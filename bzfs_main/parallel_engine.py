@@ -15,6 +15,7 @@
 """Fault-tolerant, dependency-aware execution of parallel operations, ensuring that ancestor datasets finish before
 descendants start; The design maximizes throughput while preventing deadlocks or inconsistent dataset states during
 replication."""
+
 from __future__ import annotations
 import argparse
 import concurrent
@@ -46,7 +47,7 @@ from bzfs_main.utils import (
 )
 
 # constants:
-BARRIER_CHAR = "~"
+BARRIER_CHAR: str = "~"
 
 
 #############################################################################
@@ -58,7 +59,7 @@ def build_dataset_tree(sorted_datasets: list[str]) -> Tree:
     form of nested dicts."""
     tree: Tree = {}
     for dataset in sorted_datasets:
-        current = tree
+        current: Tree = tree
         for component in dataset.split("/"):
             child = current.get(component)
             if child is None:
@@ -129,7 +130,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     assert max_workers > 0
     assert callable(interval_nanos)
     assert "%" not in task_name
-    has_barrier = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
+    has_barrier: bool = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
     assert (enable_barriers is not False) or not has_barrier
     barriers_enabled: bool = bool(has_barrier or enable_barriers)
     assert callable(append_exception)
@@ -143,23 +144,23 @@ def process_datasets_in_parallel_and_fault_tolerant(
 
     def _process_dataset(dataset: str, tid: str) -> bool:
         """Runs ``process_dataset`` with retries and logs duration."""
-        start_time_nanos = time.monotonic_ns()
+        start_time_nanos: int = time.monotonic_ns()
         try:
             return run_with_retries(log, retry_policy, process_dataset, dataset, tid)
         finally:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+            elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
             log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, human_readable_duration(elapsed_nanos))
 
     def build_dataset_tree_and_find_roots() -> list[TreeNode]:
         """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
         tree: Tree = build_dataset_tree(datasets)  # tree consists of nested dictionaries
-        skip_dataset = DONT_SKIP_DATASET
-        roots = []
+        skip_dataset: str = DONT_SKIP_DATASET
+        roots: list[TreeNode] = []
         for dataset in datasets:
             if is_descendant(dataset, of_root_dataset=skip_dataset):
                 continue
             skip_dataset = dataset
-            children = tree
+            children: Tree = tree
             for component in dataset.split("/"):
                 children = children[component]
             roots.append(make_tree_node(dataset, children))
@@ -185,7 +186,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
             while len(priority_queue) > 0 and len(todo_futures) < max_workers:
                 # pick "smallest" dataset (wrt. sort order) available for start of processing; submit to thread pool
                 nonlocal next_update_nanos
-                sleep_nanos = next_update_nanos - time.monotonic_ns()
+                sleep_nanos: int = next_update_nanos - time.monotonic_ns()
                 if sleep_nanos > 0:
                     time.sleep(sleep_nanos / 1_000_000_000)  # seconds
                 if sleep_nanos > 0 and len(todo_futures) > 0:
@@ -197,18 +198,19 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 next_update_nanos += max(0, interval_nanos(node.dataset))
                 nonlocal submitted
                 submitted += 1
-                future = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
+                future: Future[Any] = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
                 future_to_node[future] = node
                 todo_futures.add(future)
             return len(todo_futures) > 0
 
         # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
-        failed = False
+        failed: bool = False
         while submit_datasets():
+            done_futures: set[Future[Any]]
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
             for done_future in done_futures:
                 done_future_node: TreeNode = future_to_node.pop(done_future)
-                dataset = done_future_node.dataset
+                dataset: str = done_future_node.dataset
                 try:
                     no_skip: bool = done_future.result()  # does not block as processing has already completed
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
@@ -226,7 +228,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                     def simple_enqueue_children(node: TreeNode) -> None:
                         """Recursively enqueues child nodes for start of processing."""
                         for child, grandchildren in node.children.items():  # as processing of parent has now completed
-                            child_node = make_tree_node(f"{node.dataset}/{child}", grandchildren)
+                            child_node: TreeNode = make_tree_node(f"{node.dataset}/{child}", grandchildren)
                             if child_node.dataset in datasets_set:
                                 heapq.heappush(priority_queue, child_node)  # make it available for start of processing
                             else:  # it's an intermediate node that has no job attached; pass the enqueue operation
@@ -253,10 +255,11 @@ def process_datasets_in_parallel_and_fault_tolerant(
                     # enforced by the 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs.
                     def enqueue_children(node: TreeNode) -> int:
                         """Returns number of jobs that were added to priority_queue for immediate start of processing."""
-                        n = 0
-                        children = node.children
+                        n: int = 0
+                        children: Tree = node.children
                         for child, grandchildren in children.items():
-                            child_node = make_tree_node(f"{node.dataset}/{child}", grandchildren, parent=node)
+                            child_node: TreeNode = make_tree_node(f"{node.dataset}/{child}", grandchildren, parent=node)
+                            k: int
                             if child != BARRIER_CHAR:
                                 if child_node.dataset in datasets_set:
                                     # it's not a barrier; make job available for immediate start of processing

@@ -64,22 +64,22 @@ T = TypeVar("T")
 
 def run_with_retries(log: Logger, policy: RetryPolicy, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
-    max_sleep_mark = policy.min_sleep_nanos
-    retry_count = 0
-    sysrandom = None
-    start_time_nanos = time.monotonic_ns()
+    max_sleep_mark: int = policy.min_sleep_nanos
+    retry_count: int = 0
+    sysrandom: random.SystemRandom | None = None
+    start_time_nanos: int = time.monotonic_ns()
     while True:
         try:
             return fn(*args, **kwargs, retry=Retry(retry_count))  # Call the target function with provided args
         except RetryableError as retryable_error:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+            elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
             if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
                 retry_count += 1
                 if retryable_error.no_sleep and retry_count <= 1:
                     log.info(f"Retrying [{retry_count}/{policy.retries}] immediately ...")
                 else:  # jitter: pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
                     sysrandom = random.SystemRandom() if sysrandom is None else sysrandom
-                    sleep_nanos = sysrandom.randint(policy.min_sleep_nanos, max_sleep_mark)
+                    sleep_nanos: int = sysrandom.randint(policy.min_sleep_nanos, max_sleep_mark)
                     log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap

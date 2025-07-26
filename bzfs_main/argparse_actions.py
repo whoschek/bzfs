@@ -102,11 +102,11 @@ def merge_adjacent_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> N
 
     i = len(snapshot_filters) - 1
     while i >= 0:
-        filter_i = snapshot_filters[i]
+        filter_i: SnapshotFilter = snapshot_filters[i]
         if isinstance(filter_i.options, list):
             j = i - 1
             if j >= 0 and snapshot_filters[j] == filter_i:
-                lst = snapshot_filters[j].options
+                lst: list = snapshot_filters[j].options
                 assert isinstance(lst, list)
                 lst += filter_i.options
                 snapshot_filters.pop(i)
@@ -118,13 +118,13 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> N
 
     i = len(snapshot_filters) - 1
     while i >= 0:
-        filter_i = snapshot_filters[i]
+        filter_i: SnapshotFilter = snapshot_filters[i]
         if filter_i.name in SNAPSHOT_REGEX_FILTER_NAMES:
             assert isinstance(filter_i.options, list)
             j = i - 1
             while j >= 0 and snapshot_filters[j].name in SNAPSHOT_REGEX_FILTER_NAMES:
                 if snapshot_filters[j].name == filter_i.name:
-                    lst = snapshot_filters[j].options
+                    lst: list[object] = snapshot_filters[j].options
                     assert isinstance(lst, list)
                     lst += filter_i.options
                     snapshot_filters.pop(i)
@@ -135,7 +135,7 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> N
     i = len(snapshot_filters) - 1
     while i >= 0:
         filter_i = snapshot_filters[i]
-        name = filter_i.name
+        name: str = filter_i.name
         if name in SNAPSHOT_REGEX_FILTER_NAMES:
             j = i - 1
             if j >= 0 and snapshot_filters[j].name in SNAPSHOT_REGEX_FILTER_NAMES:
@@ -144,10 +144,10 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> N
                 snapshot_filters.pop(i)
                 i -= 1
             else:
-                name_j = next(iter(SNAPSHOT_REGEX_FILTER_NAMES.difference({name})))
+                name_j: str = next(iter(SNAPSHOT_REGEX_FILTER_NAMES.difference({name})))
                 filter_j = SnapshotFilter(name_j, None, [])
-            sorted_filters = sorted([filter_i, filter_j])
-            exclude_regexes, include_regexes = sorted_filters[0].options, sorted_filters[1].options
+            sorted_filters: list[SnapshotFilter] = sorted([filter_i, filter_j])
+            exclude_regexes, include_regexes = (sorted_filters[0].options, sorted_filters[1].options)
             snapshot_filters[i] = SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, (exclude_regexes, include_regexes))
         i -= 1
 
@@ -157,7 +157,7 @@ def reorder_snapshot_time_filters(snapshot_filters: list[SnapshotFilter]) -> Non
 
     def reorder_time_filters_within_section(i: int, j: int) -> None:
         while j > i:
-            filter_j = snapshot_filters[j]
+            filter_j: SnapshotFilter = snapshot_filters[j]
             if filter_j.name == "include_snapshot_times":
                 snapshot_filters.pop(j)
                 snapshot_filters.insert(i + 1, filter_j)
@@ -166,7 +166,7 @@ def reorder_snapshot_time_filters(snapshot_filters: list[SnapshotFilter]) -> Non
     i = len(snapshot_filters) - 1
     j = i
     while i >= 0:
-        name = snapshot_filters[i].name
+        name: str = snapshot_filters[i].name
         if name == "include_snapshot_times_and_ranks":
             reorder_time_filters_within_section(i, j)
             j = i - 1
@@ -204,14 +204,14 @@ class DatasetPairsAction(argparse.Action):
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
         """Validates dataset pair arguments and expand '+file' notation."""
-        datasets = []
-        err_prefix = f"{option_string or self.dest}: "
+        datasets: list[str] = []
+        err_prefix: str = f"{option_string or self.dest}: "
 
         for value in values:
             if not value.startswith("+"):
                 datasets.append(value)
             else:
-                path = value[1:]
+                path: str = value[1:]
                 validate_no_argument_file(path, namespace, err_prefix=err_prefix, parser=parser)
                 if "bzfs_argument_file" not in os.path.basename(path):
                     parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
@@ -220,7 +220,7 @@ class DatasetPairsAction(argparse.Action):
                         for i, line in enumerate(fd.read().splitlines()):
                             if line.startswith("#") or not line.strip():
                                 continue
-                            splits = line.split("\t", 1)
+                            splits: list[str] = line.split("\t", 1)
                             if len(splits) <= 1:
                                 parser.error(f"{err_prefix}Line must contain tab-separated SRC_DATASET and DST_DATASET: {i}")
                             src_root_dataset, dst_root_dataset = splits
@@ -235,7 +235,7 @@ class DatasetPairsAction(argparse.Action):
 
         if len(datasets) % 2 != 0:
             parser.error(f"{err_prefix}Each SRC_DATASET must have a corresponding DST_DATASET: {datasets}")
-        root_dataset_pairs = [(datasets[i], datasets[i + 1]) for i in range(0, len(datasets), 2)]
+        root_dataset_pairs: list[tuple[str, str]] = [(datasets[i], datasets[i + 1]) for i in range(0, len(datasets), 2)]
         setattr(namespace, self.dest, root_dataset_pairs)
 
 
@@ -310,16 +310,16 @@ class FileOrLiteralAction(argparse.Action):
     ) -> None:
         """Expands file arguments and appends them to the namespace."""
 
-        current_values = getattr(namespace, self.dest, None)
+        current_values: list[str] | None = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
-        extra_values = []
-        err_prefix = f"{option_string or self.dest}: "
+        extra_values: list[str] = []
+        err_prefix: str = f"{option_string or self.dest}: "
         for value in values:
             if not value.startswith("+"):
                 extra_values.append(value)
             else:
-                path = value[1:]
+                path: str = value[1:]
                 validate_no_argument_file(path, namespace, err_prefix=err_prefix, parser=parser)
                 if "bzfs_argument_file" not in os.path.basename(path):
                     parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
@@ -345,9 +345,9 @@ class IncludeSnapshotPlanAction(argparse.Action):
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
         """Builds a list of snapshot filters from a serialized plan."""
-        opts = getattr(namespace, self.dest, None)
+        opts: list[str] | None = getattr(namespace, self.dest, None)
         opts = [] if opts is None else opts
-        include_snapshot_times_and_ranks = getenv_bool("include_snapshot_plan_excludes_outdated_snapshots", True)
+        include_snapshot_times_and_ranks: bool = getenv_bool("include_snapshot_plan_excludes_outdated_snapshots", True)
         if not self._add_opts(opts, include_snapshot_times_and_ranks, parser, values, option_string=option_string):
             opts += ["--new-snapshot-filter-group", "--include-snapshot-regex=!.*"]
         setattr(namespace, self.dest, opts)
@@ -360,21 +360,21 @@ class IncludeSnapshotPlanAction(argparse.Action):
         values: str,
         option_string: str | None = None,
     ) -> bool:
-        xperiods = SnapshotPeriods()
-        has_at_least_one_filter_clause = False
+        xperiods: SnapshotPeriods = SnapshotPeriods()
+        has_at_least_one_filter_clause: bool = False
         for org, target_periods in ast.literal_eval(values).items():
-            prefix = re.escape(nprefix(org))
+            prefix: str = re.escape(nprefix(org))
             for target, periods in target_periods.items():
-                infix = re.escape(ninfix(target)) if target else YEAR_WITH_FOUR_DIGITS_REGEX.pattern
+                infix: str = re.escape(ninfix(target)) if target else YEAR_WITH_FOUR_DIGITS_REGEX.pattern
                 for period_unit, period_amount in periods.items():
                     if not isinstance(period_amount, int) or period_amount < 0:
                         parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
-                    suffix = re.escape(nsuffix(period_unit))
-                    regex = f"{prefix}{infix}.*{suffix}"
+                    suffix: str = re.escape(nsuffix(period_unit))
+                    regex: str = f"{prefix}{infix}.*{suffix}"
                     opts += ["--new-snapshot-filter-group", f"--include-snapshot-regex={regex}"]
                     if include_snapshot_times_and_ranks:
                         duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)
-                        duration_unit_label = xperiods.period_labels.get(duration_unit)
+                        duration_unit_label: str | None = xperiods.period_labels.get(duration_unit)
                         opts += [
                             "--include-snapshot-times-and-ranks",
                             (
@@ -396,7 +396,7 @@ class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
         """Parses plan while preventing disasters."""
-        opts = getattr(namespace, self.dest, None)
+        opts: list[str] | None = getattr(namespace, self.dest, None)
         opts = [] if opts is None else opts
         opts += ["--delete-dst-snapshots-except"]
         if not self._add_opts(opts, True, parser, values, option_string=option_string):
@@ -435,15 +435,15 @@ class TimeRangeAndRankRangeAction(argparse.Action):
 
         assert isinstance(values, list)
         assert len(values) > 0
-        value = values[0].strip()
+        value: str = values[0].strip()
         if value == "notime":
             value = "0..0"
         if ".." not in value:
             parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {value}")
-        timerange_specs = [parse_time(time_spec) for time_spec in value.split("..", 1)]
-        rankranges = self.parse_rankranges(parser, values[1:], option_string=option_string)
+        timerange_specs: list[int | timedelta | None] = [parse_time(time_spec) for time_spec in value.split("..", 1)]
+        rankranges: list[RankRange] = self.parse_rankranges(parser, values[1:], option_string=option_string)
         setattr(namespace, self.dest, [timerange_specs] + rankranges)
-        timerange = self.get_include_snapshot_times(timerange_specs)
+        timerange: UnixTimeRange = self.get_include_snapshot_times(timerange_specs)
         add_time_and_rank_snapshot_filter(namespace, self.dest, timerange, rankranges)
 
     @staticmethod
@@ -477,15 +477,15 @@ class TimeRangeAndRankRangeAction(argparse.Action):
             if not (match := re.fullmatch(r"(all\s*except\s*)?(oldest|latest)\s*(\d+)%?", spec)):
                 parser.error(f"{option_string}: Invalid rank format: {spec}")
             assert match
-            is_except = bool(match.group(1))
-            kind = match.group(2)
-            num = int(match.group(3))
-            is_percent = spec.endswith("%")
+            is_except: bool = bool(match.group(1))
+            kind: str = match.group(2)
+            num: int = int(match.group(3))
+            is_percent: bool = spec.endswith("%")
             if is_percent and num > 100:
                 parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
             return is_except, kind, num, is_percent
 
-        rankranges = []
+        rankranges: list[RankRange] = []
         for value in values:
             value = value.strip()
             if ".." in value:
@@ -501,7 +501,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
                 is_except, kind, num, is_percent = hi
                 if is_except:
                     if is_percent:
-                        negated_kind = "oldest" if kind == "latest" else "latest"
+                        negated_kind: str = "oldest" if kind == "latest" else "latest"
                         lo = parse_rank(f"{negated_kind}0")
                         hi = parse_rank(f"{negated_kind}{100-num}%")
                     else:
@@ -521,11 +521,11 @@ class LogConfigVariablesAction(argparse.Action):
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
         """Validates NAME:VALUE entries and accumulate them."""
-        current_values = getattr(namespace, self.dest, None)
+        current_values: list[str] | None = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
         for variable in values:
-            error_msg = validate_log_config_variable(variable)
+            error_msg: str | None = validate_log_config_variable(variable)
             if error_msg:
                 parser.error(error_msg)
             current_values.append(variable)
@@ -543,7 +543,7 @@ class CheckPercentRange(CheckRange):
         assert isinstance(values, str)
         original = values
         values = values.strip()
-        is_percent = values.endswith("%")
+        is_percent: bool = values.endswith("%")
         if is_percent:
             values = values[0:-1]
         try:

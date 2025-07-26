@@ -46,9 +46,9 @@ from bzfs_main.utils import (
 )
 
 # constants
-PV_FILE_THREAD_SEPARATOR = "_"
-ARABIC_DECIMAL_SEPARATOR = "\u066b"  # "٫"  # noqa: RUF003
-PV_SIZE_TO_BYTES_REGEX = re.compile(rf"(\d+[.,{ARABIC_DECIMAL_SEPARATOR}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)")
+PV_FILE_THREAD_SEPARATOR: str = "_"
+ARABIC_DECIMAL_SEPARATOR: str = "\u066b"  # "٫"  # noqa: RUF003
+PV_SIZE_TO_BYTES_REGEX: re.Pattern = re.compile(rf"(\d+[.,{ARABIC_DECIMAL_SEPARATOR}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)")
 
 
 #############################################################################
@@ -173,8 +173,8 @@ class ProgressReporter:
         )
         update_interval_nanos: int = round(update_interval_secs * 1_000_000_000)
         sliding_window_nanos: int = round(sliding_window_secs * 1_000_000_000)
-        sleep_nanos = round(update_interval_nanos / 2.5)
-        etas: list = []
+        sleep_nanos: int = round(update_interval_nanos / 2.5)
+        etas: list[ProgressReporter.TransferStat.ETA] = []
         while True:
             empty_file_name_queue: set[str] = set()
             with self.lock:
@@ -185,14 +185,14 @@ class ProgressReporter:
                 m = len(self.file_name_set)
                 self.file_name_set.update(self.file_name_queue)  # union
                 assert len(self.file_name_set) == n + m  # aka assert (previous) file_name_set.isdisjoint(file_name_queue)
-                local_file_name_queue = self.file_name_queue
+                local_file_name_queue: set[str] = self.file_name_queue
                 self.file_name_queue = empty_file_name_queue  # exchange buffers
-                is_pausing = self.is_pausing
+                is_pausing: bool = self.is_pausing
                 self.is_pausing = False
-                is_resetting = self.is_resetting
+                is_resetting: bool = self.is_resetting
                 self.is_resetting = False
             if is_pausing:
-                next_update_nanos = time.monotonic_ns() + 10 * 365 * 86400 * 1_000_000_000  # infinity
+                next_update_nanos: int = time.monotonic_ns() + 10 * 365 * 86400 * 1_000_000_000  # infinity
             if is_resetting:
                 sent_bytes, last_status_len = 0, 0
                 num_lines, num_readables = 0, 0
@@ -212,9 +212,9 @@ class ProgressReporter:
                 eta = self.TransferStat.ETA(timestamp_nanos=0, seq_nr=-len(fds), line_tail="")
                 selector.register(fd, selectors.EVENT_READ, data=(iter(fd), self.TransferStat(bytes_in_flight=0, eta=eta)))
                 etas.append(eta)
-            readables = selector.select(timeout=0)  # 0 indicates "don't block"
-            has_line = False
-            curr_time_nanos = time.monotonic_ns()
+            readables: list[tuple[selectors.SelectorKey, int]] = selector.select(timeout=0)  # 0 indicates "don't block"
+            has_line: bool = False
+            curr_time_nanos: int = time.monotonic_ns()
             selector_key: selectors.SelectorKey
             for selector_key, _ in readables:  # for each file that's ready for non-blocking read
                 num_readables += 1
@@ -224,14 +224,14 @@ class ProgressReporter:
                     num_lines += 1
                     has_line = True
             if curr_time_nanos >= next_update_nanos:
-                elapsed_nanos = curr_time_nanos - start_time_nanos
+                elapsed_nanos: int = curr_time_nanos - start_time_nanos
                 msg0, msg3 = self.format_sent_bytes(sent_bytes, elapsed_nanos)  # throughput etc since replication start time
-                msg1 = self.format_duration(elapsed_nanos)  # duration since replication start time
+                msg1: str = self.format_duration(elapsed_nanos)  # duration since replication start time
                 oldest: Sample = latest_samples[0]  # throughput etc, over sliding window
                 _, msg2 = self.format_sent_bytes(sent_bytes - oldest.sent_bytes, curr_time_nanos - oldest.timestamp_nanos)
-                msg4 = max(etas).line_tail if len(etas) > 0 else ""  # progress bar, ETAs
-                timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
-                status_line = f"{timestamp} [I] zfs sent {msg0} {msg1} {msg2} {msg3} {msg4}"
+                msg4: str = max(etas).line_tail if len(etas) > 0 else ""  # progress bar, ETAs
+                timestamp: str = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
+                status_line: str = f"{timestamp} [I] zfs sent {msg0} {msg1} {msg2} {msg3} {msg4}"
                 status_line = status_line.ljust(last_status_len)  # "overwrite" trailing chars of previous status with spaces
 
                 # The Unix console skips back to the beginning of the console line when it sees this \r control char:
@@ -254,13 +254,13 @@ class ProgressReporter:
     def update_transfer_stat(self, line: str, s: TransferStat, curr_time_nanos: int) -> int:
         """Update ``s`` from one pv status line and return bytes delta."""
         num_bytes, s.eta.timestamp_nanos, s.eta.line_tail = self.parse_pv_line(line, curr_time_nanos)
-        bytes_in_flight = s.bytes_in_flight
+        bytes_in_flight: int = s.bytes_in_flight
         s.bytes_in_flight = num_bytes if line.endswith("\r") else 0  # intermediate vs. final status update of each transfer
         return num_bytes - bytes_in_flight
 
-    no_rates_regex = re.compile(r".*/s\s*[)\]]?\s*")  # matches until end of last pv rate, e.g. "834MiB/s]" or "834MiB/s)"
+    NO_RATES_REGEX = re.compile(r".*/s\s*[)\]]?\s*")  # matches until end of last pv rate, e.g. "834MiB/s]" or "834MiB/s)"
     # time remaining --eta "ETA 00:00:39" or "ETA 2+0:00:39" or "ETA 2:0:00:39", followed by trailing --fineta timestamp ETA
-    time_remaining_eta_regex = re.compile(r".*?ETA\s*((\d+)[+:])?(\d\d?):(\d\d):(\d\d).*(ETA|FIN).*")
+    TIME_REMAINING_ETA_REGEX = re.compile(r".*?ETA\s*((\d+)[+:])?(\d\d?):(\d\d):(\d\d).*(ETA|FIN).*")
 
     @staticmethod
     def parse_pv_line(line: str, curr_time_nanos: int) -> tuple[int, int, str]:
@@ -269,8 +269,8 @@ class ProgressReporter:
         if ":" in line:
             line = line.split(":", 1)[1].strip()
             sent_bytes, line = pv_size_to_bytes(line)
-            line = ProgressReporter.no_rates_regex.sub("", line.lstrip(), 1)  # remove pv --timer, --rate, --average-rate
-            if match := ProgressReporter.time_remaining_eta_regex.fullmatch(line):  # extract pv --eta duration
+            line = ProgressReporter.NO_RATES_REGEX.sub("", line.lstrip(), 1)  # remove pv --timer, --rate, --average-rate
+            if match := ProgressReporter.TIME_REMAINING_ETA_REGEX.fullmatch(line):  # extract pv --eta duration
                 _, days, hours, minutes, secs, _ = match.groups()
                 time_remaining_secs = (86400 * int(days) if days else 0) + int(hours) * 3600 + int(minutes) * 60 + int(secs)
                 curr_time_nanos += time_remaining_secs * 1_000_000_000  # ETA timestamp = now + time remaining duration
@@ -297,21 +297,21 @@ class ProgressReporter:
         parser.add_argument("--interval", "-i", type=float, default=1)
         parser.add_argument("--average-rate-window", "-m", type=float, default=30)
         args, _ = parser.parse_known_args(args=self.pv_program_opts)
-        interval = min(60 * 60, max(args.interval, 0.1))
+        interval: float = min(60 * 60, max(args.interval, 0.1))
         return interval, min(60 * 60, max(args.average_rate_window, interval))
 
 
 def pv_size_to_bytes(size: str) -> tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
     """Converts pv size string to bytes and returns remaining text."""
     if match := PV_SIZE_TO_BYTES_REGEX.fullmatch(size):
-        number = float(match.group(1).replace(",", ".").replace(ARABIC_DECIMAL_SEPARATOR, "."))
-        i = "KMGTPEZYRQ".index(match.group(2)) if match.group(2) else -1
-        m = 1024 if match.group(3) == "i" else 1000
-        b = 1 if match.group(4) == "B" else 8
-        line_tail = match.group(5)
+        number: float = float(match.group(1).replace(",", ".").replace(ARABIC_DECIMAL_SEPARATOR, "."))
+        i: int = "KMGTPEZYRQ".index(match.group(2)) if match.group(2) else -1
+        m: int = 1024 if match.group(3) == "i" else 1000
+        b: int = 1 if match.group(4) == "B" else 8
+        line_tail: str = match.group(5)
         if line_tail and line_tail.startswith("/s"):
             raise ValueError("Invalid pv_size: " + size)  # stems from 'pv --rate' or 'pv --average-rate'
-        size_in_bytes = round(number * (m ** (i + 1)) / b)
+        size_in_bytes: int = round(number * (m ** (i + 1)) / b)
         return size_in_bytes, line_tail
     else:
         return 0, ""  # skip partial or bad 'pv' log file line (pv process killed while writing?)
@@ -328,13 +328,13 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
             return num_bytes
         return 0
 
-    total_bytes = 0
-    files = [basis_pv_log_file] + glob.glob(basis_pv_log_file + PV_FILE_THREAD_SEPARATOR + "[0-9]*")
+    total_bytes: int = 0
+    files: list[str] = [basis_pv_log_file] + glob.glob(basis_pv_log_file + PV_FILE_THREAD_SEPARATOR + "[0-9]*")
     for file in files:
         if os.path.isfile(file):
             try:
                 with open_nofollow(file, mode="r", newline="", encoding="utf-8") as fd:
-                    line = None
+                    line: str | None = None
                     for line in fd:
                         if line.endswith("\r"):
                             continue  # skip all but the most recent status update of each transfer

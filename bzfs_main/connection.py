@@ -50,8 +50,8 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.configuration import Params, Remote
 
 # constants:
-SHARED = "shared"
-DEDICATED = "dedicated"
+SHARED: str = "shared"
+DEDICATED: str = "dedicated"
 
 
 def run_ssh_command(
@@ -148,12 +148,12 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: "Connect
         ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
         # extend lifetime of ssh master by $control_persist_secs via 'ssh -O check' if master is still running.
         # 'ssh -S /path/to/socket -O check' doesn't talk over the network, hence is still a low latency fast path.
-        t = timeout(job)
+        t: float | None = timeout(job)
         if subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=t).returncode == 0:
             log.log(LOG_TRACE, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
         else:  # ssh master is not alive; start a new master:
             log.log(LOG_TRACE, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
-            control_persist_secs = job.control_persist_secs
+            control_persist_secs: int = job.control_persist_secs
             if "-v" in remote.ssh_extra_opts:
                 # Unfortunately, with `ssh -v` (debug mode), the ssh master won't background; instead it stays in the
                 # foreground and blocks until the ControlPersist timer expires (90 secs). To make progress earlier we ...
@@ -248,7 +248,7 @@ class Connection:
         if ssh_cmd:
             ssh_socket_cmd: list[str] = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
             p.log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_socket_cmd))
-            process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
+            process: CompletedProcess = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
                 p.log.log(LOG_TRACE, "%s", process.stderr.rstrip())
 
@@ -271,7 +271,7 @@ class ConnectionPool:
     @contextlib.contextmanager
     def connection(self) -> Iterator[Connection]:
         """Context manager that yields a connection from the pool and automatically returns it on __exit__."""
-        conn = self.get_connection()
+        conn: Connection = self.get_connection()
         try:
             yield conn
         finally:

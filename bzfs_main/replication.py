@@ -95,8 +95,8 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 
 
 # constants:
-INJECT_DST_PIPE_FAIL_KBYTES = 400  # for testing only
-RIGHT_JUST = 7
+INJECT_DST_PIPE_FAIL_KBYTES: int = 400  # for testing only
+RIGHT_JUST: int = 7
 
 
 def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
@@ -121,9 +121,9 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
         oldest_src_snapshot,
     ) = list_result
     log.debug("latest_src_snapshot: %s", latest_src_snapshot)
-    latest_dst_snapshot = ""
-    latest_common_src_snapshot = ""
-    done_checking = False
+    latest_dst_snapshot: str = ""
+    latest_common_src_snapshot: str = ""
+    done_checking: bool = False
 
     if job.dst_dataset_exists[dst_dataset]:
         rollback_result: bool | Tuple[str, str, bool] = _rollback_dst_dataset_if_necessary(
@@ -136,7 +136,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
     log.log(LOG_TRACE, "latest_dst_snapshot: %s", latest_dst_snapshot)
     props_cache: dict[tuple[str, str, str], dict[str, str | None]] = {}
-    dry_run_no_send = False
+    dry_run_no_send: bool = False
     if not latest_common_src_snapshot:
         # no common snapshot exists; delete all dst snapshots and perform a full send of the oldest selected src snapshot
         full_result: tuple[str, bool, bool, int] = _replicate_dataset_fully(
@@ -181,7 +181,7 @@ def _list_and_filter_src_and_dst_snapshots(
     src, dst = p.src, p.dst
 
     # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
-    dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
+    dst_cmd: list[str] = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
 
     # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
     # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
@@ -193,8 +193,8 @@ def _list_and_filter_src_and_dst_snapshots(
     # char, bookmark names must not contain a '@' char, and dataset names must not contain a '#' or '@' char.
     # GUID and creation time also do not contain a '#' or '@' char.
     filter_needs_creation_time: bool = has_timerange_filter(p.snapshot_filters)
-    types = "snapshot,bookmark" if p.use_bookmark and are_bookmarks_enabled(p, src) else "snapshot"
-    props = job.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
+    types: str = "snapshot,bookmark" if p.use_bookmark and are_bookmarks_enabled(p, src) else "snapshot"
+    props: str = job.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
     src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
     job.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
     src_snapshots_and_bookmarks, dst_snapshots_with_guids = run_in_parallel(  # list src+dst snapshots in parallel
@@ -211,11 +211,11 @@ def _list_and_filter_src_and_dst_snapshots(
     if len(dst_snapshots_with_guids) == 0 and "bookmark" in types:
         # src bookmarks serve no purpose if the destination dataset has no snapshot; ignore them
         src_snapshots_with_guids = [snapshot for snapshot in src_snapshots_with_guids if "@" in snapshot]
-    num_src_snapshots_found = sum(1 for snapshot in src_snapshots_with_guids if "@" in snapshot)
+    num_src_snapshots_found: int = sum(1 for snapshot in src_snapshots_with_guids if "@" in snapshot)
     with job.stats_lock:
         job.num_snapshots_found += num_src_snapshots_found
     # apply include/exclude regexes to ignore irrelevant src snapshots
-    basis_src_snapshots_with_guids = src_snapshots_with_guids
+    basis_src_snapshots_with_guids: list[str] = src_snapshots_with_guids
     src_snapshots_with_guids = filter_snapshots(job, src_snapshots_with_guids)
     if filter_needs_creation_time:
         src_snapshots_with_guids = cut(field=2, lines=src_snapshots_with_guids)
@@ -223,8 +223,8 @@ def _list_and_filter_src_and_dst_snapshots(
 
     # find oldest and latest "true" snapshot, as well as GUIDs of all snapshots and bookmarks.
     # a snapshot is "true" if it is not a bookmark.
-    oldest_src_snapshot = ""
-    latest_src_snapshot = ""
+    oldest_src_snapshot: str = ""
+    latest_src_snapshot: str = ""
     included_src_guids: set[str] = set()
     for line in src_snapshots_with_guids:
         guid, snapshot = line.split("\t", 1)
@@ -263,8 +263,8 @@ def _rollback_dst_dataset_if_necessary(
     """On replication, rollback dst if necessary."""
     p, log = job.params, job.params.log
     dst = p.dst
-    latest_dst_snapshot = ""
-    latest_dst_guid = ""
+    latest_dst_snapshot: str = ""
+    latest_dst_guid: str = ""
     if len(dst_snapshots_with_guids) > 0:
         latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
         if p.force_rollback_to_latest_snapshot:
@@ -370,7 +370,7 @@ def _replicate_dataset_fully(
     if oldest_src_snapshot:
         if not job.dst_dataset_exists[dst_dataset]:
             # on destination, create parent filesystem and ancestors if they do not yet exist
-            dst_dataset_parent = os.path.dirname(dst_dataset)
+            dst_dataset_parent: str = os.path.dirname(dst_dataset)
             if not job.dst_dataset_exists[dst_dataset_parent]:
                 if p.dry_run:
                     dry_run_no_send = True
@@ -543,8 +543,8 @@ def prepare_zfs_send_receive(
     recv_cmd_str: str = shlex.join(recv_cmd)
 
     if p.is_program_available("zstd", "src") and p.is_program_available("zstd", "dst"):
-        compress_cmd_ = compress_cmd(p, "src", size_estimate_bytes)
-        decompress_cmd_ = decompress_cmd(p, "dst", size_estimate_bytes)
+        compress_cmd_: str = compress_cmd(p, "src", size_estimate_bytes)
+        decompress_cmd_: str = decompress_cmd(p, "dst", size_estimate_bytes)
     else:  # no compression is used if source and destination do not both support compression
         compress_cmd_, decompress_cmd_ = "cat", "cat"
 
@@ -695,7 +695,7 @@ def clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr: 
 
     def clear_resumable_recv_state() -> bool:
         log.warning(p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset)
-        cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
+        cmd: list[str] = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
         try_ssh_command(job, p.dst, LOG_TRACE, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
         log.log(LOG_TRACE, p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
         return True
@@ -759,7 +759,7 @@ def _recv_resume_token(job: Job, dst_dataset: str, retry_count: int) -> tuple[st
     p, log = job.params, job.params.log
     if not p.resume_recv:
         return None, [], []
-    warning = None
+    warning: str | None = None
     if not is_zpool_feature_enabled_or_active(p, p.dst, "feature@extensible_dataset"):
         warning = "not available on destination dataset"
     elif not p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_1_0, "dst"):
@@ -770,7 +770,7 @@ def _recv_resume_token(job: Job, dst_dataset: str, retry_count: int) -> tuple[st
     recv_resume_token: str | None = None
     send_resume_opts: list[str] = []
     if job.dst_dataset_exists[dst_dataset]:
-        cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset)
+        cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset)
         recv_resume_token = run_ssh_command(job, p.dst, LOG_TRACE, cmd=cmd).rstrip()
         if recv_resume_token == "-" or not recv_resume_token:  # noqa: S105
             recv_resume_token = None
@@ -835,11 +835,11 @@ def pv_cmd(
     viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
     p = job.params
     if p.is_program_available("pv", loc):
-        size = f"--size={size_estimate_bytes}"
+        size: str = f"--size={size_estimate_bytes}"
         if disable_progress_bar or size_estimate_bytes == 0:
             size = ""
-        pv_log_file = p.log_params.pv_log_file
-        thread_name = threading.current_thread().name
+        pv_log_file: str = p.log_params.pv_log_file
+        thread_name: str = threading.current_thread().name
         if match := WORKER_THREAD_NUMBER_REGEX.fullmatch(thread_name):
             worker = int(match.group(1))
             if worker > 0:
@@ -850,7 +850,7 @@ def pv_cmd(
             job.replication_start_time_nanos = time.monotonic_ns()
         if job.isatty and not p.quiet:
             job.progress_reporter.enqueue_pv_log_file(pv_log_file)
-        pv_program_opts = [p.pv_program] + p.pv_program_opts
+        pv_program_opts: list[str] = [p.pv_program] + p.pv_program_opts
         if job.progress_update_intervals is not None:  # for testing
             pv_program_opts += [f"--interval={job.progress_update_intervals[0]}"]
         pv_program_opts += ["--force", f"--name={size_estimate_human}"]
@@ -891,8 +891,8 @@ def delete_snapshots(job: Job, remote: Remote, dataset: str, snapshot_tags: list
 def delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str) -> None:
     """Runs zfs destroy for a comma-separated snapshot list."""
     p = job.params
-    cmd = delete_snapshot_cmd(p, r, snapshots_to_delete)
-    is_dry = p.dry_run and is_solaris_zfs(p, r)  # solaris-11.4 knows no 'zfs destroy -n' flag
+    cmd: list[str] = delete_snapshot_cmd(p, r, snapshots_to_delete)
+    is_dry: bool = p.dry_run and is_solaris_zfs(p, r)  # solaris-11.4 knows no 'zfs destroy -n' flag
     try:
         maybe_inject_error(job, cmd=cmd, error_trigger="zfs_delete_snapshot")
         run_ssh_command(job, r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
@@ -919,7 +919,7 @@ def delete_bookmarks(job: Job, remote: Remote, dataset: str, snapshot_tags: list
     log.info(
         p.dry(f"Deleting {len(snapshot_tags)} bookmarks within %s: %s"), dataset, dataset + "#" + ",".join(snapshot_tags)
     )
-    cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy")
+    cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} destroy")
     run_ssh_cmd_parallel(
         job,
         remote,
@@ -936,12 +936,12 @@ def delete_datasets(job: Job, remote: Remote, datasets: Iterable[str]) -> None:
     # Impl is batch optimized to minimize CLI + network roundtrips: only need to run zfs destroy if previously
     # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
     p, log = job.params, job.params.log
-    last_deleted_dataset = DONT_SKIP_DATASET
+    last_deleted_dataset: str = DONT_SKIP_DATASET
     for dataset in sorted(datasets):
         if is_descendant(dataset, of_root_dataset=last_deleted_dataset):
             continue
         log.info(p.dry("Deleting dataset tree: %s"), f"{dataset} ...")
-        cmd = p.split_args(
+        cmd: list[str] = p.split_args(
             f"{remote.sudo} {p.zfs_program} destroy -r {p.force_unmount} {p.force_hard} {p.verbose_destroy}",
             p.dry_run_destroy,
             dataset,
@@ -959,11 +959,11 @@ def create_zfs_filesystem(job: Job, filesystem: str) -> None:
     # part only to the immediate filesystem, rather than to the not-yet existing ancestors.
     p = job.params
     parent: str = ""
-    no_mount = "-u" if p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_1_0, "dst") else ""
+    no_mount: str = "-u" if p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_1_0, "dst") else ""
     for component in filesystem.split("/"):
         parent += component
         if not job.dst_dataset_exists[parent]:
-            cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} create -p", no_mount, parent)
+            cmd: list[str] = p.split_args(f"{p.dst.sudo} {p.zfs_program} create -p", no_mount, parent)
             try:
                 run_ssh_command(job, p.dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             except subprocess.CalledProcessError as e:
@@ -988,7 +988,7 @@ def create_zfs_bookmarks(job: Job, remote: Remote, dataset: str, snapshots: list
     def create_zfs_bookmark(cmd: list[str]) -> None:
         snapshot = cmd[-1]
         assert "@" in snapshot
-        bookmark_cmd = cmd + [replace_prefix(snapshot, old_prefix=f"{dataset}@", new_prefix=f"{dataset}#")]
+        bookmark_cmd: list[str] = cmd + [replace_prefix(snapshot, old_prefix=f"{dataset}@", new_prefix=f"{dataset}#")]
         try:
             run_ssh_command(job, remote, LOG_DEBUG, is_dry=p.dry_run, print_stderr=False, cmd=bookmark_cmd)
         except subprocess.CalledProcessError as e:
@@ -998,7 +998,7 @@ def create_zfs_bookmarks(job: Job, remote: Remote, dataset: str, snapshots: list
                 raise
 
     if p.create_bookmarks != "none" and are_bookmarks_enabled(p, remote):
-        cmd = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark")
+        cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark")
         run_ssh_cmd_parallel(
             job, remote, [(cmd, snapshots)], lambda _cmd, batch: create_zfs_bookmark(_cmd + batch), max_batch_items=1
         )
@@ -1014,7 +1014,7 @@ def estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_t
     if recv_resume_token:
         zfs_send_program_opts = ["-Pnv", "-t", recv_resume_token]
         items = ()
-    cmd = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
+    cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
     try:
         lines: str | None = try_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
     except RetryableError as retryable_error:
@@ -1027,7 +1027,7 @@ def estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_t
         raise
     if lines is None:
         return 0  # src dataset or snapshot has been deleted by third party
-    size = lines.splitlines()[-1]
+    size: str = lines.splitlines()[-1]
     assert size.startswith("size")
     return int(size[size.index("\t") + 1 :])
 
@@ -1038,7 +1038,7 @@ def zfs_set(job: Job, properties: list[str], remote: Remote, dataset: str) -> No
     if len(properties) == 0:
         return
     # set properties in batches without creating a command line that's too big for the OS to handle
-    cmd = p.split_args(f"{remote.sudo} {p.zfs_program} set")
+    cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} set")
     run_ssh_cmd_batched(
         job,
         remote,
@@ -1066,11 +1066,11 @@ def zfs_get(
         return {}
     p = job.params
     cache_key = (sources, output_columns, propnames)
-    props = props_cache.get(cache_key)
+    props: dict[str, str | None] | None = props_cache.get(cache_key)
     if props is None:
-        cmd = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
-        lines = run_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
-        is_name_value_pair = "," in output_columns
+        cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
+        lines: str = run_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
+        is_name_value_pair: bool = "," in output_columns
         props = {}
         # if not splitlines: omit single trailing newline that was appended by 'zfs get' CLI
         for line in lines.splitlines() if splitlines else [lines[0:-1]]:
@@ -1087,7 +1087,7 @@ def incremental_send_steps_wrapper(
     p: Params, src_snapshots: list[str], src_guids: list[str], included_guids: set[str], is_resume: bool
 ) -> list[tuple[str, str, str, list[str]]]:
     """Returns incremental send steps, optionally converting -I to -i."""
-    force_convert_I_to_i = p.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", True)  # noqa: N806
+    force_convert_I_to_i: bool = p.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", True)  # noqa: N806
     # force_convert_I_to_i == True implies that:
     # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
     # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
@@ -1100,10 +1100,10 @@ def add_recv_property_options(
     """Reads the ZFS properties of the given src dataset; Appends zfs recv -o and -x values to recv_opts according to CLI
     params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""
     p = job.params
-    set_opts = []
-    x_names = p.zfs_recv_x_names
-    x_names_set = set(x_names)
-    ox_names = p.zfs_recv_ox_names.copy()
+    set_opts: list[str] = []
+    x_names: list[str] = p.zfs_recv_x_names
+    x_names_set: set[str] = set(x_names)
+    ox_names: set[str] = p.zfs_recv_ox_names.copy()
     if p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, p.dst.location):
         # workaround for https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff
         # 'zfs recv -x foo' on zfs < 2.2 errors out if the 'foo' property isn't contained in the send stream
@@ -1121,11 +1121,11 @@ def add_recv_property_options(
             # a single 'zfs get' call. Therefore, here we use a separate 'zfs get' call for each ZFS user property.
             # TODO: perf: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
             try:
-                props_any = zfs_get(job, p.src, dataset, config.sources, "property", "all", True, cache)
-                props_filtered = filter_properties(p, props_any, config.include_regexes, config.exclude_regexes)
-                user_propnames = [name for name in props_filtered.keys() if ":" in name]
-                sys_propnames = ",".join([name for name in props_filtered.keys() if ":" not in name])
-                props = zfs_get(job, p.src, dataset, config.sources, "property,value", sys_propnames, True, cache)
+                props_any: dict = zfs_get(job, p.src, dataset, config.sources, "property", "all", True, cache)
+                props_filtered: dict = filter_properties(p, props_any, config.include_regexes, config.exclude_regexes)
+                user_propnames: list[str] = [name for name in props_filtered.keys() if ":" in name]
+                sys_propnames: str = ",".join([name for name in props_filtered.keys() if ":" not in name])
+                props: dict = zfs_get(job, p.src, dataset, config.sources, "property,value", sys_propnames, True, cache)
                 for propnames in user_propnames:
                     props.update(zfs_get(job, p.src, dataset, config.sources, "property,value", propnames, False, cache))
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
@@ -1166,13 +1166,13 @@ def check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send:
     p, log = job.params, job.params.log
     if not p.is_program_available("ps", remote.location):
         return True
-    cmd = p.split_args(f"{p.ps_program} -Ao args")
-    procs = (try_ssh_command(job, remote, LOG_TRACE, cmd=cmd) or "").splitlines()
+    cmd: list[str] = p.split_args(f"{p.ps_program} -Ao args")
+    procs: list[str] = (try_ssh_command(job, remote, LOG_TRACE, cmd=cmd) or "").splitlines()
     if job.inject_params.get("is_zfs_dataset_busy", False):
         procs += ["sudo -n zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
     if not is_zfs_dataset_busy(procs, dataset, busy_if_send=busy_if_send):
         return True
-    op = "zfs {receive" + ("|send" if busy_if_send else "") + "} operation"
+    op: str = "zfs {receive" + ("|send" if busy_if_send else "") + "} operation"
     try:
         die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
     except SystemExit as e:
@@ -1180,14 +1180,14 @@ def check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send:
         raise RetryableError("dst currently busy with zfs mutation op") from e
 
 
-ZFS_DATASET_BUSY_PREFIX = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
+ZFS_DATASET_BUSY_PREFIX: str = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
 ZFS_DATASET_BUSY_IF_MODS: re.Pattern[str] = re.compile((ZFS_DATASET_BUSY_PREFIX + ") .*").replace("(", "(?:"))
 ZFS_DATASET_BUSY_IF_SEND: re.Pattern[str] = re.compile((ZFS_DATASET_BUSY_PREFIX + "|send) .*").replace("(", "(?:"))
 
 
 def is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> bool:
     """Checks if any process list entry indicates ZFS activity on dataset."""
-    regex = ZFS_DATASET_BUSY_IF_SEND if busy_if_send else ZFS_DATASET_BUSY_IF_MODS
-    suffix = " " + dataset
-    infix = " " + dataset + "@"
+    regex: re.Pattern[str] = ZFS_DATASET_BUSY_IF_SEND if busy_if_send else ZFS_DATASET_BUSY_IF_MODS
+    suffix: str = " " + dataset
+    infix: str = " " + dataset + "@"
     return any((proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc) for proc in procs)

@@ -99,7 +99,7 @@ class LogParams:
         """Reads from ArgumentParser via args."""
         # immutable variables:
         if args.quiet:
-            self.log_level = "ERROR"
+            self.log_level: str = "ERROR"
         elif args.verbose >= 2:
             self.log_level = "TRACE"
         elif args.verbose >= 1:
@@ -115,9 +115,9 @@ class LogParams:
         log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)
         if LOG_DIR_DEFAULT not in os.path.basename(log_parent_dir):
             die(f"Basename of --log-dir must contain the substring '{LOG_DIR_DEFAULT}', but got: {log_parent_dir}")
-        sep = "_" if args.log_subdir == "daily" else ":"
-        timestamp = self.timestamp
-        subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
+        sep: str = "_" if args.log_subdir == "daily" else ":"
+        timestamp: str = self.timestamp
+        subdir: str = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
         os.makedirs(log_parent_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--log-dir ", log_parent_dir)
@@ -138,9 +138,9 @@ class LogParams:
 
         # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.
         # For parallel usage, ensures there is no time window when the symlinks are inconsistent or do not exist.
-        current = "current"
-        dot_current_dir = os.path.join(log_parent_dir, f".{current}")
-        current_dir = os.path.join(dot_current_dir, os.path.basename(self.log_file)[0 : -len(".log")])
+        current: str = "current"
+        dot_current_dir: str = os.path.join(log_parent_dir, f".{current}")
+        current_dir: str = os.path.join(dot_current_dir, os.path.basename(self.log_file)[0 : -len(".log")])
         os.makedirs(dot_current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--log-dir: .current ", dot_current_dir)
         os.makedirs(current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
@@ -148,7 +148,7 @@ class LogParams:
         create_symlink(self.log_file, current_dir, f"{current}.log")
         create_symlink(self.pv_log_file, current_dir, f"{current}.pv")
         create_symlink(self.log_dir, current_dir, f"{current}.dir")
-        dst_file = os.path.join(current_dir, current)
+        dst_file: str = os.path.join(current_dir, current)
         os.symlink(os.path.relpath(current_dir, start=log_parent_dir), dst_file)
         os.replace(dst_file, os.path.join(log_parent_dir, current))  # atomic rename
         delete_stale_files(dot_current_dir, prefix="", millis=10, dirs=True, exclude=os.path.basename(current_dir))
@@ -388,8 +388,8 @@ class Params:
 
     def unset_matching_env_vars(self, args: argparse.Namespace) -> None:
         """Unset environment variables matching regex filters."""
-        exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex)
-        include_envvar_regexes = compile_regexes(args.include_envvar_regex)
+        exclude_envvar_regexes: RegexList = compile_regexes(args.exclude_envvar_regex)
+        include_envvar_regexes: RegexList = compile_regexes(args.include_envvar_regex)
         for envvar_name in list(os.environ.keys()):
             if is_included(envvar_name, exclude_envvar_regexes, include_envvar_regexes):
                 os.environ.pop(envvar_name, None)
@@ -415,7 +415,7 @@ class Params:
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
         # fmt: on
-        hash_code = hashlib.sha256(str(key).encode("utf-8")).hexdigest()
+        hash_code: str = hashlib.sha256(str(key).encode("utf-8")).hexdigest()
         return os.path.join(tempfile.gettempdir(), f"{PROG_NAME}-lockfile-{hash_code}.lock")
 
     def dry(self, msg: str) -> str:
@@ -456,8 +456,8 @@ class Remote:
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             self.socket_prefix: str = "s"
             delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
-        self.sanitize1_regex = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
-        self.sanitize2_regex = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # Remove chars not in the allowed set
+        self.sanitize1_regex: re.Pattern = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
+        self.sanitize2_regex: re.Pattern = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # Remove disallowed chars
 
         # mutable variables:
         self.root_dataset: str = ""  # deferred until run_main()
@@ -477,10 +477,10 @@ class Remote:
             return []  # dataset is on local host - don't use ssh
 
         # dataset is on remote host
-        p = self.params
+        p: Params = self.params
         if p.ssh_program == DISABLE_PRG:
             die("Cannot talk to remote host because ssh CLI is disabled.")
-        ssh_cmd = [p.ssh_program] + self.ssh_extra_opts
+        ssh_cmd: list[str] = [p.ssh_program] + self.ssh_extra_opts
         if self.ssh_config_file:
             ssh_cmd += ["-F", self.ssh_config_file]
         if self.ssh_port:
@@ -491,12 +491,12 @@ class Remote:
             # Generate unique private Unix domain socket file name in user's home dir and pass it to 'ssh -S /path/to/socket'
             def sanitize(name: str) -> str:
                 name = self.sanitize1_regex.sub("~", name)  # replace whitespace, /, $, \, @ with a ~ tilde char
-                name = self.sanitize2_regex.sub("", name)  # Remove chars not in the allowed set
+                name = self.sanitize2_regex.sub("", name)  # Remove disallowed chars
                 return name
 
-            unique = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999_999_999)}"
-            socket_name = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
-            socket_file = os.path.join(self.ssh_socket_dir, socket_name)[: max(100, len(self.ssh_socket_dir) + 10)]
+            unique: str = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999_999_999)}"
+            socket_name: str = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
+            socket_file: str = os.path.join(self.ssh_socket_dir, socket_name)[: max(100, len(self.ssh_socket_dir) + 10)]
             ssh_cmd += ["-S", socket_file]
         ssh_cmd += [self.ssh_user_host]
         return ssh_cmd
@@ -516,7 +516,7 @@ class CopyPropertiesConfig:
     def __init__(self, group: str, flag: str, args: argparse.Namespace, p: Params) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
-        grup = group
+        grup: str = group
         self.group: str = group
         self.flag: str = flag  # one of -o or -x
         sources: str = p.validate_arg_str(getattr(args, f"{grup}_sources"))
@@ -543,7 +543,7 @@ class SnapshotLabel(NamedTuple):
 
     def validate_label(self, input_text: str) -> None:
         """Validates that the composed snapshot label forms a legal name."""
-        name = str(self)
+        name: str = str(self)
         validate_dataset_name(name, input_text)
         if "/" in name:
             die(f"Invalid ZFS snapshot name: '{name}' for: '{input_text}*'")
@@ -584,15 +584,15 @@ class CreateSrcSnapshotConfig:
         # Compute the schedule for upcoming periodic time events (suffix_durations). This event schedule is also used in
         # daemon mode via sleep_until_next_daemon_iteration()
         suffixes: list[str] = []
-        labels = []
-        create_src_snapshots_plan = args.create_src_snapshots_plan or str({"bzfs": {"onsite": {"adhoc": 1}}})
+        labels: list[SnapshotLabel] = []
+        create_src_snapshots_plan: str = args.create_src_snapshots_plan or str({"bzfs": {"onsite": {"adhoc": 1}}})
         for org, target_periods in ast.literal_eval(create_src_snapshots_plan).items():
             for target, periods in target_periods.items():
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     if not isinstance(period_amount, int) or period_amount < 0:
                         die(f"--create-src-snapshots-plan: Period amount must be a non-negative integer: {period_amount}")
                     if period_amount > 0:
-                        suffix = nsuffix(period_unit)
+                        suffix: str = nsuffix(period_unit)
                         suffixes.append(suffix)
                         labels.append(SnapshotLabel(prefix=nprefix(org), infix=ninfix(target), timestamp="", suffix=suffix))
         xperiods: SnapshotPeriods = p.xperiods
@@ -602,11 +602,11 @@ class CreateSrcSnapshotConfig:
                 die(f"Invalid --daemon-frequency: {p.daemon_frequency}")
             suffixes = [nsuffix(p.daemon_frequency)]
             labels = []
-        suffix_durations = {suffix: xperiods.suffix_to_duration1(suffix) for suffix in suffixes}
+        suffix_durations: dict[str, tuple[int, str]] = {suffix: xperiods.suffix_to_duration1(suffix) for suffix in suffixes}
 
         def suffix_key(suffix: str) -> tuple[int, str]:
             duration_amount, duration_unit = suffix_durations[suffix]
-            duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
+            duration_milliseconds: int = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
             if suffix.endswith(("hourly", "minutely", "secondly")):
                 if duration_milliseconds != 0 and 86400 * 1000 % duration_milliseconds != 0:
                     die(
@@ -623,7 +623,7 @@ class CreateSrcSnapshotConfig:
 
         suffixes = sorted(suffixes, key=suffix_key, reverse=True)  # take snapshots for dailies before hourlies, and so on
         self.suffix_durations: dict[str, tuple[int, str]] = {suffix: suffix_durations[suffix] for suffix in suffixes}  # sort
-        suffix_indexes = {suffix: k for k, suffix in enumerate(suffixes)}
+        suffix_indexes: dict[str, int] = {suffix: k for k, suffix in enumerate(suffixes)}
         labels.sort(key=lambda label: (suffix_indexes[label.suffix], label))  # take snapshots for dailies before hourlies
         self._snapshot_labels: list[SnapshotLabel] = labels
         for label in self.snapshot_labels():
@@ -631,8 +631,8 @@ class CreateSrcSnapshotConfig:
 
     def snapshot_labels(self) -> list[SnapshotLabel]:
         """Returns the snapshot name patterns for which snapshots shall be created."""
-        timeformat = self.timeformat
-        is_millis = timeformat.endswith("%F")  # non-standard hack to append milliseconds
+        timeformat: str = self.timeformat
+        is_millis: bool = timeformat.endswith("%F")  # non-standard hack to append milliseconds
         if is_millis:
             timeformat = timeformat[0:-1] + "f"  # replace %F with %f (append microseconds)
         timestamp: str = self.current_datetime.strftime(timeformat)
@@ -677,10 +677,10 @@ class MonitorSnapshotsConfig:
         self.dont_crit: bool = args.monitor_snapshots_dont_crit
         self.no_latest_check: bool = args.monitor_snapshots_no_latest_check
         self.no_oldest_check: bool = args.monitor_snapshots_no_oldest_check
-        alerts = []
+        alerts: list[MonitorSnapshotAlert] = []
         xperiods: SnapshotPeriods = p.xperiods
         for org, target_periods in self.monitor_snapshots.items():
-            prefix = nprefix(org)
+            prefix: str = nprefix(org)
             for target, periods in target_periods.items():
                 for period_unit, alert_dicts in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     label = SnapshotLabel(prefix=prefix, infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
@@ -693,7 +693,7 @@ class MonitorSnapshotsConfig:
                         critical_millis: int = 0
                         cycles: int = 1
                         for kind, value in alert_dict.items():
-                            context = args.monitor_snapshots
+                            context: str = args.monitor_snapshots
                             if kind == "warning":
                                 warning_millis = max(0, parse_duration_to_milliseconds(str(value), context=context))
                             elif kind == "critical":
@@ -704,7 +704,7 @@ class MonitorSnapshotsConfig:
                                 die(f"{m}'{kind}' must be 'warning', 'critical' or 'cycles' within {context}")
                         if warning_millis > 0 or critical_millis > 0:
                             duration_amount, duration_unit = xperiods.suffix_to_duration1(label.suffix)
-                            duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
+                            duration_milliseconds: int = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
                             warning_millis += 0 if warning_millis <= 0 else cycles * duration_milliseconds
                             critical_millis += 0 if critical_millis <= 0 else cycles * duration_milliseconds
                             warning_millis = UNIX_TIME_INFINITY_SECS if warning_millis <= 0 else warning_millis
@@ -723,7 +723,7 @@ class MonitorSnapshotsConfig:
 
         def alert_sort_key(alert: MonitorSnapshotAlert) -> tuple[int, SnapshotLabel]:
             duration_amount, duration_unit = xperiods.suffix_to_duration1(alert.label.suffix)
-            duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
+            duration_milliseconds: int = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
             return duration_milliseconds, alert.label
 
         alerts.sort(key=alert_sort_key, reverse=True)  # check snapshots for dailies before hourlies, and so on
@@ -745,12 +745,12 @@ def fix_send_recv_opts(
 ) -> tuple[list[str], list[str]]:
     """These opts are instead managed via bzfs CLI args --dryrun, etc."""
     assert "-" not in exclude_short_opts
-    results = []
-    x_names = set(preserve_properties)
+    results: list[str] = []
+    x_names: set[str] = set(preserve_properties)
     i = 0
     n = len(opts)
     while i < n:
-        opt = opts[i]
+        opt: str = opts[i]
         i += 1
         if opt in exclude_arg_opts:  # example: {"-X", "--exclude"}
             i += 1
@@ -786,8 +786,8 @@ def delete_stale_files(
     ssh: bool = False,
 ) -> None:
     """Cleans up obsolete files; For example caused by abnormal termination, OS crash."""
-    seconds = millis / 1000
-    now = time.time()
+    seconds: float = millis / 1000
+    now: float = time.time()
     validate_is_not_a_symlink("", root_dir)
     for entry in os.scandir(root_dir):
         if entry.name == exclude or not entry.name.startswith(prefix):
@@ -799,7 +799,7 @@ def delete_stale_files(
                 elif not (ssh and stat.S_ISSOCK(entry.stat().st_mode)):
                     os.remove(entry.path)
                 elif match := SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
-                    pid = int(match.group(0))
+                    pid: int = int(match.group(0))
                     if pid_exists(pid) is False or now - entry.stat().st_mtime >= 31 * 24 * 60 * 60:
                         os.remove(entry.path)  # bzfs process is nomore alive hence its ssh master process isn't alive either
         except FileNotFoundError:
@@ -808,5 +808,5 @@ def delete_stale_files(
 
 def create_symlink(src: str, dst_dir: str, dst: str) -> None:
     """Creates dst symlink pointing to src using a relative path."""
-    rel_path = os.path.relpath(src, start=dst_dir)
+    rel_path: str = os.path.relpath(src, start=dst_dir)
     os.symlink(src=rel_path, dst=os.path.join(dst_dir, dst))

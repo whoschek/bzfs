@@ -181,17 +181,17 @@ from bzfs_main.utils import (
 )
 
 # constants:
-__version__ = bzfs_main.argparse_cli.__version__
-CRITICAL_STATUS = 2
-WARNING_STATUS = 1
-STILL_RUNNING_STATUS = 4
+__version__: str = bzfs_main.argparse_cli.__version__
+CRITICAL_STATUS: int = 2
+WARNING_STATUS: int = 1
+STILL_RUNNING_STATUS: int = 4
 MIN_PYTHON_VERSION: tuple[int, int] = (3, 8)
 if sys.version_info < MIN_PYTHON_VERSION:
     print(f"ERROR: {PROG_NAME} requires Python version >= {'.'.join(map(str, MIN_PYTHON_VERSION))}!")
     sys.exit(DIE_STATUS)
-CREATE_SRC_SNAPSHOTS_PREFIX_DFLT = PROG_NAME + "_"
-CREATE_SRC_SNAPSHOTS_SUFFIX_DFLT = "_adhoc"
-TIME_THRESHOLD_SECS = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
+CREATE_SRC_SNAPSHOTS_PREFIX_DFLT: str = PROG_NAME + "_"
+CREATE_SRC_SNAPSHOTS_SUFFIX_DFLT: str = "_adhoc"
+TIME_THRESHOLD_SECS: float = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
 
 
 #############################################################################
@@ -279,7 +279,7 @@ class Job:
         assert isinstance(self.inject_params, dict)
         with xfinally(reset_logger):  # runs reset_logger() on exit, without masking exception raised in body of `with` block
             try:
-                log_params = LogParams(args)
+                log_params: LogParams = LogParams(args)
                 log = bzfs_main.loggers.get_logger(log_params=log_params, args=args, log=log)
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
@@ -365,7 +365,7 @@ class Job:
         self.replication_start_time_nanos = time.monotonic_ns()
         self.progress_reporter = ProgressReporter(log, p.pv_program_opts, self.use_select, self.progress_update_intervals)
         with xfinally(lambda: self.progress_reporter.stop()):
-            daemon_stoptime_nanos = time.monotonic_ns() + p.daemon_lifetime_nanos
+            daemon_stoptime_nanos: int = time.monotonic_ns() + p.daemon_lifetime_nanos
             while True:  # loop for daemon mode
                 self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
                 self.all_dst_dataset_exists.clear()

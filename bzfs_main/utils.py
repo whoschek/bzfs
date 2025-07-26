@@ -60,18 +60,18 @@ from typing import (
 )
 
 # constants:
-PROG_NAME = "bzfs"
+PROG_NAME: str = "bzfs"
 ENV_VAR_PREFIX: str = PROG_NAME + "_"
-DIE_STATUS = 3
-DESCENDANTS_RE_SUFFIX = r"(?:/.*)?"  # also match descendants of a matching dataset
+DIE_STATUS: int = 3
+DESCENDANTS_RE_SUFFIX: str = r"(?:/.*)?"  # also match descendants of a matching dataset
 LOG_STDERR: int = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
 LOG_STDOUT: int = (LOG_STDERR + logging.INFO) // 2  # custom log level is halfway in between
 LOG_DEBUG: int = logging.DEBUG
 LOG_TRACE: int = logging.DEBUG // 2  # custom log level is halfway in between
-SNAPSHOT_FILTERS_VAR = "snapshot_filters_var"
+SNAPSHOT_FILTERS_VAR: str = "snapshot_filters_var"
 YEAR_WITH_FOUR_DIGITS_REGEX: re.Pattern[str] = re.compile(r"[1-9][0-9][0-9][0-9]")  # empty shall not match non-empty target
-UNIX_TIME_INFINITY_SECS = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
-DONT_SKIP_DATASET = ""
+UNIX_TIME_INFINITY_SECS: int = 2**64  # billions of years and to be extra safe, larger than the largest ZFS GUID
+DONT_SKIP_DATASET: str = ""
 SHELL_CHARS: str = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
 FILE_PERMISSIONS: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
 DIR_PERMISSIONS: int = stat.S_IRWXU  # rwx------ (owner read + write + execute)
@@ -118,7 +118,7 @@ V_ = TypeVar("V_")
 
 def shuffle_dict(dictionary: dict[K_, V_]) -> dict[K_, V_]:
     """Returns a new dict with items shuffled randomly."""
-    items = list(dictionary.items())
+    items: list[tuple[K_, V_]] = list(dictionary.items())
     random.shuffle(items)
     return dict(items)
 
@@ -268,7 +268,7 @@ def open_nofollow(
     fd = os.open(path, flags=flags, mode=perm)
     try:
         if check_owner:
-            st_uid = os.fstat(fd).st_uid
+            st_uid: int = os.fstat(fd).st_uid
             if st_uid != os.geteuid():  # verify ownership is current effective UID
                 raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
         return os.fdopen(fd, mode, buffering=buffering, encoding=encoding, errors=errors, newline=newline, **kwargs)
@@ -305,7 +305,7 @@ def find_match(
         i = find_match(lst, lambda arg: arg.startswith("-"), raises=f"Tag {tag} not found in {file}")
         i = find_match(lst, lambda arg: arg.startswith("-"), raises=lambda: f"Tag {tag} not found in {file}")
     """
-    offset = 0 if start is None else start if start >= 0 else len(seq) + start
+    offset: int = 0 if start is None else start if start >= 0 else len(seq) + start
     if start is not None or end is not None:
         seq = seq[start:end]
     for i, item in enumerate(reversed(seq) if reverse else seq):
@@ -406,7 +406,7 @@ def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexLis
 def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
     """Compiles regex strings and keeps track of negations."""
     assert isinstance(regexes, list)
-    compiled_regexes = []
+    compiled_regexes: RegexList = []
     for regex in regexes:
         if suffix:  # disallow non-trailing end-of-str symbol in dataset regexes to ensure descendants will also match
             if regex.endswith("\\$"):
@@ -506,9 +506,9 @@ def terminate_process_subtree(
     except_current_process: bool = False, root_pid: int | None = None, sig: signal.Signals = signal.SIGTERM
 ) -> None:
     """Sends ``sig`` to ``root_pid`` and all of its descendant processes."""
-    current_pid = os.getpid()
+    current_pid: int = os.getpid()
     root_pid = current_pid if root_pid is None else root_pid
-    pids = get_descendant_processes(root_pid)
+    pids: list[int] = get_descendant_processes(root_pid)
     if root_pid == current_pid:
         pids += [] if except_current_process else [current_pid]
     else:
@@ -520,11 +520,11 @@ def terminate_process_subtree(
 
 def get_descendant_processes(root_pid: int) -> list[int]:
     """Returns the list of all descendant process IDs for the given root PID, on Unix systems."""
-    procs = defaultdict(list)
-    cmd = ["ps", "-Ao", "pid,ppid"]
-    lines = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()
+    procs: defaultdict[int, list[int]] = defaultdict(list)
+    cmd: list[str] = ["ps", "-Ao", "pid,ppid"]
+    lines: list[str] = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()
     for line in lines[1:]:  # all lines except the header line
-        splits = line.split()
+        splits: list[str] = line.split()
         assert len(splits) == 2
         pid = int(splits[0])
         ppid = int(splits[1])
@@ -594,7 +594,7 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
 
 def validate_property_name(propname: str, input_text: str) -> str:
     """Checks that the ZFS property name contains no spaces or shell chars."""
-    invalid_chars = SHELL_CHARS
+    invalid_chars: str = SHELL_CHARS
     if not propname or any(c.isspace() or c in invalid_chars for c in propname):
         die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
     return propname
@@ -608,7 +608,7 @@ def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentPars
 
 def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
     """Parses human duration strings like '5m' or '2 hours' to milliseconds."""
-    unit_milliseconds = {
+    unit_milliseconds: dict[str, int] = {
         "milliseconds": 1,
         "millis": 1,
         "seconds": 1000,
@@ -631,8 +631,8 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", contex
         else:
             raise ValueError(f"Invalid duration format: {duration}")
     assert match
-    quantity = int(match.group(1))
-    unit = match.group(2)
+    quantity: int = int(match.group(1))
+    unit: str = match.group(2)
     return quantity * unit_milliseconds[unit]
 
 
@@ -644,7 +644,7 @@ def unixtime_fromisoformat(datetime_str: str) -> int:
 def isotime_from_unixtime(unixtime_in_seconds: int) -> str:
     """Converts UTC Unix time seconds into ISO 8601 datetime string."""
     tz: tzinfo = timezone.utc
-    dt = datetime.fromtimestamp(unixtime_in_seconds, tz=tz)
+    dt: datetime = datetime.fromtimestamp(unixtime_in_seconds, tz=tz)
     return dt.isoformat(sep="_", timespec="seconds")
 
 
@@ -668,7 +668,7 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
     else:
         if match := re.fullmatch(r"([+-])(\d\d):?(\d\d)", tz_spec):
             sign, hours, minutes = match.groups()
-            offset = int(hours) * 60 + int(minutes)
+            offset: int = int(hours) * 60 + int(minutes)
             offset = -offset if sign == "-" else offset
             tz = timezone(timedelta(minutes=offset))
         elif "/" in tz_spec and sys.version_info >= (3, 9):
@@ -721,9 +721,9 @@ class SnapshotPeriods:  # thread-safe
     def _suffix_to_duration(suffix: str, regex: re.Pattern) -> tuple[int, str]:
         """Example: Converts '2 hourly' to (2, 'hourly') and 'hourly' to (1, 'hourly')."""
         if match := regex.fullmatch(suffix):
-            duration_amount = int(match.group(1)) if match.group(1) else 1
+            duration_amount: int = int(match.group(1)) if match.group(1) else 1
             assert duration_amount > 0
-            duration_unit = match.group(2)
+            duration_unit: str = match.group(2)
             return duration_amount, duration_unit
         else:
             return 0, ""
@@ -841,7 +841,7 @@ class SynchronizedBool:
     def compare_and_set(self, expected_value: bool, new_value: bool) -> bool:
         """Sets to ``new_value`` only if current value equals ``expected_value``."""
         with self._lock:
-            eq = self._value == expected_value
+            eq: bool = self._value == expected_value
             if eq:
                 self._value = new_value
             return eq
@@ -929,10 +929,10 @@ class InterruptibleSleep:
 
     def sleep(self, duration_nanos: int) -> bool:
         """Delays the current thread by the given number of nanoseconds."""
-        end_time_nanos = time.monotonic_ns() + duration_nanos
+        end_time_nanos: int = time.monotonic_ns() + duration_nanos
         with self._lock:
             while not self.is_stopping:
-                diff_nanos = end_time_nanos - time.monotonic_ns()
+                diff_nanos: int = end_time_nanos - time.monotonic_ns()
                 if diff_nanos <= 0:
                     return False
                 self._condition.wait(timeout=diff_nanos / 1_000_000_000)  # release, then block until notified or timeout

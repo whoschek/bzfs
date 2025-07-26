@@ -45,10 +45,10 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.configuration import Params, Remote
 
 # constants:
-DISABLE_PRG = "-"
-DUMMY_DATASET = "dummy"
-ZFS_VERSION_IS_AT_LEAST_2_1_0 = "zfs>=2.1.0"
-ZFS_VERSION_IS_AT_LEAST_2_2_0 = "zfs>=2.2.0"
+DISABLE_PRG: str = "-"
+DUMMY_DATASET: str = "dummy"
+ZFS_VERSION_IS_AT_LEAST_2_1_0: str = "zfs>=2.1.0"
+ZFS_VERSION_IS_AT_LEAST_2_2_0: str = "zfs>=2.2.0"
 
 
 #############################################################################
@@ -66,9 +66,9 @@ def detect_available_programs(job: Job) -> None:
     """Detects programs, zpool features and connection pools for local and remote hosts."""
     p = params = job.params
     log = p.log
-    available_programs = params.available_programs
+    available_programs: dict[str, dict[str, str]] = params.available_programs
     if "local" not in available_programs:
-        cmd = [p.shell_program_local, "-c", find_available_programs(p)]
+        cmd: list[str] = [p.shell_program_local, "-c", find_available_programs(p)]
         available_programs["local"] = dict.fromkeys(
             subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout.splitlines(), ""
         )
@@ -77,7 +77,7 @@ def detect_available_programs(job: Job) -> None:
             disable_program(p, "sh", ["local"])
 
     for r in [p.dst, p.src]:
-        loc = r.location
+        loc: str = r.location
         remote_conf_cache_key = r.cache_key()
         cache_item: RemoteConfCacheItem | None = job.remote_conf_cache.get(remote_conf_cache_key)
         if cache_item is not None:
@@ -127,20 +127,20 @@ def detect_available_programs(job: Job) -> None:
                 # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
                 # uname-Darwin foo 23.6.0 Darwin Kernel Version 23.6.0: Mon Jul 29 21:13:04 PDT 2024; root:xnu-10063.141.2~1/RELEASE_ARM64_T6020 arm64
                 programs.pop(program)
-                uname = program[len("uname-") :]
+                uname: str = program[len("uname-") :]
                 programs["uname"] = uname
                 log.log(LOG_TRACE, f"available_programs[{key}][uname]: %s", uname)
                 programs["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
                 log.log(LOG_TRACE, f"available_programs[{key}][os]: %s", programs["os"])
             elif program.startswith("default_shell-"):
                 programs.pop(program)
-                default_shell = program[len("default_shell-") :]
+                default_shell: str = program[len("default_shell-") :]
                 programs["default_shell"] = default_shell
                 log.log(LOG_TRACE, f"available_programs[{key}][default_shell]: %s", default_shell)
                 validate_default_shell(default_shell, r)
             elif program.startswith("getconf_cpu_count-"):
                 programs.pop(program)
-                getconf_cpu_count = program[len("getconf_cpu_count-") :]
+                getconf_cpu_count: str = program[len("getconf_cpu_count-") :]
                 programs["getconf_cpu_count"] = getconf_cpu_count
                 log.log(LOG_TRACE, f"available_programs[{key}][getconf_cpu_count]: %s", getconf_cpu_count)
 
@@ -171,7 +171,7 @@ def disable_program(p: Params, program: str, locations: list[str]) -> None:
 def find_available_programs(p: Params) -> str:
     """POSIX shell script that checks for the existence of various programs; It uses `if` statements instead of `&&` plus
     `printf` instead of `echo` to ensure maximum compatibility across shells."""
-    cmds = []
+    cmds: list[str] = []
     cmds.append("printf 'default_shell-%s\n' \"$SHELL\"")
     cmds.append("if command -v echo > /dev/null; then printf 'echo\n'; fi")
     cmds.append(f"if command -v {p.zpool_program} > /dev/null; then printf 'zpool\n'; fi")
@@ -199,7 +199,7 @@ def detect_available_programs_remote(job: Job, remote: Remote, available_program
     location = remote.location
     available_programs_minimum = {"zpool": None, "sudo": None}
     available_programs[location] = {}
-    lines = None
+    lines: str | None = None
     try:
         # on Linux, 'zfs --version' returns with zero status and prints the correct info
         # on FreeBSD, 'zfs --version' always prints the same (correct) info as Linux, but nonetheless sometimes
@@ -219,10 +219,10 @@ def detect_available_programs_remote(job: Job, remote: Remote, available_program
             lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
             assert lines
     if lines:
-        line = lines.splitlines()[0]
+        line: str = lines.splitlines()[0]
         assert line.startswith("zfs")
         # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5, zfswin-2.2.3rc5 -> 2.2.3
-        version = line.split("-")[1].strip()
+        version: str = line.split("-")[1].strip()
         match = re.fullmatch(r"(\d+\.\d+\.\d+).*", version)
         assert match, "Unparsable zfs version string: " + version
         version = match.group(1)
@@ -235,7 +235,7 @@ def detect_available_programs_remote(job: Job, remote: Remote, available_program
 
     if p.shell_program != DISABLE_PRG:
         try:
-            cmd = [p.shell_program, "-c", find_available_programs(p)]
+            cmd: list[str] = [p.shell_program, "-c", find_available_programs(p)]
             available_programs[location].update(dict.fromkeys(run_ssh_command(job, remote, LOG_TRACE, cmd=cmd).splitlines()))
             return
         except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
@@ -268,14 +268,14 @@ def detect_zpool_features(job: Job, remote: Remote) -> None:
     """Fills ``job.params.zpool_features`` with detected zpool capabilities."""
     p = params = job.params
     r, loc, log = remote, remote.location, p.log
-    lines = []
-    features = {}
+    lines: list[str] = []
+    features: dict[str, str] = {}
     params.zpool_features.pop(loc, None)
     if is_dummy(r):
         params.zpool_features[loc] = {}
         return
     if params.zpool_program != DISABLE_PRG:
-        cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
+        cmd: list[str] = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
         try:
             lines = run_ssh_command(job, remote, LOG_TRACE, check=False, cmd=cmd).splitlines()
         except (FileNotFoundError, PermissionError) as e:
@@ -283,7 +283,7 @@ def detect_zpool_features(job: Job, remote: Remote) -> None:
                 raise
             log.warning("%s", f"Failed to detect zpool features on {loc}: {r.pool}. Continuing with minimal assumptions ...")
         else:
-            props = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
+            props: dict[str, str] = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
             features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
     if len(lines) == 0:
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)

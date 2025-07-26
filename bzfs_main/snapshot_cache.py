@@ -38,7 +38,7 @@ from bzfs_main.utils import (
     stderr_to_str,
 )
 
-SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
+SNAPSHOTS_CHANGED: str = "snapshots_changed"  # http://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import Job
@@ -67,14 +67,14 @@ class SnapshotCache:
 
     def last_modified_cache_file(self, remote: Remote, dataset: str, label: SnapshotLabel | None = None) -> str:
         """Returns the path of the cache file that is tracking last snapshot modification."""
-        cache_file = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
-        userhost_dir = remote.ssh_user_host if remote.ssh_user_host else "-"
+        cache_file: str = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
+        userhost_dir: str = remote.ssh_user_host if remote.ssh_user_host else "-"
         return os_path_join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
         p = self.job.params
-        cache_file = self.last_modified_cache_file(p.src, dataset)
+        cache_file: str = self.last_modified_cache_file(p.src, dataset)
         if not p.dry_run:
             try:
                 zero_times = (0, 0)
@@ -97,16 +97,16 @@ class SnapshotCache:
             for dataset in datasets:
                 dataset_labels[dataset].append(label)
 
-        sorted_datasets = sorted(src_datasets_set)
-        snapshots_changed_dict = self.zfs_get_snapshots_changed(src, sorted_datasets)
+        sorted_datasets: list[str] = sorted(src_datasets_set)
+        snapshots_changed_dict: dict[str, int] = self.zfs_get_snapshots_changed(src, sorted_datasets)
         for src_dataset in sorted_datasets:
-            snapshots_changed = snapshots_changed_dict.get(src_dataset, 0)
+            snapshots_changed: int = snapshots_changed_dict.get(src_dataset, 0)
             self.job.src_properties[src_dataset][SNAPSHOTS_CHANGED] = snapshots_changed
             if snapshots_changed == 0:
                 self.invalidate_last_modified_cache_dataset(src_dataset)
             else:
-                cache_file = self.last_modified_cache_file(src, src_dataset)
-                cache_dir = os.path.dirname(cache_file)
+                cache_file: str = self.last_modified_cache_file(src, src_dataset)
+                cache_dir: str = os.path.dirname(cache_file)
                 if not p.dry_run:
                     try:
                         os.makedirs(cache_dir, exist_ok=True)
@@ -130,8 +130,8 @@ class SnapshotCache:
                 return []
 
         p = self.job.params
-        cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o snapshots_changed,name")
-        results = {}
+        cmd: list[str] = p.split_args(f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o snapshots_changed,name")
+        results: dict[str, int] = {}
         for lines in itr_ssh_cmd_parallel(
             self.job, remote, [(cmd, datasets)], lambda _cmd, batch: try_zfs_list_command(_cmd, batch), ordered=False
         ):

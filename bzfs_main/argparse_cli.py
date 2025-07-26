@@ -48,20 +48,20 @@ from bzfs_main.utils import (
 )
 
 # constants:
-__version__ = "1.12.0-dev"
-PROG_AUTHOR = "Wolfgang Hoschek"
-EXCLUDE_DATASET_REGEXES_DEFAULT = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
-LOG_DIR_DEFAULT = PROG_NAME + "-logs"
-SKIP_ON_ERROR_DEFAULT = "dataset"
+__version__: str = "1.12.0-dev"
+PROG_AUTHOR: str = "Wolfgang Hoschek"
+EXCLUDE_DATASET_REGEXES_DEFAULT: str = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
+LOG_DIR_DEFAULT: str = PROG_NAME + "-logs"
+SKIP_ON_ERROR_DEFAULT: str = "dataset"
 ZFS_RECV_GROUPS: dict[str, str] = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 CMP_CHOICES_ITEMS: tuple[str, str, str] = ("src", "dst", "all")
 
 
 def argument_parser() -> argparse.ArgumentParser:
     """Returns the CLI parser used by bzfs."""
-    create_src_snapshots_plan_example1 = str({"test": {"": {"adhoc": 1}}}).replace(" ", "")
-    create_src_snapshots_plan_example2 = str({"prod": {"us-west-1": {"hourly": 36, "daily": 31}}}).replace(" ", "")
-    delete_dst_snapshots_except_plan_example1 = str(
+    create_src_snapshots_plan_example1: str = str({"test": {"": {"adhoc": 1}}}).replace(" ", "")
+    create_src_snapshots_plan_example2: str = str({"prod": {"us-west-1": {"hourly": 36, "daily": 31}}}).replace(" ", "")
+    delete_dst_snapshots_except_plan_example1: str = str(
         {
             "prod": {
                 "onsite": {
@@ -78,7 +78,7 @@ def argument_parser() -> argparse.ArgumentParser:
     ).replace(" ", "")
 
     # fmt: off
-    parser = argparse.ArgumentParser(
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
         prog=PROG_NAME,
         allow_abbrev=False,
         formatter_class=argparse.RawTextHelpFormatter,
@@ -953,7 +953,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--monitor-snapshots-no-oldest-check", action="store_true",
         # help="Disable monitoring check of oldest snapshot.\n\n")
         help=argparse.SUPPRESS)
-    cmp_choices_dflt = "+".join(CMP_CHOICES_ITEMS)
+    cmp_choices_dflt: str = "+".join(CMP_CHOICES_ITEMS)
     cmp_choices: list[str] = []
     for i in range(len(CMP_CHOICES_ITEMS)):
         cmp_choices += ["+".join(c) for c in itertools.combinations(CMP_CHOICES_ITEMS, i + 1)]
@@ -1231,7 +1231,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     def hlp(program: str) -> str:
         return f"The name of the '{program}' executable (optional). Default is '{program}'. "
 
-    msg = f"Use '{DISABLE_PRG}' to disable the use of this program.\n\n"
+    msg: str = f"Use '{DISABLE_PRG}' to disable the use of this program.\n\n"
     parser.add_argument(
         "--compression-program", default="zstd", choices=["zstd", "lz4", "pzstd", "pigz", "gzip", "bzip2", DISABLE_PRG],
         help=hlp("zstd") + msg.rstrip() + " The use is auto-disabled if data is transferred locally instead of via the "
@@ -1386,7 +1386,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
                 help=f"{f.metadata.get('help')} ({min_} ≤ x ≤ {max_}, default: %(default)s).\n\n")
 
     for option_name, flag in ZFS_RECV_GROUPS.items():
-        grup = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
+        grup: str = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
         flag = "'" + flag + "'"  # one of -o or -x
 
         def h(text: str, option_name: str=option_name) -> str:

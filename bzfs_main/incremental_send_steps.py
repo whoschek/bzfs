@@ -51,7 +51,7 @@ def incremental_send_steps(
         """Appends a run of snapshots as one or more send steps."""
         # step = ("-I", src_snapshots[start], src_snapshots[i], i - start)
         # print(f"{label} {self.send_step_to_str(step)}")
-        is_not_resume = len(steps) > 0 or not is_resume
+        is_not_resume: bool = len(steps) > 0 or not is_resume
         if i - start > 1 and (not force_convert_I_to_i) and "@" in src_snapshots[start] and is_not_resume:
             steps.append(("-I", src_snapshots[start], src_snapshots[i], src_snapshots[start + 1 : i + 1]))
         elif "@" in src_snapshots[start] and is_not_resume:

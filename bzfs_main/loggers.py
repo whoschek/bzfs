@@ -98,7 +98,7 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
         handler.setLevel(log_params.log_level)
         log.addHandler(handler)
 
-    abs_log_file = os.path.abspath(log_params.log_file)
+    abs_log_file: str = os.path.abspath(log_params.log_file)
     if not any(isinstance(h, logging.FileHandler) and h.baseFilename == abs_log_file for h in sublog.handlers):
         handler = logging.FileHandler(log_params.log_file, encoding="utf-8")
         handler.setFormatter(get_default_log_formatter())
@@ -114,7 +114,7 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
         handler.setLevel(args.log_syslog_level)
         log.addHandler(handler)
         if handler.level < sublog.getEffectiveLevel():
-            log_level_name = logging.getLevelName(sublog.getEffectiveLevel())
+            log_level_name: str = logging.getLevelName(sublog.getEffectiveLevel())
             log.warning(
                 "%s",
                 f"No messages with priority lower than {log_level_name} will be sent to syslog because syslog "
@@ -150,12 +150,12 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = N
 
         def format(self, record: logging.LogRecord) -> str:
             """Formats the given record, adding timestamp and level prefix and padding."""
-            levelno = record.levelno
+            levelno: int = record.levelno
             if levelno != log_stderr_ and levelno != log_stdout_:  # emit stdout and stderr "as-is" (no formatting)
-                timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
-                ts_level = f"{timestamp} {level_prefixes_.get(levelno, '')} "
-                msg = record.msg
-                i = msg.find("%s")
+                timestamp: str = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
+                ts_level: str = f"{timestamp} {level_prefixes_.get(levelno, '')} "
+                msg: str = record.msg
+                i: int = msg.find("%s")
                 msg = ts_level + msg
                 if i >= 1:
                     i += len(ts_level)
@@ -169,7 +169,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = N
                 msg = super().format(record)
 
             msg = prefix + msg
-            cols = terminal_cols[0]
+            cols: int | None = terminal_cols[0]
             if cols is None:
                 cols = self.ljust_cols()
             msg = msg.ljust(cols)  # w/ progress line, "overwrite" trailing chars of previous msg with spaces
@@ -180,7 +180,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = N
             """Lazily determines padding width from ProgressReporter settings."""
             # lock-free yet thread-safe late configuration-based init for prettier ProgressReporter output
             # log_params.params and available_programs are not fully initialized yet before detect_available_programs() ends
-            cols = 0
+            cols: int = 0
             assert log_params is not None
             p = log_params.params
             if p is not None and "local" in p.available_programs:
@@ -241,9 +241,9 @@ def get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tu
 
 def remove_json_comments(config_str: str) -> str:  # not standard but practical
     """Strips line and end-of-line comments from a JSON string."""
-    lines = []
+    lines: list[str] = []
     for line in config_str.splitlines():
-        stripped = line.strip()
+        stripped: str = line.strip()
         if stripped.startswith("#"):
             line = ""  # replace comment line with empty line to preserve line numbering
         elif stripped.endswith("#"):
@@ -258,8 +258,8 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
     """Creates a logger from a JSON config file with variable substitution."""
     import json
 
-    prefix = PROG_NAME + "."
-    log_config_vars = {
+    prefix: str = PROG_NAME + "."
+    log_config_vars: dict[str, str] = {
         prefix + "sub.logger": get_logger_subname(),
         prefix + "get_default_log_formatter": __name__ + ".get_default_log_formatter",
         prefix + "log_level": log_params.log_level,
@@ -270,10 +270,10 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
     }
     log_config_vars.update(log_params.log_config_vars)  # merge variables passed into CLI with convenience variables
 
-    log_config_file_str = log_params.log_config_file
+    log_config_file_str: str = log_params.log_config_file
     if log_config_file_str.startswith("+"):
-        path = log_config_file_str[1:]
-        basename_stem = Path(path).stem  # stem is basename without file extension ("bzfs_log_config")
+        path: str = log_config_file_str[1:]
+        basename_stem: str = Path(path).stem  # stem is basename without file extension ("bzfs_log_config")
         if not ("bzfs_log_config" in basename_stem and os.path.basename(path).endswith(".json")):
             die(f"--log-config-file: basename must contain 'bzfs_log_config' and end with '.json': {path}")
         with open_nofollow(path, "r", encoding="utf-8") as fd:
@@ -284,13 +284,13 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
 
         def substitute_fn(match: re.Match) -> str:
             """Returns JSON replacement for variable placeholder."""
-            varname = match.group(1)
-            error_msg = validate_log_config_variable_name(varname)
+            varname: str = match.group(1)
+            error_msg: str | None = validate_log_config_variable_name(varname)
             if error_msg:
                 raise ValueError(error_msg)
-            replacement = log_config_variables.get(varname)
+            replacement: str | None = log_config_variables.get(varname)
             if not replacement:
-                default = match.group(3)
+                default: str | None = match.group(3)
                 if default is None:
                     raise ValueError("Missing default value in JSON for empty log config variable: ${" + varname + "}")
                 replacement = default
@@ -311,7 +311,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
     log_config_file_str = substitute_log_config_vars(log_config_file_str, log_config_vars)
     # if args is not None and args.verbose >= 2:
     #     print("[T] Substituted log_config_file_str:\n" + log_config_file_str, flush=True)
-    log_config_dict = json.loads(log_config_file_str)
+    log_config_dict: dict = json.loads(log_config_file_str)
     validate_log_config_dict(log_config_dict)
     logging.config.dictConfig(log_config_dict)
     return logging.getLogger(get_logger_subname())
@@ -330,7 +330,7 @@ def validate_log_config_variable_name(name: str) -> str | None:
     """Validates log config variable name and return error message if invalid."""
     if not name:
         return "Invalid log config variable name. Name must not be empty: " + name
-    bad_chars = "${} " + '"' + "'"
+    bad_chars: str = "${} " + '"' + "'"
     if any(char in bad_chars for char in name):
         return f"Invalid log config variable name. Name must not contain forbidden {bad_chars} characters: " + name
     if any(char.isspace() for char in name):
@@ -341,7 +341,7 @@ def validate_log_config_variable_name(name: str) -> str | None:
 def validate_log_config_dict(config: dict) -> None:
     """Recursively scans the logging configuration dictionary to ensure that any instantiated objects via the '()' key are on
     an approved whitelist; This prevents arbitrary code execution from a malicious config file."""
-    whitelist = {
+    whitelist: set[str] = {
         "logging.StreamHandler",
         "logging.FileHandler",
         "logging.handlers.SysLogHandler",

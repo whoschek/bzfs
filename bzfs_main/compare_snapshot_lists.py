@@ -79,28 +79,28 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     """
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
-    task = src.root_dataset + " vs. " + dst.root_dataset
-    tsv_dir = p.log_params.log_file[0 : -len(".log")] + ".cmp"
+    task: str = src.root_dataset + " vs. " + dst.root_dataset
+    tsv_dir: str = p.log_params.log_file[0 : -len(".log")] + ".cmp"
     os.makedirs(tsv_dir, exist_ok=True)
-    tsv_file = os.path.join(tsv_dir, (src.root_dataset + "%" + dst.root_dataset).replace("/", "~") + ".tsv")
-    tmp_tsv_file = tsv_file + ".tmp"
-    compare_snapshot_lists = set(p.compare_snapshot_lists.split("+"))
-    is_src_dst_all = all(choice in compare_snapshot_lists for choice in CMP_CHOICES_ITEMS)
-    all_src_dst = [loc for loc in ("all", "src", "dst") if loc in compare_snapshot_lists]
-    is_first_row = True
-    now = None
+    tsv_file: str = os.path.join(tsv_dir, (src.root_dataset + "%" + dst.root_dataset).replace("/", "~") + ".tsv")
+    tmp_tsv_file: str = tsv_file + ".tmp"
+    compare_snapshot_lists: set[str] = set(p.compare_snapshot_lists.split("+"))
+    is_src_dst_all: bool = all(choice in compare_snapshot_lists for choice in CMP_CHOICES_ITEMS)
+    all_src_dst: list[str] = [loc for loc in ("all", "src", "dst") if loc in compare_snapshot_lists]
+    is_first_row: bool = True
+    now: int | None = None
 
     def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Generator[str, None, None]:
         """Lists snapshots sorted by dataset name; All snapshots of a given dataset will be adjacent."""
         assert (not job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
-        written_zfs_prop = "written"  # https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
+        written_zfs_prop: str = "written"  # https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
         if is_solaris_zfs(p, r):  # solaris-11.4 zfs does not know the "written" ZFS snapshot property
             written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
-        props = job.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
-        types = "snapshot"
+        props: str = job.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
+        types: str = "snapshot"
         if p.use_bookmark and r.location == "src" and are_bookmarks_enabled(p, r):
             types = "snapshot,bookmark"  # output list ordering: intentionally makes bookmarks appear *after* snapshots
-        cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
+        cmd: list[str] = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
         for lines in zfs_list_snapshots_in_parallel(job, r, cmd, sorted_datasets):
             yield from lines
 
@@ -114,11 +114,11 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         for dataset, group in itertools.groupby(
             sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.replace("#", "@").index("@")]
         ):
-            snapshots = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
+            snapshots: list[str] = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
             snapshots = filter_snapshots(job, snapshots, filter_bookmarks=True)  # apply include/exclude policy
             snapshots.sort(key=lambda line: line.split("\t", 2)[1])  # stable sort by GUID (2nd remains createtxg)
-            rel_dataset = relativize_dataset(dataset, root_dataset)  # rel_dataset=/foo, root_dataset=tank1/src
-            last_guid = ""
+            rel_dataset: str = relativize_dataset(dataset, root_dataset)  # rel_dataset=/foo, root_dataset=tank1/src
+            last_guid: str = ""
             for line in snapshots:
                 cols = line.split("\t")
                 creation, guid, createtxg, written, snapshot_name = cols
@@ -156,7 +156,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
 
         # print metadata of snapshots of current dataset to TSV file; custom stats can later be computed from there
         stats: defaultdict[str, SnapshotStats] = defaultdict(SnapshotStats)
-        header = "location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation written"
+        header: str = "location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation written"
         nonlocal is_first_row
         if is_first_row:
             fd.write(header.replace(" ", "\t") + "\n")
@@ -191,8 +191,8 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
             s = stats[location]
             s.snapshot_count_since += 1
             s.sum_written_since += int(written) if written != "-" else 0
-        prefix = f"Comparing {rel_dataset}~"
-        msgs = []
+        prefix: str = f"Comparing {rel_dataset}~"
+        msgs: list[str] = []
         msgs.append(f"{prefix} of {task}")
         msgs.append(
             f"{prefix} Q: No src snapshots are missing on dst, and no dst snapshots are missing on src, "
@@ -258,7 +258,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     tsv_file = tsv_file[0 : tsv_file.rindex(".")] + ".rel_datasets_tsv"
     tmp_tsv_file = tsv_file + ".tmp"
     with open_nofollow(tmp_tsv_file, "w", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
-        header = "location rel_dataset src_dataset dst_dataset"
+        header: str = "location rel_dataset src_dataset dst_dataset"
         fd.write(header.replace(" ", "\t") + "\n")
         src_only: set[str] = rel_datasets["src"].difference(rel_datasets["dst"])
         dst_only: set[str] = rel_datasets["dst"].difference(rel_datasets["src"])
@@ -298,7 +298,7 @@ def merge_sorted_iterators(
     """The typical pipelined merge algorithm of a merge sort, slightly adapted to our specific use case."""
     assert len(choices) == 3
     assert choice
-    flags = 0
+    flags: int = 0
     for i, item in enumerate(choices):
         if item in choice:
             flags |= 1 << i

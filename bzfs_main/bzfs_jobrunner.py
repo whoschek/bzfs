@@ -70,10 +70,10 @@ from bzfs_main.utils import (
 from bzfs_main.utils import PROG_NAME as BZFS_PROG_NAME
 
 # constants:
-PROG_NAME = "bzfs_jobrunner"
-SRC_MAGIC_SUBSTITUTION_TOKEN = "^SRC_HOST"  # noqa: S105
-DST_MAGIC_SUBSTITUTION_TOKEN = "^DST_HOST"  # noqa: S105
-SEP = ","
+PROG_NAME: str = "bzfs_jobrunner"
+SRC_MAGIC_SUBSTITUTION_TOKEN: str = "^SRC_HOST"  # noqa: S105
+DST_MAGIC_SUBSTITUTION_TOKEN: str = "^DST_HOST"  # noqa: S105
+SEP: str = ","
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -453,7 +453,7 @@ class Job:
     def run_main(self, sys_argv: list[str]) -> None:
         """API for Python clients; visible for testing; may become a public API eventually."""
         self.first_exception = None
-        log = self.log
+        log: Logger = self.log
         log.info("CLI arguments: %s", " ".join(sys_argv))
         nsp = argparse.Namespace(no_argument_file=True)  # disable --root-dataset-pairs='+file' option in DatasetPairsAction
         args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:], nsp)  # forward all unknown args to `bzfs`
@@ -464,33 +464,35 @@ class Job:
         src_bookmark_plan = self.validate_snapshot_plan(literal_eval(args.src_bookmark_plan), "--src-bookmark-plan")
         dst_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
         monitor_snapshot_plan = self.validate_monitor_snapshot_plan(literal_eval(args.monitor_snapshot_plan))
-        localhostname = args.localhost if args.localhost else socket.gethostname()
+        localhostname: str = args.localhost if args.localhost else socket.gethostname()
         self.validate_host_name(localhostname, "--localhost")
         log.debug("localhostname: %s", localhostname)
-        src_hosts = self.validate_src_hosts(literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read()))
-        basis_src_hosts = src_hosts
-        nb_src_hosts = len(basis_src_hosts)
+        src_hosts: list[str] = self.validate_src_hosts(
+            literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read())
+        )
+        basis_src_hosts: list[str] = src_hosts
+        nb_src_hosts: int = len(basis_src_hosts)
         log.debug("src_hosts before subsetting: %s", src_hosts)
         if args.src_host is not None:  # retain only the src hosts that are also contained in args.src_host
             assert isinstance(args.src_host, list)
-            retain_src_hosts = set(args.src_host)
+            retain_src_hosts: set[str] = set(args.src_host)
             self.validate_is_subset(retain_src_hosts, src_hosts, "--src-host", "--src-hosts")
             src_hosts = [host for host in src_hosts if host in retain_src_hosts]
-        dst_hosts = self.validate_dst_hosts(literal_eval(args.dst_hosts))
-        nb_dst_hosts = len(dst_hosts)
+        dst_hosts: dict[str, list[str]] = self.validate_dst_hosts(literal_eval(args.dst_hosts))
+        nb_dst_hosts: int = len(dst_hosts)
         if args.dst_host is not None:  # retain only the dst hosts that are also contained in args.dst_host
             assert isinstance(args.dst_host, list)
-            retain_dst_hosts = set(args.dst_host)
+            retain_dst_hosts: set[str] = set(args.dst_host)
             self.validate_is_subset(retain_dst_hosts, dst_hosts.keys(), "--dst-host", "--dst-hosts.keys")
             dst_hosts = {dst_host: lst for dst_host, lst in dst_hosts.items() if dst_host in retain_dst_hosts}
-        retain_dst_targets = self.validate_dst_hosts(literal_eval(args.retain_dst_targets))
+        retain_dst_targets: dict[str, list[str]] = self.validate_dst_hosts(literal_eval(args.retain_dst_targets))
         self.validate_is_subset(dst_hosts.keys(), retain_dst_targets.keys(), "--dst-hosts.keys", "--retain-dst-targets.keys")
-        dst_root_datasets = self.validate_dst_root_datasets(literal_eval(args.dst_root_datasets))
+        dst_root_datasets: dict[str, str] = self.validate_dst_root_datasets(literal_eval(args.dst_root_datasets))
         self.validate_is_subset(
             dst_root_datasets.keys(), retain_dst_targets.keys(), "--dst-root-dataset.keys", "--retain-dst-targets.keys"
         )
         self.validate_is_subset(dst_hosts.keys(), dst_root_datasets.keys(), "--dst-hosts.keys", "--dst-root-dataset.keys")
-        bad_root_datasets = {
+        bad_root_datasets: dict[str, str] = {
             dst_host: root_dataset
             for dst_host in sorted(dst_hosts.keys())
             if SRC_MAGIC_SUBSTITUTION_TOKEN not in (root_dataset := dst_root_datasets[dst_host])
@@ -516,18 +518,18 @@ class Job:
         if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
             random.shuffle(src_hosts)
             dst_hosts = shuffle_dict(dst_hosts)
-        ssh_src_user = args.ssh_src_user if args.ssh_src_user is not None else args.src_user  # --src-user is deprecated
-        ssh_dst_user = args.ssh_dst_user if args.ssh_dst_user is not None else args.dst_user  # --dst-user is deprecated
-        ssh_src_port = args.ssh_src_port
-        ssh_dst_port = args.ssh_dst_port
-        ssh_src_config_file = args.ssh_src_config_file
-        ssh_dst_config_file = args.ssh_dst_config_file
-        job_id = sanitize(args.job_id)
-        job_run = args.job_run if args.job_run is not None else args.jobid  # --jobid is deprecated; was renamed to --job-run
+        ssh_src_user: str = args.ssh_src_user if args.ssh_src_user is not None else args.src_user  # --src-user is deprecated
+        ssh_dst_user: str = args.ssh_dst_user if args.ssh_dst_user is not None else args.dst_user  # --dst-user is deprecated
+        ssh_src_port: int | None = args.ssh_src_port
+        ssh_dst_port: int | None = args.ssh_dst_port
+        ssh_src_config_file: str | None = args.ssh_src_config_file
+        ssh_dst_config_file: str | None = args.ssh_dst_config_file
+        job_id: str = sanitize(args.job_id)
+        job_run: str = args.job_run if args.job_run is not None else args.jobid  # --jobid deprecat; was renamed to --job-run
         job_run = sanitize(job_run) if job_run else uuid.uuid1().hex
         workers, workers_is_percent = args.workers
-        max_workers = max(1, round((os.cpu_count() or 1) * workers / 100.0) if workers_is_percent else round(workers))
-        worker_timeout_seconds = args.worker_timeout_seconds
+        max_workers: int = max(1, round((os.cpu_count() or 1) * workers / 100.0) if workers_is_percent else round(workers))
+        worker_timeout_seconds: int = args.worker_timeout_seconds
         self.spawn_process_per_job = args.spawn_process_per_job
         username: str = pwd.getpwuid(os.geteuid()).pw_name
         assert username
@@ -560,25 +562,25 @@ class Job:
             """Returns host:dataset string resolving IPv6 and localhost cases."""
             ssh_user = ssh_src_user if is_src else ssh_dst_user
             ssh_user = ssh_user if ssh_user else username
-            lb = self.loopback_address
-            lhi = localhost_ids
+            lb: str = self.loopback_address
+            lhi: set[str] = localhost_ids
             hostname = hostname if hostname not in lhi else (lb if lb else hostname) if username != ssh_user else "-"
             hostname = convert_ipv6(hostname)
             return f"{hostname}:{dataset}"
 
         def resolve_dst_dataset(dst_hostname: str, dst_dataset: str) -> str:
             """Expands ``dst_dataset`` relative to ``dst_hostname`` roots."""
-            root_dataset = dst_root_datasets.get(dst_hostname)
+            root_dataset: str | None = dst_root_datasets.get(dst_hostname)
             assert root_dataset is not None, dst_hostname  # f"Hostname '{dst_hostname}' missing in --dst-root-datasets"
             root_dataset = root_dataset.replace(SRC_MAGIC_SUBSTITUTION_TOKEN, src_host)
             root_dataset = root_dataset.replace(DST_MAGIC_SUBSTITUTION_TOKEN, dst_hostname)
-            resolved_dst_dataset = root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
+            resolved_dst_dataset: str = root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
             bzfs_main.utils.validate_dataset_name(resolved_dst_dataset, dst_dataset)
             return resolve_dataset(dst_hostname, resolved_dst_dataset, is_src=False)
 
         dummy: str = DUMMY_DATASET
-        lhn = localhostname
-        bzfs_prog_header = [BZFS_PROG_NAME, "--no-argument-file"] + unknown_args
+        lhn: str = localhostname
+        bzfs_prog_header: list[str] = [BZFS_PROG_NAME, "--no-argument-file"] + unknown_args
         subjobs: dict[str, list[str]] = {}
         for i, src_host in enumerate(src_hosts):
             subjob_name: str = zero_pad(i) + "src-host"
@@ -597,8 +599,8 @@ class Job:
                 subjobs[subjob_name] = bzfs_prog_header + opts
 
             if args.replicate:
-                j = 0
-                marker = "replicate"
+                j: int = 0
+                marker: str = "replicate"
                 for dst_hostname, targets in dst_hosts.items():
                     opts = self.replication_opts(
                         dst_snapshot_plan, set(targets), lhn, src_host, dst_hostname, marker, job_id, job_run + npad()
@@ -615,7 +617,7 @@ class Job:
                             ssh_dst_config_file=ssh_dst_config_file,
                         )
                         opts += ["--"]
-                        dataset_pairs = [
+                        dataset_pairs: list[tuple[str, str]] = [
                             (resolve_dataset(src_host, src), resolve_dst_dataset(dst_hostname, dst))
                             for src, dst in args.root_dataset_pairs
                         ]
@@ -657,7 +659,7 @@ class Job:
                 j = 0
                 marker = "prune-dst-snapshots"
                 for dst_hostname, _ in dst_hosts.items():
-                    curr_retain_targets = set(retain_dst_targets[dst_hostname])
+                    curr_retain_targets: set[str] = set(retain_dst_targets[dst_hostname])
                     curr_dst_snapshot_plan = {  # only retain targets that belong to the host
                         org: {target: periods for target, periods in target_periods.items() if target in curr_retain_targets}
                         for org, target_periods in dst_snapshot_plan.items()
@@ -835,8 +837,8 @@ class Job:
         opts: list[str],
         ssh_src_user: str | None = None,
         ssh_dst_user: str | None = None,
-        ssh_src_port: str | None = None,
-        ssh_dst_port: str | None = None,
+        ssh_src_port: int | None = None,
+        ssh_dst_port: int | None = None,
         ssh_src_config_file: str | None = None,
         ssh_dst_config_file: str | None = None,
     ) -> None:
@@ -844,8 +846,8 @@ class Job:
         assert isinstance(opts, list)
         opts += [f"--ssh-src-user={ssh_src_user}"] if ssh_src_user else []
         opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
-        opts += [f"--ssh-src-port={ssh_src_port}"] if ssh_src_port else []
-        opts += [f"--ssh-dst-port={ssh_dst_port}"] if ssh_dst_port else []
+        opts += [f"--ssh-src-port={ssh_src_port}"] if ssh_src_port is not None else []
+        opts += [f"--ssh-dst-port={ssh_dst_port}"] if ssh_dst_port is not None else []
         opts += [f"--ssh-src-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
         opts += [f"--ssh-dst-config-file={ssh_dst_config_file}"] if ssh_dst_config_file else []
 

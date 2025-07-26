@@ -47,7 +47,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.configuration import Params, Remote
 
 # constants:
-SNAPSHOT_REGEX_FILTER_NAME = "snapshot_regex"
+SNAPSHOT_REGEX_FILTER_NAME: str = "snapshot_regex"
 SNAPSHOT_REGEX_FILTER_NAMES: frozenset[str] = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
 
 
@@ -66,7 +66,7 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
     for i, dataset in enumerate(sorted_datasets):
         if i == 0 and p.skip_parent:
             continue
-        rel_dataset = relativize_dataset(dataset, remote.root_dataset)
+        rel_dataset: str = relativize_dataset(dataset, remote.root_dataset)
         if rel_dataset.startswith("/"):
             rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
         if is_included(rel_dataset, p.include_dataset_regexes, p.exclude_dataset_regexes):
@@ -76,7 +76,7 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
             log.debug("Excluding b/c dataset regex: %s", dataset)
     if p.exclude_dataset_property:
         results = filter_datasets_by_exclude_property(job, remote, results)
-    is_debug = p.log.isEnabledFor(LOG_DEBUG)
+    is_debug: bool = p.log.isEnabledFor(LOG_DEBUG)
     for dataset in results:
         if is_debug:
             log.debug("Finally included %s dataset: %s", remote.location, dataset)
@@ -84,8 +84,8 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
         assert results == sorted(results), "List is not sorted"
         # Asserts the following: If a dataset is excluded its descendants are automatically excluded too, and this
         # decision is never reconsidered even for the descendants because exclude takes precedence over include.
-        resultset = set(results)
-        root_datasets = [dataset for dataset in results if os.path.dirname(dataset) not in resultset]  # have no parent
+        resultset: set[str] = set(results)
+        root_datasets: list[str] = [dataset for dataset in results if os.path.dirname(dataset) not in resultset]  # no parent
         for root in root_datasets:  # each root is not a descendant of another dataset
             assert not any(is_descendant(root, of_root_dataset=dataset) for dataset in results if dataset != root)
         for dataset in results:  # each dataset belongs to a subtree rooted at one of the roots
@@ -97,8 +97,8 @@ def filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_dataset
     """Excludes datasets that are marked with a ZFS user property value that, in effect, says 'skip me'."""
     p, log = job.params, job.params.log
     results: list[str] = []
-    localhostname = None
-    skip_dataset = DONT_SKIP_DATASET
+    localhostname: str | None = None
+    skip_dataset: str = DONT_SKIP_DATASET
     for dataset in sorted_datasets:
         if is_descendant(dataset, of_root_dataset=skip_dataset):
             # skip_dataset shall be ignored or has been deleted by some third party while we're running
@@ -107,13 +107,14 @@ def filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_dataset
         # TODO perf: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset)
         job.maybe_inject_delete(remote, dataset=dataset, delete_trigger="zfs_list_exclude_property")
-        property_value = try_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
+        property_value: str | None = try_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
         if property_value is None:
             log.warning(f"Third party deleted {remote.location}: %s", dataset)
             skip_dataset = dataset
         else:
-            reason = ""
+            reason: str = ""
             property_value = property_value.strip()
+            sync: bool
             if not property_value or property_value == "-" or property_value.lower() == "true":
                 sync = True
             elif property_value.lower() == "false":
@@ -184,9 +185,9 @@ def filter_snapshots(
                 )
         resultset.update(snapshots)  # union
 
-    no_f_bookmarks = not filter_bookmarks
+    no_f_bookmarks: bool = not filter_bookmarks
     snapshots = [line for line in basis_snapshots if (no_f_bookmarks and "#" in line) or ((line in resultset) != all_except)]
-    is_debug = log.isEnabledFor(LOG_DEBUG)
+    is_debug: bool = log.isEnabledFor(LOG_DEBUG)
     for snapshot in snapshots:
         if is_debug:
             log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -199,7 +200,7 @@ def filter_snapshots_by_regex(
     """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
     exclude_snapshot_regexes, include_snapshot_regexes = regexes
     log = job.params.log
-    is_debug = log.isEnabledFor(LOG_DEBUG)
+    is_debug: bool = log.isEnabledFor(LOG_DEBUG)
     results: list[str] = []
     for snapshot in snapshots:
         i = snapshot.find("@")  # snapshot separator
@@ -222,7 +223,7 @@ def filter_snapshots_by_creation_time(
 ) -> list[str]:
     """Filters snapshots to those created within the specified time window."""
     log = job.params.log
-    is_debug = log.isEnabledFor(LOG_DEBUG)
+    is_debug: bool = log.isEnabledFor(LOG_DEBUG)
     lo_snaptime, hi_snaptime = include_snapshot_times or (0, UNIX_TIME_INFINITY_SECS)
     assert isinstance(lo_snaptime, int)
     assert isinstance(hi_snaptime, int)
@@ -259,17 +260,17 @@ def filter_snapshots_by_creation_time_and_rank(
     assert isinstance(include_snapshot_ranks, list)
     assert len(include_snapshot_ranks) > 0
     log = job.params.log
-    is_debug = log.isEnabledFor(LOG_DEBUG)
+    is_debug: bool = log.isEnabledFor(LOG_DEBUG)
     lo_time, hi_time = include_snapshot_times or (0, UNIX_TIME_INFINITY_SECS)
     assert isinstance(lo_time, int)
     assert isinstance(hi_time, int)
     n = sum(1 for snapshot in snapshots if "@" in snapshot)
     for rank_range in include_snapshot_ranks:
         lo_rank, hi_rank = rank_range
-        lo = get_idx(lo_rank, n)
-        hi = get_idx(hi_rank, n)
+        lo: int = get_idx(lo_rank, n)
+        hi: int = get_idx(hi_rank, n)
         lo, hi = (lo, hi) if lo <= hi else (hi, lo)
-        i = 0
+        i: int = 0
         results: list[str] = []
         for snapshot in snapshots:
             is_snapshot = "@" in snapshot
@@ -298,7 +299,7 @@ def filter_properties(
 ) -> dict[str, str | None]:
     """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
     log = p.log
-    is_debug = log.isEnabledFor(LOG_DEBUG)
+    is_debug: bool = log.isEnabledFor(LOG_DEBUG)
     results: dict[str, str | None] = {}
     for propname, propvalue in props.items():
         if is_included(propname, include_regexes, exclude_regexes):
@@ -342,6 +343,7 @@ def dataset_regexes(src: Remote, dst: Remote, datasets: list[str]) -> list[str]:
                 dataset = dataset[1:]
         if dataset.endswith("/"):
             dataset = dataset[0:-1]
+        regex: str
         if dataset:
             regex = re.escape(dataset)
         else:

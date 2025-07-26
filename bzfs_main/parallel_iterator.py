@@ -57,6 +57,7 @@ def parallel_iterator(
         else:
             todo_futures: set[Future[Any]] = set(fifo_buffer)
             fifo_buffer.clear()  # help gc
+            done_futures: set[Future[Any]]
             while todo_futures:
                 done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
                 for done_future in done_futures:  # submit the next CLI call whenever a CLI call returns
