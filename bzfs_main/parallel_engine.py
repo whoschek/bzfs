@@ -100,8 +100,8 @@ def make_tree_node(dataset: str, children: Tree, parent: TreeNode | None = None)
 def process_datasets_in_parallel_and_fault_tolerant(
     log: Logger,
     datasets: list[str],
-    process_dataset: Callable[[str, str, Retry], bool],  # lambda, must be thread-safe
-    skip_tree_on_error: Callable[[str], bool],
+    process_dataset: Callable[[str, str, Retry], bool],  # lambda[dataset, tid, Retry]; must be thread-safe
+    skip_tree_on_error: Callable[[str], bool],  # lambda[dataset]
     skip_on_error: str = "fail",
     max_workers: int = os.cpu_count() or 1,
     interval_nanos: Callable[[str], int] = lambda dataset: 0,  # optionally, spread tasks out over time; e.g. for jitter

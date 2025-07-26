@@ -107,7 +107,9 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     dst_dataset: str = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
     log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
-    list_result = _list_and_filter_src_and_dst_snapshots(job, src_dataset, dst_dataset)
+    list_result: bool | Tuple[list[str], list[str], list[str], set[str], str, str] = _list_and_filter_src_and_dst_snapshots(
+        job, src_dataset, dst_dataset
+    )
     if isinstance(list_result, bool):
         return list_result
     (
@@ -124,7 +126,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     done_checking = False
 
     if job.dst_dataset_exists[dst_dataset]:
-        rollback_result = _rollback_dst_dataset_if_necessary(
+        rollback_result: bool | Tuple[str, str, bool] = _rollback_dst_dataset_if_necessary(
             job, dst_dataset, latest_src_snapshot, src_snapshots_with_guids, dst_snapshots_with_guids, done_checking, tid
         )
         if isinstance(rollback_result, bool):
@@ -137,7 +139,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     dry_run_no_send = False
     if not latest_common_src_snapshot:
         # no common snapshot exists; delete all dst snapshots and perform a full send of the oldest selected src snapshot
-        latest_common_src_snapshot, dry_run_no_send, done_checking, retry_count = _replicate_dataset_fully(
+        full_result: tuple[str, bool, bool, int] = _replicate_dataset_fully(
             job,
             src_dataset,
             dst_dataset,
@@ -151,6 +153,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
             retry_count,
             tid,
         )  # we have now created a common snapshot
+        latest_common_src_snapshot, dry_run_no_send, done_checking, retry_count = full_result
     if latest_common_src_snapshot:
         # finally, incrementally replicate all selected snapshots from latest common snapshot until latest src snapshot
         _replicate_dataset_incrementally(
@@ -374,11 +377,12 @@ def _replicate_dataset_fully(
                 if dst_dataset_parent != "":
                     create_zfs_filesystem(job, dst_dataset_parent)
 
-        recv_resume_token, send_resume_opts, recv_resume_opts = _recv_resume_token(job, dst_dataset, retry_count)
+        recv_resume_token_result: tuple[str | None, list[str], list[str]] = _recv_resume_token(job, dst_dataset, retry_count)
+        recv_resume_token, send_resume_opts, recv_resume_opts = recv_resume_token_result
         curr_size: int = estimate_send_size(job, src, dst_dataset, recv_resume_token, oldest_src_snapshot)
         humansize: str = format_size(curr_size)
         if recv_resume_token:
-            send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
+            send_opts: list[str] = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
@@ -460,7 +464,8 @@ def _replicate_dataset_incrementally(
         # bookmark whose snapshot has been deleted on src.
         return  # nothing more tbd
 
-    recv_resume_token, send_resume_opts, recv_resume_opts = _recv_resume_token(job, dst_dataset, retry_count)
+    recv_resume_token_result: tuple[str | None, list[str], list[str]] = _recv_resume_token(job, dst_dataset, retry_count)
+    recv_resume_token, send_resume_opts, recv_resume_opts = recv_resume_token_result
     recv_opts: list[str] = p.zfs_recv_program_opts.copy() + recv_resume_opts
     recv_opts, set_opts = add_recv_property_options(job, False, recv_opts, src_dataset, props_cache)
     if p.no_stream:
@@ -489,7 +494,7 @@ def _replicate_dataset_incrementally(
         humansize: str = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
         human_num: str = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
         if recv_resume_token:
-            send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
+            send_opts: list[str] = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [incr_flag, from_snap, to_snap]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)

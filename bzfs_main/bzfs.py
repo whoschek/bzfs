@@ -854,7 +854,7 @@ class Job:
         if are_bookmarks_enabled(p, dst) or not p.delete_dst_bookmarks:
             start_time_nanos = time.monotonic_ns()
             failed = process_datasets_in_parallel_and_fault_tolerant(
-                log=p.log,
+                log=log,
                 datasets=dst_datasets,
                 process_dataset=delete_destination_snapshots,  # lambda
                 skip_tree_on_error=lambda dataset: False,
@@ -913,7 +913,7 @@ class Job:
         """
         p = self.params
         dst = p.dst
-        delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
+        delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: bool = (
             p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and are_bookmarks_enabled(p, dst)
         )
 
@@ -1197,8 +1197,8 @@ class Job:
             cmsg = ""
 
         # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
-        failed = process_datasets_in_parallel_and_fault_tolerant(
-            log=p.log,
+        failed: bool = process_datasets_in_parallel_and_fault_tolerant(
+            log=log,
             datasets=stale_src_datasets,
             process_dataset=lambda src_dataset, tid, retry: replicate_dataset(self, src_dataset, tid, retry),
             skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[src2dst(dataset)],
