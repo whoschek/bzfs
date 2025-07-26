@@ -148,7 +148,7 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "FA",       # forward annotations
     "FAST",     # fastAPI
     "G",        # flake8-logging-format
-    "I",        # sort imports
+    "I",        # isort: auto-sort and auto-format imports
     "ICN",      # flake8-import-conventions
     "INP",      # flake8-no-pep420
     "ISC",      # flake8-implicit-str-concat

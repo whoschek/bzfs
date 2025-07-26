@@ -65,7 +65,7 @@ def incremental_send_steps(
     assert len(src_guids) == len(src_snapshots)
     assert len(included_guids) >= 0
     steps = []
-    guids = src_guids
+    guids: list[str] = src_guids
     n = len(guids)
     i = 0
     while i < n and guids[i] not in included_guids:  # skip hourlies

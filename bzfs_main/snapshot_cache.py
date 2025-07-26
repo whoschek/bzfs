@@ -38,11 +38,13 @@ from bzfs_main.utils import (
     stderr_to_str,
 )
 
-SNAPSHOTS_CHANGED: str = "snapshots_changed"  # http://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
-
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import Job
     from bzfs_main.configuration import Remote, SnapshotLabel
+
+
+# constants:
+SNAPSHOTS_CHANGED: str = "snapshots_changed"  # http://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
 
 
 class SnapshotCache:

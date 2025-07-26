@@ -584,6 +584,8 @@ class Job:
         subjobs: dict[str, list[str]] = {}
         for i, src_host in enumerate(src_hosts):
             subjob_name: str = zero_pad(i) + "src-host"
+            j: int = 0
+            opts: list[str]
 
             if args.create_src_snapshots:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
@@ -599,7 +601,7 @@ class Job:
                 subjobs[subjob_name] = bzfs_prog_header + opts
 
             if args.replicate:
-                j: int = 0
+                j = 0
                 marker: str = "replicate"
                 for dst_hostname, targets in dst_hosts.items():
                     opts = self.replication_opts(

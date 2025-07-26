@@ -51,7 +51,7 @@ def run_ssh_cmd_batched(
     max_batch_items: int = 2**29,
     sep: str = " ",
 ) -> None:
-    """Runs ssh command for each batch of args, without creating a command line that's too big for the OS to handle."""
+    """Runs ssh command for each sequential batch of args, without creating a cmdline that's too big for the OS to handle."""
     drain(itr_ssh_cmd_batched(job, r, cmd, cmd_args, fn, max_batch_items=max_batch_items, sep=sep))
 
 
@@ -64,7 +64,7 @@ def itr_ssh_cmd_batched(
     max_batch_items: int = 2**29,
     sep: str = " ",
 ) -> Generator[Any, None, None]:
-    """Runs fn(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle."""
+    """Runs fn(cmd_args) in sequential batches w/ cmd, without creating a cmdline that's too big for the OS to handle."""
     max_bytes: int = min(get_max_command_line_bytes(job, "local"), get_max_command_line_bytes(job, r.location))
     assert isinstance(sep, str)
     # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html

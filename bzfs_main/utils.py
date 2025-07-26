@@ -91,7 +91,7 @@ def getenv_int(key: str, default: int) -> int:
 
 def getenv_bool(key: str, default: bool = False) -> bool:
     """Returns environment variable ``key`` as bool with ``default`` fallback."""
-    return cast(str, getenv_any(key, str(default))).lower().strip().lower() == "true"
+    return cast(str, getenv_any(key, str(default))).lower().strip() == "true"
 
 
 def cut(field: int = -1, separator: str = "\t", lines: list[str] | None = None) -> list[str]:
@@ -124,7 +124,7 @@ def shuffle_dict(dictionary: dict[K_, V_]) -> dict[K_, V_]:
 
 
 def sorted_dict(dictionary: dict[K_, V_]) -> dict[K_, V_]:
-    """Returns a new dict with items sorted by key."""
+    """Returns a new dict with items sorted primarily by key and secondarily by value."""
     return dict(sorted(dictionary.items()))
 
 
