@@ -162,12 +162,12 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
             fd.write(header.replace(" ", "\t") + "\n")
             is_first_row = False
         for i, entry in enumerate(entries):  # entry is tuple[location:str, ComparableSnapshot]
-            loc = location = entry[0]
+            location: str = entry[0]  # "src" or "dst" or "all"
             creation, guid, createtxg, written, name = entry[1].cols
-            root_dataset = dst.root_dataset if location == CMP_CHOICES_ITEMS[1] else src.root_dataset
-            rel_name = relativize_dataset(name, root_dataset)
-            creation_iso = isotime_from_unixtime(int(creation))
-            row = loc, creation_iso, createtxg, rel_name, guid, root_dataset, rel_dataset, name, creation, written
+            root_dataset: str = dst.root_dataset if location == CMP_CHOICES_ITEMS[1] else src.root_dataset
+            rel_name: str = relativize_dataset(name, root_dataset)
+            creation_iso: str = isotime_from_unixtime(int(creation))
+            row = (location, creation_iso, createtxg, rel_name, guid, root_dataset, rel_dataset, name, creation, written)
             # Example: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src /foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205 24576
             row_str = "\t".join(row)
             if not p.dry_run:
@@ -266,7 +266,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
             loc = "src" if rel_dataset in src_only else "dst" if rel_dataset in dst_only else "all"
             src_dataset = src.root_dataset + rel_dataset if rel_dataset not in dst_only else ""
             dst_dataset = dst.root_dataset + rel_dataset if rel_dataset not in src_only else ""
-            row = loc, rel_dataset, src_dataset, dst_dataset  # Example: all /foo/bar tank1/src/foo/bar tank2/dst/foo/bar
+            row = (loc, rel_dataset, src_dataset, dst_dataset)  # Example: all /foo/bar tank1/src/foo/bar tank2/dst/foo/bar
             if not p.dry_run:
                 fd.write("\t".join(row) + "\n")
     os.rename(tmp_tsv_file, tsv_file)
