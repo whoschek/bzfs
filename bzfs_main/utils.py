@@ -162,7 +162,7 @@ def get_home_directory() -> str:
 
 
 def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int | None = None, long: bool = False) -> str:
-    """Formats ``num_bytes`` as human readable size, e.g. ``12 MiB``."""
+    """Formats 'num_bytes' as a human-readable size; for example "567 MiB"."""
     sign = "-" if num_bytes < 0 else ""
     s = abs(num_bytes)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
@@ -179,7 +179,7 @@ def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int 
 def human_readable_duration(
     duration: float, unit: str = "ns", separator: str = "", precision: int | None = None, long: bool = False
 ) -> str:
-    """Formats a duration in human units, automatically scaling as needed."""
+    """Formats a duration in human units, automatically scaling as needed; for example "567ms"."""
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")

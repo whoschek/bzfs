@@ -1495,7 +1495,7 @@ def fix_solaris_raw_mode(lst: list[str]) -> list[str]:
 
 def has_siblings(sorted_datasets: list[str]) -> bool:
     """Returns whether the (sorted) list of input datasets contains any siblings."""
-    skip_dataset = DONT_SKIP_DATASET
+    skip_dataset: str = DONT_SKIP_DATASET
     parents: set[str] = set()
     for dataset in sorted_datasets:
         assert dataset

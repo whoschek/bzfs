@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Fault-tolerant, dependency-aware execution of parallel operations, ensuring that ancestor datasets finish before
-descendants start; The design maximizes throughput while preventing deadlocks or inconsistent dataset states during
-replication."""
+"""Fault-tolerant, dependency-aware scheduling and execution of parallel operations, ensuring that ancestor datasets finish
+before descendants start; The design maximizes throughput while preventing inconsistent dataset states during replication or
+deletion."""
 
 from __future__ import annotations
 import argparse
@@ -129,15 +129,72 @@ def process_datasets_in_parallel_and_fault_tolerant(
     dry_run: bool = False,
     is_test_mode: bool = False,
 ) -> bool:
-    """Runs process_dataset(dataset) for each dataset in datasets, while taking care of error handling and retries and
-    parallel execution.
+    """Executes dataset processing operations in parallel with dependency-aware scheduling and fault tolerance.
 
-    Assumes that the input dataset list is sorted and does not contain duplicates. All children of a dataset may be processed
-    in parallel. For consistency (even during parallel dataset replication/deletion), processing of a dataset only starts
-    after processing of all its ancestor datasets has completed. Further, when a thread is ready to start processing another
-    dataset, it chooses the "smallest" dataset wrt. lexicographical sort order from the datasets that are currently available
-    for start of processing. Initially, only the roots of the selected dataset subtrees are available for start of
-    processing.
+    This function orchestrates parallel execution of dataset operations while maintaining strict hierarchical
+    dependencies. Processing of a dataset only starts after processing of all its ancestor datasets has completed,
+    ensuring data consistency during operations like ZFS replication, snapshot creation, or dataset deletion.
+
+    Purpose:
+    --------
+    - Process hierarchical datasets in parallel while respecting parent-child dependencies
+    - Provide fault tolerance with configurable error handling and retry mechanisms
+    - Maximize throughput by processing independent dataset subtrees in parallel
+    - Support complex job scheduling patterns via optional barrier synchronization
+
+    Assumptions:
+    -----------------
+    - Input `datasets` list is sorted in lexicographical order (enforced in test mode)
+    - Input `datasets` list contains no duplicate entries (enforced in test mode)
+    - Dataset hierarchy is determined by slash-separated path components
+    - The `process_dataset` callable is thread-safe and can be executed in parallel
+
+    Design Rationale:
+    -----------------
+    - The implementation uses a priority queue-based scheduler that maintains two key invariants:
+
+    - Dependency Ordering: Children are only enqueued for processing after their parent completes, preventing
+        inconsistent dataset states.
+
+    - Lexicographical Priority: Among available datasets, the lexicographically smallest is always processed next,
+        ensuring mostly-deterministic execution order.
+
+    Algorithm Selection:
+    --------------------
+    - Simple Algorithm (default): Used when no barriers ('~') are detected in dataset names. Provides efficient
+        scheduling for standard parent-child dependencies via recursive child enqueueing after parent completion.
+
+    - Barrier Algorithm (advanced): Activated when barriers are detected or explicitly enabled. Supports complex
+        synchronization scenarios where jobs must wait for completion of entire subtrees before proceeding. Essential
+        for advanced job scheduling patterns like "complete all parallel replications before starting pruning phase."
+
+    Error Handling Strategy:
+    ------------------------
+    - "fail": Immediately terminate all processing on first error (fail-fast)
+    - "dataset": Skip failed dataset but continue processing others
+    - "tree": Skip entire subtree rooted at failed dataset, determined by `skip_tree_on_error`
+
+    Concurrency Design:
+    -------------------
+    Uses ThreadPoolExecutor with configurable worker limits to balance parallelism against resource consumption. The
+    single-threaded coordination loop prevents race conditions while worker threads execute dataset operations in parallel.
+
+    Params:
+    -------
+    - datasets: Sorted list of dataset names to process (must not contain duplicates)
+    - process_dataset: Thread-safe function to execute on each dataset
+    - skip_tree_on_error: Function determining whether to skip subtree on error
+    - max_workers: Maximum number of parallel worker threads
+    - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
+
+    Returns:
+    --------
+        bool: True if any dataset processing failed, False if all succeeded
+
+    Raises:
+    -------
+        AssertionError: If input validation fails (sorted order, no duplicates, etc.)
+        Various exceptions: Propagated from process_dataset when skip_on_error="fail"
     """
     assert (not is_test_mode) or datasets == sorted(datasets), "List is not sorted"
     assert (not is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
@@ -195,7 +252,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                     # It's possible an even "smaller" dataset (wrt. sort order) has become available while we slept.
                     # If so it's preferable to submit to the thread pool the smaller one first.
                     break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
-                node: TreeNode = heapq.heappop(priority_queue)
+                node: TreeNode = heapq.heappop(priority_queue)  # pick "smallest" dataset (wrt. sort order)
                 next_update_nanos += max(0, interval_nanos(node.dataset))
                 nonlocal submitted
                 submitted += 1

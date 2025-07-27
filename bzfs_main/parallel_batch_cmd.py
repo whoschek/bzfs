@@ -12,7 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Helpers for running shell commands in parallel batches within worker processes."""
+"""Helpers for running CLI commands in (sequential or parallel) batches, without exceeding operating system limits.
+
+The batch size aka max_batch_items splits one CLI command into one or more CLI commands. The resulting commands are executed
+sequentially (via functions *_batched()), or in parallel across max_workers threads (via functions *_parallel()).
+
+The degree of parallelism (max_workers) is specified by the job (via --threads).
+Batch size is a trade-off between resource consumption, latency, bandwidth and throughput.
+
+Example:
+--------
+
+- max_batch_items=1 (seq or par):
+```
+zfs list -t snapshot d1
+zfs list -t snapshot d2
+zfs list -t snapshot d3
+zfs list -t snapshot d4
+```
+
+- max_batch_items=2 (seq or par):
+```
+zfs list -t snapshot d1 d2
+zfs list -t snapshot d3 d4
+
+- max_batch_items=N (seq or par):
+```
+zfs list -t snapshot d1 d2 d3 d4
+```
+"""
 
 from __future__ import annotations
 import sys
@@ -118,7 +146,8 @@ def itr_ssh_cmd_parallel(
     max_batch_items: int = 2**29,
     ordered: bool = True,
 ) -> Generator[Any, None, Any]:
-    """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
+    """Streams results from multiple parallel (batched) SSH commands; Returns output datasets in the same order as the input
+    datasets (not in random order) if ordered == True."""
     return parallel_iterator(
         iterator_builder=lambda executr: [
             itr_ssh_cmd_batched(
