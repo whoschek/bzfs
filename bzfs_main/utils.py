@@ -161,31 +161,27 @@ def get_home_directory() -> str:
     return pwd.getpwuid(os.getuid()).pw_dir
 
 
-def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int | None = None, long: bool = False) -> str:
+def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int | None = None) -> str:
     """Formats 'num_bytes' as a human-readable size; for example "567 MiB"."""
     sign = "-" if num_bytes < 0 else ""
     s = abs(num_bytes)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
     n = len(units) - 1
     i = 0
-    long_form = f" ({num_bytes} bytes)" if long else ""
     while s >= 1024 and i < n:
         s /= 1024
         i += 1
     formatted_num = human_readable_float(s) if precision is None else f"{s:.{precision}f}"
-    return f"{sign}{formatted_num}{separator}{units[i]}{long_form}"
+    return f"{sign}{formatted_num}{separator}{units[i]}"
 
 
-def human_readable_duration(
-    duration: float, unit: str = "ns", separator: str = "", precision: int | None = None, long: bool = False
-) -> str:
+def human_readable_duration(duration: float, unit: str = "ns", separator: str = "", precision: int | None = None) -> str:
     """Formats a duration in human units, automatically scaling as needed; for example "567ms"."""
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")
     nanos = (1, 1_000, 1_000_000, 1_000_000_000, 60 * 1_000_000_000, 60 * 60 * 1_000_000_000, 60 * 60 * 24 * 1_000_000_000)
     i = units.index(unit)
-    long_form = f" ({round(duration * nanos[i] / 1_000_000_000)} seconds)" if long else ""
     if t < 1 and t != 0:
         t *= nanos[i]
         i = 0
@@ -201,7 +197,7 @@ def human_readable_duration(
             t /= 24
             i += 1
     formatted_num = human_readable_float(t) if precision is None else f"{t:.{precision}f}"
-    return f"{sign}{formatted_num}{separator}{units[i]}{long_form}"
+    return f"{sign}{formatted_num}{separator}{units[i]}"
 
 
 def human_readable_float(number: float) -> str:
