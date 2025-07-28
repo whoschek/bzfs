@@ -128,7 +128,7 @@ def try_ssh_command(
         raise RetryableError("Subprocess failed") from e
 
 
-def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: "Connection") -> None:
+def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connection) -> None:
     """Maintain or create an ssh master connection for low latency reuse."""
     p, log = job.params, job.params.log
     if remote.ssh_user_host == "":

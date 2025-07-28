@@ -52,6 +52,7 @@ from bzfs_main.utils import (
     SnapshotPeriods,
     SynchronizedBool,
     SynchronizedDict,
+    _get_descendant_processes,
     append_if_absent,
     compile_regexes,
     current_datetime,
@@ -60,7 +61,6 @@ from bzfs_main.utils import (
     drain,
     find_match,
     format_dict,
-    get_descendant_processes,
     get_home_directory,
     get_timezone,
     has_duplicates,
@@ -874,7 +874,7 @@ class TestTerminateProcessSubtree(AbstractTestCase):
         child = subprocess.Popen(["sleep", "1"])
         self.children.append(child)
         time.sleep(0.1)
-        descendants = get_descendant_processes(os.getpid())
+        descendants = _get_descendant_processes(os.getpid())
         self.assertIn(child.pid, descendants, "Child PID not found in descendants")
 
     def test_terminate_process_subtree_excluding_current(self) -> None:

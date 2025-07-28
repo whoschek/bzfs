@@ -60,7 +60,7 @@ from bzfs_main.detect import (
     is_version_at_least,
 )
 from bzfs_main.loggers import get_simple_logger
-from bzfs_main.parallel_batch_cmd import get_max_command_line_bytes
+from bzfs_main.parallel_batch_cmd import _get_max_command_line_bytes
 from bzfs_main.replication import INJECT_DST_PIPE_FAIL_KBYTES
 from bzfs_main.utils import (
     DIE_STATUS,
@@ -2481,12 +2481,12 @@ class LocalTestCase(IntegrationTestCase):
 
     def test_max_command_line_bytes(self) -> None:
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication")
-        self.assertTrue(get_max_command_line_bytes(job, "dst", os_name="Linux") > 0)
-        self.assertTrue(get_max_command_line_bytes(job, "dst", os_name="FreeBSD") > 0)
-        self.assertTrue(get_max_command_line_bytes(job, "dst", os_name="SunOS") > 0)
-        self.assertTrue(get_max_command_line_bytes(job, "dst", os_name="Darwin") > 0)
-        self.assertTrue(get_max_command_line_bytes(job, "dst", os_name="Windows") > 0)
-        self.assertTrue(get_max_command_line_bytes(job, "dst", os_name="unknown") > 0)
+        self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="Linux") > 0)
+        self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="FreeBSD") > 0)
+        self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="SunOS") > 0)
+        self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="Darwin") > 0)
+        self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="Windows") > 0)
+        self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="unknown") > 0)
 
     def test_zfs_set(self) -> None:
         if self.is_no_privilege_elevation():
@@ -2494,8 +2494,8 @@ class LocalTestCase(IntegrationTestCase):
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication")
         props = self.properties_with_special_characters()
         props_list = [f"{name}={value}" for name, value in props.items()]
-        bzfs_main.replication.zfs_set(job, [], job.params.dst, dst_root_dataset)
-        bzfs_main.replication.zfs_set(job, props_list, job.params.dst, dst_root_dataset)
+        bzfs_main.replication._zfs_set(job, [], job.params.dst, dst_root_dataset)
+        bzfs_main.replication._zfs_set(job, props_list, job.params.dst, dst_root_dataset)
         for name, value in props.items():
             self.assertEqual(value, dataset_property(dst_root_dataset, name))
 
@@ -3515,7 +3515,7 @@ class LocalTestCase(IntegrationTestCase):
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--create-bookmarks=all")
         with contextlib.redirect_stderr(io.StringIO()) as buf:
             with self.assertRaises(subprocess.CalledProcessError):
-                bzfs_main.replication.create_zfs_bookmarks(job, job.params.src, src_root_dataset, [non_existing_snapshot])
+                bzfs_main.replication._create_zfs_bookmarks(job, job.params.src, src_root_dataset, [non_existing_snapshot])
             self.assertTrue(buf.getvalue())
 
     def test_create_zfs_bookmarks_existing_bookmark(self) -> None:

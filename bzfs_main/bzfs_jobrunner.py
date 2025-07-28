@@ -440,7 +440,7 @@ class Job:
         self.log: Logger = log if log is not None else get_simple_logger(PROG_NAME)
         self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
         self.argument_parser: argparse.ArgumentParser = argument_parser()
-        self.loopback_address: str = detect_loopback_address()
+        self.loopback_address: str = _detect_loopback_address()
 
         # mutable variables:
         self.first_exception: int | None = None
@@ -524,9 +524,9 @@ class Job:
         ssh_dst_port: int | None = args.ssh_dst_port
         ssh_src_config_file: str | None = args.ssh_src_config_file
         ssh_dst_config_file: str | None = args.ssh_dst_config_file
-        job_id: str = sanitize(args.job_id)
+        job_id: str = _sanitize(args.job_id)
         job_run: str = args.job_run if args.job_run is not None else args.jobid  # --jobid deprecat; was renamed to --job-run
-        job_run = sanitize(job_run) if job_run else uuid.uuid1().hex
+        job_run = _sanitize(job_run) if job_run else uuid.uuid1().hex
         workers, workers_is_percent = args.workers
         max_workers: int = max(1, round((os.cpu_count() or 1) * workers / 100.0) if workers_is_percent else round(workers))
         worker_timeout_seconds: int = args.worker_timeout_seconds
@@ -591,12 +591,12 @@ class Job:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
                 opts += [f"--log-file-prefix={PROG_NAME}{SEP}create-src-snapshots{SEP}"]
                 opts += [f"--log-file-infix={SEP}{job_id}"]
-                opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{SEP}"]
+                opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{_log_suffix(lhn, src_host, '')}{SEP}"]
                 self.add_ssh_opts(
                     opts, ssh_src_user=ssh_src_user, ssh_src_port=ssh_src_port, ssh_src_config_file=ssh_src_config_file
                 )
                 opts += ["--"]
-                opts += flatten(dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
+                opts += _flatten(_dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/create-src-snapshots"
                 subjobs[subjob_name] = bzfs_prog_header + opts
 
@@ -625,7 +625,7 @@ class Job:
                         ]
                         dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                         if len(dataset_pairs) > 0:
-                            subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + flatten(dataset_pairs)
+                            subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + _flatten(dataset_pairs)
                             j += 1
                 subjob_name = update_subjob_name(marker)
 
@@ -636,14 +636,14 @@ class Job:
                     f"--delete-dst-snapshots-except-plan={retention_plan}",
                     f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}",
                     f"--log-file-infix={SEP}{job_id}",
-                    f"--log-file-suffix={SEP}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{SEP}",
+                    f"--log-file-suffix={SEP}{job_run}{npad()}{_log_suffix(lhn, src_host, '')}{SEP}",
                     f"--daemon-frequency={args.daemon_prune_src_frequency}",
                 ]
                 self.add_ssh_opts(  # i.e. dst=src, src=dummy
                     opts, ssh_dst_user=ssh_src_user, ssh_dst_port=ssh_src_port, ssh_dst_config_file=ssh_src_config_file
                 )
                 opts += ["--"]
-                opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
+                opts += _flatten(_dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 nonlocal subjob_name
                 subjob_name += f"/{tag}"
                 subjobs[subjob_name] = bzfs_prog_header + opts
@@ -670,7 +670,7 @@ class Job:
                     opts += [f"--delete-dst-snapshots-except-plan={curr_dst_snapshot_plan}"]
                     opts += [f"--log-file-prefix={PROG_NAME}{SEP}{marker}{SEP}"]
                     opts += [f"--log-file-infix={SEP}{job_id}"]
-                    opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{log_suffix(lhn, src_host, dst_hostname)}{SEP}"]
+                    opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{_log_suffix(lhn, src_host, dst_hostname)}{SEP}"]
                     opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
                     self.add_ssh_opts(
                         opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
@@ -679,7 +679,7 @@ class Job:
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                     if len(dataset_pairs) > 0:
-                        subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + flatten(dataset_pairs)
+                        subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + _flatten(dataset_pairs)
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
@@ -718,12 +718,12 @@ class Job:
             if args.monitor_src_snapshots:
                 marker = "monitor-src-snapshots"
                 monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan, "src_snapshot_")
-                opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(lhn, src_host, ""))
+                opts = monitor_snapshots_opts(marker, monitor_plan, _log_suffix(lhn, src_host, ""))
                 self.add_ssh_opts(  # i.e. dst=src, src=dummy
                     opts, ssh_dst_user=ssh_src_user, ssh_dst_port=ssh_src_port, ssh_dst_config_file=ssh_src_config_file
                 )
                 opts += ["--"]
-                opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
+                opts += _flatten(_dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/" + marker
                 subjobs[subjob_name] = bzfs_prog_header + opts
 
@@ -737,7 +737,7 @@ class Job:
                         for org, target_periods in monitor_snapshot_plan.items()
                     }
                     monitor_plan = build_monitor_plan(monitor_plan, dst_snapshot_plan, "dst_snapshot_")
-                    opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(lhn, src_host, dst_hostname))
+                    opts = monitor_snapshots_opts(marker, monitor_plan, _log_suffix(lhn, src_host, dst_hostname))
                     self.add_ssh_opts(
                         opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
                     )
@@ -745,7 +745,7 @@ class Job:
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                     if len(dataset_pairs) > 0:
-                        subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + flatten(dataset_pairs)
+                        subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + _flatten(dataset_pairs)
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
@@ -753,7 +753,7 @@ class Job:
         log.info(
             msg, len(subjobs), len(src_hosts), nb_src_hosts, src_hosts, len(dst_hosts), nb_dst_hosts, list(dst_hosts.keys())
         )
-        log.log(LOG_TRACE, "subjobs: \n%s", pretty_print_formatter(subjobs))
+        log.log(LOG_TRACE, "subjobs: \n%s", _pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds, args.jitter)
         ex = self.first_exception
         if isinstance(ex, int):
@@ -798,7 +798,7 @@ class Job:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
             opts += [f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}"]
             opts += [f"--log-file-infix={SEP}{job_id}"]
-            opts += [f"--log-file-suffix={SEP}{job_run}{log_suffix(localhostname, src_hostname, dst_hostname)}{SEP}"]
+            opts += [f"--log-file-suffix={SEP}{job_run}{_log_suffix(localhostname, src_hostname, dst_hostname)}{SEP}"]
         return opts
 
     def skip_nonexisting_local_dst_pools(self, root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
@@ -909,7 +909,7 @@ class Job:
         assert stats.jobs_completed == stats.jobs_started, msg
         skipped_jobs_dict = {subjob: subjobs[subjob] for subjob in sorted_subjobs if subjob not in stats.started_job_names}
         if len(skipped_jobs_dict) > 0:
-            log.debug("Skipped subjobs: \n%s", pretty_print_formatter(skipped_jobs_dict))
+            log.debug("Skipped subjobs: \n%s", _pretty_print_formatter(skipped_jobs_dict))
         assert jobs_skipped == len(skipped_jobs_dict), msg
 
     def run_subjob(
@@ -1181,7 +1181,7 @@ class RejectArgumentAction(argparse.Action):
 
 
 #############################################################################
-def dedupe(root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+def _dedupe(root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """Returns a list with duplicate dataset pairs removed while preserving order."""
     return list(dict.fromkeys(root_dataset_pairs).keys())
 
@@ -1189,25 +1189,25 @@ def dedupe(root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
 T = TypeVar("T")
 
 
-def flatten(root_dataset_pairs: Iterable[Iterable[T]]) -> list[T]:
+def _flatten(root_dataset_pairs: Iterable[Iterable[T]]) -> list[T]:
     """Flattens an iterable of pairs into a single list."""
     return [item for pair in root_dataset_pairs for item in pair]
 
 
-def sanitize(filename: str) -> str:
+def _sanitize(filename: str) -> str:
     """Replaces potentially problematic characters in ``filename`` with '!'."""
     for s in (" ", "..", "/", "\\", SEP):
         filename = filename.replace(s, "!")
     return filename
 
 
-def log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
+def _log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
     """Returns a log file suffix in a format that contains the given hostnames."""
-    sanitized_dst_hostname = sanitize(dst_hostname) if dst_hostname else ""
-    return f"{SEP}{sanitize(localhostname)}{SEP}{sanitize(src_hostname)}{SEP}{sanitized_dst_hostname}"
+    sanitized_dst_hostname = _sanitize(dst_hostname) if dst_hostname else ""
+    return f"{SEP}{_sanitize(localhostname)}{SEP}{_sanitize(src_hostname)}{SEP}{sanitized_dst_hostname}"
 
 
-def pretty_print_formatter(dictionary: dict[str, Any]) -> Any:
+def _pretty_print_formatter(dictionary: dict[str, Any]) -> Any:
     """Lazy JSON formatter used to avoid overhead in disabled log levels."""
 
     class PrettyPrintFormatter:
@@ -1221,7 +1221,7 @@ def pretty_print_formatter(dictionary: dict[str, Any]) -> Any:
     return PrettyPrintFormatter()
 
 
-def detect_loopback_address() -> str:
+def _detect_loopback_address() -> str:
     """Detects if a loopback connection over IPv4 or IPv6 is possible."""
     try:
         addr = "127.0.0.1"

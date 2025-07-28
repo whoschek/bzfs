@@ -96,7 +96,7 @@ def itr_ssh_cmd_batched(
     sep: str = " ",
 ) -> Generator[T, None, None]:
     """Runs fn(cmd_args) in sequential batches w/ cmd, without creating a cmdline that's too big for the OS to handle."""
-    max_bytes: int = min(get_max_command_line_bytes(job, "local"), get_max_command_line_bytes(job, r.location))
+    max_bytes: int = min(_get_max_command_line_bytes(job, "local"), _get_max_command_line_bytes(job, r.location))
     assert isinstance(sep, str)
     # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html
     max_bytes = max_bytes if sep == " " else min(max_bytes, 131071)  # e.g. 'zfs destroy foo@s1,s2,...,sN'
@@ -184,7 +184,7 @@ def zfs_list_snapshots_in_parallel(
     )
 
 
-def get_max_command_line_bytes(job: Job, location: str, os_name: str | None = None) -> int:
+def _get_max_command_line_bytes(job: Job, location: str, os_name: str | None = None) -> int:
     """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
     os_name = os_name if os_name else job.params.available_programs[location].get("os")
     if os_name == "Linux":

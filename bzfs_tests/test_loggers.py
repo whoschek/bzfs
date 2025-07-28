@@ -34,14 +34,14 @@ from bzfs_main.configuration import (
     LogParams,
 )
 from bzfs_main.loggers import (
-    get_default_logger,
-    get_dict_config_logger,
+    _get_default_logger,
+    _get_dict_config_logger,
+    _get_syslog_address,
+    _remove_json_comments,
+    _validate_log_config_dict,
     get_logger,
     get_logger_subname,
-    get_syslog_address,
-    remove_json_comments,
     reset_logger,
-    validate_log_config_dict,
     validate_log_config_variable,
 )
 from bzfs_main.utils import (
@@ -158,10 +158,10 @@ class TestHelperFunctions(AbstractTestCase):
     def test_get_syslog_address(self) -> None:
         udp = socket.SOCK_DGRAM
         tcp = socket.SOCK_STREAM
-        self.assertEqual((("localhost", 514), udp), get_syslog_address("localhost:514", "UDP"))
-        self.assertEqual((("localhost", 514), tcp), get_syslog_address("localhost:514", "TCP"))
-        self.assertEqual(("/dev/log", None), get_syslog_address("/dev/log", "UDP"))
-        self.assertEqual(("/dev/log", None), get_syslog_address("/dev/log", "TCP"))
+        self.assertEqual((("localhost", 514), udp), _get_syslog_address("localhost:514", "UDP"))
+        self.assertEqual((("localhost", 514), tcp), _get_syslog_address("localhost:514", "TCP"))
+        self.assertEqual(("/dev/log", None), _get_syslog_address("/dev/log", "UDP"))
+        self.assertEqual(("/dev/log", None), _get_syslog_address("/dev/log", "TCP"))
 
     def test_validate_log_config_variable(self) -> None:
         self.assertIsNone(validate_log_config_variable("name:value"))
@@ -172,7 +172,7 @@ class TestHelperFunctions(AbstractTestCase):
         args = self.argparser_parse_args(["src", "dst", "--log-config-file", "+bad_file_name.txt"])
         log_params = LogParams(args)
         with self.assertRaises(SystemExit):
-            get_dict_config_logger(log_params, args)
+            _get_dict_config_logger(log_params, args)
 
 
 #############################################################################
@@ -183,7 +183,7 @@ class TestLogging(AbstractTestCase):
         lp = LogParams(args)
         logging.getLogger(get_logger_subname()).handlers.clear()
         logging.getLogger(bzfs.__name__).handlers.clear()
-        log = get_default_logger(lp, args)
+        log = _get_default_logger(lp, args)
         self.assertTrue(any(isinstance(h, logging.StreamHandler) for h in log.handlers))
         self.assertTrue(any(isinstance(h, logging.FileHandler) for h in log.handlers))
 
@@ -201,7 +201,7 @@ class TestLogging(AbstractTestCase):
             file_h = logging.FileHandler(lp.log_file, encoding="utf-8")
             sublog.addHandler(stream_h)
             sublog.addHandler(file_h)
-            log_result = get_default_logger(lp, args)
+            log_result = _get_default_logger(lp, args)
             self.assertEqual([], log_result.handlers)
         finally:
             if stream_h is not None:
@@ -235,7 +235,7 @@ class TestLogging(AbstractTestCase):
         mock_syslog.return_value = handler
         try:
             with patch.object(logger, "warning") as mock_warning:
-                log = get_default_logger(lp, args)
+                log = _get_default_logger(lp, args)
                 mock_syslog.assert_called_once()
                 self.assertIn(handler, log.handlers)
                 mock_warning.assert_called_once()
@@ -247,7 +247,7 @@ class TestLogging(AbstractTestCase):
             "#c1\n" + "line_without_comment\n" + "line_with_trailing_hash_only #\n" + "line_with_trailing_comment##tail#\n"
         )
         expected = "\nline_without_comment\nline_with_trailing_hash_only #\n" + "line_with_trailing_comment#"
-        self.assertEqual(expected, remove_json_comments(config_str))
+        self.assertEqual(expected, _remove_json_comments(config_str))
 
     def test_get_dict_config_logger(self) -> None:
         with tempfile.NamedTemporaryFile("w", prefix="bzfs_log_config", suffix=".json", delete=False, encoding="utf-8") as f:
@@ -264,7 +264,7 @@ class TestLogging(AbstractTestCase):
             args = self.argparser_parse_args(["src", "dst", f"--log-config-file=+{path}"])
             lp = LogParams(args)
             with patch("logging.config.dictConfig") as m:
-                get_dict_config_logger(lp, args)
+                _get_dict_config_logger(lp, args)
                 self.assertEqual(lp.log_level, m.call_args[0][0]["root"]["level"])
         finally:
             os.remove(path)
@@ -277,7 +277,7 @@ class TestLogging(AbstractTestCase):
         args = self.argparser_parse_args(["src", "dst", "--log-config-file", config])
         lp = LogParams(args)
         with patch("logging.config.dictConfig") as m:
-            get_dict_config_logger(lp, args)
+            _get_dict_config_logger(lp, args)
             self.assertEqual("DEBUG", m.call_args[0][0]["root"]["level"])
 
     def test_get_dict_config_logger_missing_default_raises(self) -> None:
@@ -285,14 +285,14 @@ class TestLogging(AbstractTestCase):
         args = self.argparser_parse_args(["src", "dst", "--log-config-file", config])
         lp = LogParams(args)
         with self.assertRaises(ValueError):
-            get_dict_config_logger(lp, args)
+            _get_dict_config_logger(lp, args)
 
     def test_get_dict_config_logger_invalid_name_raises(self) -> None:
         config = '{"version": 1, "root": {"level": "${bad name:INFO}"}}'
         args = self.argparser_parse_args(["src", "dst", "--log-config-file", config])
         lp = LogParams(args)
         with self.assertRaises(ValueError):
-            get_dict_config_logger(lp, args)
+            _get_dict_config_logger(lp, args)
 
     def test_get_dict_config_logger_invalid_path(self) -> None:
         with tempfile.NamedTemporaryFile("w", prefix="badfilename", suffix=".json", delete=False, encoding="utf-8") as f:
@@ -302,7 +302,7 @@ class TestLogging(AbstractTestCase):
             args = self.argparser_parse_args(["src", "dst", f"--log-config-file=+{path}"])
             lp = LogParams(args)
             with self.assertRaises(SystemExit):
-                get_dict_config_logger(lp, args)
+                _get_dict_config_logger(lp, args)
         finally:
             os.remove(path)
 
@@ -319,9 +319,9 @@ class TestLogging(AbstractTestCase):
         with patch("os.system") as mock_system:
             # The fixed code should detect the disallowed callable and exit.
             with self.assertRaises(SystemExit) as cm:  # get_dict_config_logger() calls die(), which raises SystemExit.
-                get_dict_config_logger(lp, args)
+                _get_dict_config_logger(lp, args)
             self.assertEqual(cm.exception.code, DIE_STATUS)
             self.assertIn("Disallowed callable 'os.system'", str(cm.exception))
             mock_system.assert_not_called()
 
-        validate_log_config_dict(None)  # type: ignore[arg-type]
+        _validate_log_config_dict(None)  # type: ignore[arg-type]

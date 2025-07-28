@@ -48,14 +48,14 @@ def suite() -> unittest.TestSuite:
 class TestHelperFunctions(AbstractTestCase):
     def test_validate_quoting(self) -> None:
         params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
-        params.validate_quoting([""])
-        params.validate_quoting(["foo"])
+        params._validate_quoting([""])
+        params._validate_quoting(["foo"])
         with self.assertRaises(SystemExit):
-            params.validate_quoting(['foo"'])
+            params._validate_quoting(['foo"'])
         with self.assertRaises(SystemExit):
-            params.validate_quoting(["foo'"])
+            params._validate_quoting(["foo'"])
         with self.assertRaises(SystemExit):
-            params.validate_quoting(["foo`"])
+            params._validate_quoting(["foo`"])
 
     def test_validate_arg(self) -> None:
         params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
@@ -145,29 +145,29 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_fix_send_recv_opts(self) -> None:
         params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
-        self.assertEqual([], params.fix_recv_opts(["-n"], frozenset())[0])
-        self.assertEqual([], params.fix_recv_opts(["--dryrun", "-n"], frozenset())[0])
-        self.assertEqual([""], params.fix_recv_opts([""], frozenset())[0])
-        self.assertEqual([], params.fix_recv_opts([], frozenset())[0])
-        self.assertEqual(["-"], params.fix_recv_opts(["-"], frozenset())[0])
-        self.assertEqual(["-h"], params.fix_recv_opts(["-hn"], frozenset())[0])
-        self.assertEqual(["-h"], params.fix_recv_opts(["-nh"], frozenset())[0])
-        self.assertEqual(["--Fvhn"], params.fix_recv_opts(["--Fvhn"], frozenset())[0])
-        self.assertEqual(["foo"], params.fix_recv_opts(["foo"], frozenset())[0])
-        self.assertEqual(["v", "n", "F"], params.fix_recv_opts(["v", "n", "F"], frozenset())[0])
-        self.assertEqual(["-o", "-n"], params.fix_recv_opts(["-o", "-n"], frozenset())[0])
-        self.assertEqual(["-o", "-n"], params.fix_recv_opts(["-o", "-n", "-n"], frozenset())[0])
-        self.assertEqual(["-x", "--dryrun"], params.fix_recv_opts(["-x", "--dryrun"], frozenset())[0])
-        self.assertEqual(["-x", "--dryrun"], params.fix_recv_opts(["-x", "--dryrun", "-n"], frozenset())[0])
-        self.assertEqual(["-x"], params.fix_recv_opts(["-x"], frozenset())[0])
+        self.assertEqual([], params._fix_recv_opts(["-n"], frozenset())[0])
+        self.assertEqual([], params._fix_recv_opts(["--dryrun", "-n"], frozenset())[0])
+        self.assertEqual([""], params._fix_recv_opts([""], frozenset())[0])
+        self.assertEqual([], params._fix_recv_opts([], frozenset())[0])
+        self.assertEqual(["-"], params._fix_recv_opts(["-"], frozenset())[0])
+        self.assertEqual(["-h"], params._fix_recv_opts(["-hn"], frozenset())[0])
+        self.assertEqual(["-h"], params._fix_recv_opts(["-nh"], frozenset())[0])
+        self.assertEqual(["--Fvhn"], params._fix_recv_opts(["--Fvhn"], frozenset())[0])
+        self.assertEqual(["foo"], params._fix_recv_opts(["foo"], frozenset())[0])
+        self.assertEqual(["v", "n", "F"], params._fix_recv_opts(["v", "n", "F"], frozenset())[0])
+        self.assertEqual(["-o", "-n"], params._fix_recv_opts(["-o", "-n"], frozenset())[0])
+        self.assertEqual(["-o", "-n"], params._fix_recv_opts(["-o", "-n", "-n"], frozenset())[0])
+        self.assertEqual(["-x", "--dryrun"], params._fix_recv_opts(["-x", "--dryrun"], frozenset())[0])
+        self.assertEqual(["-x", "--dryrun"], params._fix_recv_opts(["-x", "--dryrun", "-n"], frozenset())[0])
+        self.assertEqual(["-x"], params._fix_recv_opts(["-x"], frozenset())[0])
 
-        self.assertEqual([], params.fix_send_opts(["-n"]))
-        self.assertEqual([], params.fix_send_opts(["--dryrun", "-n", "-ed"]))
-        self.assertEqual([], params.fix_send_opts(["-I", "s1"]))
-        self.assertEqual(["--raw"], params.fix_send_opts(["-i", "s1", "--raw"]))
-        self.assertEqual(["-X", "d1,d2"], params.fix_send_opts(["-X", "d1,d2"]))
+        self.assertEqual([], params._fix_send_opts(["-n"]))
+        self.assertEqual([], params._fix_send_opts(["--dryrun", "-n", "-ed"]))
+        self.assertEqual([], params._fix_send_opts(["-I", "s1"]))
+        self.assertEqual(["--raw"], params._fix_send_opts(["-i", "s1", "--raw"]))
+        self.assertEqual(["-X", "d1,d2"], params._fix_send_opts(["-X", "d1,d2"]))
         self.assertEqual(
-            ["--exclude", "d1,d2", "--redact", "b1"], params.fix_send_opts(["--exclude", "d1,d2", "--redact", "b1"])
+            ["--exclude", "d1,d2", "--redact", "b1"], params._fix_send_opts(["--exclude", "d1,d2", "--redact", "b1"])
         )
 
     def test_fix_recv_opts_with_preserve_properties(self) -> None:
@@ -175,12 +175,12 @@ class TestHelperFunctions(AbstractTestCase):
         cr = "createtxg"
         params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
         with self.assertRaises(SystemExit):
-            params.fix_recv_opts(["-n", "-o", f"{mp}=foo"], frozenset([mp]))
-        self.assertEqual(([], [mp]), params.fix_recv_opts(["-n"], frozenset([mp])))
-        self.assertEqual((["-u", mp], [mp]), params.fix_recv_opts(["-n", "-u", mp], frozenset([mp])))
-        self.assertEqual((["-x", mp], []), params.fix_recv_opts(["-n", "-x", mp], frozenset([mp])))
-        self.assertEqual((["-x", mp, "-x", cr], []), params.fix_recv_opts(["-n", "-x", mp, "-x", cr], frozenset([mp])))
-        self.assertEqual(([], [cr, mp]), params.fix_recv_opts([], frozenset([mp, cr])))
+            params._fix_recv_opts(["-n", "-o", f"{mp}=foo"], frozenset([mp]))
+        self.assertEqual(([], [mp]), params._fix_recv_opts(["-n"], frozenset([mp])))
+        self.assertEqual((["-u", mp], [mp]), params._fix_recv_opts(["-n", "-u", mp], frozenset([mp])))
+        self.assertEqual((["-x", mp], []), params._fix_recv_opts(["-n", "-x", mp], frozenset([mp])))
+        self.assertEqual((["-x", mp, "-x", cr], []), params._fix_recv_opts(["-n", "-x", mp, "-x", cr], frozenset([mp])))
+        self.assertEqual(([], [cr, mp]), params._fix_recv_opts([], frozenset([mp, cr])))
 
     def test_delete_stale_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -195,7 +195,7 @@ class TestHelperFunctions(AbstractTestCase):
             non_socket_file = os.path.join(tmpdir, "f")
             Path(non_socket_file).touch()
 
-            configuration.delete_stale_files(tmpdir, "s", millis=31 * 24 * 60 * 60 * 1000)
+            configuration._delete_stale_files(tmpdir, "s", millis=31 * 24 * 60 * 60 * 1000)
 
             self.assertTrue(os.path.exists(new_socket_file))
             self.assertFalse(os.path.exists(stale_socket_file))
@@ -212,7 +212,7 @@ class TestHelperFunctions(AbstractTestCase):
                 sock.bind(socket_path)
                 time.sleep(0.001)  # sleep to ensure the file's mtime is in the past
                 # Call delete_stale_files with millis=0 to mark all files as stale.
-                configuration.delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+                configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
                 # The file should still exist because the current process is alive.
                 self.assertTrue(os.path.exists(socket_path))
             finally:
@@ -233,7 +233,7 @@ class TestHelperFunctions(AbstractTestCase):
             try:
                 sock.bind(socket_path)
                 time.sleep(0.001)  # sleep to ensure the file's mtime is in the past
-                configuration.delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+                configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
                 # The file should be removed because the fake pid is not alive.
                 self.assertFalse(os.path.exists(socket_path))
             finally:
@@ -246,7 +246,7 @@ class TestHelperFunctions(AbstractTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             regular_file = os.path.join(tmpdir, "s_regular_file")
             Path(regular_file).touch()
-            configuration.delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+            configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
             self.assertFalse(os.path.exists(regular_file))
 
     def test_custom_ssh_config_file_must_match_file_name_pattern(self) -> None:
@@ -628,15 +628,15 @@ class TestAdditionalHelpers(AbstractTestCase):
     def test_program_name_injections(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         p1 = self.make_params(args=args, inject_params={"inject_unavailable_ssh": True})
-        self.assertEqual("ssh-xxx", p1.program_name("ssh"))
+        self.assertEqual("ssh-xxx", p1._program_name("ssh"))
         p2 = self.make_params(args=args, inject_params={"inject_failing_ssh": True})
-        self.assertEqual("false", p2.program_name("ssh"))
+        self.assertEqual("false", p2._program_name("ssh"))
 
     def test_unset_matching_env_vars(self) -> None:
         with patch.dict(os.environ, {"FOO_BAR": "x"}):
             args = self.argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
             params = self.make_params(args=args)
-            params.unset_matching_env_vars(args)
+            params._unset_matching_env_vars(args)
             self.assertNotIn("FOO_BAR", os.environ)
 
     def test_local_ssh_command_variants(self) -> None:

@@ -239,7 +239,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     # setup streaming pipeline
     src_snapshot_itr = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
     dst_snapshot_itr = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
-    merge_itr = merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snapshot_itr, dst_snapshot_itr)
+    merge_itr = _merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snapshot_itr, dst_snapshot_itr)
 
     rel_datasets: dict[str, set[str]] = defaultdict(set)
     for datasets, remote in (src_datasets, src), (dst_datasets, dst):
@@ -251,7 +251,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     with open_nofollow(tmp_tsv_file, "w", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
         # streaming group by rel_dataset (consumes constant memory only); entry is a Tuple[str, ComparableSnapshot]
         group = itertools.groupby(merge_itr, key=lambda entry: entry[1].key[0])
-        print_datasets(group, lambda rel_ds, entries: print_dataset(rel_ds, entries), rel_src_or_dst)
+        _print_datasets(group, lambda rel_ds, entries: print_dataset(rel_ds, entries), rel_src_or_dst)
     os.rename(tmp_tsv_file, tsv_file)
     log.info("%s", f"Final TSV output file comparing {task} is: {tsv_file}")
 
@@ -272,7 +272,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     os.rename(tmp_tsv_file, tsv_file)
 
 
-def print_datasets(group: itertools.groupby, fn: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
+def _print_datasets(group: itertools.groupby, fn: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
     """Iterate over grouped datasets and apply fn, adding gaps for missing ones."""
     rel_datasets = sorted(rel_datasets)
     n = len(rel_datasets)
@@ -289,7 +289,7 @@ def print_datasets(group: itertools.groupby, fn: Callable[[str, Iterable], None]
         i += 1
 
 
-def merge_sorted_iterators(
+def _merge_sorted_iterators(
     choices: Sequence[str],  # ["src", "dst", "all"]
     choice: str,  # Example: "src+dst+all"
     src_itr: Iterator,

@@ -68,13 +68,13 @@ def detect_available_programs(job: Job) -> None:
     log = p.log
     available_programs: dict[str, dict[str, str]] = params.available_programs
     if "local" not in available_programs:
-        cmd: list[str] = [p.shell_program_local, "-c", find_available_programs(p)]
+        cmd: list[str] = [p.shell_program_local, "-c", _find_available_programs(p)]
         available_programs["local"] = dict.fromkeys(
             subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout.splitlines(), ""
         )
         cmd = [p.shell_program_local, "-c", "exit"]
         if subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
-            disable_program(p, "sh", ["local"])
+            _disable_program(p, "sh", ["local"])
 
     for r in [p.dst, p.src]:
         loc: str = r.location
@@ -91,8 +91,8 @@ def detect_available_programs(job: Job) -> None:
             p.connection_pools[loc] = ConnectionPools(
                 r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
             )
-        detect_zpool_features(job, r)
-        detect_available_programs_remote(job, r, available_programs, r.ssh_user_host)
+        _detect_zpool_features(job, r)
+        _detect_available_programs_remote(job, r, available_programs, r.ssh_user_host)
         job.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
             p.connection_pools[loc], available_programs[loc], p.zpool_features[loc]
         )
@@ -104,19 +104,19 @@ def detect_available_programs(job: Job) -> None:
 
     locations = ["src", "dst", "local"]
     if params.compression_program == DISABLE_PRG:
-        disable_program(p, "zstd", locations)
+        _disable_program(p, "zstd", locations)
     if params.mbuffer_program == DISABLE_PRG:
-        disable_program(p, "mbuffer", locations)
+        _disable_program(p, "mbuffer", locations)
     if params.ps_program == DISABLE_PRG:
-        disable_program(p, "ps", locations)
+        _disable_program(p, "ps", locations)
     if params.pv_program == DISABLE_PRG:
-        disable_program(p, "pv", locations)
+        _disable_program(p, "pv", locations)
     if params.shell_program == DISABLE_PRG:
-        disable_program(p, "sh", locations)
+        _disable_program(p, "sh", locations)
     if params.sudo_program == DISABLE_PRG:
-        disable_program(p, "sudo", locations)
+        _disable_program(p, "sudo", locations)
     if params.zpool_program == DISABLE_PRG:
-        disable_program(p, "zpool", locations)
+        _disable_program(p, "zpool", locations)
 
     for key, programs in available_programs.items():
         for program in list(programs.keys()):
@@ -137,7 +137,7 @@ def detect_available_programs(job: Job) -> None:
                 default_shell: str = program[len("default_shell-") :]
                 programs["default_shell"] = default_shell
                 log.log(LOG_TRACE, f"available_programs[{key}][default_shell]: %s", default_shell)
-                validate_default_shell(default_shell, r)
+                _validate_default_shell(default_shell, r)
             elif program.startswith("getconf_cpu_count-"):
                 programs.pop(program)
                 getconf_cpu_count: str = program[len("getconf_cpu_count-") :]
@@ -162,13 +162,13 @@ def detect_available_programs(job: Job) -> None:
         )
 
 
-def disable_program(p: Params, program: str, locations: list[str]) -> None:
+def _disable_program(p: Params, program: str, locations: list[str]) -> None:
     """Removes the given program from the available_programs mapping."""
     for location in locations:
         p.available_programs[location].pop(program, None)
 
 
-def find_available_programs(p: Params) -> str:
+def _find_available_programs(p: Params) -> str:
     """POSIX shell script that checks for the existence of various programs; It uses `if` statements instead of `&&` plus
     `printf` instead of `echo` to ensure maximum compatibility across shells."""
     cmds: list[str] = []
@@ -193,7 +193,7 @@ def find_available_programs(p: Params) -> str:
     return "; ".join(cmds)
 
 
-def detect_available_programs_remote(job: Job, remote: Remote, available_programs: dict, ssh_user_host: str) -> None:
+def _detect_available_programs_remote(job: Job, remote: Remote, available_programs: dict, ssh_user_host: str) -> None:
     """Detects CLI tools available on ``remote`` and updates mapping correspondingly."""
     p, log = job.params, job.params.log
     location = remote.location
@@ -235,7 +235,7 @@ def detect_available_programs_remote(job: Job, remote: Remote, available_program
 
     if p.shell_program != DISABLE_PRG:
         try:
-            cmd: list[str] = [p.shell_program, "-c", find_available_programs(p)]
+            cmd: list[str] = [p.shell_program, "-c", _find_available_programs(p)]
             available_programs[location].update(dict.fromkeys(run_ssh_command(job, remote, LOG_TRACE, cmd=cmd).splitlines()))
             return
         except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
@@ -264,7 +264,7 @@ def is_dummy(r: Remote) -> bool:
     return r.root_dataset == DUMMY_DATASET
 
 
-def detect_zpool_features(job: Job, remote: Remote) -> None:
+def _detect_zpool_features(job: Job, remote: Remote) -> None:
     """Fills ``job.params.zpool_features`` with detected zpool capabilities."""
     p = params = job.params
     r, loc, log = remote, remote.location, p.log
@@ -318,7 +318,7 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
-def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
+def _validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
     """Fails if the remote user uses csh or tcsh as the default shell."""
     if path_to_default_shell.endswith(("/csh", "/tcsh")):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt

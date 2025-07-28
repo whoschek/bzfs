@@ -45,14 +45,14 @@ from bzfs_main.configuration import (
 )
 from bzfs_main.filter import (
     SNAPSHOT_REGEX_FILTER_NAME,
+    _filter_datasets_by_exclude_property,
+    _filter_snapshots_by_regex,
     dataset_regexes,
     filter_datasets,
-    filter_datasets_by_exclude_property,
     filter_lines,
     filter_lines_except,
     filter_properties,
     filter_snapshots,
-    filter_snapshots_by_regex,
 )
 from bzfs_main.utils import (
     LOG_DEBUG,
@@ -163,7 +163,7 @@ class TestHelperFunctions(CommonTest):
             compile_regexes([".*c.*"]),
             compile_regexes(["a.*", "b2"]),
         )
-        self.assertEqual(["\tds@a1", "\tds@b2"], filter_snapshots_by_regex(job, snapshots, regexes))
+        self.assertEqual(["\tds@a1", "\tds@b2"], _filter_snapshots_by_regex(job, snapshots, regexes))
 
     def test_filter_snapshots_by_regex_debug(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
@@ -178,7 +178,7 @@ class TestHelperFunctions(CommonTest):
             compile_regexes(["c3"]),
             compile_regexes(["a1", "c3"]),
         )
-        result = filter_snapshots_by_regex(job, snapshots, regexes)
+        result = _filter_snapshots_by_regex(job, snapshots, regexes)
         self.assertEqual(["\tds@a1"], result)
         log_output = stream.getvalue()
         self.assertIn("Including b/c snapshot regex", log_output)
@@ -216,7 +216,7 @@ class TestHelperFunctions(CommonTest):
         regexes = (compile_regexes([]), compile_regexes(["keep"]))
         job.params.snapshot_filters = [[SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, regexes)]]
         snapshots = ["0\tds@keep", "0\tds@other"]
-        with patch("bzfs_main.filter.filter_snapshots_by_regex", return_value=[snapshots[0]]) as mock_f:
+        with patch("bzfs_main.filter._filter_snapshots_by_regex", return_value=[snapshots[0]]) as mock_f:
             result = filter_snapshots(job, snapshots)
             mock_f.assert_called_once_with(job, snapshots, regexes=regexes, filter_bookmarks=False)
         self.assertEqual([snapshots[0]], result)
@@ -839,7 +839,7 @@ class TestFilterDatasets(CommonTest):
 
     def test_property_filter_called(self) -> None:
         job, remote = self.make_job(exclude_property="skip")
-        with patch("bzfs_main.filter.filter_datasets_by_exclude_property", return_value=["src/a"]) as m:
+        with patch("bzfs_main.filter._filter_datasets_by_exclude_property", return_value=["src/a"]) as m:
             result = filter_datasets(job, remote, ["src/a", "src/b"])
             m.assert_called_once()
             self.assertEqual(["src/a"], result)
@@ -895,7 +895,7 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
         with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try):
             with patch.object(job, "maybe_inject_delete"):
                 with patch("socket.gethostname", return_value="host1"):
-                    result = filter_datasets_by_exclude_property(job, remote, list(mapping.keys()))
+                    result = _filter_datasets_by_exclude_property(job, remote, list(mapping.keys()))
         return result
 
     def test_include_empty_value(self) -> None:
@@ -928,7 +928,7 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
         with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try) as mock_try:
             with patch.object(job, "maybe_inject_delete"):
                 with patch("socket.gethostname", return_value="host1"):
-                    result = filter_datasets_by_exclude_property(job, remote, ["a", "a/b", "c"])
+                    result = _filter_datasets_by_exclude_property(job, remote, ["a", "a/b", "c"])
         self.assertListEqual(["c"], result)
         self.assertEqual(2, mock_try.call_count)
 
@@ -942,7 +942,7 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
         with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try):
             with patch.object(job, "maybe_inject_delete"):
                 with patch("socket.gethostname", return_value="host1"):
-                    result = filter_datasets_by_exclude_property(job, remote, ["a", "b"])
+                    result = _filter_datasets_by_exclude_property(job, remote, ["a", "b"])
         self.assertListEqual(["b"], result)
 
     def test_debug_logging(self) -> None:
@@ -958,7 +958,7 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
         with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try):
             with patch.object(job, "maybe_inject_delete"):
                 with patch("socket.gethostname", return_value="host1"):
-                    filter_datasets_by_exclude_property(job, remote, ["a"])
+                    _filter_datasets_by_exclude_property(job, remote, ["a"])
         log_output = stream.getvalue()
         self.assertIn("Excluding b/c dataset prop", log_output)
 

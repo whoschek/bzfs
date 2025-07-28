@@ -61,7 +61,7 @@ class SnapshotFilter:
     options: Any = field(compare=False, default=None)
 
 
-def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> None:
+def _add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> None:
     """Appends snapshot filter to namespace list, creating the list if absent."""
 
     if not hasattr(args, SNAPSHOT_FILTERS_VAR):
@@ -69,16 +69,16 @@ def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> No
     args.snapshot_filters_var[-1].append(_filter)
 
 
-def add_time_and_rank_snapshot_filter(
+def _add_time_and_rank_snapshot_filter(
     args: argparse.Namespace, dst: str, timerange: "UnixTimeRange", rankranges: list["RankRange"]
 ) -> None:
     """Creates and adds a SnapshotFilter using timerange and rank ranges."""
 
     if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
-        add_snapshot_filter(args, SnapshotFilter("include_snapshot_times", timerange, None))
+        _add_snapshot_filter(args, SnapshotFilter("include_snapshot_times", timerange, None))
     else:
         assert timerange is not None
-        add_snapshot_filter(args, SnapshotFilter(dst, timerange, rankranges))
+        _add_snapshot_filter(args, SnapshotFilter(dst, timerange, rankranges))
 
 
 def has_timerange_filter(snapshot_filters: list[list[SnapshotFilter]]) -> bool:
@@ -90,14 +90,14 @@ def has_timerange_filter(snapshot_filters: list[list[SnapshotFilter]]) -> bool:
 def optimize_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> list[SnapshotFilter]:
     """Basic optimizations for the snapshot filter execution plan."""
 
-    merge_adjacent_snapshot_filters(snapshot_filters)
-    merge_adjacent_snapshot_regexes(snapshot_filters)
+    _merge_adjacent_snapshot_filters(snapshot_filters)
+    _merge_adjacent_snapshot_regexes(snapshot_filters)
     snapshot_filters = [f for f in snapshot_filters if f.timerange or f.options]
-    reorder_snapshot_time_filters(snapshot_filters)
+    _reorder_snapshot_time_filters(snapshot_filters)
     return snapshot_filters
 
 
-def merge_adjacent_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> None:
+def _merge_adjacent_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> None:
     """Merge adjacent filters of the same type if possible."""
 
     i = len(snapshot_filters) - 1
@@ -113,7 +113,7 @@ def merge_adjacent_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> N
         i -= 1
 
 
-def merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> None:
+def _merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> None:
     """Combine consecutive regex filters of the same kind for efficiency."""
 
     i = len(snapshot_filters) - 1
@@ -152,7 +152,7 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> N
         i -= 1
 
 
-def reorder_snapshot_time_filters(snapshot_filters: list[SnapshotFilter]) -> None:
+def _reorder_snapshot_time_filters(snapshot_filters: list[SnapshotFilter]) -> None:
     """Reorder time filters before regex filters within execution plan sections."""
 
     def reorder_time_filters_within_section(i: int, j: int) -> None:
@@ -334,7 +334,7 @@ class FileOrLiteralAction(argparse.Action):
         current_values += extra_values
         setattr(namespace, self.dest, current_values)
         if self.dest in SNAPSHOT_REGEX_FILTER_NAMES:
-            add_snapshot_filter(namespace, SnapshotFilter(self.dest, None, extra_values))
+            _add_snapshot_filter(namespace, SnapshotFilter(self.dest, None, extra_values))
 
 
 #############################################################################
@@ -441,13 +441,13 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         if ".." not in value:
             parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {value}")
         timerange_specs: list[int | timedelta | None] = [parse_time(time_spec) for time_spec in value.split("..", 1)]
-        rankranges: list[RankRange] = self.parse_rankranges(parser, values[1:], option_string=option_string)
+        rankranges: list[RankRange] = self._parse_rankranges(parser, values[1:], option_string=option_string)
         setattr(namespace, self.dest, [timerange_specs] + rankranges)
-        timerange: UnixTimeRange = self.get_include_snapshot_times(timerange_specs)
-        add_time_and_rank_snapshot_filter(namespace, self.dest, timerange, rankranges)
+        timerange: UnixTimeRange = self._get_include_snapshot_times(timerange_specs)
+        _add_time_and_rank_snapshot_filter(namespace, self.dest, timerange, rankranges)
 
     @staticmethod
-    def get_include_snapshot_times(times: list[timedelta | int | None]) -> "UnixTimeRange":
+    def _get_include_snapshot_times(times: list[timedelta | int | None]) -> "UnixTimeRange":
         """Convert start and end times to ``UnixTimeRange`` for filtering."""
 
         def utc_unix_time_in_seconds(time_spec: timedelta | int | None, default: int) -> timedelta | int:
@@ -467,7 +467,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         return lo, hi
 
     @staticmethod
-    def parse_rankranges(
+    def _parse_rankranges(
         parser: argparse.ArgumentParser, values: Any, option_string: str | None = None
     ) -> list["RankRange"]:
         """Parses rank range strings like 'latest 3..latest 5' into tuples."""

@@ -109,25 +109,25 @@ class TestHelperFunctions(AbstractTestCase):
     def test_detect_loopback_address_ipv4_supported(self) -> None:
         ipv4 = self._make_mock_socket()
         with patch("socket.socket", side_effect=[ipv4]) as socket_factory:
-            self.assertEqual("127.0.0.1", bzfs_jobrunner.detect_loopback_address())
+            self.assertEqual("127.0.0.1", bzfs_jobrunner._detect_loopback_address())
             self.assertEqual(1, socket_factory.call_count)
 
     def test_detect_loopback_address_ipv6_fallback(self) -> None:
         ipv4_fail = self._make_mock_socket(OSError("No IPv4"))
         ipv6_ok = self._make_mock_socket()
         with patch("socket.socket", side_effect=[ipv4_fail, ipv6_ok]) as socket_factory:
-            self.assertEqual("::1", bzfs_jobrunner.detect_loopback_address())
+            self.assertEqual("::1", bzfs_jobrunner._detect_loopback_address())
             self.assertEqual(2, socket_factory.call_count)
 
     def test_detect_loopback_address_neither_supported(self) -> None:
         ipv4_fail = self._make_mock_socket(OSError("No IPv4"))
         ipv6_fail = self._make_mock_socket(OSError("No IPv6"))
         with patch("socket.socket", side_effect=[ipv4_fail, ipv6_fail]) as socket_factory:
-            self.assertEqual("", bzfs_jobrunner.detect_loopback_address())
+            self.assertEqual("", bzfs_jobrunner._detect_loopback_address())
             self.assertEqual(2, socket_factory.call_count)
 
     def test_pretty_print_formatter(self) -> None:
-        self.assertIsNotNone(str(bzfs_jobrunner.pretty_print_formatter({"foo": "bar"})))
+        self.assertIsNotNone(str(bzfs_jobrunner._pretty_print_formatter({"foo": "bar"})))
 
     def test_help(self) -> None:
         if is_solaris_zfs():
@@ -170,12 +170,12 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_dedupe_and_flatten(self) -> None:
         pairs = [("a", "b"), ("a", "b"), ("c", "d")]
-        self.assertEqual([("a", "b"), ("c", "d")], bzfs_jobrunner.dedupe(pairs))
-        self.assertEqual(["a", "b", "c", "d"], bzfs_jobrunner.flatten([("a", "b"), ("c", "d")]))
+        self.assertEqual([("a", "b"), ("c", "d")], bzfs_jobrunner._dedupe(pairs))
+        self.assertEqual(["a", "b", "c", "d"], bzfs_jobrunner._flatten([("a", "b"), ("c", "d")]))
 
     def test_sanitize_and_log_suffix(self) -> None:
-        self.assertEqual("a!b!c!d!e!f", bzfs_jobrunner.sanitize("a b..c/d,e\\f"))
-        suffix = bzfs_jobrunner.log_suffix("l o", "s/p", "d\\h")
+        self.assertEqual("a!b!c!d!e!f", bzfs_jobrunner._sanitize("a b..c/d,e\\f"))
+        suffix = bzfs_jobrunner._log_suffix("l o", "s/p", "d\\h")
         self.assertEqual(",l!o,s!p,d!h", suffix)
 
     def test_convert_ipv6(self) -> None:

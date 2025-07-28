@@ -57,7 +57,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_pv_size_to_bytes(self) -> None:
         def pv_size_to_bytes(line: str) -> int:
-            num_bytes, _ = progress_reporter.pv_size_to_bytes(line)
+            num_bytes, _ = progress_reporter._pv_size_to_bytes(line)
             return num_bytes
 
         self.assertEqual(800, pv_size_to_bytes("800B foo"))
@@ -134,76 +134,76 @@ class TestHelperFunctions(AbstractTestCase):
             with stop_on_failure_subtest(i=eols.index(eol)):
                 # normal intermediate line
                 line = "125 GiB: 2,71GiB 0:00:08 [98,8MiB/s] [ 341MiB/s] [>                ]  2% ETA 0:06:03 ETA 17:27:49"
-                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(2.71 * 1024**3), num_bytes)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), eta_timestamp_nanos)
                 self.assertEqual("[>                ]  2% ETA 0:06:03 ETA 17:27:49", line_tail)
 
                 # intermediate line with duration ETA that contains days
                 line = "98 GiB/ 0 B/  98 GiB: 93.1GiB 0:12:12 [ 185MiB/s] [ 130MiB/s] [==>  ] 94% ETA 2+0:00:39 ETA 17:55:48"
-                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(93.1 * 1024**3), num_bytes)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (2 * 86400 + 39), eta_timestamp_nanos)
                 self.assertEqual("[==>  ] 94% ETA 2+0:00:39 ETA 17:55:48", line_tail)
 
                 # intermediate line with duration ETA that contains other days syntax and timestamp ETA that contains days
                 line = "98 GiB/ 0 B/  98 GiB: 93.1GiB 0:12:12 ( 185MiB/s) ( 130MiB/s) [==>  ] ETA 1:00:07:16 ETA 2025-01-23 14:06:02"
-                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(93.1 * 1024**3), num_bytes)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (1 * 86400 + 7 * 60 + 16), eta_timestamp_nanos)
                 self.assertEqual("[==>  ] ETA 1:00:07:16 ETA 2025-01-23 14:06:02", line_tail)
 
                 # intermediate line with duration ETA that contains other days syntax and timestamp ETA using FIN marker
                 line = "98 GiB/ 0 B/  98 GiB: 93.1GiB 9:0:12:12 [ 185MiB/s] [ 130MiB/s] [==>  ] ETA 1:00:07:16 FIN 2025-01-23 14:06:02"
-                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(93.1 * 1024**3), num_bytes)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (1 * 86400 + 7 * 60 + 16), eta_timestamp_nanos)
                 self.assertEqual("[==>  ] ETA 1:00:07:16 FIN 2025-01-23 14:06:02", line_tail)
 
                 # final line on transfer completion does not contain duration ETA
                 line = "98 GiB/ 0 B/  98 GiB: 98,1GiB 0:12:39 [ 132MiB/s] [ 132MiB/s] [=====>] 100%             ETA 17:55:37"
-                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(98.1 * 1024**3), num_bytes)
                 self.assertEqual(curr_time_nanos, eta_timestamp_nanos)
                 self.assertEqual("[=====>] 100%             ETA 17:55:37", line_tail)
 
                 # final line on transfer completion does not contain duration ETA
                 line = "12.6KiB: 44.2KiB 0:00:00 [3.14MiB/s] [3.14MiB/s] [===================] 350%             ETA 14:48:27"
-                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(44.2 * 1024), num_bytes)
                 self.assertEqual(curr_time_nanos, eta_timestamp_nanos)
                 self.assertEqual("[===================] 350%             ETA 14:48:27", line_tail)
 
                 # missing from --pv--program-opts: --timer, --rate, --average-rate
                 line = "125 GiB: 2.71GiB[ >                    ]  2% ETA 0:06:03 ETA 17:27:49"
-                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(2.71 * 1024**3), num_bytes)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), eta_timestamp_nanos)
                 self.assertEqual("[ >                    ]  2% ETA 0:06:03 ETA 17:27:49", line_tail)
 
                 # missing from --pv--program-opts: --rate, --average-rate
                 line = "125 GiB: 2.71GiB 0:00:08 [ >                    ]  2% ETA 0:06:03 ETA 17:27:49"
-                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(2.71 * 1024**3), num_bytes)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), eta_timestamp_nanos)
                 self.assertEqual("0:00:08 [ >                    ]  2% ETA 0:06:03 ETA 17:27:49", line_tail)
 
                 # intermediate line with square brackets after the first ETA (not sure if this actually occurs in the wild)
                 line = "125 GiB: 2,71GiB 0:00:08 [98,8MiB/s] [ 341MiB/s] [>            ]  2% ETA 0:06:03 ] [ ETA 17:27:49]"
-                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(2.71 * 1024**3), num_bytes)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), eta_timestamp_nanos)
                 self.assertEqual("[>            ]  2% ETA 0:06:03 ] [ ETA 17:27:49]", line_tail)
 
                 # zero line with final line on transfer completion does not contain duration ETA
                 line = "275GiB: 0.00 B 0:00:00 [0.00 B/s] [0.00 B/s] [>                   ]  0%             ETA 03:24:32"
-                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(0, num_bytes)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * 0, eta_timestamp_nanos)
                 self.assertEqual("[>                   ]  0%             ETA 03:24:32", line_tail)
 
                 for line in eols:
-                    num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                    num_bytes, eta_timestamp_nanos, line_tail = reporter._parse_pv_line(line + eol, curr_time_nanos)
                     self.assertEqual(0, num_bytes)
                     self.assertEqual(curr_time_nanos, eta_timestamp_nanos)
                     self.assertEqual("", line_tail)
@@ -222,7 +222,7 @@ class TestHelperFunctions(AbstractTestCase):
                 expected_bytes = round(2.71 * 1024**3)
                 if i > 0:
                     line = line + "\r"
-                num_bytes = reporter.update_transfer_stat(line, stat, curr_time_nanos)
+                num_bytes = reporter._update_transfer_stat(line, stat, curr_time_nanos)
                 if i == 0:
                     self.assertEqual(expected_bytes - bytes_in_flight, num_bytes)
                     self.assertEqual(0, stat.bytes_in_flight)
@@ -329,7 +329,7 @@ class TestHelperFunctions(AbstractTestCase):
         ]
         total_bytes_op1 = 0
         for line in op1_lines:
-            delta_bytes = reporter.update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
+            delta_bytes = reporter._update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
             total_bytes_op1 += delta_bytes
             current_time_ns += 1000  # Advance time slightly
         self.assertEqual(100 * 1024, total_bytes_op1, "Total bytes for Op1 incorrect")
@@ -346,7 +346,7 @@ class TestHelperFunctions(AbstractTestCase):
         total_bytes_op2 = 0
         for line in op2_lines:
             # CRITICAL: We are passing the SAME stat_obj_for_pv_log_file
-            delta_bytes = reporter.update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
+            delta_bytes = reporter._update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
             total_bytes_op2 += delta_bytes
             current_time_ns += 1000
         self.assertEqual(200 * 1024, total_bytes_op2, "Total bytes for Op2 incorrect")
@@ -464,7 +464,7 @@ class TestHelperFunctions(AbstractTestCase):
         key = types.SimpleNamespace(data=(iter(fake_file), stat))
         selector = MagicMock()
         selector.select.return_value = [(key, None)]
-        with patch.object(reporter, "update_transfer_stat", return_value=1) as upd_mock:
+        with patch.object(reporter, "_update_transfer_stat", return_value=1) as upd_mock:
             with self.assertRaises(ValueError):
                 reporter.inject_error = True
                 reporter._run_internal(fds, selector)
@@ -492,7 +492,7 @@ class TestHelperFunctions(AbstractTestCase):
 
         with patch.object(progress_reporter, "open_nofollow", side_effect=open_side_effect), patch.object(
             Path, "touch", lambda self: None
-        ), patch.object(reporter, "update_transfer_stat", return_value=0):
+        ), patch.object(reporter, "_update_transfer_stat", return_value=0):
             with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
                 with self.assertRaises(ValueError):
                     reporter.inject_error = True
@@ -589,12 +589,12 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertIsInstance(reporter.exception, ValueError)
 
     def test_format_sent_bytes(self) -> None:
-        self.assertEqual(("0.00 B", "[0.00 B/s]"), ProgressReporter.format_sent_bytes(0, 1))
+        self.assertEqual(("0.00 B", "[0.00 B/s]"), ProgressReporter._format_sent_bytes(0, 1))
         self.assertEqual(
             ("1.00 MiB", "[512.00 KiB/s]"),
-            ProgressReporter.format_sent_bytes(1_048_576, 2_000_000_000),
+            ProgressReporter._format_sent_bytes(1_048_576, 2_000_000_000),
         )
 
     def test_format_duration(self) -> None:
-        self.assertEqual("0:00:05", ProgressReporter.format_duration(5_000_000_000))
-        self.assertEqual("1:01:01", ProgressReporter.format_duration(3_661_000_000_000))
+        self.assertEqual("0:00:05", ProgressReporter._format_duration(5_000_000_000))
+        self.assertEqual("1:01:01", ProgressReporter._format_duration(3_661_000_000_000))

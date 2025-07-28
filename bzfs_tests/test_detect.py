@@ -33,8 +33,8 @@ from bzfs_main.connection import (
 )
 from bzfs_main.detect import (
     RemoteConfCacheItem,
+    _validate_default_shell,
     detect_available_programs,
-    validate_default_shell,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
 from bzfs_tests.test_utils import stop_on_failure_subtest
@@ -70,8 +70,8 @@ class TestRemoteConfCache(AbstractTestCase):
         item = RemoteConfCacheItem(pools, {"os": "Linux", "ssh": ""}, {"feat": "on"}, time.monotonic_ns())
         job.remote_conf_cache[p.src.cache_key()] = item
         job.remote_conf_cache[p.dst.cache_key()] = item
-        with patch.object(bzfs_main.detect, "detect_available_programs_remote") as d1, patch.object(
-            bzfs_main.detect, "detect_zpool_features"
+        with patch.object(bzfs_main.detect, "_detect_available_programs_remote") as d1, patch.object(
+            bzfs_main.detect, "_detect_zpool_features"
         ) as d2:
             detect_available_programs(job)
             d1.assert_not_called()
@@ -94,8 +94,8 @@ class TestRemoteConfCache(AbstractTestCase):
         item = RemoteConfCacheItem(pools, {"os": "Linux"}, {"feat": "on"}, expired_ts)
         job.remote_conf_cache[p.src.cache_key()] = item
         job.remote_conf_cache[p.dst.cache_key()] = item
-        with patch.object(bzfs_main.detect, "detect_available_programs_remote") as d1, patch.object(
-            bzfs_main.detect, "detect_zpool_features"
+        with patch.object(bzfs_main.detect, "_detect_available_programs_remote") as d1, patch.object(
+            bzfs_main.detect, "_detect_zpool_features"
         ) as d2:
             d1.side_effect = lambda p, r, programs, host: programs.__setitem__(r.location, {"ssh": ""})
             d2.side_effect = lambda p, r: job.params.zpool_features.__setitem__(r.location, {"feat": "on"})
@@ -110,14 +110,14 @@ class TestDisableAndHelpers(AbstractTestCase):
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
         p.available_programs = {"local": {"zpool": ""}, "src": {"zpool": ""}}
-        bzfs_main.detect.disable_program(p, "zpool", ["local", "src"])
+        bzfs_main.detect._disable_program(p, "zpool", ["local", "src"])
         self.assertNotIn("zpool", p.available_programs["local"])
         self.assertNotIn("zpool", p.available_programs["src"])
 
     def test_find_available_programs_contains_commands(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
-        cmds = bzfs_main.detect.find_available_programs(p)
+        cmds = bzfs_main.detect._find_available_programs(p)
         self.assertIn("default_shell-", cmds)
         self.assertIn(f"command -v {p.zpool_program}", cmds)
 
@@ -142,12 +142,12 @@ class TestDisableAndHelpers(AbstractTestCase):
         args = self.argparser_parse_args(args=["src", "dst"])
         p = self.make_params(args=args)
         remote = Remote("src", args, p)
-        validate_default_shell("/bin/sh", remote)
-        validate_default_shell("/bin/bash", remote)
+        _validate_default_shell("/bin/sh", remote)
+        _validate_default_shell("/bin/bash", remote)
         with self.assertRaises(SystemExit):
-            validate_default_shell("/bin/csh", remote)
+            _validate_default_shell("/bin/csh", remote)
         with self.assertRaises(SystemExit):
-            validate_default_shell("/bin/tcsh", remote)
+            _validate_default_shell("/bin/tcsh", remote)
 
 
 #############################################################################
@@ -178,8 +178,8 @@ class TestDetectAvailablePrograms(AbstractTestCase):
             with stop_on_failure_subtest(prog=prog):
                 setattr(p, attr, bzfs_main.detect.DISABLE_PRG)
                 p.available_programs = {"local": {prog: ""}, "src": {prog: ""}, "dst": {prog: ""}}
-                with patch.object(bzfs_main.detect, "detect_available_programs_remote"), patch.object(
-                    bzfs_main.detect, "detect_zpool_features"
+                with patch.object(bzfs_main.detect, "_detect_available_programs_remote"), patch.object(
+                    bzfs_main.detect, "_detect_zpool_features"
                 ):
                     detect_available_programs(job)
                 self.assertNotIn(prog, p.available_programs["local"])
@@ -195,8 +195,8 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         ]
         p.available_programs.pop("local", None)
         with patch("subprocess.run", side_effect=outputs), patch.object(
-            bzfs_main.detect, "detect_available_programs_remote"
-        ), patch.object(bzfs_main.detect, "detect_zpool_features"):
+            bzfs_main.detect, "_detect_available_programs_remote"
+        ), patch.object(bzfs_main.detect, "_detect_zpool_features"):
             detect_available_programs(job)
         self.assertIn("sh", p.available_programs["local"])
         job = self._setup_job()
@@ -207,8 +207,8 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         ]
         p.available_programs.pop("local", None)
         with patch("subprocess.run", side_effect=outputs), patch.object(
-            bzfs_main.detect, "detect_available_programs_remote"
-        ), patch.object(bzfs_main.detect, "detect_zpool_features"):
+            bzfs_main.detect, "_detect_available_programs_remote"
+        ), patch.object(bzfs_main.detect, "_detect_zpool_features"):
             detect_available_programs(job)
         self.assertNotIn("sh", p.available_programs["local"])
 
@@ -218,8 +218,8 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         p.args.preserve_properties = ["x"]
         p.zfs_send_program_opts = ["--props"]
         p.available_programs[p.dst.location] = {}
-        with patch.object(bzfs_main.detect, "detect_available_programs_remote"), patch.object(
-            bzfs_main.detect, "detect_zpool_features"
+        with patch.object(bzfs_main.detect, "_detect_available_programs_remote"), patch.object(
+            bzfs_main.detect, "_detect_zpool_features"
         ), self.assertRaises(SystemExit):
             detect_available_programs(job)
 
@@ -227,8 +227,8 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         p = job.params
         p.dst.sudo = "sudo -n"
         p.available_programs[p.dst.location] = {}
-        with patch.object(bzfs_main.detect, "detect_available_programs_remote"), patch.object(
-            bzfs_main.detect, "detect_zpool_features"
+        with patch.object(bzfs_main.detect, "_detect_available_programs_remote"), patch.object(
+            bzfs_main.detect, "_detect_zpool_features"
         ), self.assertRaises(SystemExit):
             detect_available_programs(job)
 
@@ -236,8 +236,8 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         p = job.params
         p.dst.use_zfs_delegation = True
         p.zpool_features[p.dst.location] = {"delegation": "off"}
-        with patch.object(bzfs_main.detect, "detect_available_programs_remote"), patch.object(
-            bzfs_main.detect, "detect_zpool_features"
+        with patch.object(bzfs_main.detect, "_detect_available_programs_remote"), patch.object(
+            bzfs_main.detect, "_detect_zpool_features"
         ), self.assertRaises(SystemExit):
             detect_available_programs(job)
 
@@ -263,7 +263,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
             return "sh\n"
 
         with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run):
-            bzfs_main.detect.detect_available_programs_remote(job, remote, p.available_programs, "host")
+            bzfs_main.detect._detect_available_programs_remote(job, remote, p.available_programs, "host")
         self.assertEqual("2.2.3", p.available_programs[remote.location]["zfs"])
         self.assertIn("sh", p.available_programs[remote.location])
         self.assertTrue(p.available_programs[remote.location][bzfs_main.detect.ZFS_VERSION_IS_AT_LEAST_2_2_0])
@@ -273,7 +273,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         p = job.params
         p.shell_program = bzfs_main.detect.DISABLE_PRG
         with patch.object(bzfs_main.detect, "run_ssh_command", return_value="zfs-2.1.0\n"):
-            bzfs_main.detect.detect_available_programs_remote(job, remote, p.available_programs, "host")
+            bzfs_main.detect._detect_available_programs_remote(job, remote, p.available_programs, "host")
         self.assertIn("zpool", p.available_programs[remote.location])
         self.assertNotIn("sh", p.available_programs[remote.location])
 
@@ -284,7 +284,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
             "run_ssh_command",
             side_effect=FileNotFoundError(),
         ), self.assertRaises(SystemExit):
-            bzfs_main.detect.detect_available_programs_remote(job, remote, job.params.available_programs, "host")
+            bzfs_main.detect._detect_available_programs_remote(job, remote, job.params.available_programs, "host")
 
     def test_not_openzfs_handling(self) -> None:
         job, remote = self._setup()
@@ -293,11 +293,11 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
             returncode=1, cmd="zfs", output="", stderr="unrecognized command '--version'\nrun: zfs help"
         )
         with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=err):
-            bzfs_main.detect.detect_available_programs_remote(job, remote, p.available_programs, "host")
+            bzfs_main.detect._detect_available_programs_remote(job, remote, p.available_programs, "host")
         self.assertEqual("notOpenZFS", p.available_programs[remote.location]["zfs"])
 
     def test_called_process_error_non_zfs(self) -> None:
         job, remote = self._setup()
         err = subprocess.CalledProcessError(returncode=1, cmd="zfs", output="bad", stderr="fail")
         with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit):
-            bzfs_main.detect.detect_available_programs_remote(job, remote, job.params.available_programs, "host")
+            bzfs_main.detect._detect_available_programs_remote(job, remote, job.params.available_programs, "host")

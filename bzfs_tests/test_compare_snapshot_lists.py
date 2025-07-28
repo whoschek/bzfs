@@ -41,7 +41,7 @@ class TestCompareSnapshotLists(AbstractTestCase):
 
     def merge_sorted_iterators(self, src: list[Any], dst: list[Any], choice: str) -> list[tuple[Any, ...]]:
         s, d, a = self.s, self.d, self.a
-        return list(bzfs_main.compare_snapshot_lists.merge_sorted_iterators([s, d, a], choice, iter(src), iter(dst)))
+        return list(bzfs_main.compare_snapshot_lists._merge_sorted_iterators([s, d, a], choice, iter(src), iter(dst)))
 
     def assert_merge_sorted_iterators(
         self,

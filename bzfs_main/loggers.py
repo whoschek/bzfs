@@ -71,7 +71,7 @@ def reset_logger() -> None:
 
 def get_logger(log_params: LogParams, args: argparse.Namespace, log: Logger | None = None) -> Logger:
     """Returns a logger configured from CLI arguments or an optional base logger."""
-    add_trace_loglevel()
+    _add_trace_loglevel()
     logging.addLevelName(LOG_STDERR, "STDERR")
     logging.addLevelName(LOG_STDOUT, "STDOUT")
 
@@ -79,13 +79,13 @@ def get_logger(log_params: LogParams, args: argparse.Namespace, log: Logger | No
         assert isinstance(log, Logger)
         return log  # use third party provided logger object
     elif args.log_config_file:
-        clog = get_dict_config_logger(log_params, args)  # use logger defined in config file, and afterwards ...
+        clog = _get_dict_config_logger(log_params, args)  # use logger defined in config file, and afterwards ...
     # ... add our own handlers unless matching handlers are already present
-    default_log = get_default_logger(log_params, args)
+    default_log = _get_default_logger(log_params, args)
     return clog if args.log_config_file else default_log
 
 
-def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
+def _get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
     """Creates the default logger with stream, file and optional syslog handlers."""
     sublog = logging.getLogger(get_logger_subname())
     log = logging.getLogger(get_logger_name())
@@ -107,7 +107,7 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
 
     address = args.log_syslog_address
     if address:  # optionally, also log to local or remote syslog
-        address, socktype = get_syslog_address(address, args.log_syslog_socktype)
+        address, socktype = _get_syslog_address(address, args.log_syslog_socktype)
         log_syslog_prefix = str(args.log_syslog_prefix).strip().replace("%", "")  # sanitize
         handler = logging.handlers.SysLogHandler(address=address, facility=args.log_syslog_facility, socktype=socktype)
         handler.setFormatter(get_default_log_formatter(prefix=log_syslog_prefix + " "))
@@ -128,7 +128,7 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
     return log
 
 
-log_level_prefixes: dict[int, str] = {
+LOG_LEVEL_PREFIXES: dict[int, str] = {
     logging.CRITICAL: "[C] CRITICAL:",
     logging.ERROR: "[E] ERROR:",
     logging.WARNING: "[W]",
@@ -140,7 +140,7 @@ log_level_prefixes: dict[int, str] = {
 
 def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = None) -> logging.Formatter:
     """Returns a formatter for bzfs logs with optional prefix and column padding."""
-    level_prefixes_: dict[int, str] = log_level_prefixes
+    level_prefixes_: dict[int, str] = LOG_LEVEL_PREFIXES
     log_stderr_: int = LOG_STDERR
     log_stdout_: int = LOG_STDOUT
     terminal_cols: list[int | None] = [0 if log_params is None else None]  # 'None' indicates "configure value later"
@@ -201,11 +201,11 @@ def get_simple_logger(program: str) -> Logger:
 
         def format(self, record: logging.LogRecord) -> str:
             """Attaches extra fields before delegating to base formatter."""
-            record.level_prefix = log_level_prefixes.get(record.levelno, "")
+            record.level_prefix = LOG_LEVEL_PREFIXES.get(record.levelno, "")
             record.program = program
             return super().format(record)
 
-    add_trace_loglevel()
+    _add_trace_loglevel()
     log = logging.getLogger(program)
     log.setLevel(logging.INFO)
     log.propagate = False
@@ -218,12 +218,12 @@ def get_simple_logger(program: str) -> Logger:
     return log
 
 
-def add_trace_loglevel() -> None:
+def _add_trace_loglevel() -> None:
     """Registers a custom TRACE logging level with the standard python logging framework."""
     logging.addLevelName(LOG_TRACE, "TRACE")
 
 
-def get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tuple[str, int], socket.SocketKind | None]:
+def _get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tuple[str, int], socket.SocketKind | None]:
     """Normalizes syslog address to tuple form and returns socket type."""
     address = address.strip()
     socktype: socket.SocketKind | None = None
@@ -239,7 +239,7 @@ def get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tu
     return address, socktype
 
 
-def remove_json_comments(config_str: str) -> str:  # not standard but practical
+def _remove_json_comments(config_str: str) -> str:  # not standard but practical
     """Strips line and end-of-line comments from a JSON string."""
     lines: list[str] = []
     for line in config_str.splitlines():
@@ -254,7 +254,7 @@ def remove_json_comments(config_str: str) -> str:  # not standard but practical
     return "\n".join(lines)
 
 
-def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
+def _get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
     """Creates a logger from a JSON config file with variable substitution."""
     import json
 
@@ -285,7 +285,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
         def substitute_fn(match: re.Match) -> str:
             """Returns JSON replacement for variable placeholder."""
             varname: str = match.group(1)
-            error_msg: str | None = validate_log_config_variable_name(varname)
+            error_msg: str | None = _validate_log_config_variable_name(varname)
             if error_msg:
                 raise ValueError(error_msg)
             replacement: str | None = log_config_variables.get(varname)
@@ -303,7 +303,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
         pattern = re.compile(r"\$\{([^}:]*?)(:([^}]*))?}")  # Any char except } and :, followed by optional default part
         return pattern.sub(substitute_fn, config_str)
 
-    log_config_file_str = remove_json_comments(log_config_file_str)
+    log_config_file_str = _remove_json_comments(log_config_file_str)
     if not log_config_file_str.strip().startswith("{"):
         log_config_file_str = "{\n" + log_config_file_str  # lenient JSON parsing
     if not log_config_file_str.strip().endswith("}"):
@@ -312,7 +312,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
     # if args is not None and args.verbose >= 2:
     #     print("[T] Substituted log_config_file_str:\n" + log_config_file_str, flush=True)
     log_config_dict: dict = json.loads(log_config_file_str)
-    validate_log_config_dict(log_config_dict)
+    _validate_log_config_dict(log_config_dict)
     logging.config.dictConfig(log_config_dict)
     return logging.getLogger(get_logger_subname())
 
@@ -323,10 +323,10 @@ def validate_log_config_variable(var: str) -> str | None:
         return "Invalid log config NAME:VALUE variable. Variable must not be empty: " + var
     if ":" not in var:
         return "Invalid log config NAME:VALUE variable. Variable is missing a colon character: " + var
-    return validate_log_config_variable_name(var[0 : var.index(":")])
+    return _validate_log_config_variable_name(var[0 : var.index(":")])
 
 
-def validate_log_config_variable_name(name: str) -> str | None:
+def _validate_log_config_variable_name(name: str) -> str | None:
     """Validates log config variable name and return error message if invalid."""
     if not name:
         return "Invalid log config variable name. Name must not be empty: " + name
@@ -338,7 +338,7 @@ def validate_log_config_variable_name(name: str) -> str | None:
     return None
 
 
-def validate_log_config_dict(config: dict) -> None:
+def _validate_log_config_dict(config: dict) -> None:
     """Recursively scans the logging configuration dictionary to ensure that any instantiated objects via the '()' key are on
     an approved whitelist; This prevents arbitrary code execution from a malicious config file."""
     whitelist: set[str] = {
@@ -355,10 +355,10 @@ def validate_log_config_dict(config: dict) -> None:
         for key, value in config.items():
             if key == "()" and value not in whitelist:
                 die(f"--log-config-file: Disallowed callable '{value}'. For security, only specific classes are permitted.")
-            validate_log_config_dict(value)
+            _validate_log_config_dict(value)
     elif isinstance(config, list):
         for item in config:
-            validate_log_config_dict(item)
+            _validate_log_config_dict(item)
 
 
 #############################################################################

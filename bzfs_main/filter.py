@@ -75,7 +75,7 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
         else:
             log.debug("Excluding b/c dataset regex: %s", dataset)
     if p.exclude_dataset_property:
-        results = filter_datasets_by_exclude_property(job, remote, results)
+        results = _filter_datasets_by_exclude_property(job, remote, results)
     is_debug: bool = p.log.isEnabledFor(LOG_DEBUG)
     for dataset in results:
         if is_debug:
@@ -93,7 +93,7 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
     return results
 
 
-def filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_datasets: list[str]) -> list[str]:
+def _filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_datasets: list[str]) -> list[str]:
     """Excludes datasets that are marked with a ZFS user property value that, in effect, says 'skip me'."""
     p, log = job.params, job.params.log
     results: list[str] = []
@@ -165,18 +165,18 @@ def filter_snapshots(
         for _filter in snapshot_filter:
             name: str = _filter.name
             if name == SNAPSHOT_REGEX_FILTER_NAME:
-                snapshots = filter_snapshots_by_regex(
+                snapshots = _filter_snapshots_by_regex(
                     job, snapshots, regexes=_filter.options, filter_bookmarks=filter_bookmarks
                 )
             elif name == "include_snapshot_times":
                 timerange = resolve_timerange(_filter.timerange) if _filter.timerange is not None else _filter.timerange
-                snapshots = filter_snapshots_by_creation_time(
+                snapshots = _filter_snapshots_by_creation_time(
                     job, snapshots, include_snapshot_times=timerange, filter_bookmarks=filter_bookmarks
                 )
             else:
                 assert name == "include_snapshot_times_and_ranks"
                 timerange = resolve_timerange(_filter.timerange) if _filter.timerange is not None else _filter.timerange
-                snapshots = filter_snapshots_by_creation_time_and_rank(
+                snapshots = _filter_snapshots_by_creation_time_and_rank(
                     job,
                     snapshots,
                     include_snapshot_times=timerange,
@@ -194,7 +194,7 @@ def filter_snapshots(
     return snapshots
 
 
-def filter_snapshots_by_regex(
+def _filter_snapshots_by_regex(
     job: Job, snapshots: list[str], regexes: tuple[RegexList, RegexList], filter_bookmarks: bool = False
 ) -> list[str]:
     """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
@@ -218,7 +218,7 @@ def filter_snapshots_by_regex(
     return results
 
 
-def filter_snapshots_by_creation_time(
+def _filter_snapshots_by_creation_time(
     job: Job, snapshots: list[str], include_snapshot_times: UnixTimeRange, filter_bookmarks: bool = False
 ) -> list[str]:
     """Filters snapshots to those created within the specified time window."""
@@ -241,7 +241,7 @@ def filter_snapshots_by_creation_time(
     return results
 
 
-def filter_snapshots_by_creation_time_and_rank(
+def _filter_snapshots_by_creation_time_and_rank(
     job: Job,
     snapshots: list[str],
     include_snapshot_times: UnixTimeRange,

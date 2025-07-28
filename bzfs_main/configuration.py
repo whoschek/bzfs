@@ -145,13 +145,13 @@ class LogParams:
         validate_is_not_a_symlink("--log-dir: .current ", dot_current_dir)
         os.makedirs(current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--log-dir: current ", current_dir)
-        create_symlink(self.log_file, current_dir, f"{current}.log")
-        create_symlink(self.pv_log_file, current_dir, f"{current}.pv")
-        create_symlink(self.log_dir, current_dir, f"{current}.dir")
+        _create_symlink(self.log_file, current_dir, f"{current}.log")
+        _create_symlink(self.pv_log_file, current_dir, f"{current}.pv")
+        _create_symlink(self.log_dir, current_dir, f"{current}.dir")
         dst_file: str = os.path.join(current_dir, current)
         os.symlink(os.path.relpath(current_dir, start=log_parent_dir), dst_file)
         os.replace(dst_file, os.path.join(log_parent_dir, current))  # atomic rename
-        delete_stale_files(dot_current_dir, prefix="", millis=10, dirs=True, exclude=os.path.basename(current_dir))
+        _delete_stale_files(dot_current_dir, prefix="", millis=10, dirs=True, exclude=os.path.basename(current_dir))
         self.params: Params | None = None
 
     def __repr__(self) -> str:
@@ -183,7 +183,7 @@ class Params:
         self.inject_params: dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
         self.two_or_more_spaces_regex: re.Pattern = re.compile(r"  +")
-        self.unset_matching_env_vars(args)
+        self._unset_matching_env_vars(args)
         self.xperiods: SnapshotPeriods = SnapshotPeriods()
 
         assert len(args.root_dataset_pairs) > 0
@@ -199,12 +199,12 @@ class Params:
         self.verbose_destroy: str = "" if args.quiet else "-v"
         self.quiet: bool = args.quiet
 
-        self.zfs_send_program_opts: list[str] = self.fix_send_opts(self.split_args(args.zfs_send_program_opts))
+        self.zfs_send_program_opts: list[str] = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
         zfs_recv_program_opts: list[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             zfs_recv_program_opts.append(self.validate_arg_str(extra_opt, allow_all=True))
         preserve_properties = [validate_property_name(name, "--preserve-properties") for name in args.preserve_properties]
-        zfs_recv_program_opts, zfs_recv_x_names = self.fix_recv_opts(zfs_recv_program_opts, frozenset(preserve_properties))
+        zfs_recv_program_opts, zfs_recv_x_names = self._fix_recv_opts(zfs_recv_program_opts, frozenset(preserve_properties))
         self.zfs_recv_program_opts: list[str] = zfs_recv_program_opts
         self.zfs_recv_x_names: list[str] = zfs_recv_x_names
         if self.verbose_zfs:
@@ -251,18 +251,18 @@ class Params:
         self.monitor_snapshots_config: MonitorSnapshotsConfig = MonitorSnapshotsConfig(args, self)
         self.is_caching_snapshots: bool = args.cache_snapshots == "true"
 
-        self.compression_program: str = self.program_name(args.compression_program)
+        self.compression_program: str = self._program_name(args.compression_program)
         self.compression_program_opts: list[str] = self.split_args(args.compression_program_opts)
         if "-o" in self.compression_program_opts or "--output-file" in self.compression_program_opts:
             die("--compression-program-opts: -o and --output-file are disallowed for security reasons.")
-        self.getconf_program: str = self.program_name("getconf")  # print number of CPUs on POSIX except Solaris
-        self.psrinfo_program: str = self.program_name("psrinfo")  # print number of CPUs on Solaris
-        self.mbuffer_program: str = self.program_name(args.mbuffer_program)
+        self.getconf_program: str = self._program_name("getconf")  # print number of CPUs on POSIX except Solaris
+        self.psrinfo_program: str = self._program_name("psrinfo")  # print number of CPUs on Solaris
+        self.mbuffer_program: str = self._program_name(args.mbuffer_program)
         self.mbuffer_program_opts: list[str] = self.split_args(args.mbuffer_program_opts)
         if "-o" in self.mbuffer_program_opts:
             die("--mbuffer-program-opts: -o is disallowed for security reasons.")
-        self.ps_program: str = self.program_name(args.ps_program)
-        self.pv_program: str = self.program_name(args.pv_program)
+        self.ps_program: str = self._program_name(args.ps_program)
+        self.pv_program: str = self._program_name(args.pv_program)
         self.pv_program_opts: list[str] = self.split_args(args.pv_program_opts)
         if "-f" in self.pv_program_opts or "--log-file" in self.pv_program_opts:
             die("--pv-program-opts: -f and --log-file are disallowed for security reasons.")
@@ -270,12 +270,12 @@ class Params:
         if args.bwlimit:
             self.pv_program_opts += [f"--rate-limit={self.validate_arg_str(args.bwlimit)}"]
         self.shell_program_local: str = "sh"
-        self.shell_program: str = self.program_name(args.shell_program)
-        self.ssh_program: str = self.program_name(args.ssh_program)
-        self.sudo_program: str = self.program_name(args.sudo_program)
-        self.uname_program: str = self.program_name("uname")
-        self.zfs_program: str = self.program_name("zfs")
-        self.zpool_program: str = self.program_name(args.zpool_program)
+        self.shell_program: str = self._program_name(args.shell_program)
+        self.ssh_program: str = self._program_name(args.ssh_program)
+        self.sudo_program: str = self._program_name(args.sudo_program)
+        self.uname_program: str = self._program_name("uname")
+        self.zfs_program: str = self._program_name("zfs")
+        self.zpool_program: str = self._program_name(args.zpool_program)
 
         # no point creating complex shell pipeline commands for tiny data transfers:
         self.min_pipe_transfer_size: int = getenv_int("min_pipe_transfer_size", 1024 * 1024)
@@ -324,7 +324,7 @@ class Params:
         opts = self.one_or_more_whitespace_regex.split(text) if text else []
         xappend(opts, items)
         if not allow_all:
-            self.validate_quoting(opts)
+            self._validate_quoting(opts)
         return opts
 
     def validate_arg(self, opt: str, allow_spaces: bool = False, allow_all: bool = False) -> str | None:
@@ -333,7 +333,7 @@ class Params:
             return opt
         if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):
             die(f"Option must not contain a whitespace character{' other than space' if allow_spaces else ''}: {opt}")
-        self.validate_quoting([opt])
+        self._validate_quoting([opt])
         return opt
 
     def validate_arg_str(self, opt: str, allow_spaces: bool = False, allow_all: bool = False) -> str:
@@ -344,16 +344,16 @@ class Params:
         return opt
 
     @staticmethod
-    def validate_quoting(opts: list[str]) -> None:
+    def _validate_quoting(opts: list[str]) -> None:
         """Raises an error if any option contains a quote or shell metacharacter."""
         for opt in opts:
             if "'" in opt or '"' in opt or "$" in opt or "`" in opt:
                 die(f"Option must not contain a single quote or double quote or dollar or backtick character: {opt}")
 
     @staticmethod
-    def fix_recv_opts(opts: list[str], preserve_properties: frozenset[str]) -> tuple[list[str], list[str]]:
+    def _fix_recv_opts(opts: list[str], preserve_properties: frozenset[str]) -> tuple[list[str], list[str]]:
         """Returns sanitized ``zfs recv`` options and captured ``-o/-x`` args."""
-        return fix_send_recv_opts(
+        return _fix_send_recv_opts(
             opts,
             exclude_long_opts={"--dryrun"},
             exclude_short_opts="n",
@@ -362,9 +362,9 @@ class Params:
         )
 
     @staticmethod
-    def fix_send_opts(opts: list[str]) -> list[str]:
+    def _fix_send_opts(opts: list[str]) -> list[str]:
         """Returns sanitized ``zfs send`` options."""
-        return fix_send_recv_opts(
+        return _fix_send_recv_opts(
             opts,
             exclude_long_opts={"--dryrun"},
             exclude_short_opts="den",
@@ -372,7 +372,7 @@ class Params:
             exclude_arg_opts=frozenset({"-i", "-I"}),
         )[0]
 
-    def program_name(self, program: str) -> str:
+    def _program_name(self, program: str) -> str:
         """For testing: helps simulate errors caused by external programs."""
         self.validate_arg_str(program)
         if not program:
@@ -386,7 +386,7 @@ class Params:
             return "false"  # substitute a program that will error out with non-zero return code
         return program
 
-    def unset_matching_env_vars(self, args: argparse.Namespace) -> None:
+    def _unset_matching_env_vars(self, args: argparse.Namespace) -> None:
         """Unset environment variables matching regex filters."""
         exclude_envvar_regexes: RegexList = compile_regexes(args.exclude_envvar_regex)
         include_envvar_regexes: RegexList = compile_regexes(args.include_envvar_regex)
@@ -455,7 +455,7 @@ class Remote:
             os.makedirs(os.path.dirname(self.ssh_socket_dir), exist_ok=True)
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             self.socket_prefix: str = "s"
-            delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
+            _delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
         self.sanitize1_regex: re.Pattern = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
         self.sanitize2_regex: re.Pattern = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # Remove disallowed chars
 
@@ -735,7 +735,7 @@ class MonitorSnapshotsConfig:
 
 
 #############################################################################
-def fix_send_recv_opts(
+def _fix_send_recv_opts(
     opts: list[str],
     exclude_long_opts: set[str],
     exclude_short_opts: str,
@@ -777,7 +777,7 @@ def fix_send_recv_opts(
 SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: re.Pattern[str] = re.compile(r"^[0-9]+")  # see socket_name in local_ssh_command()
 
 
-def delete_stale_files(
+def _delete_stale_files(
     root_dir: str,
     prefix: str,
     millis: int = 60 * 60 * 1000,
@@ -806,7 +806,7 @@ def delete_stale_files(
             pass  # harmless
 
 
-def create_symlink(src: str, dst_dir: str, dst: str) -> None:
+def _create_symlink(src: str, dst_dir: str, dst: str) -> None:
     """Creates dst symlink pointing to src using a relative path."""
     rel_path: str = os.path.relpath(src, start=dst_dir)
     os.symlink(src=rel_path, dst=os.path.join(dst_dir, dst))

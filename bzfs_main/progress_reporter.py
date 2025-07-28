@@ -169,7 +169,7 @@ class ProgressReporter:
 
         log = self.log
         update_interval_secs, sliding_window_secs = (
-            self.progress_update_intervals if self.progress_update_intervals is not None else self.get_update_intervals()
+            self.progress_update_intervals if self.progress_update_intervals is not None else self._get_update_intervals()
         )
         update_interval_nanos: int = round(update_interval_secs * 1_000_000_000)
         sliding_window_nanos: int = round(sliding_window_secs * 1_000_000_000)
@@ -220,15 +220,15 @@ class ProgressReporter:
                 num_readables += 1
                 iter_fd, s = selector_key.data
                 for line in iter_fd:  # aka iter(fd)
-                    sent_bytes += self.update_transfer_stat(line, s, curr_time_nanos)
+                    sent_bytes += self._update_transfer_stat(line, s, curr_time_nanos)
                     num_lines += 1
                     has_line = True
             if curr_time_nanos >= next_update_nanos:
                 elapsed_nanos: int = curr_time_nanos - start_time_nanos
-                msg0, msg3 = self.format_sent_bytes(sent_bytes, elapsed_nanos)  # throughput etc since replication start time
-                msg1: str = self.format_duration(elapsed_nanos)  # duration since replication start time
+                msg0, msg3 = self._format_sent_bytes(sent_bytes, elapsed_nanos)  # throughput etc since replication starttime
+                msg1: str = self._format_duration(elapsed_nanos)  # duration since replication start time
                 oldest: Sample = latest_samples[0]  # throughput etc, over sliding window
-                _, msg2 = self.format_sent_bytes(sent_bytes - oldest.sent_bytes, curr_time_nanos - oldest.timestamp_nanos)
+                _, msg2 = self._format_sent_bytes(sent_bytes - oldest.sent_bytes, curr_time_nanos - oldest.timestamp_nanos)
                 msg4: str = max(etas).line_tail if len(etas) > 0 else ""  # progress bar, ETAs
                 timestamp: str = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
                 status_line: str = f"{timestamp} [I] zfs sent {msg0} {msg1} {msg2} {msg3} {msg4}"
@@ -251,9 +251,9 @@ class ProgressReporter:
             if self.inject_error:
                 raise ValueError("Injected ProgressReporter error")  # for testing only
 
-    def update_transfer_stat(self, line: str, s: TransferStat, curr_time_nanos: int) -> int:
+    def _update_transfer_stat(self, line: str, s: TransferStat, curr_time_nanos: int) -> int:
         """Update ``s`` from one pv status line and return bytes delta."""
-        num_bytes, s.eta.timestamp_nanos, s.eta.line_tail = self.parse_pv_line(line, curr_time_nanos)
+        num_bytes, s.eta.timestamp_nanos, s.eta.line_tail = self._parse_pv_line(line, curr_time_nanos)
         bytes_in_flight: int = s.bytes_in_flight
         s.bytes_in_flight = num_bytes if line.endswith("\r") else 0  # intermediate vs. final status update of each transfer
         return num_bytes - bytes_in_flight
@@ -263,12 +263,12 @@ class ProgressReporter:
     TIME_REMAINING_ETA_REGEX = re.compile(r".*?ETA\s*((\d+)[+:])?(\d\d?):(\d\d):(\d\d).*(ETA|FIN).*")
 
     @staticmethod
-    def parse_pv_line(line: str, curr_time_nanos: int) -> tuple[int, int, str]:
+    def _parse_pv_line(line: str, curr_time_nanos: int) -> tuple[int, int, str]:
         """Parses a pv status line into transferred bytes and ETA timestamp."""
         assert isinstance(line, str)
         if ":" in line:
             line = line.split(":", 1)[1].strip()
-            sent_bytes, line = pv_size_to_bytes(line)
+            sent_bytes, line = _pv_size_to_bytes(line)
             line = ProgressReporter.NO_RATES_REGEX.sub("", line.lstrip(), 1)  # remove pv --timer, --rate, --average-rate
             if match := ProgressReporter.TIME_REMAINING_ETA_REGEX.fullmatch(line):  # extract pv --eta duration
                 _, days, hours, minutes, secs, _ = match.groups()
@@ -278,20 +278,20 @@ class ProgressReporter:
         return 0, curr_time_nanos, ""
 
     @staticmethod
-    def format_sent_bytes(num_bytes: int, duration_nanos: int) -> tuple[str, str]:
+    def _format_sent_bytes(num_bytes: int, duration_nanos: int) -> tuple[str, str]:
         """Returns a human-readable byte count and rate."""
         bytes_per_sec: int = round(1_000_000_000 * num_bytes / max(1, duration_nanos))
         return f"{human_readable_bytes(num_bytes, precision=2)}", f"[{human_readable_bytes(bytes_per_sec, precision=2)}/s]"
 
     @staticmethod
-    def format_duration(duration_nanos: int) -> str:
+    def _format_duration(duration_nanos: int) -> str:
         """Formats ``duration_nanos`` as HH:MM:SS string."""
         total_seconds: int = round(duration_nanos / 1_000_000_000)
         hours, remainder = divmod(total_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{hours}:{minutes:02d}:{seconds:02d}"
 
-    def get_update_intervals(self) -> tuple[float, float]:
+    def _get_update_intervals(self) -> tuple[float, float]:
         """Extracts polling intervals from ``pv_program_opts``."""
         parser = argparse.ArgumentParser(allow_abbrev=False)
         parser.add_argument("--interval", "-i", type=float, default=1)
@@ -301,7 +301,9 @@ class ProgressReporter:
         return interval, min(60 * 60, max(args.average_rate_window, interval))
 
 
-def pv_size_to_bytes(size: str) -> tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
+def _pv_size_to_bytes(
+    size: str,
+) -> tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
     """Converts pv size string to bytes and returns remaining text."""
     if match := PV_SIZE_TO_BYTES_REGEX.fullmatch(size):
         number: float = float(match.group(1).replace(",", ".").replace(ARABIC_DECIMAL_SEPARATOR, "."))
@@ -324,7 +326,7 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
         """Extracts byte count from a single pv log line."""
         if ":" in line:
             col: str = line.split(":", 1)[1].strip()
-            num_bytes, _ = pv_size_to_bytes(col)
+            num_bytes, _ = _pv_size_to_bytes(col)
             return num_bytes
         return 0
 

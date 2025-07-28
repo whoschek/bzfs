@@ -1267,7 +1267,7 @@ class Job:
                     die(f"Missing value for {stripped} option in --zfs-recv-program-opt(s): {' '.join(recv_opts)}")
                 if stripped == "-o" and "=" not in recv_opts[i]:
                     die(f"Missing value for {stripped} name=value pair in --zfs-recv-program-opt(s): {' '.join(recv_opts)}")
-                propname = recv_opts[i] if stripped == "-x" else recv_opts[i].split("=", 1)[0]
+                propname: str = recv_opts[i] if stripped == "-x" else recv_opts[i].split("=", 1)[0]
                 validate_property_name(propname, "--zfs-recv-program-opt(s)")
                 propnames.add(propname)
             i += 1

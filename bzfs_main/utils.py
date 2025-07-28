@@ -504,7 +504,7 @@ def terminate_process_subtree(
     """Sends ``sig`` to ``root_pid`` and all of its descendant processes."""
     current_pid: int = os.getpid()
     root_pid = current_pid if root_pid is None else root_pid
-    pids: list[int] = get_descendant_processes(root_pid)
+    pids: list[int] = _get_descendant_processes(root_pid)
     if root_pid == current_pid:
         pids += [] if except_current_process else [current_pid]
     else:
@@ -514,7 +514,7 @@ def terminate_process_subtree(
             os.kill(pid, sig)
 
 
-def get_descendant_processes(root_pid: int) -> list[int]:
+def _get_descendant_processes(root_pid: int) -> list[int]:
     """Returns the list of all descendant process IDs for the given root PID, on Unix systems."""
     procs: defaultdict[int, list[int]] = defaultdict(list)
     cmd: list[str] = ["ps", "-Ao", "pid,ppid"]

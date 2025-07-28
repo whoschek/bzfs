@@ -42,9 +42,9 @@ from bzfs_main.detect import (
     detect_available_programs,
 )
 from bzfs_main.replication import (
-    add_recv_property_options,
-    is_zfs_dataset_busy,
-    pv_cmd,
+    _add_recv_property_options,
+    _is_zfs_dataset_busy,
+    _pv_cmd,
 )
 from bzfs_main.utils import (
     DIE_STATUS,
@@ -153,7 +153,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_is_zfs_dataset_busy_match(self) -> None:
         def is_busy(proc: str, dataset: str, busy_if_send: bool = True) -> bool:
-            return is_zfs_dataset_busy([proc], dataset, busy_if_send=busy_if_send)
+            return _is_zfs_dataset_busy([proc], dataset, busy_if_send=busy_if_send)
 
         ds = "tank/foo/bar"
         self.assertTrue(is_busy("zfs receive " + ds, ds))
@@ -180,7 +180,7 @@ class TestHelperFunctions(AbstractTestCase):
         job = bzfs.Job()
         job.params = self.make_params(args=args, log_params=LogParams(args))
         job.params.available_programs = {"src": {"pv": "pv"}}
-        self.assertNotEqual("cat", pv_cmd(job, "src", 1024 * 1024, "foo"))
+        self.assertNotEqual("cat", _pv_cmd(job, "src", 1024 * 1024, "foo"))
 
     @staticmethod
     def root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(  # compare faster algos to this baseline impl
@@ -516,7 +516,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
     def test_appends_x_options_when_supported(self) -> None:
         recv_opts: list[str] = []
         with patch.object(self.p, "is_program_available", return_value=True):
-            result_opts, set_opts = add_recv_property_options(self.job, True, recv_opts, "ds", {})
+            result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
         self.assertEqual(["-x", "xprop1", "-x", "xprop2"], result_opts)
         self.assertEqual([], set_opts)
         # original zfs_recv_ox_names remains unchanged
@@ -525,7 +525,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
     def test_skips_x_options_when_not_supported(self) -> None:
         recv_opts: list[str] = []
         with patch.object(self.p, "is_program_available", return_value=False):
-            result_opts, set_opts = add_recv_property_options(self.job, True, recv_opts, "ds", {})
+            result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
         self.assertEqual([], result_opts)
         self.assertEqual([], set_opts)
         self.assertEqual({"existing"}, self.p.zfs_recv_ox_names)
@@ -560,8 +560,8 @@ class TestPreservePropertiesValidation(AbstractTestCase):
         self.p.zpool_features = {"src": {}, "dst": {}}
         self.p.available_programs = {"local": {"ssh": ""}, "src": {}, "dst": {}}
 
-    @patch.object(bzfs_main.detect, "detect_zpool_features")
-    @patch.object(bzfs_main.detect, "detect_available_programs_remote")
+    @patch.object(bzfs_main.detect, "_detect_zpool_features")
+    @patch.object(bzfs_main.detect, "_detect_available_programs_remote")
     def test_preserve_properties_fails_on_old_zfs_with_props(
         self, mock_detect_zpool_features: MagicMock, mock_detect_available_programs_remote: MagicMock
     ) -> None:
@@ -579,8 +579,8 @@ class TestPreservePropertiesValidation(AbstractTestCase):
             self.assertEqual(cm.exception.code, DIE_STATUS)
             self.assertIn("--preserve-properties is unreliable on destination ZFS < 2.2.0", str(cm.exception))
 
-    @patch.object(bzfs_main.detect, "detect_zpool_features")
-    @patch.object(bzfs_main.detect, "detect_available_programs_remote")
+    @patch.object(bzfs_main.detect, "_detect_zpool_features")
+    @patch.object(bzfs_main.detect, "_detect_available_programs_remote")
     def test_preserve_properties_succeeds_on_new_zfs_with_props(
         self, mock_detect_zpool_features: MagicMock, mock_detect_available_programs_remote: MagicMock
     ) -> None:
@@ -589,8 +589,8 @@ class TestPreservePropertiesValidation(AbstractTestCase):
             # This should not raise an exception
             detect_available_programs(self.job)
 
-    @patch.object(bzfs_main.detect, "detect_zpool_features")
-    @patch.object(bzfs_main.detect, "detect_available_programs_remote")
+    @patch.object(bzfs_main.detect, "_detect_zpool_features")
+    @patch.object(bzfs_main.detect, "_detect_available_programs_remote")
     def test_preserve_properties_succeeds_on_old_zfs_without_props(
         self, mock_detect_zpool_features: MagicMock, mock_detect_available_programs_remote: MagicMock
     ) -> None:
