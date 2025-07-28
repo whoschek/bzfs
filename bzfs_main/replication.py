@@ -197,12 +197,12 @@ def _list_and_filter_src_and_dst_snapshots(
     props: str = job.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
     src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
     job.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
-    src_snapshots_and_bookmarks, dst_snapshots_with_guids = run_in_parallel(  # list src+dst snapshots in parallel
+    src_snapshots_and_bookmarks, dst_snapshots_with_guids_str = run_in_parallel(  # list src+dst snapshots in parallel
         lambda: try_ssh_command(job, src, LOG_TRACE, cmd=src_cmd),
         lambda: try_ssh_command(job, dst, LOG_TRACE, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
     )
-    job.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
-    dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
+    job.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids_str is not None
+    dst_snapshots_with_guids: list[str] = (dst_snapshots_with_guids_str or "").splitlines()
     if src_snapshots_and_bookmarks is None:
         log.warning("Third party deleted source: %s", src_dataset)
         return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore

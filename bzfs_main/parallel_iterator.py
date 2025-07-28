@@ -21,18 +21,21 @@ import os
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
 from typing import (
-    Any,
     Callable,
     Generator,
+    Iterable,
     Iterator,
+    TypeVar,
 )
+
+T = TypeVar("T")
 
 
 def parallel_iterator(
-    iterator_builder: Callable[[ThreadPoolExecutor], list[Iterator[Future[Any]]]],
+    iterator_builder: Callable[[ThreadPoolExecutor], list[Iterable[Future[T]]]],
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
-) -> Generator[Any, None, Any]:
+) -> Generator[T, None, None]:
     """Executes multiple iterators in parallel/concurrently, with configurable result ordering.
 
     This function provides high-performance parallel execution of iterator-based tasks using a shared thread pool, with
@@ -71,7 +74,7 @@ def parallel_iterator(
 
     Parameters:
     -----------
-    iterator_builder : Callable[[ThreadPoolExecutor], list[Iterator[Future[Any]]]]
+    iterator_builder : Callable[[ThreadPoolExecutor], list[Iterable[Future[T]]]]
         Factory function that receives a ThreadPoolExecutor and returns a list of iterators. Each iterator should yield
         Future objects representing submitted tasks. The builder is called once with the managed thread pool.
 
@@ -104,25 +107,25 @@ def parallel_iterator(
         process_ssh_result(result)
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        iterators: list[Iterator[Future[Any]]] = iterator_builder(executor)
+        iterators: list[Iterable[Future[T]]] = iterator_builder(executor)
         assert isinstance(iterators, list)
-        iterator: Iterator[Future[Any]] = itertools.chain(*iterators)
+        iterator: Iterator[Future[T]] = itertools.chain(*iterators)
         iterators.clear()  # help gc
         # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
-        fifo_buffer: deque[Future[Any]] = deque(itertools.islice(iterator, max_workers))
-        next_future: Future[Any] | None
+        fifo_buffer: deque[Future[T]] = deque(itertools.islice(iterator, max_workers))
+        next_future: Future[T] | None
 
         if ordered:
             while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
-                curr_future: Future[Any] = fifo_buffer.popleft()
+                curr_future: Future[T] = fifo_buffer.popleft()
                 next_future = next(iterator, None)  # causes the next CLI call to be submitted
                 if next_future is not None:
                     fifo_buffer.append(next_future)
                 yield curr_future.result()  # blocks until CLI returns
         else:
-            todo_futures: set[Future[Any]] = set(fifo_buffer)
+            todo_futures: set[Future[T]] = set(fifo_buffer)
             fifo_buffer.clear()  # help gc
-            done_futures: set[Future[Any]]
+            done_futures: set[Future[T]]
             while todo_futures:
                 done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
                 for done_future in done_futures:  # submit the next CLI call whenever a CLI call returns
@@ -133,10 +136,14 @@ def parallel_iterator(
         assert next(iterator, None) is None
 
 
-def run_in_parallel(fn1: Callable[[], Any], fn2: Callable[[], Any]) -> tuple[Any, Any]:
+K = TypeVar("K")
+V = TypeVar("V")
+
+
+def run_in_parallel(fn1: Callable[[], K], fn2: Callable[[], V]) -> tuple[K, V]:
     """perf: Runs both I/O functions in parallel/concurrently."""
     with ThreadPoolExecutor(max_workers=1) as executor:
-        future: Future[Any] = executor.submit(fn2)  # async fn2
+        future: Future[V] = executor.submit(fn2)  # async fn2
         result1 = fn1()  # blocks until fn1 call returns
         result2 = future.result()  # blocks until fn2 call returns
         return result1, result2

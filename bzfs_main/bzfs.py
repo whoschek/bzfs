@@ -788,14 +788,14 @@ class Job:
                 src_cmd = None
             dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
             self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
-            src_snaps_with_guids, dst_snaps_with_guids = run_in_parallel(  # list src+dst snapshots in parallel
+            src_snaps_with_guids, dst_snaps_with_guids_str = run_in_parallel(  # list src+dst snapshots in parallel
                 lambda: set(run_ssh_command(self, src, LOG_TRACE, cmd=src_cmd).splitlines() if src_cmd else []),
                 lambda: try_ssh_command(self, dst, LOG_TRACE, cmd=dst_cmd),
             )
-            if dst_snaps_with_guids is None:
+            if dst_snaps_with_guids_str is None:
                 log.warning("Third party deleted destination: %s", dst_dataset)
                 return False
-            dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
+            dst_snaps_with_guids: list[str] = dst_snaps_with_guids_str.splitlines()
             num_dst_snaps_with_guids = len(dst_snaps_with_guids)
             basis_dst_snaps_with_guids: list[str] = dst_snaps_with_guids.copy()
             if p.delete_dst_bookmarks:
@@ -944,12 +944,12 @@ class Job:
             if run == 0:
                 # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
                 cmd: list[str] = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
-                for datasets_having_snapshots in zfs_list_snapshots_in_parallel(
+                for datasets_having_snapshots_lst in zfs_list_snapshots_in_parallel(
                     self, dst, cmd, sorted(orphans), ordered=False
                 ):
                     if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
-                        replace_in_lines(datasets_having_snapshots, old="#", new="@", count=1)  # treat bookmarks as snap
-                    datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
+                        replace_in_lines(datasets_having_snapshots_lst, old="#", new="@", count=1)  # treat bookmarks as snap
+                    datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots_lst))
                     dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
             else:
                 delete_datasets(self, dst, orphans)

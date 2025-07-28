@@ -50,6 +50,7 @@ from typing import (
     Callable,
     Generator,
     Iterable,
+    TypeVar,
 )
 
 from bzfs_main.connection import (
@@ -68,6 +69,8 @@ from bzfs_main.utils import (
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import Job
     from bzfs_main.configuration import Remote
+
+T = TypeVar("T")
 
 
 def run_ssh_cmd_batched(
@@ -88,10 +91,10 @@ def itr_ssh_cmd_batched(
     r: Remote,
     cmd: list[str],
     cmd_args: Iterable[str],
-    fn: Callable[[list[str]], Any],
+    fn: Callable[[list[str]], T],
     max_batch_items: int = 2**29,
     sep: str = " ",
-) -> Generator[Any, None, None]:
+) -> Generator[T, None, None]:
     """Runs fn(cmd_args) in sequential batches w/ cmd, without creating a cmdline that's too big for the OS to handle."""
     max_bytes: int = min(get_max_command_line_bytes(job, "local"), get_max_command_line_bytes(job, r.location))
     assert isinstance(sep, str)
@@ -107,7 +110,7 @@ def itr_ssh_cmd_batched(
     total_bytes: int = header_bytes
     max_items: int = max_batch_items
 
-    def flush() -> Any:
+    def flush() -> T | None:
         if len(batch) > 0:
             return fn(batch)
         return None
@@ -142,10 +145,10 @@ def itr_ssh_cmd_parallel(
     job: Job,
     r: Remote,
     cmd_args_list: list[tuple[list[str], Iterable[str]]],
-    fn: Callable[[list[str], list[str]], Any],
+    fn: Callable[[list[str], list[str]], T],
     max_batch_items: int = 2**29,
     ordered: bool = True,
-) -> Generator[Any, None, Any]:
+) -> Generator[T, None, None]:
     """Streams results from multiple parallel (batched) SSH commands; Returns output datasets in the same order as the input
     datasets (not in random order) if ordered == True."""
     return parallel_iterator(
@@ -162,7 +165,7 @@ def itr_ssh_cmd_parallel(
 
 def zfs_list_snapshots_in_parallel(
     job: Job, r: Remote, cmd: list[str], datasets: list[str], ordered: bool = True
-) -> Generator[Any, None, Any]:
+) -> Generator[list[str], None, None]:
     """Runs 'zfs list -t snapshot' on multiple datasets at the same time."""
     max_workers: int = job.max_workers[r.location]
     return itr_ssh_cmd_parallel(
