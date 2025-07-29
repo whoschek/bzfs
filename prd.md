@@ -3,6 +3,7 @@
 | **Version** | **Date** | **Author** | **Status** | **Summary of Changes** |
 | --- | --- | --- | --- | --- |
 | 1.0 | 2024-10-01 | Wolfgang Hoschek | Draft | Initial version of the PRD. |
+| 1.1 | 2025-04-15 | Wolfgang Hoschek | Final | Finalized Job Orchestration (bzfs_jobrunner). |
 
 ### Table of Contents
 1. [Introduction & Vision](#1-introduction--vision)
