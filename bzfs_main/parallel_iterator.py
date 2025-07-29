@@ -18,6 +18,7 @@ from __future__ import annotations
 import concurrent
 import itertools
 import os
+import sys
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
 from typing import (
@@ -144,6 +145,60 @@ def run_in_parallel(fn1: Callable[[], K], fn2: Callable[[], V]) -> tuple[K, V]:
     """perf: Runs both I/O functions in parallel/concurrently."""
     with ThreadPoolExecutor(max_workers=1) as executor:
         future: Future[V] = executor.submit(fn2)  # async fn2
-        result1 = fn1()  # blocks until fn1 call returns
-        result2 = future.result()  # blocks until fn2 call returns
+        result1: K = fn1()  # blocks until fn1 call returns
+        result2: V = future.result()  # blocks until fn2 call returns
         return result1, result2
+
+
+def batch_cmd_iterator(
+    cmd_args: Iterable[str],  # list of arguments to be split across one or more commands
+    fn: Callable[[list[str]], T],  # callback that runs a CLI command with a single batch
+    max_batch_items: int = 2**29,  # max number of args per batch
+    max_batch_bytes: int = 127 * 1024,  # max number of bytes per batch
+    sep: str = " ",  # separator between batch args
+) -> Generator[T, None, None]:
+    """Returns an iterator that runs fn(cmd_args) in sequential batches, without creating a cmdline that's too big for the OS
+    to handle."""
+    assert isinstance(sep, str)
+    fsenc: str = sys.getfilesystemencoding()
+    seplen: int = len(sep.encode(fsenc))
+    batch: list[str]
+    batch, total_bytes, max_items = [], 0, max_batch_items
+
+    def flush() -> T | None:
+        if len(batch) > 0:
+            return fn(batch)
+        return None
+
+    for cmd_arg in cmd_args:
+        curr_bytes: int = seplen + len(cmd_arg.encode(fsenc))
+        if total_bytes + curr_bytes > max_batch_bytes or max_items <= 0:
+            results = flush()
+            if results is not None:
+                yield results
+            batch, total_bytes, max_items = [], 0, max_batch_items
+        batch.append(cmd_arg)
+        total_bytes += curr_bytes
+        max_items -= 1
+    results = flush()
+    if results is not None:
+        yield results
+
+
+def get_max_command_line_bytes(os_name: str) -> int:
+    """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
+    arg_max = MAX_CMDLINE_BYTES.get(os_name, 256 * 1024)
+    environ_size = 4 * 1024  # typically is 1-4 KB
+    safety_margin = (8 * 2 * 4 + 4) * 1024 if arg_max >= 1 * 1024 * 1024 else 8 * 1024
+    max_bytes = max(4 * 1024, arg_max - environ_size - safety_margin)
+    return max_bytes
+
+
+# constants:
+MAX_CMDLINE_BYTES: dict[str, int] = {
+    "Linux": 2 * 1024 * 1024,
+    "FreeBSD": 256 * 1024,
+    "SunOS": 1 * 1024 * 1024,
+    "Darwin": 1 * 1024 * 1024,
+    "Windows": 32 * 1024,
+}

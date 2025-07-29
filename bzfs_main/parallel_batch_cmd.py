@@ -59,6 +59,8 @@ from bzfs_main.connection import (
     try_ssh_command,
 )
 from bzfs_main.parallel_iterator import (
+    batch_cmd_iterator,
+    get_max_command_line_bytes,
     parallel_iterator,
 )
 from bzfs_main.utils import (
@@ -96,38 +98,8 @@ def itr_ssh_cmd_batched(
     sep: str = " ",
 ) -> Generator[T, None, None]:
     """Runs fn(cmd_args) in sequential batches w/ cmd, without creating a cmdline that's too big for the OS to handle."""
-    max_bytes: int = min(_get_max_command_line_bytes(job, "local"), _get_max_command_line_bytes(job, r.location))
-    assert isinstance(sep, str)
-    # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html
-    max_bytes = max_bytes if sep == " " else min(max_bytes, 131071)  # e.g. 'zfs destroy foo@s1,s2,...,sN'
-    fsenc: str = sys.getfilesystemencoding()
-    seplen: int = len(sep.encode(fsenc))
-    conn_pool: ConnectionPool = job.params.connection_pools[r.location].pool(SHARED)
-    with conn_pool.connection() as conn:
-        cmd = conn.ssh_cmd + cmd
-    header_bytes: int = len(" ".join(cmd).encode(fsenc))
-    batch: list[str] = []
-    total_bytes: int = header_bytes
-    max_items: int = max_batch_items
-
-    def flush() -> T | None:
-        if len(batch) > 0:
-            return fn(batch)
-        return None
-
-    for cmd_arg in cmd_args:
-        curr_bytes: int = seplen + len(cmd_arg.encode(fsenc))
-        if total_bytes + curr_bytes > max_bytes or max_items <= 0:
-            results = flush()
-            if results is not None:
-                yield results
-            batch, total_bytes, max_items = [], header_bytes, max_batch_items
-        batch.append(cmd_arg)
-        total_bytes += curr_bytes
-        max_items -= 1
-    results = flush()
-    if results is not None:
-        yield results
+    max_bytes: int = _max_batch_bytes(job, r, cmd, sep)
+    return batch_cmd_iterator(cmd_args=cmd_args, fn=fn, max_batch_items=max_batch_items, max_batch_bytes=max_bytes, sep=sep)
 
 
 def run_ssh_cmd_parallel(
@@ -184,25 +156,24 @@ def zfs_list_snapshots_in_parallel(
     )
 
 
+def _max_batch_bytes(job: Job, r: Remote, cmd: list[str], sep: str) -> int:
+    """Avoids creating a cmdline that's too big for the OS to handle."""
+    assert isinstance(sep, str)
+    max_bytes: int = min(_get_max_command_line_bytes(job, "local"), _get_max_command_line_bytes(job, r.location))
+    # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html
+    max_bytes = max_bytes if sep == " " else min(max_bytes, 131071)  # e.g. 'zfs destroy foo@s1,s2,...,sN'
+    conn_pool: ConnectionPool = job.params.connection_pools[r.location].pool(SHARED)
+    with conn_pool.connection() as conn:
+        cmd = conn.ssh_cmd + cmd
+    header_bytes: int = len(" ".join(cmd).encode(sys.getfilesystemencoding()))
+    return max_bytes - header_bytes
+
+
 def _get_max_command_line_bytes(job: Job, location: str, os_name: str | None = None) -> int:
     """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
     os_name = os_name if os_name else job.params.available_programs[location].get("os")
-    if os_name == "Linux":
-        arg_max = 2 * 1024 * 1024
-    elif os_name == "FreeBSD":
-        arg_max = 256 * 1024
-    elif os_name == "SunOS":
-        arg_max = 1 * 1024 * 1024
-    elif os_name == "Darwin":
-        arg_max = 1 * 1024 * 1024
-    elif os_name == "Windows":
-        arg_max = 32 * 1024
-    else:
-        arg_max = 256 * 1024  # unknown
-
-    environ_size = 4 * 1024  # typically is 1-4 KB
-    safety_margin = (8 * 2 * 4 + 4) * 1024 if arg_max >= 1 * 1024 * 1024 else 8 * 1024
-    max_bytes = max(4 * 1024, arg_max - environ_size - safety_margin)
+    os_name = os_name if os_name else "n/a"
+    max_bytes = get_max_command_line_bytes(os_name)
     if job.max_command_line_bytes is not None:
         return job.max_command_line_bytes  # for testing only
     else:

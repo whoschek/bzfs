@@ -14,7 +14,7 @@
 #
 """Fault-tolerant, dependency-aware scheduling and execution of parallel operations, ensuring that ancestor datasets finish
 before descendants start; The design maximizes throughput while preventing inconsistent dataset states during replication or
-deletion."""
+snapshot deletion."""
 
 from __future__ import annotations
 import argparse
@@ -69,12 +69,12 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> Tree:
     return tree
 
 
-def _build_dataset_tree_and_find_roots(datasets: list[str]) -> list[TreeNode]:
+def _build_dataset_tree_and_find_roots(sorted_datasets: list[str]) -> list[TreeNode]:
     """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
-    tree: Tree = _build_dataset_tree(datasets)  # tree consists of nested dictionaries
+    tree: Tree = _build_dataset_tree(sorted_datasets)  # tree consists of nested dictionaries
     skip_dataset: str = DONT_SKIP_DATASET
     roots: list[TreeNode] = []
-    for dataset in datasets:
+    for dataset in sorted_datasets:
         if is_descendant(dataset, of_root_dataset=skip_dataset):
             continue
         skip_dataset = dataset
@@ -133,7 +133,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
 
     This function orchestrates parallel execution of dataset operations while maintaining strict hierarchical
     dependencies. Processing of a dataset only starts after processing of all its ancestor datasets has completed,
-    ensuring data consistency during operations like ZFS replication, snapshot creation, or dataset deletion.
+    ensuring data consistency during operations like ZFS replication or snapshot deletion.
 
     Purpose:
     --------
