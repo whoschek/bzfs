@@ -34,8 +34,9 @@ The `bzfs` project consists of two primary command-line tools:
 - **`bzfs`:** The core engine for replicating ZFS snapshots. It handles the low-level mechanics of `zfs send/receive`,
     data transfer, and snapshot management between two hosts.
 - **`bzfs_jobrunner`:** A high-level orchestrator that calls `bzfs` as part of complex, periodic workflows to manage
-    backup, replication, and pruning jobs across a fleet of multiple source and destination hosts. It is driven by a
-    job configuration file (e.g., `bzfs_job_example.py`). Understanding this distinction is critical.
+    backup, replication, pruning and monitoring jobs across a fleet of multiple source and destination hosts. It is
+    driven by a simple, version-controllable, fleet-wide job configuration file (e.g., `bzfs_job_example.py`).
+    Understanding this distinction is critical.
 
 ## Repository Layout
 
@@ -176,10 +177,11 @@ Your context is your most valuable asset. Use it effectively.
 - **Active Recall:** Keep this document's rules, the user's explicit requests and the current coding goal in your active
     context.
 - **Compact Context:** Whenever your context window exceeds 75% capacity *or* when a single impending response would
-    overflow it, immediately save the complete current context as-is to external memory (e.g. the filesystem) for
-    future recall. Then use the `/compact` or `/compress` command to create a detailed, structured summary of the work
-    so far, paying close attention to the user's explicit requests, without losing precision. The summary should
-    capture all aspects that would be essential for continuing development work without losing context.
+    overflow it, immediately save the complete current context as-is, along with structured annotations, to external
+    memory (e.g. the filesystem) for future recall and search. Then use the `/compact` or `/compress` command to create
+    a detailed, structured summary of the work so far, paying close attention to the user's explicit requests, without
+    losing precision. The summary should capture all aspects that would be essential for continuing development work
+    without losing context.
 
 ## How to Manage Time if your Environment has Time Limits
 
