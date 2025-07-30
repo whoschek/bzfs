@@ -81,7 +81,7 @@ def parallel_iterator(
 
     max_workers : int, default=os.cpu_count() or 1
         Maximum number of worker threads in the thread pool. Also determines the buffer size for the sliding window
-        execution model. Should typically match available CPU cores for I/O-bound tasks.
+        execution model. Often higher than the number of available CPU cores for I/O-bound tasks.
 
     ordered : bool, default=True
         Controls result delivery mode:

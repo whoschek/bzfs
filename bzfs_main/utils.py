@@ -45,6 +45,7 @@ from typing import (
     Any,
     Callable,
     Final,
+    Generator,
     Generic,
     ItemsView,
     Iterable,
@@ -340,6 +341,18 @@ def relativize_dataset(dataset: str, root_dataset: str) -> str:
     Example: root_dataset=tank/foo, dataset=tank/foo/bar/baz --> relative_path=/bar/baz.
     """
     return dataset[len(root_dataset) :]
+
+
+def dataset_paths(dataset: str) -> Generator[str, None, None]:
+    """Enumerates all paths of a valid ZFS dataset name; Example: "a/b/c" --> yields "a", "a/b", "a/b/c"."""
+    i: int = 0
+    while i >= 0:
+        i = dataset.find("/", i)
+        if i < 0:
+            yield dataset
+        else:
+            yield dataset[:i]
+            i += 1
 
 
 def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
@@ -674,6 +687,32 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
         else:
             raise ValueError(f"Invalid timezone specification: {tz_spec}")
     return tz
+
+
+###############################################################################
+S = TypeVar("S")
+
+
+class Interner(Generic[S]):
+    """Same as sys.intern() except that it isn't global and can also be used for types other than str."""
+
+    def __init__(self, items: Iterable[S] = frozenset()) -> None:
+        self.items: dict[S, S] = {v: v for v in items}
+
+    def intern(self, item: S) -> S:
+        """Interns the given item."""
+        interned_item = self.items.get(item)
+        if interned_item is None:
+            self.items[item] = item
+            return item
+        return interned_item
+
+    def interned(self, item: S) -> S:
+        """Returns the interned item if contained, else the non-interned item."""
+        return self.items.get(item, item)
+
+    def __contains__(self, item: S) -> bool:
+        return item in self.items
 
 
 ###############################################################################

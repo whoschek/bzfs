@@ -39,6 +39,7 @@ from bzfs_main.retry import (
 )
 from bzfs_main.utils import (
     DONT_SKIP_DATASET,
+    Interner,
     dry,
     has_duplicates,
     human_readable_duration,
@@ -58,14 +59,27 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> Tree:
     """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names, in the
     form of nested dicts."""
     tree: Tree = {}
+    interner: Interner[str] = Interner()  # reduces memory footprint
     for dataset in sorted_datasets:
         current: Tree = tree
         for component in dataset.split("/"):
             child: Tree | None = current.get(component)
             if child is None:
                 child = {}
+                component = interner.intern(component)
                 current[component] = child
             current = child
+    shared_empty_leaf: Tree = {}
+
+    def compress(node: Tree) -> None:
+        """Tree with shared empty leaf nodes has some 30% lower memory footprint than the uncompressed version."""
+        for key, child_node in node.items():
+            if len(child_node) == 0:
+                node[key] = shared_empty_leaf  # sharing is safe because the tree is treated as immutable henceforth
+            else:
+                compress(child_node)
+
+    compress(tree)
     return tree
 
 
@@ -229,7 +243,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     priority_queue: list[TreeNode] = _build_dataset_tree_and_find_roots(datasets)
     heapq.heapify(priority_queue)  # same order as sorted()
     len_datasets: int = len(datasets)
-    datasets_set: set[str] = set(datasets)
+    datasets_set: Interner[str] = Interner(datasets)  # reduces memory footprint
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         todo_futures: set[Future[Any]] = set()
         future_to_node: dict[Future[Any], TreeNode] = {}
@@ -286,7 +300,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
                     def simple_enqueue_children(node: TreeNode) -> None:
                         """Recursively enqueues child nodes for start of processing."""
                         for child, grandchildren in node.children.items():  # as processing of parent has now completed
-                            child_node: TreeNode = _make_tree_node(f"{node.dataset}/{child}", grandchildren)
+                            child_node: TreeNode = _make_tree_node(
+                                datasets_set.interned(f"{node.dataset}/{child}"), grandchildren
+                            )
                             if child_node.dataset in datasets_set:
                                 heapq.heappush(priority_queue, child_node)  # make it available for start of processing
                             else:  # it's an intermediate node that has no job attached; pass the enqueue operation
@@ -316,7 +332,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
                         n: int = 0
                         children: Tree = node.children
                         for child, grandchildren in children.items():
-                            child_node: TreeNode = _make_tree_node(f"{node.dataset}/{child}", grandchildren, parent=node)
+                            child_node: TreeNode = _make_tree_node(
+                                datasets_set.interned(f"{node.dataset}/{child}"), grandchildren, parent=node
+                            )
                             k: int
                             if child != BARRIER_CHAR:
                                 if child_node.dataset in datasets_set:

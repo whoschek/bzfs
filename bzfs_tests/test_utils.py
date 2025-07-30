@@ -57,6 +57,7 @@ from bzfs_main.utils import (
     compile_regexes,
     current_datetime,
     cut,
+    dataset_paths,
     die,
     drain,
     find_match,
@@ -146,6 +147,11 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertTrue(is_descendant("", ""))
         self.assertFalse(is_descendant("pool/fs-backup", "pool/fs"))
         self.assertTrue(is_descendant("pool/fs", "pool"))
+
+    def test_dataset_paths(self) -> None:
+        self.assertEqual(list(dataset_paths("a")), ["a"])
+        self.assertEqual(list(dataset_paths("a/b/c")), ["a", "a/b", "a/b/c"])
+        self.assertEqual(list(dataset_paths("")), [""])
 
     def test_append_if_absent(self) -> None:
         self.assertListEqual([], append_if_absent([]))
