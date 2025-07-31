@@ -145,7 +145,6 @@ from bzfs_main.retry import (
     RetryableError,
 )
 from bzfs_main.snapshot_cache import (
-    SNAPSHOTS_CHANGED,
     SnapshotCache,
     set_last_modification_time_safe,
 )
@@ -223,8 +222,8 @@ class Job:
         self.params: Params
         self.all_dst_dataset_exists: dict[str, dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
-        self.src_properties: dict[str, dict[str, str | int]] = {}
-        self.dst_properties: dict[str, dict[str, str | int]] = {}
+        self.src_properties: dict[str, DatasetProperties] = {}
+        self.dst_properties: dict[str, DatasetProperties] = {}
         self.all_exceptions: list[str] = []
         self.all_exceptions_count: int = 0
         self.max_exceptions_to_summarize: int = 10000
@@ -688,10 +687,10 @@ class Job:
         for line in (try_ssh_command(self, src, LOG_DEBUG, cmd=cmd) or "").splitlines():
             cols: list[str] = line.split("\t")
             snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
-            self.src_properties[src_dataset] = {
-                "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
-                SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
-            }
+            self.src_properties[src_dataset] = DatasetProperties(
+                recordsize=int(recordsize) if recordsize != "-" else -int(volblocksize),
+                snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
+            )
             basis_src_datasets.append(src_dataset)
         assert (not self.is_test_mode) or basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
         return basis_src_datasets
@@ -714,9 +713,10 @@ class Job:
             for line in basis_dst_datasets_str.splitlines():
                 cols: list[str] = line.split("\t")
                 snapshots_changed, dst_dataset = cols if is_caching else ["-"] + cols
-                self.dst_properties[dst_dataset] = {
-                    SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
-                }
+                self.dst_properties[dst_dataset] = DatasetProperties(
+                    recordsize=0,
+                    snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
+                )
                 basis_dst_datasets.append(dst_dataset)
         assert (not self.is_test_mode) or basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
         return basis_dst_datasets
@@ -848,7 +848,7 @@ class Job:
                 nonlocal num_snapshots_deleted
                 num_snapshots_deleted += len(dst_tags_to_delete)
                 if len(dst_tags_to_delete) > 0 and not p.delete_dst_bookmarks:
-                    self.dst_properties[dst_dataset][SNAPSHOTS_CHANGED] = 0  # invalidate cache
+                    self.dst_properties[dst_dataset].snapshots_changed = 0  # invalidate cache
             return True
 
         # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
@@ -996,9 +996,7 @@ class Job:
         is_debug: bool = log.isEnabledFor(LOG_DEBUG)
         if is_caching_snapshots(p, remote):
             props = self.dst_properties if remote is p.dst else self.src_properties
-            snapshots_changed_dict: dict[str, int] = {
-                dataset: int(vals[SNAPSHOTS_CHANGED]) for dataset, vals in props.items()
-            }
+            snapshots_changed_dict: dict[str, int] = {dataset: vals.snapshots_changed for dataset, vals in props.items()}
             hash_code: str = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
         is_caching: bool = False
 
@@ -1155,7 +1153,7 @@ class Job:
                 cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
                 cache_file: str = self.cache.last_modified_cache_file(src, src_dataset, cache_label)
                 cache_files[src_dataset] = cache_file
-                snapshots_changed: int = int(self.src_properties[src_dataset][SNAPSHOTS_CHANGED])  # get prop "for free"
+                snapshots_changed: int = self.src_properties[src_dataset].snapshots_changed  # get prop "for free"
                 if (
                     snapshots_changed != 0
                     and time.time() > snapshots_changed + TIME_THRESHOLD_SECS
@@ -1222,7 +1220,7 @@ class Job:
                 dst_snapshots_changed: int = dst_snapshots_changed_dict.get(dst_dataset, 0)
                 dst_cache_file: str = self.cache.last_modified_cache_file(dst, dst_dataset)
                 src_dataset: str = dst2src(dst_dataset)
-                src_snapshots_changed: int = int(self.src_properties[src_dataset][SNAPSHOTS_CHANGED])
+                src_snapshots_changed: int = self.src_properties[src_dataset].snapshots_changed
                 if not p.dry_run:
                     set_last_modification_time_safe(cache_files[src_dataset], unixtime_in_secs=src_snapshots_changed)
                     set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=dst_snapshots_changed)
@@ -1377,7 +1375,7 @@ class Job:
                 if cached_snapshots_changed == 0:
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
-                if cached_snapshots_changed != self.src_properties[dataset][SNAPSHOTS_CHANGED]:  # get that prop "for free"
+                if cached_snapshots_changed != self.src_properties[dataset].snapshots_changed:  # get that prop "for free"
                     cache.invalidate_last_modified_cache_dataset(dataset)
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
@@ -1402,7 +1400,7 @@ class Job:
             if is_caching and not p.dry_run:
                 set_last_modification_time_safe(
                     self.cache.last_modified_cache_file(src, dataset),
-                    unixtime_in_secs=int(self.src_properties[dataset][SNAPSHOTS_CHANGED]),
+                    unixtime_in_secs=self.src_properties[dataset].snapshots_changed,
                     if_more_recent=True,
                 )
 
@@ -1482,6 +1480,20 @@ class Job:
                 fn_on_finish_dataset(dataset)
         datasets_without_snapshots = [dataset for dataset in sorted_datasets if dataset not in datasets_with_snapshots]
         return datasets_without_snapshots
+
+
+#############################################################################
+class DatasetProperties:
+    """Attributes of a ZFS dataset."""
+
+    __slots__ = ("recordsize", "snapshots_changed")  # uses more compact memory layout than __dict__
+
+    def __init__(self, recordsize: int, snapshots_changed: int) -> None:
+        # immutable variables:
+        self.recordsize: int = recordsize
+
+        # mutable variables:
+        self.snapshots_changed: int = snapshots_changed
 
 
 #############################################################################

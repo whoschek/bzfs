@@ -44,10 +44,6 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.configuration import Remote, SnapshotLabel
 
 
-# constants:
-SNAPSHOTS_CHANGED: str = "snapshots_changed"  # http://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
-
-
 class SnapshotCache:
     """Handles last-modified cache operations for snapshot management."""
 
@@ -104,7 +100,7 @@ class SnapshotCache:
         snapshots_changed_dict: dict[str, int] = self.zfs_get_snapshots_changed(src, sorted_datasets)
         for src_dataset in sorted_datasets:
             snapshots_changed: int = snapshots_changed_dict.get(src_dataset, 0)
-            self.job.src_properties[src_dataset][SNAPSHOTS_CHANGED] = snapshots_changed
+            self.job.src_properties[src_dataset].snapshots_changed = snapshots_changed
             if snapshots_changed == 0:
                 self.invalidate_last_modified_cache_dataset(src_dataset)
             else:

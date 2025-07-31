@@ -548,7 +548,7 @@ def _prepare_zfs_send_receive(
     else:  # no compression is used if source and destination do not both support compression
         compress_cmd_, decompress_cmd_ = "cat", "cat"
 
-    recordsize: int = abs(int(job.src_properties[src_dataset]["recordsize"]))
+    recordsize: int = abs(job.src_properties[src_dataset].recordsize)
     src_buffer: str = _mbuffer_cmd(p, "src", size_estimate_bytes, recordsize)
     dst_buffer: str = _mbuffer_cmd(p, "dst", size_estimate_bytes, recordsize)
     local_buffer: str = _mbuffer_cmd(p, "local", size_estimate_bytes, recordsize)

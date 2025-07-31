@@ -708,7 +708,7 @@ class Interner(Generic[S]):
         return interned_item
 
     def interned(self, item: S) -> S:
-        """Returns the interned item if contained, else the non-interned item."""
+        """Returns the interned item if an equal item is contained, else returns the non-interned item."""
         return self.items.get(item, item)
 
     def __contains__(self, item: S) -> bool:

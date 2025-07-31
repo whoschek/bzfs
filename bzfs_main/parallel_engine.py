@@ -72,15 +72,15 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> Tree:
             current = child
     shared_empty_leaf: Tree = {}
 
-    def compress(node: Tree) -> None:
-        """Tree with shared empty leaf nodes has some 30% lower memory footprint than the uncompressed version."""
+    def compact(node: Tree) -> None:
+        """Tree with shared empty leaf nodes has some 30% lower memory footprint than the non-compacted version."""
         for key, child_node in node.items():
             if len(child_node) == 0:
                 node[key] = shared_empty_leaf  # sharing is safe because the tree is treated as immutable henceforth
             else:
-                compress(child_node)
+                compact(child_node)
 
-    compress(tree)
+    compact(tree)
     return tree
 
 
