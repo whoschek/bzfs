@@ -44,7 +44,7 @@ repos:
         additional_dependencies: [tomli]
         # config options like `wrap-summaries` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.5
+    rev: v0.12.7
     hooks:
       - id: ruff-check  # Run linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
@@ -63,23 +63,6 @@ repos:
         language: python
         additional_dependencies: ['pyrefly==0.25.1']
         pass_filenames: false
-  - repo: local
-    hooks:
-      - id: pyre-infer
-        name: "pyre infer (auto-fix types)"
-        exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
-        entry: pyre infer --in-place --use-future-annotations
-        pass_filenames: false
-        language: python
-  - repo: https://github.com/JelleZijlstra/autotyping
-    rev: 24.9.0
-    hooks:
-      - id: autotyping
-        name: "autotyping (auto-fix types)"
-        exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
-        types: [python]
-        args: [--safe]
-        # args: ["--aggressive"]
   - repo: local
     hooks:
       - id: pytype-and-merge
