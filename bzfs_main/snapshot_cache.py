@@ -35,6 +35,7 @@ from bzfs_main.parallel_batch_cmd import (
     itr_ssh_cmd_parallel,
 )
 from bzfs_main.utils import (
+    SortedInterner,
     stderr_to_str,
 )
 
@@ -119,7 +120,7 @@ class SnapshotCache:
                     except FileNotFoundError:
                         pass  # harmless
 
-    def zfs_get_snapshots_changed(self, remote: Remote, datasets: list[str]) -> dict[str, int]:
+    def zfs_get_snapshots_changed(self, remote: Remote, sorted_datasets: list[str]) -> dict[str, int]:
         """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds;
         See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
 
@@ -131,11 +132,13 @@ class SnapshotCache:
             except UnicodeDecodeError:
                 return []
 
+        assert (not self.job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
         p = self.job.params
         cmd: list[str] = p.split_args(f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o snapshots_changed,name")
         results: dict[str, int] = {}
+        interner: SortedInterner[str] = SortedInterner(sorted_datasets)  # reduces memory footprint
         for lines in itr_ssh_cmd_parallel(
-            self.job, remote, [(cmd, datasets)], lambda _cmd, batch: try_zfs_list_command(_cmd, batch), ordered=False
+            self.job, remote, [(cmd, sorted_datasets)], lambda _cmd, batch: try_zfs_list_command(_cmd, batch), ordered=False
         ):
             for line in lines:
                 if "\t" not in line:
@@ -143,6 +146,7 @@ class SnapshotCache:
                 snapshots_changed, dataset = line.split("\t", 1)
                 if not dataset:
                     break  # partial output from failing 'zfs list' command
+                dataset = interner.interned(dataset)
                 if snapshots_changed == "-" or not snapshots_changed:
                     snapshots_changed = "0"
                 results[dataset] = int(snapshots_changed)

@@ -159,6 +159,7 @@ from bzfs_main.utils import (
     PROG_NAME,
     SHELL_CHARS,
     YEAR_WITH_FOUR_DIGITS_REGEX,
+    SortedInterner,
     SynchronizedBool,
     SynchronizedDict,
     append_if_absent,
@@ -1437,12 +1438,15 @@ class Job:
     ) -> list[str]:  # thread-safe
         """For each dataset in `sorted_datasets`, for each label in `labels`, finds the latest and oldest snapshot, and runs
         the callback functions on them; Ignores the timestamp of the input labels and the timestamp of the snapshot names."""
+        assert (not self.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
         p = self.params
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
         datasets_with_snapshots: set[str] = set()
+        interner: SortedInterner[str] = SortedInterner(sorted_datasets)  # reduces memory footprint
         for lines in zfs_list_snapshots_in_parallel(self, remote, cmd, sorted_datasets, ordered=False):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in itertools.groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
+                dataset = interner.interned(dataset)
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
                     (int(createtxg), int(creation_unixtime_secs), name[name.index("@") + 1 :])
                     for createtxg, creation_unixtime_secs, name in (line.split("\t", 2) for line in group)

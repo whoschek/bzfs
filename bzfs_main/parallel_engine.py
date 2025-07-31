@@ -40,6 +40,7 @@ from bzfs_main.retry import (
 from bzfs_main.utils import (
     DONT_SKIP_DATASET,
     Interner,
+    SortedInterner,
     dry,
     has_duplicates,
     human_readable_duration,
@@ -243,7 +244,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     priority_queue: list[TreeNode] = _build_dataset_tree_and_find_roots(datasets)
     heapq.heapify(priority_queue)  # same order as sorted()
     len_datasets: int = len(datasets)
-    datasets_set: Interner[str] = Interner(datasets)  # reduces memory footprint
+    datasets_set: SortedInterner[str] = SortedInterner(datasets)  # reduces memory footprint
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         todo_futures: set[Future[Any]] = set()
         future_to_node: dict[Future[Any], TreeNode] = {}

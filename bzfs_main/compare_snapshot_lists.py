@@ -48,6 +48,7 @@ from bzfs_main.parallel_iterator import (
 )
 from bzfs_main.utils import (
     FILE_PERMISSIONS,
+    Interner,
     human_readable_bytes,
     human_readable_duration,
     isotime_from_unixtime,
@@ -241,10 +242,11 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     dst_snapshot_itr = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
     merge_itr = _merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snapshot_itr, dst_snapshot_itr)
 
+    interner: Interner[str] = Interner()  # reduces memory footprint
     rel_datasets: dict[str, set[str]] = defaultdict(set)
     for datasets, remote in (src_datasets, src), (dst_datasets, dst):
         for dataset in datasets:  # rel_dataset=/foo, root_dataset=tank1/src
-            rel_datasets[remote.location].add(relativize_dataset(dataset, remote.root_dataset))
+            rel_datasets[remote.location].add(interner.intern(relativize_dataset(dataset, remote.root_dataset)))
     rel_src_or_dst: list[str] = sorted(rel_datasets["src"].union(rel_datasets["dst"]))
 
     log.debug("%s", f"Temporary TSV output file comparing {task} is: {tmp_tsv_file}")

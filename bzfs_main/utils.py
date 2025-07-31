@@ -845,6 +845,31 @@ class SmallPriorityQueue(Generic[T]):
         return repr(list(reversed(self._lst))) if self._reverse else repr(self._lst)
 
 
+###############################################################################
+class SortedInterner(Generic[T]):
+    """Same as sys.intern() except that it isn't global and that it assumes the input list is sorted (for binary search)."""
+
+    def __init__(self, sorted_list: list[T]) -> None:
+        self._lst: list[T] = sorted_list
+
+    def interned(self, element: T) -> T:
+        """Returns the interned item if an equal item is contained, else returns the non-interned item."""
+        lst = self._lst
+        i = binary_search(lst, element)
+        return lst[i] if i >= 0 else element
+
+    def __contains__(self, element: T) -> bool:
+        """Returns ``True`` if ``element`` is present."""
+        return binary_search(self._lst, element) >= 0
+
+
+def binary_search(sorted_list: list[T], item: T) -> int:
+    """Java-style binary search; Returns index >=0 if an equal item is found in list, else '-insertion_point-1'; If it
+    returns index >=0, the index will be the left-most index in case multiple such equal items are contained."""
+    i = bisect.bisect_left(sorted_list, item)
+    return i if i < len(sorted_list) and sorted_list[i] == item else -i - 1
+
+
 #############################################################################
 class SynchronizedBool:
     """Thread-safe wrapper around a regular bool."""

@@ -54,6 +54,7 @@ from bzfs_main.utils import (
     SynchronizedDict,
     _get_descendant_processes,
     append_if_absent,
+    binary_search,
     compile_regexes,
     current_datetime,
     cut,
@@ -96,6 +97,7 @@ def suite() -> unittest.TestSuite:
         TestDrain,
         TestShuffleDict,
         TestSortedDict,
+        TestBinarySearch,
         TestTail,
         TestGetHomeDirectory,
         TestHumanReadable,
@@ -331,6 +333,67 @@ class TestSortedDict(AbstractTestCase):
     def test_sorted_dict_with_mixed_key_types_raises_error(self) -> None:
         with self.assertRaises(TypeError):
             sorted_dict({"a": 1, 2: "two"})
+
+
+#############################################################################
+class TestBinarySearch(AbstractTestCase):
+
+    @staticmethod
+    def insertion_point(result: int) -> int:
+        return result if result >= 0 else -result - 1
+
+    def test_found_first(self) -> None:
+        a = [1, 3, 5, 7]
+        self.assertEqual(binary_search(a, 1), 0)
+
+    def test_found_last(self) -> None:
+        a = [1, 3, 5, 7]
+        self.assertEqual(binary_search(a, 7), 3)
+
+    def test_found_middle(self) -> None:
+        a = [1, 3, 5, 7]
+        self.assertEqual(binary_search(a, 5), 2)
+
+    def test_not_found_before_first(self) -> None:
+        a = [1, 3, 5, 7]
+        r = binary_search(a, 0)
+        self.assertLess(r, 0)
+        self.assertEqual(self.insertion_point(r), 0)
+
+    def test_not_found_after_last(self) -> None:
+        a = [1, 3, 5, 7]
+        r = binary_search(a, 8)
+        self.assertLess(r, 0)
+        self.assertEqual(self.insertion_point(r), 4)
+
+    def test_not_found_middle(self) -> None:
+        a = [1, 3, 5, 7]
+        r = binary_search(a, 4)
+        self.assertLess(r, 0)
+        self.assertEqual(self.insertion_point(r), 2)
+
+    def test_duplicates_returns_leftmost(self) -> None:
+        a = [1, 3, 3, 3, 5]
+        self.assertEqual(binary_search(a, 3), 1)
+
+    def test_empty_list(self) -> None:
+        self.assertEqual(binary_search([], 42), -1)
+
+    def test_string_found(self) -> None:
+        a = ["ant", "bee", "cat", "dog"]
+        self.assertEqual(binary_search(a, "bee"), 1)
+
+    def test_string_not_found_middle(self) -> None:
+        a = ["ant", "bee", "cat", "dog"]
+        r = binary_search(a, "cow")  # between cat and dog
+        self.assertLess(r, 0)
+        self.assertEqual(self.insertion_point(r), 3)
+
+    def test_string_not_found_before_first(self) -> None:
+        a = ["ant", "bee", "cat", "dog"]
+        r = binary_search(a, "aardvark")
+        self.assertLess(r, 0)
+        self.assertEqual(self.insertion_point(r), 0)
 
 
 #############################################################################

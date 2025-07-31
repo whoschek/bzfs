@@ -29,6 +29,7 @@ import bzfs_tests.test_detect
 import bzfs_tests.test_filter
 import bzfs_tests.test_incremental_send_steps
 import bzfs_tests.test_integrations
+import bzfs_tests.test_interner
 import bzfs_tests.test_jobrunner
 import bzfs_tests.test_loggers
 import bzfs_tests.test_parallel_engine
@@ -44,6 +45,7 @@ def main() -> None:
     suite = unittest.TestSuite()
     suites = [
         bzfs_tests.test_utils.suite(),
+        bzfs_tests.test_interner.suite(),
         bzfs_tests.test_loggers.suite(),
         bzfs_tests.test_retry.suite(),
         bzfs_tests.test_period_anchors.suite(),
