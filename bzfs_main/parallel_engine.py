@@ -183,6 +183,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
         synchronization scenarios where jobs must wait for completion of entire subtrees before proceeding. Essential
         for advanced job scheduling patterns like "complete all parallel replications before starting pruning phase."
 
+    - Both algorithms are highly CPU and memory efficient. They require main memory that is proportional to the number
+        of dataset names (~400 bytes per dataset name), and easily scale to millions of datasets.
+
     Error Handling Strategy:
     ------------------------
     - "fail": Immediately terminate all processing on first error (fail-fast)
