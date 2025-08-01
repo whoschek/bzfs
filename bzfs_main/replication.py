@@ -13,7 +13,10 @@
 # limitations under the License.
 #
 """The core replication algorithm is in replicate_dataset(), which performs reliable full and/or incremental 'zfs send' and
-'zfs receive' operations on snapshots, using resumable ZFS sends when possible."""
+'zfs receive' operations on snapshots, using resumable ZFS sends when possible.
+
+For replication of multiple datasets, including recursive replication, see bzfs.py/replicate_datasets().
+"""
 
 from __future__ import annotations
 import os
@@ -100,7 +103,8 @@ RIGHT_JUST: int = 7
 
 
 def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
-    """Replicates src_dataset to dst_dataset (thread-safe); For recursive replication, see bzfs.py/replicate_datasets()."""
+    """Replicates src_dataset to dst_dataset (thread-safe); For replication of multiple datasets, including recursive
+    replication, see bzfs.py/replicate_datasets()."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
     retry_count: int = retry.count
