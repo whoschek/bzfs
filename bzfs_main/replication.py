@@ -100,7 +100,7 @@ RIGHT_JUST: int = 7
 
 
 def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
-    """Replicates src_dataset (without handling descendants) to dst_dataset (thread-safe)."""
+    """Replicates src_dataset to dst_dataset (thread-safe); For recursive replication, see bzfs.py/replicate_datasets()."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
     retry_count: int = retry.count
