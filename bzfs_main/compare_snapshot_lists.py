@@ -22,7 +22,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import (
     TYPE_CHECKING,
-    Any,
     Callable,
     Generator,
     Iterable,
@@ -49,6 +48,7 @@ from bzfs_main.parallel_iterator import (
 from bzfs_main.utils import (
     FILE_PERMISSIONS,
     Interner,
+    T,
     human_readable_bytes,
     human_readable_duration,
     isotime_from_unixtime,
@@ -238,8 +238,8 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         log.info("%s", "\n".join(msgs))
 
     # setup streaming pipeline
-    src_snapshot_itr = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
-    dst_snapshot_itr = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
+    src_snapshot_itr: Iterator = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
+    dst_snapshot_itr: Iterator = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
     merge_itr = _merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snapshot_itr, dst_snapshot_itr)
 
     interner: Interner[str] = Interner()  # reduces memory footprint
@@ -294,9 +294,9 @@ def _print_datasets(group: itertools.groupby, fn: Callable[[str, Iterable], None
 def _merge_sorted_iterators(
     choices: Sequence[str],  # ["src", "dst", "all"]
     choice: str,  # Example: "src+dst+all"
-    src_itr: Iterator,
-    dst_itr: Iterator,
-) -> Generator[tuple[Any, ...], None, None]:
+    src_itr: Iterator[T],
+    dst_itr: Iterator[T],
+) -> Generator[tuple[str, T] | tuple[str, T, T], None, None]:
     """The typical pipelined merge algorithm of a merge sort, slightly adapted to our specific use case."""
     assert len(choices) == 3
     assert choice
@@ -309,12 +309,15 @@ def _merge_sorted_iterators(
         if src_next == dst_next:
             n = 2
             if (flags & (1 << n)) != 0:
+                assert src_next is not None
+                assert dst_next is not None
                 yield choices[n], src_next, dst_next
             src_next = next(src_itr, None)
             dst_next = next(dst_itr, None)
         elif src_next is None or (dst_next is not None and dst_next < src_next):
             n = 1
             if (flags & (1 << n)) != 0:
+                assert dst_next is not None
                 yield choices[n], dst_next
             dst_next = next(dst_itr, None)
         else:
