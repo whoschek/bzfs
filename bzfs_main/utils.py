@@ -697,22 +697,22 @@ class Interner(Generic[S]):
     """Same as sys.intern() except that it isn't global and can also be used for types other than str."""
 
     def __init__(self, items: Iterable[S] = frozenset()) -> None:
-        self.items: dict[S, S] = {v: v for v in items}
+        self._items: dict[S, S] = {v: v for v in items}
 
     def intern(self, item: S) -> S:
         """Interns the given item."""
-        interned_item = self.items.get(item)
+        interned_item = self._items.get(item)
         if interned_item is None:
-            self.items[item] = item
+            self._items[item] = item
             return item
         return interned_item
 
     def interned(self, item: S) -> S:
         """Returns the interned item if an equal item is contained, else returns the non-interned item."""
-        return self.items.get(item, item)
+        return self._items.get(item, item)
 
     def __contains__(self, item: S) -> bool:
-        return item in self.items
+        return item in self._items
 
 
 ###############################################################################

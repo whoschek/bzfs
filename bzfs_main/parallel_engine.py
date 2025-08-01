@@ -168,11 +168,11 @@ def process_datasets_in_parallel_and_fault_tolerant(
     -----------------
     - The implementation uses a priority queue-based scheduler that maintains two key invariants:
 
-    - Dependency Ordering: Children are only enqueued for processing after their parent completes, preventing
-        inconsistent dataset states.
+    - Dependency Ordering: Children are only made available for start of processing after their parent completes,
+        preventing inconsistent dataset states.
 
-    - Lexicographical Priority: Among available datasets, the lexicographically smallest is always processed next,
-        ensuring mostly-deterministic execution order.
+    - Lexicographical Priority: Among the datasets available for start of processing, the lexicographically smallest
+        is always processed next, ensuring more deterministic execution order.
 
     Algorithm Selection:
     --------------------
