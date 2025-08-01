@@ -138,7 +138,8 @@ def itr_ssh_cmd_parallel(
 def zfs_list_snapshots_in_parallel(
     job: Job, r: Remote, cmd: list[str], datasets: list[str], ordered: bool = True
 ) -> Generator[list[str], None, None]:
-    """Runs 'zfs list -t snapshot' on multiple datasets at the same time."""
+    """Runs 'zfs list -t snapshot' on multiple datasets at the same time; Implemented with a time and space efficient
+    streaming algorithm; easily scales to millions of datasets and any number of snapshots."""
     max_workers: int = job.max_workers[r.location]
     return itr_ssh_cmd_parallel(
         job,
