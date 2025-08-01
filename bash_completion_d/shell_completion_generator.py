@@ -61,7 +61,7 @@ def _harvest(module: str) -> tuple[str, set[str], dict[str, str]]:
     return safe, flags, vals
 
 
-blocks = []
+blocks: list[str] = []
 for program in programs:
     safe, flag_set, val_map = _harvest(program)
     blocks.append(f"__opts_{safe}='{' '.join(sorted(flag_set))}'")

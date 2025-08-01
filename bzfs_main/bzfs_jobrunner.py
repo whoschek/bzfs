@@ -793,7 +793,7 @@ class Job:
             for org, target_periods in include_snapshot_plan.items()
             if any(len(periods) > 0 for target, periods in target_periods.items())
         }
-        opts = []
+        opts: list[str] = []
         if len(include_snapshot_plan) > 0:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
             opts += [f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}"]
@@ -826,7 +826,7 @@ class Job:
         unknown_remote_dst_pools = unknown_dst_pools.difference(unknown_local_dst_pools)
         self.cache_existing_dst_pools.update(unknown_remote_dst_pools)  # union
         self.cache_known_dst_pools.update(unknown_dst_pools)  # union
-        results = []
+        results: list[tuple[str, str]] = []
         for src, dst in root_dataset_pairs:
             if zpool(dst) in self.cache_existing_dst_pools:
                 results.append((src, dst))

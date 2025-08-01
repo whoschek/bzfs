@@ -5623,7 +5623,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.setup_basic()
         for i in range(2):
             with stop_on_failure_subtest(i=i):
-                inject_params = {}
+                inject_params: dict[str, bool] = {}
                 if i == 0:
                     inject_params[flag] = True
                 self.run_bzfs(

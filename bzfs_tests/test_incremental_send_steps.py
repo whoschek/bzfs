@@ -87,7 +87,7 @@ class TestIncrementalSendSteps(AbstractTestCase):
         We test all possible permutations of series of length L=[0..max_length] snapshots
         """
         assert max_length >= 0
-        testcases = []
+        testcases: list[defaultdict[str | None, list[str]]] = []
         for L in range(max_length + 1):  # noqa: N806
             for N in range(L + 1):  # noqa: N806
                 steps = "d" * N + "h" * (L - N)
@@ -140,7 +140,7 @@ class TestIncrementalSendSteps(AbstractTestCase):
 
         Returns the subset of snapshots that have actually been replicated to the destination.
         """
-        output_snapshots = []
+        output_snapshots: list[str] = []
         for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:  # noqa: B007
             start_snapshot = start_snapshot[start_snapshot.find("@") + 1 :]
             end_snapshot = end_snapshot[end_snapshot.find("@") + 1 :]
@@ -160,7 +160,7 @@ class TestIncrementalSendSteps(AbstractTestCase):
         is_resume: bool = False,
         force_convert_I_to_i: bool = False,  # noqa: N803
     ) -> list[tuple]:
-        origin_src_snapshots_with_guids = []
+        origin_src_snapshots_with_guids: list[str] = []
         guid = 1
         for snapshot in input_snapshots:
             origin_src_snapshots_with_guids.append(f"{guid}\t{src_dataset}{snapshot}")
@@ -175,8 +175,8 @@ class TestIncrementalSendSteps(AbstractTestCase):
         is_resume: bool = False,
         force_convert_I_to_i: bool = False,  # noqa: N803
     ) -> list[tuple]:
-        guids = []
-        input_snapshots = []
+        guids: list[str] = []
+        input_snapshots: list[str] = []
         included_guids = set()
         for line in origin_src_snapshots_with_guids:
             guid, snapshot = line.split("\t", 1)
