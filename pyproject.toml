@@ -69,7 +69,7 @@ dev = [  # for development only
   "mypy==1.16.1",                   # see https://github.com/python/mypy
   "docformatter==1.7.7",            # see https://github.com/PyCQA/docformatter
   "pylint==3.3.7",                  # see https://github.com/pylint-dev/pylint
-  "pyrefly==0.25.1",                # see https://github.com/facebook/pyrefly
+  "pyrefly==0.26.1",                # see https://github.com/facebook/pyrefly
   "pytype==2024.10.11",             # see https://github.com/google/pytype
   "ast-grep-cli==0.39.2",           # see https://github.com/ast-grep/ast-grep
   "rope==1.14.0",                   # see https://github.com/python-rope/rope
