@@ -482,7 +482,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
-      uses: vmactions/solaris-vm@v1.1.1  # see https://github.com/vmactions/solaris-vm
+      uses: vmactions/solaris-vm@v1.1.4  # see https://github.com/vmactions/solaris-vm
       with:
         release: "11.4"
         envs: "bzfs_test_mode"
