@@ -87,7 +87,7 @@ source or destination host. Only the underlying 'zfs' CLI must be installed on b
 destination host. bzfs can run as root or non-root user, in the latter case via a) sudo or b) when
 granted corresponding ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
-bzfs is written in Python and continously runs a wide set of unit tests and integration tests to
+bzfs is written in Python and continuously runs a wide set of unit tests and integration tests to
 ensure coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris,
 on all Python versions >= 3.8 (including latest stable which is currently python-3.13).
 
@@ -446,7 +446,7 @@ properties to create or replicate or delete or compare.
 * Supports pull, push, pull-push and local transfer mode.
 * Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
 delete mode.
-* Continously tested on Linux, FreeBSD and Solaris.
+* Continuously tested on Linux, FreeBSD and Solaris.
 * Code is almost 100% covered by tests.
 * Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly
 deletes (or monitors or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as frequently
@@ -501,7 +501,7 @@ intermittent failures, via efficient 'zfs receive -s' and 'zfs send -t'.
 simultaneously this is detected and the operation can be auto-retried safely.
 * A job that runs periodically declines to start if the same previous periodic job is still running without
 completion yet.
-* Can log to local and remote destinations out of the box. Logging mechanism is customizable and plugable for smooth
+* Can log to local and remote destinations out of the box. Logging mechanism is customizable and pluggable for smooth
 integration.
 * Codebase is easy to change and maintain. No hidden magic. Python is very readable to contemporary engineers.
 Chances are that CI tests will catch changes that have unintended side effects.
@@ -1959,7 +1959,7 @@ usage: bzfs [-h] [--recursive]
     performance requirements, as well as the number of available CPU cores and the parallelism
     offered by SSDs vs. HDDs, ZFS topology and configuration, as well as the network bandwidth and
     other workloads simultaneously running on the system. The current default is geared towards a
-    high degreee of parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%, 150%
+    high degree of parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%, 150%
 
 <!-- -->
 

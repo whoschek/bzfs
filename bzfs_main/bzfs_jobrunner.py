@@ -802,7 +802,7 @@ class Job:
         return opts
 
     def skip_nonexisting_local_dst_pools(self, root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
-        """Skip datasets that point to removeable destination drives that are not currently (locally) attached, if any."""
+        """Skip datasets that point to removable destination drives that are not currently (locally) attached, if any."""
 
         def zpool(dataset: str) -> str:
             """Returns pool name portion of ``dataset``."""

@@ -68,6 +68,7 @@ dev = [  # for development only
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
   "mypy==1.16.1",                   # see https://github.com/python/mypy
   "docformatter==1.7.7",            # see https://github.com/PyCQA/docformatter
+  "codespell==2.4.1",               # see https://github.com/codespell-project/codespell
   "pylint==3.3.7",                  # see https://github.com/pylint-dev/pylint
   "pyrefly==0.26.1",                # see https://github.com/facebook/pyrefly
   "pytype==2024.10.11",             # see https://github.com/google/pytype
@@ -305,3 +306,13 @@ python-version = "3.8"
 #untyped-def-behavior = "check-and-infer-return-type"
 #project-includes = ["**/bzfs_*/**"]
 #project-excludes = ["**/tests/**", "**/.venv/**"]
+
+[tool.codespell]  # Auto-fix typos
+skip = "bzfs_tests/test_*.py,venv*"
+write-changes = true                      # let pre-commit make changes to files instead of printing diffs
+interactive = 0                           # no interactivity on making changes to files
+ignore-words-list = [                     # project-specific words that should not be treated as typos
+    "cach",
+    "grup",
+    "mut",
+]

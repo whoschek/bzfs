@@ -31,7 +31,7 @@
 * The --create-src-snapshots-* and --delete-* and --compare-* and --monitor-* algorithms also start in run_task().
 * The main retry logic is in run_with_retries() and clear_resumable_recv_state_if_necessary().
 * Progress reporting for use during `zfs send/recv` data transfers is in class ProgressReporter.
-* Executing a CLI commmand on a local or remote host is in run_ssh_command().
+* Executing a CLI command on a local or remote host is in run_ssh_command().
 * Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool.
 * Cache functionality can be found by searching for this regex: .*cach.*
 * The parallel processing engine is in itr_ssh_cmd_parallel() and process_datasets_in_parallel_and_fault_tolerant().

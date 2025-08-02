@@ -123,6 +123,12 @@ repos:
         args: [--multiline]
         entry: '^\s*from\s+bzfs_\w+(\.\w+)*\s+import\s+(\(\n\s*)?(?!PROG_NAME)\w+(\.\w+)*\s+as\s+\w+\s*'
         types: [python]
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell  # Auto-fix typos
+        additional_dependencies: [tomli]
+        # config options like `ignore-words-list` live in pyproject.toml
   - repo: https://github.com/psf/black
     rev: 25.1.0
     hooks:

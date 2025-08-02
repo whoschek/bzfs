@@ -35,7 +35,7 @@ def incremental_send_steps(
     corresponds to a single ZFS send/receive operation. Fewer steps translate to better performance, especially
     when sending many small snapshots. For example, 1 step that sends 100 small snapshots in a single operation is
     much faster than 100 steps that each send only 1 such snapshot per ZFS send/receive operation.
-    Example: skip hourly snapshots and only include daily shapshots for replication
+    Example: skip hourly snapshots and only include daily snapshots for replication
     Example: [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> [d1, d2, d3, d4] via
     -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
     -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')

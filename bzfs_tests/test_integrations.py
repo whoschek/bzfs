@@ -3532,7 +3532,7 @@ class LocalTestCase(IntegrationTestCase):
 
     @staticmethod
     def create_resumable_snapshots(lo: int, hi: int, size_in_bytes: int = 1024 * 1024) -> None:
-        """Large enough to be interruptable and resumable.
+        """Large enough to be interruptible and resumable.
 
         interacts with bzfs.py/inject_dst_pipe_fail
         """

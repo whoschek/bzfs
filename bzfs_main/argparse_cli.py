@@ -130,7 +130,7 @@ source or destination host. Only the underlying 'zfs' CLI must be installed on b
 {PROG_NAME} can run as root or non-root user, in the latter case via a) sudo or b) when granted corresponding
 ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
-{PROG_NAME} is written in Python and continously runs a wide set of unit tests and integration tests to ensure
+{PROG_NAME} is written in Python and continuously runs a wide set of unit tests and integration tests to ensure
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
 versions >= 3.8 (including latest stable which is currently python-3.13).
 
@@ -1186,7 +1186,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "parameter depends on the use case and its performance requirements, as well as the number of available CPU "
              "cores and the parallelism offered by SSDs vs. HDDs, ZFS topology and configuration, as well as the network "
              "bandwidth and other workloads simultaneously running on the system. The current default is geared towards a "
-             "high degreee of parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%%, 150%%\n\n")
+             "high degree of parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%%, 150%%\n\n")
     parser.add_argument(
         "--max-concurrent-ssh-sessions-per-tcp-connection", type=int, min=1, default=8, action=CheckRange, metavar="INT",
         help=f"For best throughput, {PROG_NAME} uses multiple SSH TCP connections in parallel, as indicated by "

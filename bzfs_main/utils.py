@@ -775,7 +775,7 @@ class SnapshotPeriods:  # thread-safe
 class Comparable(Protocol):
     """Partial ordering protocol used by :class:`SmallPriorityQueue`."""
 
-    def __lt__(self, other: Any) -> bool:  # pragma: no cover - behavior defined by implementor
+    def __lt__(self, other: Any) -> bool:  # pragma: no cover - behavior defined by implementer
         ...
 
 
