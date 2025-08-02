@@ -76,7 +76,7 @@ checks still pass.
 - Use `git commit -s` to sign off on your work.
 - Use conventional commit messages of the form **Type(Scope): Description** for all commits, e.g.
   'feat(bzfs_jobrunner): add --foo CLI option', using the following Type and Scope categories:
-  - **Types:** `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`
+  - **Types:** `build`, `bump`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`
   - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`
 
 7. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI

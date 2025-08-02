@@ -1,11 +1,10 @@
 [build-system]
 requires = ["setuptools >= 75.1"]
 build-backend = "setuptools.build_meta"
-#requires = ["hatchling"]
-#build-backend = "hatchling.build"
 
 [project]
 name = "bzfs"
+version = "1.12.0.dev0"
 
 description = """
 bzfs is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote) source ZFS dataset \
@@ -20,7 +19,6 @@ authors = [
 maintainers = [
   {name = "Wolfgang Hoschek", email = "wolfgang.hoschek@mac.com"},
 ]
-dynamic = ["version"]
 readme = "README.md"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -62,6 +60,7 @@ dev = [  # for development only
   "argparse-manpage==4.6",          # see https://github.com/praiskup/argparse-manpage
   # "pandoc", # instead use this for v3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
   "genbadge[coverage]==1.1.2",      # see https://smarie.github.io/python-genbadge/
+  "commitizen==4.8.3",              # see https://github.com/commitizen-tools/commitizen
   "pre-commit==4.2",                # see https://github.com/pre-commit/pre-commit
   "black==25.1",                    # see https://github.com/psf/black
   "ruff==0.12.7",                   # see https://github.com/astral-sh/ruff
@@ -96,15 +95,13 @@ exclude = ["bzfs_docs", "bash_completion_d"]
 [tool.setuptools.package-data]
 bzfs_tests = ["*.json"]
 
-[tool.setuptools.dynamic]
-version = {attr = "bzfs_main.argparse_cli.__version__"}
-
-[tool.hatch.build]
-include = ["bzfs_main/**", "bzfs_tests/**"]
-
-[tool.hatch.version]
-path = "bzfs_main/argparse_cli.py"
-pattern = "^__version__ = ['\"](?P<version>[^'\"]+)['\"]$"
+[tool.commitizen]  # release mgmt via https://github.com/commitizen-tools/commitizen + https://www.conventionalcommits.org
+name = "cz_conventional_commits"
+version_provider = "pep621"
+version_files = ["bzfs_main/argparse_cli.py:__version__"]
+tag_format = "v$version"
+bump_message = "build(release): bump version to $new_version"
+update_changelog_on_bump = false
 
 [tool.coverage.run]  # see https://coverage.readthedocs.io/
 branch = true

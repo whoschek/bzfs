@@ -19,6 +19,9 @@
 # to guarantee that the same checks are enforced everywhere.
 # ---------------------------------------------------------------------------
 fail_fast: true  # abort on first failing hook
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.28.0
@@ -134,3 +137,8 @@ repos:
     hooks:
       - id: black  # Run Python code formatter
       # style options like `line_length` live in pyproject.toml
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.8.3
+    hooks:
+      - id: commitizen  # Check commit msg has the form `type(scope): description` per https://www.conventionalcommits.org
+        stages: [commit-msg]
