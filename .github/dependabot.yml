@@ -1,0 +1,41 @@
+# Dependabot config to generate automated pull requests that update dependencies to their latest stable version. See
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  # Maintain Python dependencies
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: scope
+    # Group all dependencies from the [project.optional-dependencies.dev] section into a single (weekly) PR
+    groups:
+      python-dev-deps:
+        dependency-type: development
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "python"
+    open-pull-requests-limit: 10  # safeguard to not get swamped if many dependencies have security alerts simultaneously.
+
+  # Maintain GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci(deps)"
+      include: "scope"
+    # Group all GitHub Action version updates into a single (weekly) PR
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    open-pull-requests-limit: 10  # safeguard to not get swamped if many dependencies have security alerts simultaneously.
