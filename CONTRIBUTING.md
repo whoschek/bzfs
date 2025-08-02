@@ -2,11 +2,16 @@
 
 ## Developer Certificate of Origin
 
-bzfs is an open source product released under the Apache 2.0 license (see either [the Apache site](https://www.apache.org/licenses/LICENSE-2.0) or the [LICENSE file](./LICENSE)). The Apache 2.0 license allows you to freely use, modify, distribute, and sell your own products that include Apache 2.0 licensed software.
+bzfs is an open source product released under the Apache 2.0 license (see either
+[the Apache site](https://www.apache.org/licenses/LICENSE-2.0) or the [LICENSE file](./LICENSE)). The Apache 2.0 license
+allows you to freely use, modify, distribute, and sell your own products that include Apache 2.0 licensed software.
 
-We respect intellectual property rights of others and we want to make sure all incoming contributions are correctly attributed and licensed. A Developer Certificate of Origin (DCO) is a lightweight mechanism to do that.
+We respect intellectual property rights of others and we want to make sure all incoming contributions are correctly
+attributed and licensed. A Developer Certificate of Origin (DCO) is a lightweight mechanism to do that.
 
-The DCO is a declaration attached to every contribution made by every developer. In the commit message of the contribution, the developer simply adds a `Signed-off-by` statement and thereby agrees to the DCO, which you can find below or at [DeveloperCertificate.org](http://developercertificate.org/).
+The DCO is a declaration attached to every contribution made by every developer. In the commit message of the
+contribution, the developer simply adds a `Signed-off-by` statement and thereby agrees to the DCO, which you can find
+below or at [DeveloperCertificate.org](http://developercertificate.org/).
 
 ```
 Developer's Certificate of Origin 1.1
@@ -35,12 +40,16 @@ By making a contribution to this project, I certify that:
     sign-off) is maintained indefinitely and may be redistributed
     consistent with this project or the open source license(s)
     involved.
- ```
-We require that every contribution to bzfs is signed with a Developer Certificate of Origin. Additionally, please use your real name. We do not accept anonymous contributors nor those utilizing pseudonyms.
+```
+
+We require that every contribution to bzfs is signed with a Developer Certificate of Origin. Additionally, please use
+your real name. We do not accept anonymous contributors nor those utilizing pseudonyms.
 
 Each commit must include a DCO which looks like this
 
 ```
 Signed-off-by: Jane Smith <jane.smith@email.com>
 ```
-You may type this line on your own when writing your commit messages. However, if your user.name and user.email are set in your git configs, you can use `-s` or `--signoff` to add the `Signed-off-by` line to the end of the commit message.
+
+You may type this line on your own when writing your commit messages. However, if your user.name and user.email are set
+in your git configs, you can use `-s` or `--signoff` to add the `Signed-off-by` line to the end of the commit message.

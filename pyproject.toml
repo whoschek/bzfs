@@ -67,6 +67,7 @@ dev = [  # for development only
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
   "mypy==1.16.1",                   # see https://github.com/python/mypy
   "docformatter==1.7.7",            # see https://github.com/PyCQA/docformatter
+  "mdformat==0.7.22",               # see https://github.com/hukkin/mdformat
   "codespell==2.4.1",               # see https://github.com/codespell-project/codespell
   "pylint==3.3.7",                  # see https://github.com/pylint-dev/pylint
   "pyrefly==0.26.1",                # see https://github.com/facebook/pyrefly
