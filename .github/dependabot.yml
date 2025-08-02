@@ -7,9 +7,14 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+      day: sunday
+      time: "02:00"
+      timezone: "Etc/UTC"
+    rebase-strategy: disabled  # don't auto-rebase dependabot PRs
     commit-message:
-      prefix: "chore(deps)"
-      prefix-development: "chore(deps-dev)"
+      prefix: chore
+      prefix-development: chore
+      include: scope
     # Group all dependencies from the [project.optional-dependencies.dev] section into a single (weekly) PR
     groups:
       python-dev-deps:
@@ -17,8 +22,8 @@ updates:
         patterns:
           - "*"
     labels:
-      - "dependencies"
-      - "python"
+      - dependencies
+      - python
     open-pull-requests-limit: 10  # safeguard to not get swamped if many dependencies have security alerts simultaneously.
 
   # Maintain GitHub Actions
@@ -26,14 +31,19 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+      day: sunday
+      time: "02:00"
+      timezone: "Etc/UTC"
+    rebase-strategy: disabled  # don't auto-rebase dependabot PRs
     commit-message:
-      prefix: "ci(deps)"
+      prefix: ci
+      include: scope
     # Group all GitHub Action version updates into a single (weekly) PR
     groups:
       github-actions:
         patterns:
           - "*"
     labels:
-      - "dependencies"
-      - "github-actions"
+      - dependencies
+      - github-actions
     open-pull-requests-limit: 10  # safeguard to not get swamped if many dependencies have security alerts simultaneously.
