@@ -10,7 +10,6 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       prefix-development: "chore(deps-dev)"
-      include: scope
     # Group all dependencies from the [project.optional-dependencies.dev] section into a single (weekly) PR
     groups:
       python-dev-deps:
@@ -29,7 +28,6 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci(deps)"
-      include: "scope"
     # Group all GitHub Action version updates into a single (weekly) PR
     groups:
       github-actions:
