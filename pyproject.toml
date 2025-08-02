@@ -65,7 +65,7 @@ dev = [  # for development only
   "black==25.1",                    # see https://github.com/psf/black
   "ruff==0.12.7",                   # see https://github.com/astral-sh/ruff
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
-  "mypy==1.16.1",                   # see https://github.com/python/mypy
+  "mypy==1.17.1",                   # see https://github.com/python/mypy
   "docformatter==1.7.7",            # see https://github.com/PyCQA/docformatter
   "mdformat==0.7.22",               # see https://github.com/hukkin/mdformat
   "codespell==2.4.1",               # see https://github.com/codespell-project/codespell
