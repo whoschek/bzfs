@@ -253,19 +253,22 @@ class Params:
 
         self.compression_program: str = self._program_name(args.compression_program)
         self.compression_program_opts: list[str] = self.split_args(args.compression_program_opts)
-        if "-o" in self.compression_program_opts or "--output-file" in self.compression_program_opts:
-            die("--compression-program-opts: -o and --output-file are disallowed for security reasons.")
+        for opt in ["-o", "--output-file"]:
+            if opt in self.compression_program_opts:
+                die(f"--compression-program-opts: {opt} is disallowed for security reasons.")
         self.getconf_program: str = self._program_name("getconf")  # print number of CPUs on POSIX except Solaris
         self.psrinfo_program: str = self._program_name("psrinfo")  # print number of CPUs on Solaris
         self.mbuffer_program: str = self._program_name(args.mbuffer_program)
         self.mbuffer_program_opts: list[str] = self.split_args(args.mbuffer_program_opts)
-        if "-o" in self.mbuffer_program_opts:
-            die("--mbuffer-program-opts: -o is disallowed for security reasons.")
+        for opt in ["-o", "-O", "-i", "-l"]:
+            if opt in self.mbuffer_program_opts:
+                die(f"--mbuffer-program-opts: {opt} is disallowed for security reasons.")
         self.ps_program: str = self._program_name(args.ps_program)
         self.pv_program: str = self._program_name(args.pv_program)
         self.pv_program_opts: list[str] = self.split_args(args.pv_program_opts)
-        if "-f" in self.pv_program_opts or "--log-file" in self.pv_program_opts:
-            die("--pv-program-opts: -f and --log-file are disallowed for security reasons.")
+        for opt in ["-f", "--log-file"]:
+            if opt in self.pv_program_opts:
+                die(f"--pv-program-opts: {opt} is disallowed for security reasons.")
         self.isatty: bool = getenv_bool("isatty", True)
         if args.bwlimit:
             self.pv_program_opts += [f"--rate-limit={self.validate_arg_str(args.bwlimit)}"]
