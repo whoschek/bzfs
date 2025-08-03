@@ -39,6 +39,7 @@ _bzfs() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     lst=$(__choices_bzfs "$prev")
     [[ -z $lst ]] && lst="$__opts_bzfs"
+    # shellcheck disable=SC2207
     COMPREPLY=( $(compgen -W "$lst" -- "$cur") )
     return 0
 }
@@ -61,6 +62,7 @@ _bzfs_jobrunner() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     lst=$(__choices_bzfs_jobrunner "$prev")
     [[ -z $lst ]] && lst="$__opts_bzfs_jobrunner"
+    # shellcheck disable=SC2207
     COMPREPLY=( $(compgen -W "$lst" -- "$cur") )
     return 0
 }

@@ -80,6 +80,7 @@ for program in programs:
     prev="${{COMP_WORDS[COMP_CWORD-1]}}"
     lst=$(__choices_{safe} "$prev")
     [[ -z $lst ]] && lst="$__opts_{safe}"
+    # shellcheck disable=SC2207
     COMPREPLY=( $(compgen -W "$lst" -- "$cur") )
     return 0
 }}"""
