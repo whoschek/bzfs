@@ -103,7 +103,7 @@ repos:
     rev: v1.16.1
     hooks:
       - id: mypy  # Run Python type checker
-        exclude: ^\.git.*$
+        exclude: '^\.git.*$'
         # config options like `select` live in pyproject.toml
   - repo: local
     hooks:
@@ -138,9 +138,9 @@ repos:
     hooks:
       - id: mdformat  # Auto-format Markdown files - see https://github.com/hukkin/mdformat
         args: [--wrap=120, --number, --compact-tables]
-        exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
+        exclude: '^(README.*|prd)\.md$'
         additional_dependencies:  # see https://mdformat.readthedocs.io/en/stable/users/plugins.html
-          - mdformat-gfm          # GitHub-Flavored Markdown support
+          - mdformat-gfm          # GitHub-Flavored Markdown support - see https://github.github.com/gfm
           - mdformat-frontmatter  # YAML frontmatter support
           - mdformat-toc          # auto-generate Table-of-Contents via this directive: <!-- mdformat-toc start -->
           - mdformat-shfmt        # format embedded bash, sh

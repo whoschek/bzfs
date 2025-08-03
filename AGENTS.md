@@ -148,7 +148,7 @@ If asked to improve coverage:
 
 - **Measure:** Run coverage analysis before and after your changes.
 
-  ```bash
+  ```
   # First, run the tests to gather data
   bzfs_test_mode=unit python3 -m coverage run -m bzfs_tests.test_all
 
@@ -198,7 +198,7 @@ Your context is your most valuable asset. Use it effectively.
 
 - If the `venv` directory does not exist, create it and set it up with all development dependencies as follows:
 
-  ```bash
+  ```
   python3 -m venv venv                # Create a Python virtual environment
   source venv/bin/activate            # Activate it
   pip install -e '.[dev]'             # Install all development dependencies

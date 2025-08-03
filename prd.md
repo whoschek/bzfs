@@ -205,7 +205,7 @@ The development of `bzfs` will be guided by the following high-level goals:
 > **Solution with `bzfs_jobrunner`:** Dana creates a `bzfs_job_config.py` script and configures `systemd` timers to run
 > periodically, either on the primary or standby host.
 >
-> ```python
+> ```
 > # In bzfs_job_config.py
 > root_dataset_pairs = ["data/postgres", "data/postgres"]
 > target = "standby"
@@ -237,7 +237,7 @@ The development of `bzfs` will be guided by the following high-level goals:
 >
 > **Solution with `bzfs`:** Dana sets up a cron job.
 >
-> ```bash
+> ```
 > # Daily comparison job
 > bzfs primary-db:data/postgres standby-db:data/postgres --recursive --compare-snapshot-lists > /var/log/bzfs/daily_diff.tsv
 > ```
@@ -250,7 +250,7 @@ The development of `bzfs` will be guided by the following high-level goals:
 >
 > **Solution with `bzfs`:** Developers run a script on the bastion host that executes:
 >
-> ```bash
+> ```
 > # Executed on bastion host
 > bzfs prod-db:sanitized_clones/main_db dev-user@dev-vm:dev/main_db \
 >   --recursive --no-stream \
@@ -279,7 +279,7 @@ The development of `bzfs` will be guided by the following high-level goals:
 > **Solution with `bzfs_jobrunner`:** Alex creates a `bzfs_job_config.py` script and runs it via cron on each source and
 > destination host.
 >
-> ```python
+> ```
 > # In bzfs_job_config.py
 > root_dataset_pairs = ["tank/home", "tank/home"]
 > recursive = True
@@ -317,7 +317,7 @@ The development of `bzfs` will be guided by the following high-level goals:
 > **Solution with `bzfs_jobrunner`:** Sam creates a `bzfs_job_config.py` script and automatically runs it once per day
 > via cron.
 >
-> ```python
+> ```
 > # In bzfs_job_config.py
 > root_dataset_pairs = ["tank/media", "/usb/backups/media", "tank/documents", "/usb/backups/documents"]
 > host = "sam"
@@ -352,7 +352,7 @@ The development of `bzfs` will be guided by the following high-level goals:
 > **Solution with `bzfs_jobrunner`:** Chris configures the replication job with specific send options and a property
 > preservation list in the `bzfs_job_config.py` script.
 >
-> ```python
+> ```
 > # In bzfs_job_config.py
 > extra_args += ["--zfs-send-program-opts=--raw"]
 > extra_args += [
