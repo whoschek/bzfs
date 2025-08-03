@@ -40,7 +40,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-keywords = ["ZFS", "snapshot", "replication", "backup", "synchronization"]
+keywords = ["bzfs", "ZFS", "snapshot", "replication", "backup", "synchronization"]
 license = {text = "Apache License (2.0)"}
 requires-python = ">= 3.8"
 dependencies = [
@@ -235,6 +235,15 @@ notice-rgx = """Copyright (\\(c\\) )?\\d{4}([-,]\\d{4})* Wolfgang Hoschek AT mac
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Deprecated in Python 3.11:
+"locale.getdefaultlocale".msg = "Use locale.setlocale() and locale.getlocale() instead."
+# Deprecated in Python 3.12:
+"datetime.datetime.utcnow".msg = "Use datetime.datetime.now(tz=datetime.timezone.utc)"
+"datetime.datetime.utcfromtimestamp".msg = "Use datetime.datetime.fromtimestamp(tz=datetime.timezone.utc)"
+"typing.Hashable".msg = "Use collections.abc.Hashable"
+"typing.Sized".msg = "Use collections.abc.Sized"
+
 [tool.ruff.lint.flake8-import-conventions]  # ICN
 # forbid-aliased-import-of-modules, e.g. forbids 'import bzfs_main.bzfs as foo'
 aliases = { "bzfs_main.bzfs" = "bzfs", "bzfs_main.bzfs_jobrunner" = "bzfs_jobrunner" }
@@ -306,7 +315,7 @@ python-version = "3.8"
 #project-excludes = ["**/tests/**", "**/.venv/**"]
 
 [tool.codespell]  # Auto-fix typos
-skip = "bzfs_tests/test_*.py,venv*"
+skip = "bzfs_tests/test_*.py,venv*,dist/*"
 write-changes = true                      # let pre-commit make changes to files instead of printing diffs
 interactive = 0                           # no interactivity on making changes to files
 ignore-words-list = [                     # project-specific words that should not be treated as typos

@@ -30,22 +30,23 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      - id: check-symlinks  # Check for symlinks that do not point to anything
-      - id: check-yaml      # Attempt to load all yaml files to verify syntax
+      - id: detect-private-key          # Prevent the accidental inclusion of private keys in your commits
+      - id: check-merge-conflict        # Check that merge conflicts are not being committed
+      - id: check-yaml                  # Attempt to load all yaml files to verify syntax
       - id: check-toml
       - id: check-json
         exclude: '.*/.*bzfs_log_config.*\.json$'
-      - id: check-xml
+      - id: check-xml                   # Attempt to load all yaml files to verify syntax via xmllint
+      - id: check-symlinks              # Check for symlinks that do not point to anything
       - id: mixed-line-ending
         args: [--fix=lf]  # Replace line endings with linefeed
       - id: trailing-whitespace  # Remove whitespace from the end of lines
-      - id: detect-private-key  # Prevent the accidental inclusion of private keys in your commits
   - repo: https://github.com/python-jsonschema/check-jsonschema
     rev: 0.33.2
     hooks:
       - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
-      - id: check-compose-spec          # Validate syntax of Docker Compose files
+      #- id: check-compose-spec         # Validate syntax of Docker Compose files
       - id: check-dependabot            # Validate syntax of Dependabot config files
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.10.0.1
@@ -160,7 +161,7 @@ repos:
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
     hooks:
-      - id: codespell  # Auto-fix typos
+      - id: codespell  # Auto-fix typos; if you think this is in error, consider changing ignore-words-list in pyproject.toml
         additional_dependencies: [tomli]
         # config options like `ignore-words-list` live in pyproject.toml
   - repo: https://github.com/psf/black
