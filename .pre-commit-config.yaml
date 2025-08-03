@@ -117,6 +117,12 @@ repos:
         language: pygrep
         entry: '#\s*noqa:\s*F(?!821\b)\d+\b' # noqa: F except F821
         types: [python]
+      - id: forbid-non-empty-init-py
+        name: "forbid non-empty __init__.py"
+        language: pygrep
+        entry: '\S'                          # forbid any non-whitespace character
+        args: [--multiline]
+        files: '.*\/__init__\.py$'
       - id: forbid-dunder-all
         name: "forbid __all__ definitions"
         language: pygrep
