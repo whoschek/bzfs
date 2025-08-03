@@ -94,19 +94,16 @@ Before committing any changes, you **must** follow this exact sequence:
   cause analysis. Think harder to understand *why* the bug occurs, not just *what* it does. Before claiming a bug,
   meticulously cross-check it against the existing unit tests (`test_*.py`) and integration tests
   (`test_integrations.py`), which are known to pass. A "bug" covered by a passing test indicates a flawed analysis.
-
 - **Test First, Then Fix:** For any real bug, explain its root cause, write a new test case that fails with the current
   code, and then implement the fix that makes the new test pass.
 
 ## How to Write Tests
 
-- **Add High-Value Tests:** Focus on adding meaningful tests for critical logic, edge cases, and error paths. Make sure
-  not to test the same conditions as existing tests. Tests should be specific, readable, robust, and deterministic.
-
+- **Add High-Value Tests:** Focus on adding meaningful tests for critical logic, edge cases, and error paths. Tests
+  should be specific, readable, robust, and deterministic.
 - **Fit In:** New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
   `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in
   the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
-
 - **Expected before Actual value:** When calling unittest `assert*Equal()` methods, ensure that the *first* argument is
   the *expected* value, and the *second* argument is the *actual* value, not the other way round.
 
@@ -114,9 +111,7 @@ Before committing any changes, you **must** follow this exact sequence:
 
 - **docstrings:** For every module, class, function, or method you **add or modify**, attach a docstring ≤ 80 words that
   concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this implementation was chosen).
-
 - **Linter Suppressions: Last Resort Only:**
-
   - Do not add `# noqa:`, `# type:` annotations, etc, unless the linter cannot be satisfied in a reasonable way, in
     which case keep the annotation on the specific line and append a brief comment explaining the reason (≤ 10 words).
 
@@ -178,7 +173,6 @@ If asked to improve coverage:
 - **Auto-generated Sections:** Do not edit the auto-generated sections in `README.md` or `README_bzfs_jobrunner.md`
   directly. Instead, modify the `argparse` help texts in the `.py` files as the source of "truth", then run
   `./update_readme.sh` to regenerate the README files.
-
 - **Other Sections:** Direct edits are welcome.
 
 ## Context Engineering
@@ -187,7 +181,6 @@ Your context is your most valuable asset. Use it effectively.
 
 - **Active Recall:** Keep this document's rules, the user's explicit requests and the current coding goal in your active
   context.
-
 - **Compact Context:** Whenever your context window exceeds 75% capacity *or* when a single impending response would
   overflow it, immediately save the complete current context as-is, along with structured annotations, to external
   memory (e.g. the filesystem) for future recall and search. Then use the `/compact` or `/compress` command to create a
@@ -217,9 +210,7 @@ Your context is your most valuable asset. Use it effectively.
 - **Self-Improvement Trigger:** If you discover that a directive, clarification, or change to `AGENTS.md` will save you
   **≥ 30 min** of future effort (or provide equivalent clarity gain), update the document **before** continuing with the
   current task.
-
 - **Action:**
-
   - Think harder; distill the **engineering goal**, just enough **context**, applicable **constraints**, required
     **output**, and **measurable success criteria**.
   - Apply the change in a **single docs-only commit** touching only `AGENTS.md`, adding **≤ 100 words**.
