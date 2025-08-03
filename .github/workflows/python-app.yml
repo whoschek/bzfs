@@ -81,8 +81,8 @@ on:
 permissions:
   contents: read
 
-env:
-  bzfs_test_mode: ${{ github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string || github.event.inputs.bzfs_test_mode || '' }}
+env:  # it's sufficient to run smoke tests when dependabot is detected
+  bzfs_test_mode: ${{ (github.actor == 'dependabot[bot]' && 'smoke') || (github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string || github.event.inputs.bzfs_test_mode || '') }}
   NUM_RUNS: ${{ github.event.inputs.num_runs != '' && github.event.inputs.num_runs || '1' }}
 
 jobs:
@@ -470,7 +470,7 @@ jobs:
 
   test_solaris_11_4:
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_solaris_11_4' || contains(github.event.inputs.job_names, 'test_solaris_11_4')
+    if: (github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_solaris_11_4' || contains(github.event.inputs.job_names, 'test_solaris_11_4')) && github.actor != 'dependabot[bot]'
 #    if: false  # job currently disabled
     runs-on: ubuntu-24.04
     strategy:
