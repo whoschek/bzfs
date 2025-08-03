@@ -260,7 +260,7 @@ class Params:
         self.psrinfo_program: str = self._program_name("psrinfo")  # print number of CPUs on Solaris
         self.mbuffer_program: str = self._program_name(args.mbuffer_program)
         self.mbuffer_program_opts: list[str] = self.split_args(args.mbuffer_program_opts)
-        for opt in ["-o", "-O", "-i", "-l"]:
+        for opt in ["-i", "-I", "-o", "-O", "-l", "-L"]:
             if opt in self.mbuffer_program_opts:
                 die(f"--mbuffer-program-opts: {opt} is disallowed for security reasons.")
         self.ps_program: str = self._program_name(args.ps_program)
