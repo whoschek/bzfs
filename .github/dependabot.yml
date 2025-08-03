@@ -33,6 +33,9 @@ updates:
       day: sunday
       time: "02:00"
       timezone: "Etc/UTC"
+    ignore:
+      - dependency-name: "vmactions/solaris-vm"
+        versions: [">=1.1.2"]
     commit-message:
       prefix: ci
       include: scope
