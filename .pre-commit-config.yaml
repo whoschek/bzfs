@@ -25,22 +25,22 @@ default_install_hook_types:
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.28.0
-    hooks:  # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
+    hooks:            # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
       - id: gitleaks  # defaults to: gitleaks git --pre-commit --redact --staged --verbose
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: detect-private-key          # Prevent the accidental inclusion of private keys in your commits
       - id: check-merge-conflict        # Check that merge conflicts are not being committed
-      - id: check-yaml                  # Attempt to load all yaml files to verify syntax
-      - id: check-toml
-      - id: check-json
+      - id: check-yaml                  # Attempt to load all YAML files to verify syntax
+      - id: check-toml                  # Attempt to load all TOML files to verify syntax
+      - id: check-json                  # Attempt to load all JSON files to verify syntax
         exclude: '.*/.*bzfs_log_config.*\.json$'
-      - id: check-xml                   # Attempt to load all yaml files to verify syntax via xmllint
+      - id: check-xml                   # Attempt to load all XML files to verify syntax via xmllint
       - id: check-symlinks              # Check for symlinks that do not point to anything
       - id: mixed-line-ending
-        args: [--fix=lf]  # Replace line endings with linefeed
-      - id: trailing-whitespace  # Remove whitespace from the end of lines
+        args: [--fix=lf]                # Replace line endings with linefeed
+      - id: trailing-whitespace         # Remove whitespace from the end of lines
   - repo: https://github.com/python-jsonschema/check-jsonschema
     rev: 0.33.2
     hooks:
@@ -62,7 +62,7 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.7
     hooks:
-      - id: ruff-check  # Run linter to check if there are problems in the Python source code
+      - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
   - repo: https://github.com/pycqa/pylint
     rev: v3.3.7
@@ -108,7 +108,7 @@ repos:
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.16.1
     hooks:
-      - id: mypy  # Run Python type checker
+      - id: mypy                             # Run `mypy` Python type checker
         exclude: '^\.git.*$'
         # config options like `select` live in pyproject.toml
   - repo: local
@@ -127,7 +127,6 @@ repos:
         name: "forbid non-empty __init__.py"
         language: pygrep
         entry: '\S'                          # forbid any non-whitespace character
-        args: [--multiline]
         files: '.*\/__init__\.py$'
       - id: forbid-dunder-all
         name: "forbid __all__ definitions"
@@ -148,7 +147,7 @@ repos:
   - repo: https://github.com/hukkin/mdformat
     rev: 0.7.22
     hooks:
-      - id: mdformat  # Auto-format Markdown files - see https://github.com/hukkin/mdformat
+      - id: mdformat              # Auto-format Markdown files - see https://github.com/hukkin/mdformat
         args: [--wrap=120, --number, --compact-tables]
         exclude: '^(README.*|prd)\.md$'
         additional_dependencies:  # see https://mdformat.readthedocs.io/en/stable/users/plugins.html
@@ -167,7 +166,7 @@ repos:
   - repo: https://github.com/psf/black
     rev: 25.1.0
     hooks:
-      - id: black  # Run Python code formatter
+      - id: black                  # Run `black` Python code formatter
       # style options like `line_length` live in pyproject.toml
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.8.3
