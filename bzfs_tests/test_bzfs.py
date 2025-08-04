@@ -17,10 +17,14 @@
 from __future__ import annotations
 import contextlib
 import io
+import re
 import subprocess
 import time
 import unittest
+from datetime import datetime, timezone
 from typing import (
+    Callable,
+    Iterator,
     List,
     cast,
 )
@@ -32,7 +36,14 @@ from unittest.mock import (
 import bzfs_main.detect
 import bzfs_main.utils
 from bzfs_main import bzfs
-from bzfs_main.configuration import LogParams, Remote
+from bzfs_main.argparse_actions import (
+    SnapshotFilter,
+)
+from bzfs_main.configuration import (
+    LogParams,
+    Remote,
+    SnapshotLabel,
+)
 from bzfs_main.connection import (
     ConnectionPools,
 )
@@ -41,10 +52,16 @@ from bzfs_main.detect import (
     RemoteConfCacheItem,
     detect_available_programs,
 )
+from bzfs_main.filter import (
+    SNAPSHOT_REGEX_FILTER_NAME,
+)
 from bzfs_main.replication import (
     _add_recv_property_options,
     _is_zfs_dataset_busy,
     _pv_cmd,
+)
+from bzfs_main.snapshot_cache import (
+    SnapshotCache,
 )
 from bzfs_main.utils import (
     DIE_STATUS,
@@ -64,6 +81,11 @@ def suite() -> unittest.TestSuite:
         TestArgumentParser,
         TestAddRecvPropertyOptions,
         TestPreservePropertiesValidation,
+        TestJobMethods,
+        TestDeleteDstDatasetsTask,
+        TestDeleteEmptyDstDatasetsTask,
+        TestHandleMinMaxSnapshots,
+        TestFindDatasetsToSnapshot,
         TestPythonVersionCheck,
         # TestPerformance,
     ]
@@ -610,6 +632,333 @@ class TestPreservePropertiesValidation(AbstractTestCase):
 
 
 #############################################################################
+class TestJobMethods(AbstractTestCase):
+    """Tests Job helpers that don't require ZFS on the host."""
+
+    def make_job(self, args: list[str]) -> bzfs.Job:
+        """Creates a Job with parsed ``args`` for reuse across tests."""
+        parsed = self.argparser_parse_args(args=args)
+        job = bzfs.Job()
+        job.params = self.make_params(args=parsed)
+        job.is_test_mode = True
+        src_ds, dst_ds = job.params.root_dataset_pairs[0]
+        job.params.src.root_dataset = job.params.src.basis_root_dataset = src_ds
+        job.params.dst.root_dataset = job.params.dst.basis_root_dataset = dst_ds
+        return job
+
+    def test_sudo_cmd_root_user(self) -> None:
+        """Root user needs no sudo prefix nor delegation."""
+        job = self.make_job(["src", "dst"])
+        with patch("os.geteuid", return_value=0):
+            sudo, deleg = job.sudo_cmd("", "")
+        self.assertEqual("", sudo)
+        self.assertFalse(deleg)
+
+    def test_sudo_cmd_nonroot_with_privilege_elevation(self) -> None:
+        """Non-root user with elevation returns 'sudo -n'."""
+        job = self.make_job(["src", "dst"])
+        with patch("os.geteuid", return_value=1):
+            sudo, deleg = job.sudo_cmd("user@host", "user")
+        self.assertEqual("sudo -n", sudo)
+        self.assertFalse(deleg)
+
+    def test_sudo_cmd_nonroot_no_privilege_elevation(self) -> None:
+        """Non-root without elevation requests delegation instead."""
+        job = self.make_job(["src", "dst"])
+        job.params.enable_privilege_elevation = False
+        with patch("os.geteuid", return_value=1):
+            sudo, deleg = job.sudo_cmd("user@host", "user")
+        self.assertEqual("", sudo)
+        self.assertTrue(deleg)
+
+    def test_sudo_cmd_disabled_program_raises(self) -> None:
+        """Disabled sudo program exits when elevation is required."""
+        job = self.make_job(["src", "dst"])
+        job.params.sudo_program = bzfs_main.detect.DISABLE_PRG
+        with patch("os.geteuid", return_value=1):
+            with self.assertRaises(SystemExit) as cm:
+                job.sudo_cmd("user@host", "user")
+        self.assertIn("sudo CLI is not available on host: user@host", str(cm.exception))
+
+    def test_validate_once_compiles_recv_and_regexes(self) -> None:
+        """validate_once extracts property names and filters regexes."""
+        job = self.make_job(
+            [
+                "src",
+                "dst",
+                "--zfs-recv-program-opts",
+                "-o foo=1 -x bar",
+                "--exclude-dataset-regex",
+                "",
+                "!.*",
+                "foo.*",
+            ]
+        )
+        job.validate_once()
+        self.assertSetEqual({"foo", "bar"}, job.params.zfs_recv_ox_names)
+        patterns = [r.pattern for r, _ in job.params.tmp_exclude_dataset_regexes]
+        self.assertIn("foo.*(?:/.*)?", patterns)
+
+    def test_validate_once_requires_bytes_option(self) -> None:
+        """Missing --bytes or --bits in pv opts raises SystemExit."""
+        job = self.make_job(
+            [
+                "src",
+                "dst",
+                "--pv-program-opts=--eta",
+            ]
+        )
+        with self.assertRaises(SystemExit):
+            job.validate_once()
+
+    def test_validate_once_compiles_snapshot_regex_filters(self) -> None:
+        """Snapshot regex filters are compiled into pattern tuples."""
+        job = self.make_job(["src", "dst"])
+        job.params.snapshot_filters = [
+            [SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, (["^foo$"], ["bar"]))],
+        ]
+        job.validate_once()
+        filt = job.params.snapshot_filters[0][0]
+        self.assertIsInstance(filt.options[0][0][0], re.Pattern)
+        self.assertEqual("bar", filt.options[1][0][0].pattern)
+
+    def test_validate_once_snapshot_regex_filter_defaults_to_match_all(self) -> None:
+        """Empty include list defaults to a match-all regex."""
+        job = self.make_job(["src", "dst"])
+        job.params.snapshot_filters = [
+            [SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, (["baz"], []))],
+        ]
+        job.validate_once()
+        regex_filter = job.params.snapshot_filters[0][0]
+        self.assertEqual(".*", regex_filter.options[1][0][0].pattern)
+
+    def test_validate_once_ignores_non_regex_snapshot_filter(self) -> None:
+        """Non-regex snapshot filters remain untouched."""
+        job = self.make_job(["src", "dst"])
+        job.params.snapshot_filters = [[SnapshotFilter("include_snapshot_times", None, ["opt"])]]
+        job.validate_once()
+        self.assertEqual(["opt"], job.params.snapshot_filters[0][0].options)
+
+    def test_validate_once_separates_abs_and_rel_exclude_datasets(self) -> None:
+        """Absolute and relative exclude datasets are split correctly."""
+        job = self.make_job(
+            [
+                "--exclude-dataset=/pool/src/abs",
+                "--exclude-dataset=rel",
+                "pool/src",
+                "pool/dst",
+            ]
+        )
+        job.validate_once()
+        self.assertListEqual(["/pool/src/abs"], job.params.abs_exclude_datasets)
+        patterns = [r.pattern for r, _ in job.params.tmp_exclude_dataset_regexes]
+        self.assertIn("rel(?:/.*)?", patterns)
+
+    def test_validate_once_separates_abs_and_rel_include_datasets(self) -> None:
+        """Absolute and relative include datasets are split correctly."""
+        job = self.make_job(
+            [
+                "--include-dataset=/pool/dst/abs",
+                "--include-dataset=rel",
+                "pool/src",
+                "pool/dst",
+            ]
+        )
+        job.validate_once()
+        self.assertListEqual(["/pool/dst/abs"], job.params.abs_include_datasets)
+        patterns = [r.pattern for r, _ in job.params.tmp_include_dataset_regexes]
+        self.assertIn("rel(?:/.*)?", patterns)
+
+    def test_validate_once_skips_pv_checks_when_disabled(self) -> None:
+        """No pv option validation occurs when pv program is disabled."""
+        job = self.make_job(
+            [
+                "--pv-program",
+                bzfs_main.detect.DISABLE_PRG,
+                "src",
+                "dst",
+            ]
+        )
+        job.validate_once()  # should not raise
+
+    def test_validate_once_requires_eta_option(self) -> None:
+        """Missing --eta or -e triggers validation error."""
+        job = self.make_job(
+            [
+                "src",
+                "dst",
+                "--pv-program-opts=--bytes --fineta --average-rate",
+            ]
+        )
+        job.isatty = True
+        with self.assertRaises(SystemExit):
+            job.validate_once()
+
+    def test_validate_once_requires_fineta_option(self) -> None:
+        """Missing --fineta or -I triggers validation error."""
+        job = self.make_job(
+            [
+                "src",
+                "dst",
+                "--pv-program-opts=--bytes --eta --average-rate",
+            ]
+        )
+        job.isatty = True
+        with self.assertRaises(SystemExit):
+            job.validate_once()
+
+    def test_validate_once_requires_average_rate_option(self) -> None:
+        """Missing --average-rate or -a triggers validation error."""
+        job = self.make_job(
+            [
+                "src",
+                "dst",
+                "--pv-program-opts=--bytes --eta --fineta",
+            ]
+        )
+        job.isatty = True
+        with self.assertRaises(SystemExit):
+            job.validate_once()
+
+    def test_validate_once_accepts_pv_options_long_forms(self) -> None:
+        """All long-form pv options pass validation."""
+        job = self.make_job(
+            [
+                "src",
+                "dst",
+                "--pv-program-opts=--bytes --eta --fineta --average-rate",
+            ]
+        )
+        job.isatty = True
+        job.validate_once()
+
+    def test_validate_once_accepts_pv_options_short_forms(self) -> None:
+        """Short-form pv options also satisfy validation checks."""
+        job = self.make_job(
+            [
+                "src",
+                "dst",
+                "--pv-program-opts=-b -e -I -a",
+            ]
+        )
+        job.isatty = True
+        job.validate_once()
+
+    @patch("bzfs_main.bzfs.detect_available_programs")
+    @patch("bzfs_main.bzfs.is_solaris_zfs", return_value=False)
+    @patch("bzfs_main.bzfs.is_zpool_feature_enabled_or_active", return_value=False)
+    def test_validate_task_errors_on_same_dataset(
+        self,
+        _feature: MagicMock,
+        _solaris: MagicMock,
+        detect: MagicMock,
+    ) -> None:
+        """validate_task aborts when source and destination are identical."""
+        detect.side_effect = lambda job: None
+        job = self.make_job(
+            [
+                "--ssh-src-host",
+                "h",
+                "--ssh-dst-host",
+                "h",
+                "pool/a",
+                "pool/a",
+            ]
+        )
+        job.validate_once()
+        with self.assertRaises(SystemExit):
+            job.validate_task()
+
+    @patch("bzfs_main.bzfs.detect_available_programs")
+    @patch("bzfs_main.bzfs.is_solaris_zfs", return_value=False)
+    @patch("bzfs_main.bzfs.is_zpool_feature_enabled_or_active", return_value=False)
+    def test_validate_task_errors_on_src_descendant_of_dst(
+        self,
+        _feature: MagicMock,
+        _solaris: MagicMock,
+        detect: MagicMock,
+    ) -> None:
+        """Recursive replication fails when src is under dst."""
+        detect.side_effect = lambda job: job.params.available_programs.update({"src": {}, "dst": {}, "local": {}})
+        job = self.make_job(["--recursive", "pool/a/b", "pool/a"])
+        job.validate_once()
+        with self.assertRaises(SystemExit):
+            job.validate_task()
+
+    @patch("bzfs_main.bzfs.detect_available_programs")
+    @patch("bzfs_main.bzfs.is_solaris_zfs", return_value=False)
+    @patch("bzfs_main.bzfs.is_zpool_feature_enabled_or_active", return_value=False)
+    def test_validate_task_errors_on_dst_descendant_of_src(
+        self,
+        _feature: MagicMock,
+        _solaris: MagicMock,
+        detect: MagicMock,
+    ) -> None:
+        """Recursive replication fails when dst is under src."""
+        detect.side_effect = lambda job: job.params.available_programs.update({"src": {}, "dst": {}, "local": {}})
+        job = self.make_job(["--recursive", "pool/a", "pool/a/b"])
+        job.validate_once()
+        with self.assertRaises(SystemExit):
+            job.validate_task()
+
+    @patch("bzfs_main.bzfs.detect_available_programs")
+    @patch("bzfs_main.bzfs.is_solaris_zfs", return_value=False)
+    @patch("bzfs_main.bzfs.is_zpool_feature_enabled_or_active", return_value=False)
+    def test_validate_task_allows_overlap_when_not_recursive(
+        self,
+        _feature: MagicMock,
+        _solaris: MagicMock,
+        detect: MagicMock,
+    ) -> None:
+        """Non-recursive replication permits overlapping datasets."""
+        detect.side_effect = lambda job: job.params.available_programs.update({"src": {}, "dst": {}, "local": {}})
+        job = self.make_job(["pool/a", "pool/a/b"])
+        job.validate_once()
+        job.validate_task()  # should not raise
+
+    @patch("bzfs_main.bzfs.detect_available_programs")
+    @patch("bzfs_main.bzfs.is_solaris_zfs", return_value=False)
+    @patch("bzfs_main.bzfs.is_zpool_feature_enabled_or_active", return_value=False)
+    def test_validate_task_sets_remote_fields(
+        self,
+        _feature: MagicMock,
+        _solaris: MagicMock,
+        detect: MagicMock,
+    ) -> None:
+        """validate_task populates sudo prefix and nonlocal flag."""
+        detect.side_effect = lambda job: job.params.available_programs.update({"src": {}, "dst": {}, "local": {}})
+        job = self.make_job(
+            [
+                "pool/src",
+                "remote:pool/dst",
+            ]
+        )
+        job.validate_once()
+        with patch.object(job, "sudo_cmd", return_value=("sudo -n", False)) as sudo_mock:
+            job.validate_task()
+        sudo_mock.assert_any_call(job.params.dst.ssh_user_host, job.params.dst.ssh_user)
+        self.assertEqual(2, sudo_mock.call_count)
+        self.assertTrue(job.params.dst.is_nonlocal)
+        self.assertEqual("sudo -n", job.params.dst.sudo)
+        self.assertFalse(job.params.dst.use_zfs_delegation)
+
+    def test_print_replication_stats_logs_bytes(self) -> None:
+        """print_replication_stats logs byte counts when pv is present."""
+        job = self.make_job(["src", "dst"])
+        p = job.params
+        p.available_programs = {"local": {"pv": "pv"}}
+        p.log_params.pv_log_file = "pv.log"
+        job.num_snapshots_replicated = 5
+        with patch("time.monotonic_ns", return_value=2_000_000_000), patch(
+            "bzfs_main.bzfs.count_num_bytes_transferred_by_zfs_send", return_value=1_048_576
+        ):
+            job.print_replication_stats(0)
+        msg = cast(MagicMock, p.log.info).call_args[0][1]
+        self.assertIn("Replicated 5 snapshots in 2s.", msg)
+        self.assertIn("zfs sent 1 MiB [512 KiB/s].", msg)
+
+
+#############################################################################
 class TestPythonVersionCheck(AbstractTestCase):
     """Test version check near top of program:
     if sys.version_info < (3, 8):
@@ -637,6 +986,367 @@ class TestPythonVersionCheck(AbstractTestCase):
 
         importlib.reload(bzfs)  # Reload module to apply version patch
         mock_exit.assert_not_called()
+
+
+#############################################################################
+class TestDeleteDstDatasetsTask(AbstractTestCase):
+    """Ensures destination-only datasets and trees are pruned correctly."""
+
+    def _job(self) -> bzfs.Job:
+        """Creates a job with minimal params and root datasets."""
+        args = self.argparser_parse_args(args=["src", "dst"])
+        job = bzfs.Job()
+        job.params = self.make_params(args=args)
+        job.params.src.root_dataset = "s"
+        job.params.dst.root_dataset = "d"
+        return job
+
+    def test_deletes_orphan_tree(self) -> None:
+        """Deletes destination dataset trees absent from the source."""
+        job = self._job()
+        basis_src = ["s", "s/keep"]
+        basis_dst = ["d", "d/keep", "d/orphan", "d/orphan/child"]
+        dst = list(basis_dst)
+        with patch("bzfs_main.bzfs.delete_datasets") as mock_del:
+            basis_after, dst_after = job.delete_dst_datasets_task(basis_src, basis_dst, dst)
+        mock_del.assert_called_once()
+        self.assertSetEqual({"d/orphan", "d/orphan/child"}, set(mock_del.call_args[0][2]))
+        self.assertListEqual(["d", "d/keep"], basis_after)
+        self.assertListEqual(["d", "d/keep"], dst_after)
+
+    def test_keeps_parent_with_excluded_child(self) -> None:
+        """Preserves parent dataset when an excluded child exists."""
+        job = self._job()
+        basis_src = ["s", "s/keep"]
+        basis_dst = ["d", "d/keep", "d/delete"]
+        dst = ["d", "d/delete"]
+        with patch("bzfs_main.bzfs.delete_datasets") as mock_del:
+            basis_after, dst_after = job.delete_dst_datasets_task(basis_src, basis_dst, dst)
+        mock_del.assert_called_once()
+        self.assertSetEqual({"d/delete"}, set(mock_del.call_args[0][2]))
+        self.assertListEqual(["d", "d/keep"], basis_after)
+        self.assertListEqual(["d"], dst_after)
+
+    def test_preserves_source_datasets(self) -> None:
+        """Skips deletion when destination datasets exist on the source."""
+        job = self._job()
+        basis_src = ["s", "s/foo"]
+        basis_dst = ["d", "d/foo"]
+        dst = list(basis_dst)
+        with patch("bzfs_main.bzfs.delete_datasets") as mock_del:
+            basis_after, dst_after = job.delete_dst_datasets_task(basis_src, basis_dst, dst)
+        mock_del.assert_called_once()
+        self.assertSetEqual(set(), set(mock_del.call_args[0][2]))
+        self.assertListEqual(basis_dst, basis_after)
+        self.assertListEqual(dst, dst_after)
+
+
+#############################################################################
+class TestDeleteEmptyDstDatasetsTask(AbstractTestCase):
+    """Tests deletion of empty destination datasets, including bookmark logic."""
+
+    def _job(self, delete_snapshots_and_bookmarks: bool = False) -> bzfs.Job:
+        """Creates a Job with params toggling bookmark-aware deletion."""
+        args = self.argparser_parse_args(args=["src", "dst"])
+        job = bzfs.Job()
+        job.params = self.make_params(args=args)
+        job.params.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = delete_snapshots_and_bookmarks
+        return job
+
+    def test_deletes_only_leaf_without_snapshots(self) -> None:
+        """Removes only dataset subtrees without snapshots."""
+        job = self._job()
+        basis = ["a", "a/b", "a/b/c", "a/d"]
+        datasets = list(basis)
+        with patch(
+            "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
+            return_value=iter([["a/b/c@s1"]]),
+        ) as mock_list, patch("bzfs_main.bzfs.delete_datasets") as mock_del:
+            result = job.delete_empty_dst_datasets_task(basis, datasets)
+        self.assertListEqual(["a", "a/b", "a/b/c"], result)
+        mock_del.assert_called_once()
+        self.assertSetEqual({"a/d"}, set(mock_del.call_args[0][2]))
+        mock_list.assert_called_once()
+        self.assertListEqual(sorted(basis), mock_list.call_args[0][3])
+
+    def test_keeps_dataset_with_bookmark(self) -> None:
+        """Keeps dataset when only bookmarks exist and bookmarks count."""
+        job = self._job(delete_snapshots_and_bookmarks=True)
+        basis = ["b"]
+        datasets = list(basis)
+        with patch(
+            "bzfs_main.bzfs.are_bookmarks_enabled",
+            return_value=True,
+        ), patch(
+            "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
+            return_value=iter([["b#bm1"]]),
+        ) as mock_list, patch("bzfs_main.bzfs.delete_datasets") as mock_del:
+            result = job.delete_empty_dst_datasets_task(basis, datasets)
+        self.assertListEqual(["b"], result)
+        mock_del.assert_called_once()
+        self.assertSetEqual(set(), set(mock_del.call_args[0][2]))
+        mock_list.assert_called_once()
+        cmd = mock_list.call_args[0][2]
+        self.assertIn("bookmark,snapshot", cmd)
+
+    def test_deletes_entire_empty_tree(self) -> None:
+        """Deletes parent and child when all lack snapshots."""
+        job = self._job()
+        basis = ["a", "a/b"]
+        datasets = list(basis)
+        with patch(
+            "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
+            return_value=iter([]),
+        ) as mock_list, patch("bzfs_main.bzfs.delete_datasets") as mock_del:
+            result = job.delete_empty_dst_datasets_task(basis, datasets)
+        self.assertListEqual([], result)
+        mock_del.assert_called_once()
+        self.assertSetEqual({"a", "a/b"}, set(mock_del.call_args[0][2]))
+        mock_list.assert_called_once()
+
+
+#############################################################################
+class TestHandleMinMaxSnapshots(AbstractTestCase):
+    """Verifies snapshot selection logic in handle_minmax_snapshots."""
+
+    def test_callbacks_and_missing_datasets(self) -> None:
+        """Checks latest/oldest callbacks and reporting of datasets without snapshots."""
+
+        args = self.argparser_parse_args(args=["src", "dst"])
+        job = bzfs.Job()
+        job.params = self.make_params(args=args)
+        job.is_test_mode = True
+        remote = MagicMock(spec=Remote)
+        label1 = SnapshotLabel("bzfs_", "", "", "_hourly")
+        label2 = SnapshotLabel("bzfs_", "us-west-1_", "", "_hourly")
+        datasets = ["tank/ds1", "tank/ds2", "tank/ds3", "tank/ds4"]
+
+        lines = [
+            "1\t100\ttank/ds1@bzfs_2023-01-01_00:00:00_hourly",
+            "2\t200\ttank/ds1@bzfs_2024-01-01_00:00:00_hourly",
+            "1\t150\ttank/ds2@unrelated_snap",
+            "1\t100\ttank/ds4@bzfs_us-west-1_2023-01-01_00:00:00_hourly",
+            "2\t200\ttank/ds4@bzfs_us-west-1_2024-01-01_00:00:00_hourly",
+        ]
+
+        def fake_zfs_list(
+            job_obj: bzfs.Job,
+            remote_obj: Remote,
+            cmd: list[str],
+            datasets_arg: list[str],
+            ordered: bool = False,
+        ) -> Iterator[list[str]]:
+            yield lines
+
+        latest_calls: list[tuple[int, int, str, str]] = []
+        oldest_calls: list[tuple[int, int, str, str]] = []
+
+        def latest_cb(i: int, t: int, dataset: str, snap: str) -> None:
+            latest_calls.append((i, t, dataset, snap))
+
+        def oldest_cb(i: int, t: int, dataset: str, snap: str) -> None:
+            oldest_calls.append((i, t, dataset, snap))
+
+        with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", new=fake_zfs_list):
+            missing = job.handle_minmax_snapshots(remote, datasets, [label1, label2], latest_cb, oldest_cb)
+
+        self.assertListEqual(["tank/ds3"], missing)
+
+        expected_latest = [
+            (0, 200, "tank/ds1", "bzfs_2024-01-01_00:00:00_hourly"),
+            (1, 0, "tank/ds1", ""),
+            (0, 0, "tank/ds2", ""),
+            (1, 0, "tank/ds2", ""),
+            (0, 0, "tank/ds4", ""),
+            (1, 200, "tank/ds4", "bzfs_us-west-1_2024-01-01_00:00:00_hourly"),
+        ]
+        self.assertListEqual(expected_latest, latest_calls)
+
+        expected_oldest = [
+            (0, 100, "tank/ds1", "bzfs_2023-01-01_00:00:00_hourly"),
+            (1, 0, "tank/ds1", ""),
+            (0, 0, "tank/ds2", ""),
+            (1, 0, "tank/ds2", ""),
+            (0, 0, "tank/ds4", ""),
+            (1, 100, "tank/ds4", "bzfs_us-west-1_2023-01-01_00:00:00_hourly"),
+        ]
+        self.assertListEqual(expected_oldest, oldest_calls)
+
+    def test_latest_only(self) -> None:
+        """Ensures latest callback runs when oldest is omitted and reports missing datasets."""
+
+        args = self.argparser_parse_args(args=["src", "dst"])
+        job = bzfs.Job()
+        job.params = self.make_params(args=args)
+        job.is_test_mode = True
+        remote = MagicMock(spec=Remote)
+
+        label = SnapshotLabel("bzfs_", "", "", "_hourly")
+        datasets = ["tank/ds1", "tank/ds2"]
+
+        lines = [
+            "1\t100\ttank/ds1@bzfs_2023-01-01_00:00:00_hourly",
+            "2\t200\ttank/ds1@bzfs_2024-01-01_00:00:00_hourly",
+        ]
+
+        def fake_zfs_list(
+            job_obj: bzfs.Job,
+            remote_obj: Remote,
+            cmd: list[str],
+            datasets_arg: list[str],
+            ordered: bool = False,
+        ) -> Iterator[list[str]]:
+            yield lines
+
+        latest_calls: list[tuple[int, int, str, str]] = []
+
+        def latest_cb(i: int, t: int, dataset: str, snap: str) -> None:
+            latest_calls.append((i, t, dataset, snap))
+
+        with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", new=fake_zfs_list):
+            missing = job.handle_minmax_snapshots(remote, datasets, [label], latest_cb)
+
+        self.assertListEqual(["tank/ds2"], missing)
+        self.assertListEqual(
+            [(0, 200, "tank/ds1", "bzfs_2024-01-01_00:00:00_hourly")],
+            latest_calls,
+        )
+
+
+#############################################################################
+class TestFindDatasetsToSnapshot(AbstractTestCase):
+    """Tests scheduling logic of find_datasets_to_snapshot.
+
+    Purpose: ensure Job correctly determines datasets needing snapshots.
+    Assumes snapshots are scheduled hourly.
+    Design: exercises both caching and non-caching code paths using mocked helpers.
+    """
+
+    def _job(self) -> bzfs.Job:
+        """Constructs a Job configured for snapshot scheduling tests.
+
+        Purpose: reuse consistent snapshot plan setup.
+        Assumes '--create-src-snapshots' is enabled.
+        Design: builds Job with hourly plan.
+        """
+
+        args = self.argparser_parse_args(
+            args=[
+                "--create-src-snapshots",
+                "--create-src-snapshots-plan",
+                str({"bzfs": {"onsite": {"hourly": 1}}}),
+                "src",
+                "dst",
+            ]
+        )
+        job = bzfs.Job()
+        job.params = self.make_params(args=args)
+        job.is_test_mode = True
+        return job
+
+    def test_selects_due_datasets_without_cache(self) -> None:
+        """Schedules only datasets with outdated snapshots when cache is disabled.
+
+        Purpose: verify baseline scheduling without cache.
+        Assumes hourly schedule and deterministic timestamps.
+        Design: stub handle_minmax_snapshots to provide known snapshot ages.
+        """
+
+        job = self._job()
+        config = job.params.create_src_snapshots_config
+        config.current_datetime = datetime(2024, 1, 1, 5, 30, tzinfo=timezone.utc)
+        config.tz = timezone.utc
+        label = config.snapshot_labels()[0]
+
+        def fake_handle(
+            self: bzfs.Job,
+            remote: Remote,
+            datasets: list[str],
+            labels: list[SnapshotLabel],
+            fn_latest: Callable[[int, int, str, str], None],
+            fn_oldest: Callable[[int, int, str, str], None] | None = None,
+            fn_on_finish_dataset: Callable[[str], None] | None = None,
+        ) -> list[str]:
+            times = {
+                "tank/a": datetime(2024, 1, 1, 4, tzinfo=timezone.utc),
+                "tank/b": datetime(2024, 1, 1, 5, tzinfo=timezone.utc),
+            }
+            for ds in datasets:
+                fn_latest(0, int(times[ds].timestamp()), ds, "")
+            return []
+
+        with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=False), patch.object(
+            bzfs.Job, "handle_minmax_snapshots", new=fake_handle
+        ):
+            result = job.find_datasets_to_snapshot(["tank/a", "tank/b"])
+
+        self.assertDictEqual({label: ["tank/a"]}, result)
+
+    def test_uses_cache_and_fallback(self) -> None:
+        """Combines cached and probed datasets when caching is enabled.
+
+        Purpose: ensure cache results merge with fallback queries.
+        Assumes one dataset has valid cache and another lacks it.
+        Design: fake cache supplies one creation time; stub handles remaining datasets.
+        """
+
+        job = self._job()
+        config = job.params.create_src_snapshots_config
+
+        config.current_datetime = datetime(2024, 1, 1, 5, 30, tzinfo=timezone.utc)
+        config.tz = timezone.utc
+        label = config.snapshot_labels()[0]
+        creation_time_a = int(datetime(2024, 1, 1, 4, tzinfo=timezone.utc).timestamp())
+
+        class FakeCache:
+            def __init__(self) -> None:
+                self.mapping: dict[str, int] = {
+                    "tank/a": 123,
+                    f"tank/a@{label.suffix}": creation_time_a,
+                }
+
+            def last_modified_cache_file(self, remote: Remote, dataset: str, label_obj: SnapshotLabel | None = None) -> str:
+                if label_obj is not None:
+                    return f"{dataset}@{label_obj.suffix}"
+                return dataset
+
+            def get_snapshots_changed(self, cache_file: str) -> int:
+                return self.mapping.get(cache_file, 0)
+
+            def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
+                """Do nothing for tests."""
+
+        job.cache = cast(SnapshotCache, FakeCache())
+        job.src_properties = {
+            "tank/a": bzfs.DatasetProperties(0, 123),
+            "tank/b": bzfs.DatasetProperties(0, 456),
+        }
+
+        received: list[str] = []
+
+        def fake_handle(
+            self: bzfs.Job,
+            remote: Remote,
+            datasets: list[str],
+            labels: list[SnapshotLabel],
+            fn_latest: Callable[[int, int, str, str], None],
+            fn_oldest: Callable[[int, int, str, str], None] | None = None,
+            fn_on_finish_dataset: Callable[[str], None] | None = None,
+        ) -> list[str]:
+            received.extend(datasets)
+            for ds in datasets:
+                fn_latest(0, int(datetime(2024, 1, 1, 5, tzinfo=timezone.utc).timestamp()), ds, "")
+                if fn_on_finish_dataset:
+                    fn_on_finish_dataset(ds)
+            return []
+
+        with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+            bzfs.Job, "handle_minmax_snapshots", new=fake_handle
+        ), patch("bzfs_main.bzfs.set_last_modification_time_safe"):
+            result = job.find_datasets_to_snapshot(["tank/a", "tank/b"])
+
+        self.assertListEqual(["tank/b"], received)
+        self.assertDictEqual({label: ["tank/a"]}, result)
 
 
 #############################################################################
