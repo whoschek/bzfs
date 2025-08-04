@@ -110,6 +110,8 @@ jobs:
     timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
@@ -148,6 +150,8 @@ jobs:
     timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Show iteration info ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       run: echo "Now running iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}"
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
@@ -212,6 +216,8 @@ jobs:
     timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
         # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
@@ -259,6 +265,8 @@ jobs:
     timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
         # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.2.8
@@ -305,6 +313,8 @@ jobs:
     timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
@@ -344,6 +354,8 @@ jobs:
     timeout-minutes: 130
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
@@ -389,6 +401,8 @@ jobs:
     timeout-minutes: 130
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
@@ -431,6 +445,8 @@ jobs:
     timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
@@ -455,6 +471,8 @@ jobs:
     timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
@@ -480,6 +498,8 @@ jobs:
     timeout-minutes: 160
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
       uses: vmactions/solaris-vm@v1.1.1  # see https://github.com/vmactions/solaris-vm
@@ -510,6 +530,8 @@ jobs:
       - test_solaris_11_4
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:

@@ -48,11 +48,16 @@ repos:
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
       #- id: check-compose-spec         # Validate syntax of Docker Compose files
       - id: check-dependabot            # Validate syntax of Dependabot config files
+#  - repo: https://github.com/woodruffw/zizmor-pre-commit  # also see https://github.com/zizmorcore/zizmor
+#    rev: v1.11.0
+#    hooks:
+#      - id: zizmor                     # Validate syntax of GitHub Workflow YAML files
+#        args: [--fix=all]
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.10.0.1
     hooks:
       - id: shellcheck                  # Validate syntax of shell scripts
-        exclude: '^.github-workflow-scripts'
+        exclude: '^\.github-workflow-scripts'
   - repo: https://github.com/PyCQA/docformatter
     rev: v1.7.7
     hooks:
