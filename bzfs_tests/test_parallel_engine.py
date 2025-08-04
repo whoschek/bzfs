@@ -529,12 +529,12 @@ class TestParallelEngineBenchmark(unittest.TestCase):
         )
 
         end_time = time.monotonic()
-        total_time = end_time - start_time
-        throughput = num_datasets / total_time if total_time > 0 else float("inf")
+        elapsed_time = end_time - start_time
+        throughput = round(num_datasets / elapsed_time)
         log.info("=================================================")
         log.info(f"Results for datasets={num_datasets}, enable_barriers={enable_barriers}, max_workers={max_workers} ...")
-        log.info(f"Total elapsed time: {total_time:.4f} seconds")
-        log.info(f"Throughput: {int(throughput)} datasets/second")
+        log.info(f"Total elapsed time: {elapsed_time:.2f} seconds")
+        log.info(f"Throughput: {throughput} datasets/second")
         self.assertFalse(failed, "The process should not report failure.")
 
     def test_benchmark_10k_datasets(self) -> None:
