@@ -59,6 +59,9 @@ To understand the system's architecture and features, follow these steps:
 
 Before committing any changes, you **must** follow this exact sequence:
 
+0. **Initialize Environment**: If the `venv` directory does not exist, create it and set it up with all development
+   dependencies as described near the end of this document in Section "How to Setup the Environment".
+
 1. **Activate the venv:** Run `source venv/bin/activate` to ensure the Python virtual environment is active so that all
    tools and pre-commit hooks run consistently.
 
@@ -79,7 +82,7 @@ Before committing any changes, you **must** follow this exact sequence:
 
 - Use `git commit -s` to sign off on your work.
 - Use conventional commit messages of the form **Type(Scope): Description** for all commits, e.g. 'feat(bzfs_jobrunner):
-  add --foo CLI option', using the following Type and Scope categories:
+  add --foo CLI option', using the following Type and (optional) Scope categories:
   - **Types:** `build`, `bump`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`
   - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`
 
@@ -194,7 +197,7 @@ Your context is your most valuable asset. Use it effectively.
   within the current environment time limit to avoid your task getting unexpectedly aborted or cancelled. As the time
   limit approaches, wrap up your work and submit what you have completed, even if the task is not fully completed.
 
-## Environment Setup
+## How to Setup the Environment
 
 - If the `venv` directory does not exist, create it and set it up with all development dependencies as follows:
 
