@@ -10,6 +10,8 @@ updates:
       day: sunday
       time: "02:00"
       timezone: "Etc/UTC"
+    cooldown:
+      default-days: 10  # safeguard: don't propose an update to a new release until that release it at least N days old
     commit-message:
       prefix: chore
       prefix-development: chore
@@ -23,7 +25,7 @@ updates:
     labels:
       - dependencies
       - python
-    open-pull-requests-limit: 10  # safeguard to not get swamped if many dependencies have security alerts simultaneously.
+    open-pull-requests-limit: 10  # safeguard to not get swamped if many dependencies have security alerts simultaneously
 
   # Maintain GitHub Actions
   - package-ecosystem: github-actions
@@ -33,6 +35,8 @@ updates:
       day: sunday
       time: "02:00"
       timezone: "Etc/UTC"
+    cooldown:
+      default-days: 10  # safeguard: don't propose an update to a new release until that release it at least N days old
     ignore:
       - dependency-name: "vmactions/solaris-vm"
         versions: [">=1.1.2"]
@@ -47,4 +51,4 @@ updates:
     labels:
       - dependencies
       - github-actions
-    open-pull-requests-limit: 10  # safeguard to not get swamped if many dependencies have security alerts simultaneously.
+    open-pull-requests-limit: 10  # safeguard to not get swamped if many dependencies have security alerts simultaneously
