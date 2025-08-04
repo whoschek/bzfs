@@ -81,6 +81,7 @@ from bzfs_main.compare_snapshot_lists import (
 )
 from bzfs_main.configuration import (
     AlertConfig,
+    CreateSrcSnapshotConfig,
     LogParams,
     MonitorSnapshotAlert,
     Params,
@@ -424,7 +425,7 @@ class Job:
             return False
         self.progress_reporter.pause()
         p, log = self.params, self.params.log
-        config = p.create_src_snapshots_config
+        config: CreateSrcSnapshotConfig = p.create_src_snapshots_config
         curr_datetime: datetime = config.current_datetime + timedelta(microseconds=1)
         next_snapshotting_event_dt: datetime = min(
             (
@@ -995,7 +996,7 @@ class Job:
         current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
         is_debug: bool = log.isEnabledFor(LOG_DEBUG)
         if is_caching_snapshots(p, remote):
-            props = self.dst_properties if remote is p.dst else self.src_properties
+            props: dict[str, DatasetProperties] = self.dst_properties if remote is p.dst else self.src_properties
             snapshots_changed_dict: dict[str, int] = {dataset: vals.snapshots_changed for dataset, vals in props.items()}
             hash_code: str = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
         is_caching: bool = False
@@ -1283,7 +1284,7 @@ class Job:
         non-recursive 'zfs snapshot snapshot1 .. snapshot N' CLI flavor.
 
         Assumes that set(datasets).issubset(set(basis_datasets)). Also assumes that datasets and basis_datasets are both
-        sorted (and thus the output root_datasets is sorted too), which is why this algorithm is efficient - O(N) time
+        sorted (and thus the output root_datasets list is sorted too), which is why this algorithm is efficient - O(N) time
         complexity. The impl is akin to the merge algorithm of a merge sort, adapted to our specific use case.
         See root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct() in the unit test suite for an alternative
         impl that's easier to grok.
@@ -1330,7 +1331,8 @@ class Job:
         the most recent snapshot, for each SnapshotLabel and each dataset.
         """
         p, log = self.params, self.params.log
-        src, config = p.src, p.create_src_snapshots_config
+        src = p.src
+        config: CreateSrcSnapshotConfig = p.create_src_snapshots_config
         datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         is_caching: bool = False
         msgs: list[tuple[datetime, str, SnapshotLabel, str]] = []
@@ -1339,13 +1341,13 @@ class Job:
             datasets_to_snapshot: dict[SnapshotLabel, list[str]], dataset: str, label: SnapshotLabel, creation_unixtime: int
         ) -> None:
             """Schedules creation of a snapshot for the given label if the label's existing latest snapshot is too old."""
-            creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
+            creation_dt: datetime = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
             log.log(LOG_TRACE, "Latest snapshot creation: %s for %s", creation_dt, label)
             duration_amount, duration_unit = config.suffix_durations[label.suffix]
             next_event_dt: datetime = round_datetime_up_to_duration_multiple(
                 creation_dt + timedelta(microseconds=1), duration_amount, duration_unit, config.anchors
             )
-            msg = ""
+            msg: str = ""
             if config.current_datetime >= next_event_dt:
                 datasets_to_snapshot[label].append(dataset)  # mark it as scheduled for snapshot creation
                 msg = " has passed"
@@ -1472,7 +1474,7 @@ class Job:
                                 and len(s) >= minlen
                                 and (infix or year_with_4_digits_regex.fullmatch(s[year_slice]))
                             ):
-                                k = len(snapshots) - j - 1 if is_reverse else j
+                                k: int = len(snapshots) - j - 1 if is_reverse else j
                                 creation_unixtime_secs = snapshots[k][1]
                                 minmax_snapshot = s
                                 break
@@ -1484,7 +1486,7 @@ class Job:
 
 #############################################################################
 class DatasetProperties:
-    """Attributes of a ZFS dataset."""
+    """Properties of a ZFS dataset."""
 
     __slots__ = ("recordsize", "snapshots_changed")  # uses more compact memory layout than __dict__
 
