@@ -17,13 +17,18 @@ synchronization."""
 
 from __future__ import annotations
 import argparse
+import os
+import random
+import string
 import subprocess
 import threading
+import time
 import unittest
 from logging import Logger
 from typing import Any
 from unittest.mock import MagicMock
 
+from bzfs_main.loggers import get_simple_logger
 from bzfs_main.parallel_engine import (
     BARRIER_CHAR,
     Tree,
@@ -40,6 +45,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestBuildTree,
         TestProcessDatasetsInParallel,
+        TestParallelEngineBenchmark,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -463,3 +469,82 @@ class TestProcessDatasetsInParallel(AbstractTestCase):
         )
         self.assertFalse(failed)
         self.assertListEqual(src_datasets[0:-1], sorted(self.submitted))
+
+
+#############################################################################
+class TestParallelEngineBenchmark(unittest.TestCase):
+
+    @staticmethod
+    def generate_unique_datasets(num_datasets: int, length: int) -> list[str]:
+        # Create a realistic hierarchy to test tree-building performance
+        # Example: tank/group_xxxx/host_yyyy/data_zzzzzzzzzzzz...
+        datasets: set[str] = set()
+
+        # Characters for random components
+        chars = string.ascii_lowercase + string.digits
+
+        while len(datasets) < num_datasets:
+            # Generate components to ensure some path sharing
+            l1 = "tank"
+            l2 = f"group_{''.join(random.choices(chars, k=4))}"
+            l3 = f"host_{''.join(random.choices(chars, k=4))}"
+
+            # Ensure the final component is long enough to meet the total length
+            prefix = f"{l1}/{l2}/{l3}/"
+            remaining_len = length - len(prefix)
+            if remaining_len <= 0:
+                raise ValueError("Target length is too short for the fixed prefix.")
+
+            leaf = "".join(random.choices(chars, k=remaining_len))
+            dataset = prefix + leaf
+            datasets.add(dataset)
+
+        return sorted(datasets)
+
+    def _run_benchmark(self, num_datasets: int, enable_barriers: bool, max_workers: int = 2 * (os.cpu_count() or 1)) -> None:
+        def dummy_process_dataset(dataset: str, tid: str, retry: Retry) -> bool:
+            """A dummy function that does nothing, to benchmark the framework overhead."""
+            return True
+
+        def dummy_skip_tree_on_error(dataset: str) -> bool:
+            """A dummy function that never skips."""
+            return False
+
+        log = get_simple_logger("TestParallelEngineBenchmark")
+        datasets = self.generate_unique_datasets(num_datasets=num_datasets, length=100)
+
+        import gc
+
+        gc.collect()
+        start_time = time.monotonic()
+
+        failed = process_datasets_in_parallel_and_fault_tolerant(
+            log=log,
+            datasets=datasets,
+            process_dataset=dummy_process_dataset,
+            skip_tree_on_error=dummy_skip_tree_on_error,
+            max_workers=max_workers,
+            enable_barriers=enable_barriers,
+            is_test_mode=False,
+        )
+
+        end_time = time.monotonic()
+        total_time = end_time - start_time
+        throughput = num_datasets / total_time if total_time > 0 else float("inf")
+        log.info("=================================================")
+        log.info(f"Results for datasets={num_datasets}, enable_barriers={enable_barriers}, max_workers={max_workers} ...")
+        log.info(f"Total elapsed time: {total_time:.4f} seconds")
+        log.info(f"Throughput: {int(throughput)} datasets/second")
+        self.assertFalse(failed, "The process should not report failure.")
+
+    def test_benchmark_10k_datasets(self) -> None:
+        for enable_barriers in [False, True]:
+            self._run_benchmark(num_datasets=10_000, enable_barriers=enable_barriers)
+
+    # def test_benchmark_100k_datasets(self) -> None:
+    #     for enable_barriers in [False, True]:
+    #         self._run_benchmark(num_datasets=100_000, enable_barriers=enable_barriers)
+    #
+    # def test_benchmark_1M_datasets(self) -> None:
+    #     for enable_barriers in [False, True]:
+    #         self._run_benchmark(num_datasets=1_000_000, enable_barriers=enable_barriers)

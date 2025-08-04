@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import concurrent
 import heapq
+import logging
 import os
 import subprocess
 import time
@@ -183,8 +184,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
         synchronization scenarios where jobs must wait for completion of entire subtrees before proceeding. Essential
         for advanced job scheduling patterns like "complete all parallel replications before starting pruning phase."
 
-    - Both algorithms are highly CPU and memory efficient. They require main memory that is proportional to the number
-        of dataset names (~400 bytes per dataset name), and easily scale to millions of datasets.
+    - Both algorithms are CPU and memory efficient. They require main memory proportional to the number of dataset
+        names (~400 bytes per dataset name), and easily scale to millions of datasets. Time complexity is O(N log N),
+        where N is the number of datasets.
 
     Error Handling Strategy:
     ------------------------
@@ -232,6 +234,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
             argparse.Namespace(retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=0)
         )
     )
+    is_debug: bool = log.isEnabledFor(logging.DEBUG)
 
     def _process_dataset(dataset: str, tid: str) -> bool:
         """Runs ``process_dataset`` with retries and logs duration."""
@@ -239,8 +242,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
         try:
             return run_with_retries(log, retry_policy, process_dataset, dataset, tid)
         finally:
-            elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
-            log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, human_readable_duration(elapsed_nanos))
+            if is_debug:
+                elapsed_duration: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
+                log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, elapsed_duration)
 
     assert (not is_test_mode) or str(_make_tree_node("foo", {}))
     immutable_empty_barrier: TreeNode = _make_tree_node("immutable_empty_barrier", {})
