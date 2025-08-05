@@ -538,7 +538,7 @@ class TestHumanReadable(AbstractTestCase):
 
     def test_percent(self) -> None:
         self.assertEqual("3=30%", percent(3, 10))
-        self.assertEqual("0=NaN%", percent(0, 0))
+        self.assertEqual("0=inf%", percent(0, 0))
 
 
 #############################################################################

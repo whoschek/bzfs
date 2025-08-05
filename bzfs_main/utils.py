@@ -229,7 +229,7 @@ def human_readable_float(number: float) -> str:
 
 def percent(number: int, total: int) -> str:
     """Returns percentage string of ``number`` relative to ``total``."""
-    return f"{number}={'NaN' if total == 0 else human_readable_float(100 * number / total)}%"
+    return f"{number}={'inf' if total == 0 else human_readable_float(100 * number / total)}%"
 
 
 def open_nofollow(

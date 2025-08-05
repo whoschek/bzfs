@@ -216,6 +216,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         AssertionError: If input validation fails (sorted order, no duplicates, etc.)
         Various exceptions: Propagated from process_dataset when skip_on_error="fail"
     """
+    assert log is not None
     assert (not is_test_mode) or datasets == sorted(datasets), "List is not sorted"
     assert (not is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
     assert callable(process_dataset)
@@ -246,15 +247,14 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 elapsed_duration: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
                 log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, elapsed_duration)
 
-    assert (not is_test_mode) or str(_make_tree_node("foo", {}))
     immutable_empty_barrier: TreeNode = _make_tree_node("immutable_empty_barrier", {})
     priority_queue: list[TreeNode] = _build_dataset_tree_and_find_roots(datasets)
     heapq.heapify(priority_queue)  # same order as sorted()
     len_datasets: int = len(datasets)
     datasets_set: SortedInterner[str] = SortedInterner(datasets)  # reduces memory footprint
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        todo_futures: set[Future[Any]] = set()
-        future_to_node: dict[Future[Any], TreeNode] = {}
+        todo_futures: set[Future[bool]] = set()
+        future_to_node: dict[Future[bool], TreeNode] = {}
         submitted: int = 0
         next_update_nanos: int = time.monotonic_ns()
         fw_timeout: float | None = None
@@ -278,7 +278,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 next_update_nanos += max(0, interval_nanos(node.dataset))
                 nonlocal submitted
                 submitted += 1
-                future: Future[Any] = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
+                future: Future[bool] = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
                 future_to_node[future] = node
                 todo_futures.add(future)
             return len(todo_futures) > 0
@@ -286,7 +286,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
         failed: bool = False
         while submit_datasets():
-            done_futures: set[Future[Any]]
+            done_futures: set[Future[bool]]
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
             for done_future in done_futures:
                 done_future_node: TreeNode = future_to_node.pop(done_future)
@@ -308,10 +308,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
                     def simple_enqueue_children(node: TreeNode) -> None:
                         """Recursively enqueues child nodes for start of processing."""
                         for child, grandchildren in node.children.items():  # as processing of parent has now completed
-                            child_node: TreeNode = _make_tree_node(
-                                datasets_set.interned(f"{node.dataset}/{child}"), grandchildren
-                            )
-                            if child_node.dataset in datasets_set:
+                            child_abs_dataset: str = datasets_set.interned(f"{node.dataset}/{child}")
+                            child_node: TreeNode = _make_tree_node(child_abs_dataset, grandchildren)
+                            if child_abs_dataset in datasets_set:
                                 heapq.heappush(priority_queue, child_node)  # make it available for start of processing
                             else:  # it's an intermediate node that has no job attached; pass the enqueue operation
                                 simple_enqueue_children(child_node)  # ... recursively down the tree
@@ -340,12 +339,11 @@ def process_datasets_in_parallel_and_fault_tolerant(
                         n: int = 0
                         children: Tree = node.children
                         for child, grandchildren in children.items():
-                            child_node: TreeNode = _make_tree_node(
-                                datasets_set.interned(f"{node.dataset}/{child}"), grandchildren, parent=node
-                            )
+                            child_abs_dataset: str = datasets_set.interned(f"{node.dataset}/{child}")
+                            child_node: TreeNode = _make_tree_node(child_abs_dataset, grandchildren, parent=node)
                             k: int
                             if child != BARRIER_CHAR:
-                                if child_node.dataset in datasets_set:
+                                if child_abs_dataset in datasets_set:
                                     # it's not a barrier; make job available for immediate start of processing
                                     heapq.heappush(priority_queue, child_node)
                                     k = 1
