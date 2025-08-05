@@ -143,6 +143,7 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "F",        # pyflakes
     "FA",       # forward annotations
     "FAST",     # fastAPI
+    "FURB122", "FURB129", "FURB132", "FURB136", "FURB142", "FURB167", "FURB168", "FURB169", "FURB177", "FURB181", "FURB187",
     "G",        # flake8-logging-format
     "I",        # isort: auto-sort and auto-format imports
     "ICN",      # flake8-import-conventions
@@ -177,9 +178,7 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "TID",      # flake8-tidy-imports
     "TRY",      # tryceratops raises
     "TRY201",   # use `raise` without specifying exception name
-#    "UP006",   # pyupgrade
-#    "UP007",   # pyupgrade
-#    "UP045",   # pyupgrade: use X | None for type annotations with python >= 3.10
+    "UP",       # pyupgrade
     "YTT",      # flake8-2020
 ]
 preview = true                 # enable preview rules
@@ -204,6 +203,9 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
     "TRY300",   # consider moving this statement to an else block
     "TRY301",   # abstract raise to an inner function
     "TRY400",   # use logging.exception instead of logging.error
+    "UP012",    # unnecessary-encode-utf8
+    "UP015",    # redundant-read-open-mode
+    "UP022",    # use capture_output keyword argument (capture_output is less readable in our bimodal context)
 ]
 
 [tool.ruff.lint.per-file-ignores]

@@ -401,7 +401,7 @@ class TestTail(AbstractTestCase):
 
     def test_tail(self) -> None:
         fd, file = tempfile.mkstemp(prefix="test_bzfs.tail_")
-        os.write(fd, "line1\nline2\n".encode())
+        os.write(fd, "line1\nline2\n".encode("utf-8"))
         os.close(fd)
         self.assertEqual(["line1\n", "line2\n"], list(tail(file, n=10)))
         self.assertEqual(["line1\n", "line2\n"], list(tail(file, n=2)))

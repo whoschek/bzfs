@@ -82,7 +82,7 @@ class PeriodAnchors:
     millisecondly_microsecond: int = field(default=0, metadata=METADATA_MICROSECOND)  # 0 <= x <= 999
 
     @staticmethod
-    def parse(args: argparse.Namespace) -> "PeriodAnchors":
+    def parse(args: argparse.Namespace) -> PeriodAnchors:
         """Creates a ``PeriodAnchors`` instance from parsed CLI arguments."""
         kwargs: dict[str, int] = {f.name: getattr(args, f.name) for f in dataclasses.fields(PeriodAnchors)}
         return PeriodAnchors(**kwargs)

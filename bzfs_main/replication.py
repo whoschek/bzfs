@@ -30,7 +30,6 @@ from subprocess import DEVNULL, PIPE
 from typing import (
     TYPE_CHECKING,
     Iterable,
-    Tuple,
 )
 
 from bzfs_main.argparse_actions import (
@@ -111,7 +110,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     dst_dataset: str = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
     log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
-    list_result: bool | Tuple[list[str], list[str], list[str], set[str], str, str] = _list_and_filter_src_and_dst_snapshots(
+    list_result: bool | tuple[list[str], list[str], list[str], set[str], str, str] = _list_and_filter_src_and_dst_snapshots(
         job, src_dataset, dst_dataset
     )
     if isinstance(list_result, bool):
@@ -130,7 +129,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     done_checking: bool = False
 
     if job.dst_dataset_exists[dst_dataset]:
-        rollback_result: bool | Tuple[str, str, bool] = _rollback_dst_dataset_if_necessary(
+        rollback_result: bool | tuple[str, str, bool] = _rollback_dst_dataset_if_necessary(
             job, dst_dataset, latest_src_snapshot, src_snapshots_with_guids, dst_snapshots_with_guids, done_checking, tid
         )
         if isinstance(rollback_result, bool):
@@ -179,7 +178,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
 
 def _list_and_filter_src_and_dst_snapshots(
     job: Job, src_dataset: str, dst_dataset: str
-) -> bool | Tuple[list[str], list[str], list[str], set[str], str, str]:
+) -> bool | tuple[list[str], list[str], list[str], set[str], str, str]:
     """On replication, list and filter src and dst snapshots."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
@@ -263,7 +262,7 @@ def _rollback_dst_dataset_if_necessary(
     dst_snapshots_with_guids: list[str],
     done_checking: bool,
     tid: str,
-) -> bool | Tuple[str, str, bool]:
+) -> bool | tuple[str, str, bool]:
     """On replication, rollback dst if necessary."""
     p, log = job.params, job.params.log
     dst = p.dst

@@ -65,7 +65,6 @@ from typing import (
     Callable,
     Collection,
     Counter,
-    Tuple,
     cast,
 )
 
@@ -880,7 +879,7 @@ class Job:
 
     def delete_dst_datasets_task(
         self, basis_src_datasets: list[str], basis_dst_datasets: list[str], sorted_dst_datasets: list[str]
-    ) -> Tuple[list[str], list[str]]:
+    ) -> tuple[list[str], list[str]]:
         """Deletes existing destination datasets that do not exist within the source dataset if they are included via
         --{include|exclude}-dataset* policy; implements --delete-dst-datasets.
 

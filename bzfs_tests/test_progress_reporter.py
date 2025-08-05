@@ -263,8 +263,7 @@ class TestHelperFunctions(AbstractTestCase):
             # Write initial lines to the file using the write file descriptor
             initial_lines = ["line1\n", "line2\n"]
             with open(temp_file_fd_write, "w", encoding="utf-8") as fd_write:
-                for line in initial_lines:
-                    fd_write.write(line)
+                fd_write.writelines(initial_lines)
                 # fd_write is closed here, but temp_file_path is still valid.
 
             # Open the file for reading and keep this file descriptor (fd_read) open for the duration of the iterator's life.

@@ -57,7 +57,7 @@ class SnapshotFilter:
     """Represents a snapshot filter with matching options and time range."""
 
     name: str
-    timerange: "UnixTimeRange"  # defined in bzfs_main.filter
+    timerange: UnixTimeRange  # defined in bzfs_main.filter
     options: Any = field(compare=False, default=None)
 
 
@@ -70,7 +70,7 @@ def _add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> N
 
 
 def _add_time_and_rank_snapshot_filter(
-    args: argparse.Namespace, dst: str, timerange: "UnixTimeRange", rankranges: list["RankRange"]
+    args: argparse.Namespace, dst: str, timerange: UnixTimeRange, rankranges: list[RankRange]
 ) -> None:
     """Creates and adds a SnapshotFilter using timerange and rank ranges."""
 
@@ -447,7 +447,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         _add_time_and_rank_snapshot_filter(namespace, self.dest, timerange, rankranges)
 
     @staticmethod
-    def _get_include_snapshot_times(times: list[timedelta | int | None]) -> "UnixTimeRange":
+    def _get_include_snapshot_times(times: list[timedelta | int | None]) -> UnixTimeRange:
         """Convert start and end times to ``UnixTimeRange`` for filtering."""
 
         def utc_unix_time_in_seconds(time_spec: timedelta | int | None, default: int) -> timedelta | int:
@@ -467,9 +467,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         return lo, hi
 
     @staticmethod
-    def _parse_rankranges(
-        parser: argparse.ArgumentParser, values: Any, option_string: str | None = None
-    ) -> list["RankRange"]:
+    def _parse_rankranges(parser: argparse.ArgumentParser, values: Any, option_string: str | None = None) -> list[RankRange]:
         """Parses rank range strings like 'latest 3..latest 5' into tuples."""
 
         def parse_rank(spec: str) -> tuple[bool, str, int, bool]:

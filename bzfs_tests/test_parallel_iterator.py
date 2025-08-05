@@ -18,7 +18,7 @@ correctly."""
 from __future__ import annotations
 import time
 import unittest
-from typing import Iterable, List, Tuple
+from typing import Iterable
 
 from bzfs_main import bzfs
 from bzfs_main.configuration import Remote
@@ -83,7 +83,7 @@ class TestParallelIterator(AbstractTestCase):
         self.r = p.src
 
         # Test data with max_batch_items=2
-        self.cmd_args_list_2: List[Tuple[List[str], Iterable[str]]] = [
+        self.cmd_args_list_2: list[tuple[list[str], Iterable[str]]] = [
             (["zfslist1"], ["d1", "d2", "d3", "d4"]),
             (["zfslist2"], ["d5", "d6", "d7", "d8"]),
         ]
@@ -95,7 +95,7 @@ class TestParallelIterator(AbstractTestCase):
         ]
 
         # Test data with max_batch_items=3
-        self.cmd_args_list_3: List[Tuple[List[str], Iterable[str]]] = [
+        self.cmd_args_list_3: list[tuple[list[str], Iterable[str]]] = [
             (["zfslist1"], ["a1", "a2", "a3", "a4"]),
             (["zfslist2"], ["b1", "b2", "b3", "b4", "b5"]),
         ]
@@ -135,7 +135,7 @@ class TestParallelIterator(AbstractTestCase):
         self.assertEqual(sorted(self.expected_ordered_3), sorted(results))
 
     def test_exception_propagation_ordered(self) -> None:
-        cmd_args_list: List[Tuple[List[str], Iterable[str]]] = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
+        cmd_args_list: list[tuple[list[str], Iterable[str]]] = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
         gen = itr_ssh_cmd_parallel(self.job, self.r, cmd_args_list, dummy_fn_raise, max_batch_items=2, ordered=True)
         result = next(gen)
         self.assertEqual((["ok"], ["a1", "a2"]), result)
@@ -144,7 +144,7 @@ class TestParallelIterator(AbstractTestCase):
         self.assertEqual("Intentional failure", str(context.exception))
 
     def test_exception_propagation_unordered(self) -> None:
-        cmd_args_list: List[Tuple[List[str], Iterable[str]]] = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
+        cmd_args_list: list[tuple[list[str], Iterable[str]]] = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
         gen = itr_ssh_cmd_parallel(self.job, self.r, cmd_args_list, dummy_fn_raise, max_batch_items=2, ordered=False)
         caught_exception = False
         results = []
@@ -157,7 +157,7 @@ class TestParallelIterator(AbstractTestCase):
         self.assertTrue(caught_exception, "Expected exception was not raised in unordered mode..")
 
     def test_unordered_thread_scheduling(self) -> None:
-        cmd_args_list: List[Tuple[List[str], Iterable[str]]] = [
+        cmd_args_list: list[tuple[list[str], Iterable[str]]] = [
             (["zfslist1"], ["a1"]),
             (["zfslist2"], ["b1"]),
             (["zfslist3"], ["c1"]),
@@ -181,7 +181,7 @@ class TestParallelIterator(AbstractTestCase):
         self.assertEqual([], results)
 
     def test_cmd_with_empty_arguments_ordered(self) -> None:
-        cmd_args_list: List[Tuple[List[str], Iterable[str]]] = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
+        cmd_args_list: list[tuple[list[str], Iterable[str]]] = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
         expected_ordered = [(["zfslist2"], ["d1", "d2"])]
         results = list(
             itr_ssh_cmd_parallel(self.job, self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=True)
@@ -189,7 +189,7 @@ class TestParallelIterator(AbstractTestCase):
         self.assertEqual(expected_ordered, results)
 
     def test_cmd_with_empty_arguments_unordered(self) -> None:
-        cmd_args_list: List[Tuple[List[str], Iterable[str]]] = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
+        cmd_args_list: list[tuple[list[str], Iterable[str]]] = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
         expected_ordered = [(["zfslist2"], ["d1", "d2"])]
         results = list(
             itr_ssh_cmd_parallel(self.job, self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=False)

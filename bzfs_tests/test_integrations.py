@@ -406,7 +406,7 @@ class IntegrationTestCase(ParametrizedTestCase):
 
         if params and "skip_missing_snapshots" in params:
             i = find_match(args, lambda arg: arg.startswith("-"))
-            i = 0 if i < 0 else i
+            i = max(i, 0)
             args = args[0:i] + ["--skip-missing-snapshots=" + str(params["skip_missing_snapshots"])] + args[i:]
 
         if self.is_no_privilege_elevation():
