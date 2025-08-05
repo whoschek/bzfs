@@ -330,7 +330,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             help=f"Remote SSH username on {loc} hosts to connect to (optional). Examples: 'root', 'alice'.\n\n")
     for loc in locations:
         parser.add_argument(
-            f"--ssh-{loc}-port", type=int, metavar="INT",
+            f"--ssh-{loc}-port", type=int, min=1, max=65535, action=bzfs_main.check_range.CheckRange, metavar="INT",
             help=f"Remote SSH port on {loc} host to connect to (optional).\n\n")
     for loc in locations:
         parser.add_argument(

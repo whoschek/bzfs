@@ -1162,7 +1162,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
                  f"Overrides hostname given in {loc.upper()}_DATASET.\n\n")
     for loc in locations:
         parser.add_argument(
-            f"--ssh-{loc}-port", type=int, metavar="INT",
+            f"--ssh-{loc}-port", type=int, min=1, max=65535, action=CheckRange, metavar="INT",
             help=f"Remote SSH port on {loc} host to connect to (optional).\n\n")
     for loc in locations:
         parser.add_argument(
