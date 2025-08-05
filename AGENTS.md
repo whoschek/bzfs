@@ -162,7 +162,7 @@ If asked to improve coverage:
   cat coverage.xml
   ```
 
-- **Focus on adding high-value tests:** Do not add low-value tests just to increase a coverage percentage.
+- **Focus on adding meaningful high-value tests:** Do not add low-value tests just to increase a coverage percentage.
 
 - **Report:** State the "before vs. after" coverage percentage in your response.
 
@@ -177,6 +177,11 @@ If asked to improve coverage:
   directly. Instead, modify the `argparse` help texts in the `.py` files as the source of "truth", then run
   `./update_readme.sh` to regenerate the README files.
 - **Other Sections:** Direct edits are welcome.
+
+## How to Write a Pull Request
+
+- **Reference Issue**: If an issue URL (e.g. https://github.com/user/project/issues/93) is mentioned in the user's
+  prompt, add this issue reference to the PR summary in the form "closes #93".
 
 ## Context Engineering
 
