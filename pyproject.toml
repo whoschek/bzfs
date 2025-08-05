@@ -156,6 +156,7 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "PIE",      # flake8-pie
     "PLC",      # pylint-convention
     "PLE",      # pylint-error
+    "PLR0206",  # pylint-refactor: property-with-parameters
     "PLR0402",  # pylint-refactor: use from {module} import {name} in lieu of alias
     "PLR1711",  # pylint-refactor: useless return statement at end of function
     "PLR1722",  # pylint-refactor: use sys.exit() instead of exit()
@@ -167,7 +168,9 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "RET501", "RET502", "RET503",  # flake8-return
     "RUF",      # ruff-specifc rules
     "S",        # bandit
-    "SIM115",   # flake8-simplify: Use a context manager for opening files
+    "SIM115",   # flake8-simplify: use a context manager for opening files
+    "SIM118",   # flake8-simplify: use `key in foo` instead of `key in foo.keys()`
+    "SIM208",   # flake8-simplify: use `a` instead of `not (not a)`
     "SIM300",   # flake8-simplify: yoda condition detected
     "SIM401",   # flake8-simplify: use dict.get(x, default) instead of if statement
     "SIM910",   # flake8-simplify: dict.get(x, None)

@@ -34,9 +34,18 @@ repos:
       - id: check-merge-conflict        # Check that merge conflicts are not being committed
       - id: check-yaml                  # Attempt to load all YAML files to verify syntax
       - id: check-toml                  # Attempt to load all TOML files to verify syntax
+      - id: check-xml                   # Attempt to load all XML files to verify syntax via xmllint
+      - id: pretty-format-json          # Auto-format JSON files
+        args: [
+          --autofix,
+          --indent=4,
+          --no-ensure-ascii,            # keep non-ASCII chars verbatim
+          --no-sort-keys,               # preserve original key order
+          --top-keys="",                # no keys forced to the top
+        ]
+        exclude: '.*/.*bzfs_log_config.*\.json$'
       - id: check-json                  # Attempt to load all JSON files to verify syntax
         exclude: '.*/.*bzfs_log_config.*\.json$'
-      - id: check-xml                   # Attempt to load all XML files to verify syntax via xmllint
       - id: check-symlinks              # Check for symlinks that do not point to anything
       - id: mixed-line-ending
         args: [--fix=lf]                # Replace line endings with linefeed
