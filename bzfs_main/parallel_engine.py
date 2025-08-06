@@ -248,10 +248,10 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, elapsed_duration)
 
     immutable_empty_barrier: TreeNode = _make_tree_node("immutable_empty_barrier", {})
-    priority_queue: list[TreeNode] = _build_dataset_tree_and_find_roots(datasets)
-    heapq.heapify(priority_queue)  # same order as sorted()
     len_datasets: int = len(datasets)
     datasets_set: SortedInterner[str] = SortedInterner(datasets)  # reduces memory footprint
+    priority_queue: list[TreeNode] = _build_dataset_tree_and_find_roots(datasets)
+    heapq.heapify(priority_queue)  # same order as sorted()
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         todo_futures: set[Future[bool]] = set()
         future_to_node: dict[Future[bool], TreeNode] = {}
@@ -289,8 +289,8 @@ def process_datasets_in_parallel_and_fault_tolerant(
             done_futures: set[Future[bool]]
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
             for done_future in done_futures:
-                done_future_node: TreeNode = future_to_node.pop(done_future)
-                dataset: str = done_future_node.dataset
+                done_node: TreeNode = future_to_node.pop(done_future)
+                dataset: str = done_node.dataset
                 try:
                     no_skip: bool = done_future.result()  # does not block as processing has already completed
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
@@ -302,91 +302,97 @@ def process_datasets_in_parallel_and_fault_tolerant(
                     no_skip = not (skip_on_error == "tree" or skip_tree_on_error(dataset))
                     log.error("%s", e)
                     append_exception(e, task_name, dataset)
-
-                if not barriers_enabled:
-                    # This simple algorithm is sufficient for almost all use cases:
-                    def simple_enqueue_children(node: TreeNode) -> None:
-                        """Recursively enqueues child nodes for start of processing."""
-                        for child, grandchildren in node.children.items():  # as processing of parent has now completed
-                            child_abs_dataset: str = datasets_set.interned(f"{node.dataset}/{child}")
-                            child_node: TreeNode = _make_tree_node(child_abs_dataset, grandchildren)
-                            if child_abs_dataset in datasets_set:
-                                heapq.heappush(priority_queue, child_node)  # make it available for start of processing
-                            else:  # it's an intermediate node that has no job attached; pass the enqueue operation
-                                simple_enqueue_children(child_node)  # ... recursively down the tree
-
-                    if no_skip:
-                        simple_enqueue_children(done_future_node)
-                else:
-                    # The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner.
-                    # Here, a "dataset" string is treated as an identifier for any kind of job rather than a reference
-                    # to a concrete ZFS object. Example "dataset" job string: "src_host1/createsnapshot/push/prune".
-                    # Jobs can depend on another job via a parent/child relationship formed by '/' directory separators
-                    # within the dataset string, and multiple "datasets" form a job dependency tree by way of common
-                    # dataset directory prefixes. Jobs that do not depend on each other can be executed in parallel, and
-                    # jobs can be told to first wait for other jobs to complete successfully. The algorithm is based on
-                    # a barrier primitive and is typically disabled; it is only required for rare jobrunner configs. For
-                    # example, a job scheduler can specify that all parallel push replications jobs to multiple
-                    # destinations must succeed before the jobs of the pruning phase can start. More generally, with
-                    # this algo, a job scheduler can specify that all jobs within a given job subtree (containing any
-                    # nested combination of sequential and/or parallel jobs) must successfully complete before a certain
-                    # other job within the job tree is started. This is specified via the barrier directory named "~".
-                    # Example: "src_host1/createsnapshot/~/prune".
-                    # Note that "~" is unambiguous as it is not a valid ZFS dataset name component per the naming rules
-                    # enforced by the 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs.
-                    def enqueue_children(node: TreeNode) -> int:
-                        """Returns number of jobs that were added to priority_queue for immediate start of processing."""
-                        n: int = 0
-                        children: Tree = node.children
-                        for child, grandchildren in children.items():
-                            child_abs_dataset: str = datasets_set.interned(f"{node.dataset}/{child}")
-                            child_node: TreeNode = _make_tree_node(child_abs_dataset, grandchildren, parent=node)
-                            k: int
-                            if child != BARRIER_CHAR:
-                                if child_abs_dataset in datasets_set:
-                                    # it's not a barrier; make job available for immediate start of processing
-                                    heapq.heappush(priority_queue, child_node)
-                                    k = 1
-                                else:  # it's an intermediate node that has no job attached; pass the enqueue operation
-                                    k = enqueue_children(child_node)  # ... recursively down the tree
-                            elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
-                                k = enqueue_children(child_node)  # ... recursively down the tree
-                            else:  # park the barrier node within the (still closed) barrier for the time being
-                                assert node.mut.barrier is None
-                                node.mut.barrier = child_node
-                                k = 0
-                            node.mut.pending += min(1, k)
-                            n += k
-                        assert n >= 0
-                        return n
-
-                    def on_job_completion_with_barriers(node: TreeNode, no_skip: bool) -> None:
-                        """After successful completion, enqueues children, opens barriers + propagates completion upwards."""
-                        if no_skip:
-                            enqueue_children(node)  # make child datasets available for start of processing
-                        else:  # job completed without success
-                            tmp = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
-                            while tmp is not None:
-                                tmp.mut.barrier = immutable_empty_barrier
-                                tmp = tmp.parent
-                        assert node.mut.pending >= 0
-                        while node.mut.pending == 0:  # have all jobs in subtree of current node completed?
-                            if no_skip:  # ... if so open the barrier, if it exists, and enqueue jobs waiting on it
-                                if not (node.mut.barrier is None or node.mut.barrier is immutable_empty_barrier):
-                                    node.mut.pending += min(1, enqueue_children(node.mut.barrier))
-                            node.mut.barrier = immutable_empty_barrier
-                            if node.mut.pending > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
-                                break  # ... if so we aren't quite done yet with this subtree
-                            if node.parent is None:
-                                break  # we've reached the root node
-                            node = node.parent  # recurse up the tree to propagate completion upward
-                            node.mut.pending -= 1  # mark subtree as completed
-                            assert node.mut.pending >= 0
-
-                    assert barriers_enabled
-                    on_job_completion_with_barriers(done_future_node, no_skip)
-        # endwhile submit_datasets()
+                if barriers_enabled:  # This barrier-based algorithm is for more general job scheduling, as in bzfs_jobrunner
+                    _complete_job_with_barriers(done_node, no_skip, priority_queue, datasets_set, immutable_empty_barrier)
+                elif no_skip:  # This simple algorithm is sufficient for almost all use cases
+                    _simple_enqueue_children(done_node, priority_queue, datasets_set)
         assert len(priority_queue) == 0
         assert len(todo_futures) == 0
         assert len(future_to_node) == 0
         return failed
+
+
+def _simple_enqueue_children(node: TreeNode, priority_queue: list[TreeNode], datasets_set: SortedInterner[str]) -> None:
+    """Enqueues child nodes for start of processing."""
+    for child, grandchildren in node.children.items():  # as processing of parent has now completed
+        child_abs_dataset: str = datasets_set.interned(f"{node.dataset}/{child}")
+        child_node: TreeNode = _make_tree_node(child_abs_dataset, grandchildren)
+        if child_abs_dataset in datasets_set:
+            heapq.heappush(priority_queue, child_node)  # make it available for start of processing
+        else:  # it's an intermediate node that has no job attached; pass the enqueue operation
+            _simple_enqueue_children(child_node, priority_queue, datasets_set)  # ... recursively down the tree
+
+
+def _complete_job_with_barriers(
+    node: TreeNode,
+    no_skip: bool,
+    priority_queue: list[TreeNode],
+    datasets_set: SortedInterner[str],
+    immutable_empty_barrier: TreeNode,
+) -> None:
+    """After successful completion, enqueues children, opens barriers, and propagates completion upwards.
+
+    The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner. Here, a "dataset" string is
+    treated as an identifier for any kind of job rather than a reference to a concrete ZFS object. An example "dataset" job
+    string is "src_host1/createsnapshot/push/prune". Jobs can depend on another job via a parent/child relationship formed by
+    '/' directory separators within the dataset string, and multiple "datasets" form a job dependency tree by way of common
+    dataset directory prefixes. Jobs that do not depend on each other can be executed in parallel, and jobs can be told to
+    first wait for other jobs to complete successfully. The algorithm is based on a barrier primitive and is typically
+    disabled" it is only required for rare jobrunner configs.
+
+    For example, a job scheduler can specify that all parallel push replications jobs to multiple destinations must succeed
+    before the jobs of the pruning phase can start. More generally, with this algo, a job scheduler can specify that all jobs
+    within a given job subtree (containing any nested combination of sequential and/or parallel jobs) must successfully
+    complete before a certain other job within the job tree is started. This is specified via the barrier directory named
+    '~'. An example is "src_host1/createsnapshot/~/prune".
+
+    Note that '~' is unambiguous as it is not a valid ZFS dataset name component per the naming rules enforced by the 'zfs
+    create', 'zfs snapshot' and 'zfs bookmark' CLIs.
+    """
+
+    def enqueue_children(node: TreeNode) -> int:
+        """Returns number of jobs that were added to priority_queue for immediate start of processing."""
+        n: int = 0
+        children: Tree = node.children
+        for child, grandchildren in children.items():
+            child_abs_dataset: str = datasets_set.interned(f"{node.dataset}/{child}")
+            child_node: TreeNode = _make_tree_node(child_abs_dataset, grandchildren, parent=node)
+            k: int
+            if child != BARRIER_CHAR:
+                if child_abs_dataset in datasets_set:
+                    # it's not a barrier; make job available for immediate start of processing
+                    heapq.heappush(priority_queue, child_node)
+                    k = 1
+                else:  # it's an intermediate node that has no job attached; pass the enqueue operation
+                    k = enqueue_children(child_node)  # ... recursively down the tree
+            elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
+                k = enqueue_children(child_node)  # ... recursively down the tree
+            else:  # park the barrier node within the (still closed) barrier for the time being
+                assert node.mut.barrier is None
+                node.mut.barrier = child_node
+                k = 0
+            node.mut.pending += min(1, k)
+            n += k
+        assert n >= 0
+        return n
+
+    if no_skip:
+        enqueue_children(node)  # make child datasets available for start of processing
+    else:  # job completed without success
+        tmp = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
+        while tmp is not None:
+            tmp.mut.barrier = immutable_empty_barrier
+            tmp = tmp.parent
+    assert node.mut.pending >= 0
+    while node.mut.pending == 0:  # have all jobs in subtree of current node completed?
+        if no_skip:  # ... if so open the barrier, if it exists, and enqueue jobs waiting on it
+            if not (node.mut.barrier is None or node.mut.barrier is immutable_empty_barrier):
+                node.mut.pending += min(1, enqueue_children(node.mut.barrier))
+        node.mut.barrier = immutable_empty_barrier
+        if node.mut.pending > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
+            break  # ... if so we aren't quite done yet with this subtree
+        if node.parent is None:
+            break  # we've reached the root node
+        node = node.parent  # recurse up the tree to propagate completion upward
+        node.mut.pending -= 1  # mark subtree as completed
+        assert node.mut.pending >= 0
