@@ -54,5 +54,7 @@ class AbstractTestCase(unittest.TestCase):
         inject_params: dict[str, bool] | None = None,
     ) -> configuration.Params:
         log_params = log_params if log_params is not None else MagicMock(spec=configuration.LogParams)
-        log = log if log is not None else MagicMock(spec=logging.Logger)
+        if log is None:
+            log = MagicMock(spec=logging.Logger)
+            log.isEnabledFor.side_effect = lambda level: level >= logging.INFO
         return configuration.Params(args=args, sys_argv=[], log_params=log_params, log=log, inject_params=inject_params)

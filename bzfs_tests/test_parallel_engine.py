@@ -17,6 +17,7 @@ synchronization."""
 
 from __future__ import annotations
 import argparse
+import logging
 import os
 import random
 import string
@@ -174,8 +175,10 @@ class TestBuildTree(unittest.TestCase):
 class TestProcessDatasetsInParallel(unittest.TestCase):
     def setUp(self) -> None:
         self.lock: threading.Lock = threading.Lock()
+        self.log = MagicMock(spec=Logger)
+        self.log.isEnabledFor.side_effect = lambda level: level >= logging.INFO
         self.default_kwargs: dict[str, Any] = {
-            "log": MagicMock(spec=Logger),
+            "log": self.log,
             "skip_on_error": "dataset",
             "retry_policy": None,
             "dry_run": False,
@@ -213,8 +216,8 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             with stop_on_failure_subtest(i=i):
                 self.setUp()
                 src_datasets = ["a1", "a1/b1", "a2"]
-                self.default_kwargs["log"].isEnabledFor.return_value = i > 0
                 if i > 0:
+                    self.log.isEnabledFor.side_effect = lambda level: level >= logging.DEBUG
                     self.default_kwargs["retry_policy"] = RetryPolicy(
                         argparse.Namespace(
                             retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=0
