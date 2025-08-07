@@ -33,7 +33,7 @@ on:
         type: choice
         options:
         - test_ubuntu_24_04_fast
-        - test_ubuntu_24_04_zfs_latest
+        - test_ubuntu_24_04_hpnssh
         - test_ubuntu_24_04_zfs_2_3_latest
         - test_ubuntu_24_04_zfs_2_2_latest
         - test_ubuntu_24_04
@@ -138,9 +138,9 @@ jobs:
         echo "bzfs-testrun-success"
 
 
-  test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.1
+  test_ubuntu_24_04_hpnssh:  # currently uses zfs-2.2.8
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_latest')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_hpnssh' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_hpnssh')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -156,15 +156,14 @@ jobs:
       run: echo "Now running iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}"
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
-        # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
-        sudo add-apt-repository ppa:satadru-umich/zfs-experimental
+        # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.2.8
+        sudo add-apt-repository ppa:weiers/openzfs-2.2.8; sudo apt update
 
         # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
         sudo add-apt-repository ppa:rapier1/hpnssh
 
         sudo apt update
-        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
-        sudo apt-get -y install zfs-dkms zfsutils-linux hpnssh
+        sudo apt-get -y install openzfs-zfs-dkms hpnssh
         zfs --version
         hpnssh -V
 
@@ -519,7 +518,7 @@ jobs:
     if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
     runs-on: ubuntu-24.04
     needs:
-      - test_ubuntu_24_04_zfs_latest
+      - test_ubuntu_24_04_hpnssh
       - test_ubuntu_24_04_zfs_2_3_latest
       - test_ubuntu_24_04_zfs_2_2_latest
       - test_ubuntu_24_04
@@ -535,8 +534,8 @@ jobs:
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
-          name: coverage-test_ubuntu_24_04_zfs_latest
-          path: coverage-test_ubuntu_24_04_zfs_latest
+          name: coverage-test_ubuntu_24_04_hpnssh
+          path: coverage-test_ubuntu_24_04_hpnssh
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
