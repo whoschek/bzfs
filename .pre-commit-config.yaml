@@ -74,7 +74,7 @@ repos:
         additional_dependencies: [tomli]
         # config options like `wrap-summaries` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.7
+    rev: v0.12.8
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
@@ -86,12 +86,12 @@ repos:
         exclude: '.*'  # Skip detection of circular imports. Comment out this line to enable detection of circular imports.
   - repo: local
     hooks:
-      - id: pyrefly-autotype
-        name: "pyrefly autotype (auto-fix types)"
+      - id: pyrefly-infer
+        name: "pyrefly infer (auto-fix types)"
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
-        entry: pyrefly autotype
+        entry: pyrefly infer
         language: python
-        additional_dependencies: ['pyrefly==0.26.1']
+        additional_dependencies: ['pyrefly==0.27.2']
         pass_filenames: false
   - repo: local
     hooks:
