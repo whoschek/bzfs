@@ -48,6 +48,7 @@ from bzfs_tests.abstract_testcase import AbstractTestCase
 ###############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
+        TestQuoting,
         TestReplication,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
@@ -93,12 +94,8 @@ def _prepare_job(
 
 
 ###############################################################################
-class TestReplication(AbstractTestCase):
+class TestQuoting(AbstractTestCase):
     """Covers command builders and safety helpers in replication."""
-
-    def test_format_size(self) -> None:
-        self.assertEqual("0B".rjust(7), _format_size(0))
-        self.assertEqual("1MiB".rjust(7), _format_size(1048576))
 
     def test_squote_local_no_quote(self) -> None:
         remote = MagicMock(ssh_user_host="")
@@ -134,25 +131,26 @@ class TestReplication(AbstractTestCase):
     def test_dquote_escapes(self) -> None:
         self.assertEqual('"a\\"b\\$c\\`d"', _dquote('a"b$c`d'))
 
+    @staticmethod
+    def _sh_roundtrip(arg: str) -> str:
+        quoted = _dquote(arg)
+        return subprocess.run(["sh", "-c", f"printf %s {quoted}"], capture_output=True, text=True, check=True).stdout
+
     def test_dquote_prevents_command_substitution(self) -> None:
         """Escaping ensures the shell prints literals rather than executing."""
         for arg in ["$(echo hacked)", "`echo hacked`"]:
-            cmd = ["sh", "-c", "printf %s " + _dquote(arg)]
-            out = subprocess.run(cmd, capture_output=True, check=True, text=True).stdout
-            self.assertEqual(arg, out)
+            with self.subTest(arg=arg):
+                self.assertEqual(arg, self._sh_roundtrip(arg))
 
     def test_dquote_roundtrip_empty_string(self) -> None:
         """Ensures empty arguments survive shell evaluation unchanged."""
-        quoted = _dquote("")
-        out = subprocess.run(["sh", "-c", f"printf %s {quoted}"], capture_output=True, text=True, check=True).stdout
-        self.assertEqual("", out)
+        arg = ""
+        self.assertEqual(arg, self._sh_roundtrip(arg))
 
     def test_dquote_roundtrip_with_spaces(self) -> None:
         """Verifies that spaces are preserved when passed through a shell."""
         arg = "foo bar baz"
-        quoted = _dquote(arg)
-        out = subprocess.run(["sh", "-c", f"printf %s {quoted}"], capture_output=True, text=True, check=True).stdout
-        self.assertEqual(arg, out)
+        self.assertEqual(arg, self._sh_roundtrip(arg))
 
     def test_dquote_multiple_instances(self) -> None:
         """All repeated special chars must be escaped and round-trip."""
@@ -161,15 +159,103 @@ class TestReplication(AbstractTestCase):
         self.assertEqual(2, quoted.count('\\"'))
         self.assertEqual(2, quoted.count("\\$"))
         self.assertEqual(2, quoted.count("\\`"))
-        out = subprocess.run(["sh", "-c", f"printf %s {quoted}"], capture_output=True, text=True, check=True).stdout
-        self.assertEqual(arg, out)
+        self.assertEqual(arg, self._sh_roundtrip(arg))
 
     def test_dquote_preserves_unrelated_chars(self) -> None:
         """Characters outside the escape set remain intact after quoting."""
         arg = "path/with 'single' and \\backslash"
-        quoted = _dquote(arg)
-        out = subprocess.run(["sh", "-c", f"printf %s {quoted}"], capture_output=True, text=True, check=True).stdout
-        self.assertEqual(arg, out)
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_preserves_dollars_backticks_quotes(self) -> None:
+        samples = [
+            r"a$b",  # $ should not expand
+            r"a`uname`b",  # backticks should not execute
+            r'a"b',  # embedded double quote
+            r"plain",  # trivial
+        ]
+        for s in samples:
+            with self.subTest(s=s):
+                self.assertEqual(s, self._sh_roundtrip(s))
+
+    def test_dquote_handles_spaces_and_newlines(self) -> None:
+        samples = [
+            "a b c",  # spaces must remain a single arg
+            "line1\nline2",  # newline stays literal
+            " tab\tsep ",  # tabs preserved
+        ]
+        for s in samples:
+            with self.subTest(s=s):
+                self.assertEqual(s, self._sh_roundtrip(s))
+
+    def test_dquote_does_not_require_backslash_escaping(self) -> None:
+        samples = [
+            r"a\b",  # normal backslash
+        ]
+        for s in samples:
+            with self.subTest(s=s):
+                self.assertEqual(s, self._sh_roundtrip(s))
+
+    def test_dquote_globally_escapes_specials(self) -> None:
+        s = "pre 'a\"b $USER `uname` \\ tail' post"
+        out = _dquote(s)
+        payload = out[1:-1]  # strip outer double quotes
+
+        # Every occurrence of ", $, ` in the payload must be backslash-escaped
+        specials = {'"', "$", "`"}
+        for i, ch in enumerate(payload):
+            with self.subTest(i=i):
+                if ch in specials:
+                    self.assertTrue(i > 0)
+                    self.assertEqual("\\", payload[i - 1], f"unescaped {ch!r} at index {i}")
+
+    def test_prepare_zfs_send_never_passes_trailing_backslash_to_dquote(self) -> None:
+        """Purpose: For security, verify `_prepare_zfs_send_receive` never passes a string ending with a bare backslash to
+        `_dquote`.
+
+        Assumptions: Pipelines are built via shlex.join and shlex.quote. Program opts and the pv log path may include
+        backslashes.
+
+        Design Rationale: Patch stage builders to deterministic minimal commands and patch `_dquote` to capture inputs;
+        use a nested helper (with `+=`) instead of a lambda for mypy-friendly mutation and clarity.
+        """
+        # both legs remote so _dquote is exercised for src and dst
+        job = _prepare_job(src_host="src", dst_host="dst", is_program_available=lambda _p, _l: True)
+        # make sure options end with a backslash
+        job.params.pv_program = "pv"
+        job.params.pv_program_opts = ["Y\\"]
+        job.params.mbuffer_program = "mbuffer"
+        job.params.mbuffer_program_opts = ["X\\"]
+        job.params.compression_program = "zstd"
+        job.params.compression_program_opts = ["Z\\"]
+        job.params.log_params = MagicMock(pv_log_file="/tmp/pv.log\\")  # pv log path ending in backslash
+
+        seen: list[str] = []
+        with patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
+            "bzfs_main.replication._decompress_cmd", return_value="cat"
+        ), patch(  # force mbuffer to be present on all legs and include our trailing-backslash opt
+            "bzfs_main.replication._mbuffer_cmd",
+            side_effect=lambda p, loc, _sz, _rec: shlex.join([p.mbuffer_program, "-s", "1"] + p.mbuffer_program_opts),
+        ), patch(  # force pv to be present and include our backslashy opts + backslashy log path
+            "bzfs_main.replication._pv_cmd",
+            side_effect=lambda j, loc, _sz, _human, disable_progress_bar=False: f"LC_ALL=C {shlex.join([j.params.pv_program] + j.params.pv_program_opts)} 2>> {shlex.quote(j.params.log_params.pv_log_file)}",
+        ), patch(  # keep squote a no-op so we see the raw strings
+            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
+        ), patch(  # capture the exact strings sent to _dquote
+            "bzfs_main.replication._dquote", side_effect=lambda s: (seen.__iadd__([s]), s)[1]
+        ):
+            _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
+
+        self.assertTrue(seen)  # we should have seen src and dst
+        self.assertTrue(all(not s.endswith("\\") for s in seen), f"_dquote saw trailing backslash: {seen!r}")
+
+
+###############################################################################
+class TestReplication(AbstractTestCase):
+    """Covers command builders and safety helpers in replication."""
+
+    def test_format_size(self) -> None:
+        self.assertEqual("0B".rjust(7), _format_size(0))
+        self.assertEqual("1MiB".rjust(7), _format_size(1048576))
 
     @patch("bzfs_main.replication.is_solaris_zfs_location", return_value=False)
     def test_mbuffer_cmd_no_mbuffer(self, _loc: MagicMock) -> None:
