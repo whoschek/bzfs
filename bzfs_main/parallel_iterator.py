@@ -37,7 +37,8 @@ def parallel_iterator(
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
 ) -> Generator[T, None, None]:
-    """Executes multiple iterators in parallel/concurrently, with configurable result ordering.
+    """Executes multiple iterators in parallel/concurrently, with explicit backpressure and configurable result ordering;
+    avoids pre-submitting the entire workload.
 
     This function provides high-performance parallel execution of iterator-based tasks using a shared thread pool, with
     precise control over result delivery ordering and concurrency management through a sliding window buffer approach.
@@ -119,7 +120,7 @@ def parallel_iterator(
         if ordered:
             while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
                 curr_future: Future[T] = fifo_buffer.popleft()
-                next_future = next(iterator, None)  # causes the next CLI call to be submitted
+                next_future = next(iterator, None)  # keep the buffer full; causes the next CLI call to be submitted
                 if next_future is not None:
                     fifo_buffer.append(next_future)
                 yield curr_future.result()  # blocks until CLI returns
@@ -130,7 +131,7 @@ def parallel_iterator(
             while todo_futures:
                 done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
                 for done_future in done_futures:  # submit the next CLI call whenever a CLI call returns
-                    next_future = next(iterator, None)  # causes the next CLI call to be submitted
+                    next_future = next(iterator, None)  # keep the buffer full; causes the next CLI call to be submitted
                     if next_future is not None:
                         todo_futures.add(next_future)
                     yield done_future.result()  # does not block as processing has already completed
@@ -158,7 +159,13 @@ def batch_cmd_iterator(
     sep: str = " ",  # separator between batch args
 ) -> Generator[T, None, None]:
     """Returns an iterator that runs fn(cmd_args) in sequential batches, without creating a cmdline that's too big for the OS
-    to handle."""
+    to handle; Can be seen as a Pythonic xargs -n / -s with OS-aware safety margin.
+
+    Except for the max_batch_bytes logic, this is essentially the same as:
+    >>>
+    while batch := list(itertools.islice(cmd_args, max_batch_items)):  # doctest: +SKIP
+        yield fn(batch)
+    """
     assert isinstance(sep, str)
     fsenc: str = sys.getfilesystemencoding()
     seplen: int = len(sep.encode(fsenc))
