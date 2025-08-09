@@ -142,38 +142,38 @@ def suite() -> unittest.TestSuite:
     #     suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
     #     suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
 
-    # for ssh_mode in ["pull-push"]:
-    # for ssh_mode in ["local", "pull-push"]:
-    # for ssh_mode in []:
-    for ssh_mode in ["local"]:
-        for min_pipe_transfer_size in [1024**2]:
-            for affix in [""]:
-                # no_privilege_elevation_modes = []
-                no_privilege_elevation_modes = [False]
-                if not (os.geteuid() == 0 or ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
-                    no_privilege_elevation_modes.append(True)
-                for no_privilege_elevation in no_privilege_elevation_modes:
-                    encrypted_datasets = [False]
-                    if not (ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
-                        encrypted_datasets += [True]
-                    for encrypted_dataset in encrypted_datasets:
-                        params = {
-                            "ssh_mode": ssh_mode,
-                            "verbose": True,
-                            "min_pipe_transfer_size": min_pipe_transfer_size,
-                            "affix": affix,
-                            "skip_missing_snapshots": "continue",
-                            "no_privilege_elevation": no_privilege_elevation,
-                            "encrypted_dataset": encrypted_dataset,
-                        }
-                        if ttype.is_smoke_test:
-                            suite.addTest(ParametrizedTestCase.parametrize(SmokeTestCase, params))
-                        elif ttype.is_adhoc_test:
-                            suite.addTest(ParametrizedTestCase.parametrize(AdhocTestCase, params))
-                        else:
-                            suite.addTest(ParametrizedTestCase.parametrize(LocalTestCase, params))
-    if ttype.is_smoke_test or ttype.is_adhoc_test:
-        return suite
+    # # for ssh_mode in ["pull-push"]:
+    # # for ssh_mode in ["local", "pull-push"]:
+    # # for ssh_mode in []:
+    # for ssh_mode in ["local"]:
+    #     for min_pipe_transfer_size in [1024**2]:
+    #         for affix in [""]:
+    #             # no_privilege_elevation_modes = []
+    #             no_privilege_elevation_modes = [False]
+    #             if not (os.geteuid() == 0 or ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
+    #                 no_privilege_elevation_modes.append(True)
+    #             for no_privilege_elevation in no_privilege_elevation_modes:
+    #                 encrypted_datasets = [False]
+    #                 if not (ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
+    #                     encrypted_datasets += [True]
+    #                 for encrypted_dataset in encrypted_datasets:
+    #                     params = {
+    #                         "ssh_mode": ssh_mode,
+    #                         "verbose": True,
+    #                         "min_pipe_transfer_size": min_pipe_transfer_size,
+    #                         "affix": affix,
+    #                         "skip_missing_snapshots": "continue",
+    #                         "no_privilege_elevation": no_privilege_elevation,
+    #                         "encrypted_dataset": encrypted_dataset,
+    #                     }
+    #                     if ttype.is_smoke_test:
+    #                         suite.addTest(ParametrizedTestCase.parametrize(SmokeTestCase, params))
+    #                     elif ttype.is_adhoc_test:
+    #                         suite.addTest(ParametrizedTestCase.parametrize(AdhocTestCase, params))
+    #                     else:
+    #                         suite.addTest(ParametrizedTestCase.parametrize(LocalTestCase, params))
+    # if ttype.is_smoke_test or ttype.is_adhoc_test:
+    #     return suite
 
     # ssh_modes = []
     # ssh_modes = ["pull-push"]
