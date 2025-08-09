@@ -224,11 +224,13 @@ jobs:
         ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
         sudo apt-get -y install zfs-dkms zfsutils-linux
         zfs --version
+        ./.github-workflow-scripts/install_ubuntu_24_04_pv_fr.sh
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
         install-zfs: false
+        install-pv: false
     - name: Display ZFS version and Python version
       run: |
         id -u -n
