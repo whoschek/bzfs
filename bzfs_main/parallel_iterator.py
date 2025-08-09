@@ -115,13 +115,14 @@ def parallel_iterator(
         iterators.clear()  # help gc
         # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
         fifo_buffer: deque[Future[T]] = deque(itertools.islice(iterator, max_workers))
-        next_future: Future[T] | None
+        sentinel: Future = Future()
+        next_future: Future[T]
 
         if ordered:
             while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
                 curr_future: Future[T] = fifo_buffer.popleft()
-                next_future = next(iterator, None)  # keep the buffer full; causes the next CLI call to be submitted
-                if next_future is not None:
+                next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
+                if next_future is not sentinel:
                     fifo_buffer.append(next_future)
                 yield curr_future.result()  # blocks until CLI returns
         else:
@@ -131,8 +132,8 @@ def parallel_iterator(
             while todo_futures:
                 done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
                 for done_future in done_futures:  # submit the next CLI call whenever a CLI call returns
-                    next_future = next(iterator, None)  # keep the buffer full; causes the next CLI call to be submitted
-                    if next_future is not None:
+                    next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
+                    if next_future is not sentinel:
                         todo_futures.add(next_future)
                     yield done_future.result()  # does not block as processing has already completed
         assert next(iterator, None) is None
@@ -170,26 +171,17 @@ def batch_cmd_iterator(
     fsenc: str = sys.getfilesystemencoding()
     seplen: int = len(sep.encode(fsenc))
     batch: list[str]
-    batch, total_bytes, max_items = [], 0, max_batch_items
-
-    def flush() -> T | None:
-        if len(batch) > 0:
-            return fn(batch)
-        return None
-
+    batch, total_bytes, total_items = [], 0, 0
     for cmd_arg in cmd_args:
-        curr_bytes: int = seplen + len(cmd_arg.encode(fsenc))
-        if total_bytes + curr_bytes > max_batch_bytes or max_items <= 0:
-            results = flush()
-            if results is not None:
-                yield results
-            batch, total_bytes, max_items = [], 0, max_batch_items
+        arg_bytes: int = seplen + len(cmd_arg.encode(fsenc))
+        if (total_items >= max_batch_items or total_bytes + arg_bytes > max_batch_bytes) and len(batch) > 0:
+            yield fn(batch)
+            batch, total_bytes, total_items = [], 0, 0
         batch.append(cmd_arg)
-        total_bytes += curr_bytes
-        max_items -= 1
-    results = flush()
-    if results is not None:
-        yield results
+        total_bytes += arg_bytes
+        total_items += 1
+    if len(batch) > 0:
+        yield fn(batch)
 
 
 def get_max_command_line_bytes(os_name: str) -> int:
