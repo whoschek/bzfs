@@ -60,7 +60,7 @@ To understand the system's architecture and features, follow these steps:
 Before committing any changes, you **must** follow this exact sequence:
 
 0. **Initialize Environment**: If the `venv` directory does not exist, create it and set it up with all development
-   dependencies as described near the end of this document in Section "How to Setup the Environment".
+   dependencies as described in [How-to-Setup-the-Environment)](#how-to-setup-the-environment).
 
 1. **Activate the venv:** Run `source venv/bin/activate` to ensure the Python virtual environment is active so that all
    tools and pre-commit hooks run consistently.
