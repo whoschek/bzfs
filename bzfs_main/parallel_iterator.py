@@ -136,7 +136,7 @@ def parallel_iterator(
                     if next_future is not sentinel:
                         todo_futures.add(next_future)
                     yield done_future.result()  # does not block as processing has already completed
-        assert next(iterator, None) is None
+        assert next(iterator, sentinel) is sentinel
 
 
 K = TypeVar("K")
