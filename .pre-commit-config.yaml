@@ -25,17 +25,20 @@ default_install_hook_types:
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.28.0
-    hooks:            # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
-      - id: gitleaks  # defaults to: gitleaks git --pre-commit --redact --staged --verbose
+    hooks:                              # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
+      - id: gitleaks                    # defaults to: gitleaks git --pre-commit --redact --staged --verbose
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: detect-private-key          # Prevent the accidental inclusion of private keys in your commits
       - id: check-merge-conflict        # Check that merge conflicts are not being committed
-      - id: check-yaml                  # Attempt to load all YAML files to verify syntax
       - id: check-toml                  # Attempt to load all TOML files to verify syntax
+      - id: check-yaml                  # Attempt to load all YAML files to verify syntax
       - id: check-xml                   # Attempt to load all XML files to verify syntax via xmllint
+      - id: check-json                  # Attempt to load all JSON files to verify syntax
+        exclude: '.*/.*bzfs_log_config.*\.json$'
       - id: pretty-format-json          # Auto-format JSON files
+        exclude: '.*/.*bzfs_log_config.*\.json$'
         args: [
           --autofix,
           --indent=4,
@@ -43,9 +46,6 @@ repos:
           --no-sort-keys,               # preserve original key order
           --top-keys="",                # no keys forced to the top
         ]
-        exclude: '.*/.*bzfs_log_config.*\.json$'
-      - id: check-json                  # Attempt to load all JSON files to verify syntax
-        exclude: '.*/.*bzfs_log_config.*\.json$'
       - id: check-symlinks              # Check for symlinks that do not point to anything
       - id: mixed-line-ending
         args: [--fix=lf]                # Replace line endings with linefeed

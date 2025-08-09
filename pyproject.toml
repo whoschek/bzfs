@@ -61,7 +61,7 @@ dev = [  # for development only
   # "pandoc", # instead use this for v3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
   "genbadge[coverage]==1.1.2",      # see https://smarie.github.io/python-genbadge/
   "commitizen==4.8.3",              # see https://github.com/commitizen-tools/commitizen
-  "pre-commit==4.2",                # see https://github.com/pre-commit/pre-commit
+  "pre-commit==4.3.0",              # see https://github.com/pre-commit/pre-commit
   "black==25.1",                    # see https://github.com/psf/black
   "ruff==0.12.8",                   # see https://github.com/astral-sh/ruff
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
