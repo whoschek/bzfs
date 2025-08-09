@@ -5606,7 +5606,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.inject_pipe_error("inject_src_pipe_fail", expected_error=[1, DIE_STATUS])
 
     def test_inject_src_pipe_garble(self) -> None:
-        if is_pv_at_least_1_9_0() and is_zfs_at_least_2_3_0():
+        if is_pv_at_least_1_9_0():
             self.skipTest("workaround for zfs send-receive pipeline hang")
         self.inject_pipe_error("inject_src_pipe_garble")
 
