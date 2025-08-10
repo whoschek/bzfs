@@ -945,12 +945,10 @@ class Job:
             if run == 0:
                 # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
                 cmd: list[str] = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
-                for datasets_having_snapshots_lst in zfs_list_snapshots_in_parallel(
-                    self, dst, cmd, sorted(orphans), ordered=False
-                ):
+                for snapshots in zfs_list_snapshots_in_parallel(self, dst, cmd, sorted(orphans), ordered=False):
                     if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
-                        replace_in_lines(datasets_having_snapshots_lst, old="#", new="@", count=1)  # treat bookmarks as snap
-                    datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots_lst))
+                        replace_in_lines(snapshots, old="#", new="@", count=1)  # treat bookmarks as snapshots
+                    datasets_having_snapshots: set[str] = set(cut(field=1, separator="@", lines=snapshots))
                     dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
             else:
                 delete_datasets(self, dst, orphans)

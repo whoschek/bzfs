@@ -228,13 +228,10 @@ def process_datasets_in_parallel_and_fault_tolerant(
     assert (enable_barriers is not False) or not has_barrier
     barriers_enabled: bool = bool(has_barrier or enable_barriers)
     assert callable(append_exception)
-    retry_policy = (
-        retry_policy
-        if retry_policy is not None
-        else RetryPolicy(  # no retries
+    if retry_policy is None:
+        retry_policy = RetryPolicy(  # no retries
             argparse.Namespace(retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=0)
         )
-    )
     is_debug: bool = log.isEnabledFor(logging.DEBUG)
 
     def _process_dataset(dataset: str, tid: str) -> bool:
@@ -379,7 +376,7 @@ def _complete_job_with_barriers(
     if no_skip:
         enqueue_children(node)  # make child datasets available for start of processing
     else:  # job completed without success
-        tmp = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
+        tmp: TreeNode | None = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
         while tmp is not None:
             tmp.mut.barrier = immutable_empty_barrier
             tmp = tmp.parent
@@ -390,7 +387,7 @@ def _complete_job_with_barriers(
                 node.mut.pending += min(1, enqueue_children(node.mut.barrier))
         node.mut.barrier = immutable_empty_barrier
         if node.mut.pending > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
-            break  # ... if so we aren't quite done yet with this subtree
+            break  # ... if so we have not yet completed the subtree, so don't mark the subtree as completed yet
         if node.parent is None:
             break  # we've reached the root node
         node = node.parent  # recurse up the tree to propagate completion upward
