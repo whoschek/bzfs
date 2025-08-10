@@ -517,7 +517,7 @@ The script also demonstrates functioning installation steps on Ubuntu, FreeBSD, 
 The script also generates code coverage reports which are published
 [here](https://whoschek.github.io/bzfs/coverage).
 
-The gist is that it should work on any flavor, with python (3.8 or higher, no additional python packages required)
+The gist is that it should work on any platform, with python (3.8 or higher, no additional python packages required)
 only needed on the initiator host.
 
 
