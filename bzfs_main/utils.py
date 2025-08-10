@@ -141,7 +141,7 @@ def tail(file: str, n: int, errors: str | None = None) -> Sequence[str]:
 def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     """Replaces regex capturing groups with non-capturing groups for better matching performance.
 
-    Example: '(.*/)?tmp(foo|bar)(?!public)\\(' --> '(?:.*/)?tmp(?:foo|bar)(?!public)\\()'
+    Example: '(.*/)?tmp(foo|bar)(?!public)\\(' --> '(?:.*/)?tmp(?:foo|bar)(?!public)\\('
     Aka replaces brace '(' followed by a char other than question mark '?', but not preceded by a backslash
     with the replacement string '(?:'
     Also see https://docs.python.org/3/howto/regex.html#non-capturing-and-named-groups

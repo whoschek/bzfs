@@ -848,6 +848,19 @@ class TestReplaceCapturingGroups(AbstractTestCase):
         expected_result = "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))"
         self.assertEqual(expected_result, self.replace_capturing_group(complex_pattern))
 
+    def test_example(self) -> None:
+        pattern = "(.*/)?tmp(foo|bar)(?!public)("
+        expected_result = "(?:.*/)?tmp(?:foo|bar)(?!public)("
+        self.assertEqual(expected_result, self.replace_capturing_group(pattern))
+
+        pattern = "(.*/)?tmp(foo|bar)(?!public)\\("
+        expected_result = "(?:.*/)?tmp(?:foo|bar)(?!public)\\("
+        self.assertEqual(expected_result, self.replace_capturing_group(pattern))
+
+        pattern += ")"
+        expected_result += ")"
+        self.assertEqual(expected_result, self.replace_capturing_group(pattern))
+
 
 #############################################################################
 class TestSubprocessRun(AbstractTestCase):
