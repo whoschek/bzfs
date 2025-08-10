@@ -60,7 +60,7 @@ To understand the system's architecture and features, follow these steps:
 Before committing any changes, you **must** follow this exact sequence:
 
 0. **Initialize Environment**: If the `venv` directory does not exist, create it and set it up with all development
-   dependencies as described in [How-to-Setup-the-Environment)](#how-to-setup-the-environment).
+   dependencies as described in [How to Setup the Environment](#how-to-setup-the-environment).
 
 1. **Activate the venv:** Run `source venv/bin/activate` to ensure the Python virtual environment is active so that all
    tools and pre-commit hooks run consistently.
@@ -107,8 +107,8 @@ Before committing any changes, you **must** follow this exact sequence:
 - **Fit In:** New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
   `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in
   the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
-- **Expected before Actual value:** When calling unittest `assert*Equal()` methods, ensure that the *first* argument is
-  the *expected* value, and the *second* argument is the *actual* value, not the other way round.
+- **Place Expected before Actual value:** When calling unittest `assert*Equal()` methods, ensure that the *first*
+  argument is the *expected* value, and the *second* argument is the *actual* value, not the other way round.
 
 ## How to Write Code
 
