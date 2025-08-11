@@ -146,8 +146,6 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     with the replacement string '(?:'
     Also see https://docs.python.org/3/howto/regex.html#non-capturing-and-named-groups
     """
-    # pattern = re.compile(r'(?<!\\)\((?!\?)')
-    # return pattern.sub('(?:', regex)
     i = len(regex) - 2
     while i >= 0:
         i = regex.rfind("(", 0, i + 1)

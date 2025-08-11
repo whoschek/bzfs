@@ -861,6 +861,41 @@ class TestReplaceCapturingGroups(AbstractTestCase):
         expected_result += ")"
         self.assertEqual(expected_result, self.replace_capturing_group(pattern))
 
+    def test_many_cases(self) -> None:
+        testcases: dict[str, str] = {
+            "": "",
+            "a": "a",
+            "ab": "ab",
+            "abc": "abc",
+            "(a)": "(?:a)",
+            "(ab)": "(?:ab)",
+            "(abc)": "(?:abc)",
+            "a(b)c": "a(?:b)c",
+            "(a)(b)": "(?:a)(?:b)",  # consecutive non-empty groups
+            "(a(b(c)))": "(?:a(?:b(?:c)))",  # triple-nested groups
+            "(?abc)": "(?abc)",  # special groups
+            "(?:abc)": "(?:abc)",  # special groups
+            "(?=abc)": "(?=abc)",  # special groups
+            "(": "(",  # single opening parenthesis
+            "()": "(?:)",  # empty group
+            "()()": "(?:)(?:)",  # consecutive empty groups
+            "a\\(b)c": "a\\(b)c",  # escaped parentheses
+            r"a\\(b)": r"a\\(b)",  # double escaped parentheses
+            r"(a)\(b)": r"(?:a)\(b)",  # group followed immediately by an escaped parenthesis
+            r"(?=a)(b)\(c)(?:d)(e)": r"(?=a)(?:b)\(c)(?:d)(?:e)",  # complex mix of groups
+            "(你好)": "(?:你好)",  # group with Unicode characters
+            "a(?:b)": "a(?:b)",  # string ending with a non-capturing group
+            "([*+?^])": "(?:[*+?^])",  # group containing only special regex metacharacters
+            r"\(a)": r"\(a)",  # one backslash -> escaped -> NO change
+            r"\\(a)": r"\\(a)",  # double-escaped parentheses -> escaped -> NO change
+            r"\\\\(a)": r"\\\\(a)",  # quadruple-escaped parentheses -> escaped -> NO change
+            r"(a)\(b)(?:c)(?=d)(e)": r"(?:a)\(b)(?:c)(?=d)(?:e)",  # mixed complex case
+            "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))": "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))",  # mixed complex case
+        }
+        for i, (pattern, expected_result) in enumerate(testcases.items()):
+            with self.subTest(i=i):
+                self.assertEqual(expected_result, self.replace_capturing_group(pattern))
+
 
 #############################################################################
 class TestSubprocessRun(AbstractTestCase):
