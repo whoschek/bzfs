@@ -43,6 +43,7 @@ def round_datetime_up_to_duration_multiple(
 
 
 class TestRoundDatetimeUpToDurationMultiple(AbstractTestCase):
+
     def setUp(self) -> None:
         # Use a fixed timezone (e.g. Eastern Standard Time, UTC-5) for all tests.
         self.tz = timezone(timedelta(hours=-5))

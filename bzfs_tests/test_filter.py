@@ -224,6 +224,7 @@ class TestHelperFunctions(CommonTest):
 
 #############################################################################
 class TestTimeRangeAction(CommonTest):
+
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--time-n-ranks", action=bzfs_main.argparse_actions.TimeRangeAndRankRangeAction, nargs="+")
@@ -794,6 +795,7 @@ class TestFilterSnapshotsWithBookmarks(CommonTest):
 
 #############################################################################
 class TestFilterDatasets(CommonTest):
+
     def make_job(
         self,
         include: list[str] | None = None,
@@ -877,6 +879,7 @@ class TestFilterDatasets(CommonTest):
 
 #############################################################################
 class TestFilterDatasetsByExcludeProperty(CommonTest):
+
     def make_job(self, debug: bool = False) -> tuple[Job, Remote]:
         args = self.argparser_parse_args(["src", "dst", "--exclude-dataset-property", "skip"])
         log = logging.getLogger(f"prop_{id(self)}_{debug}")

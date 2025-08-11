@@ -94,6 +94,7 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestHelperFunctions(AbstractTestCase):
+
     def test_validate_port(self) -> None:
         bzfs.validate_port(47, "msg")
         bzfs.validate_port("47", "msg")
@@ -329,6 +330,7 @@ class TestAdditionalHelpers(AbstractTestCase):
 
 #############################################################################
 class TestParseDatasetLocator(AbstractTestCase):
+
     def run_test(
         self,
         input_value: str,
@@ -555,6 +557,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
 #############################################################################
 class TestPreservePropertiesValidation(AbstractTestCase):
+
     def setUp(self) -> None:
         self.args = self.argparser_parse_args(
             [

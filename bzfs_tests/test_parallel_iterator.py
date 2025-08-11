@@ -68,6 +68,7 @@ def dummy_fn_race(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str
 
 
 class TestParallelIterator(AbstractTestCase):
+
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
         p = self.make_params(args=args)

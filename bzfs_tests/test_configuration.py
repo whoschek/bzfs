@@ -46,6 +46,7 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestHelperFunctions(AbstractTestCase):
+
     def test_validate_quoting(self) -> None:
         params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
         params._validate_quoting([""])

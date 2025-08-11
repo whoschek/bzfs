@@ -106,6 +106,7 @@ class TestRemoteConfCache(AbstractTestCase):
 
 #############################################################################
 class TestDisableAndHelpers(AbstractTestCase):
+
     def test_disable_program(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
@@ -152,6 +153,7 @@ class TestDisableAndHelpers(AbstractTestCase):
 
 #############################################################################
 class TestDetectAvailablePrograms(AbstractTestCase):
+
     def _setup_job(self) -> bzfs.Job:
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
@@ -244,6 +246,7 @@ class TestDetectAvailablePrograms(AbstractTestCase):
 
 #############################################################################
 class TestDetectAvailableProgramsRemote(AbstractTestCase):
+
     def _setup(self) -> tuple[bzfs.Job, Remote]:
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)

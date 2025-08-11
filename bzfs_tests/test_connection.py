@@ -99,6 +99,7 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
 
 #############################################################################
 class TestConnectionPool(AbstractTestCase):
+
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst", "-v"])
         p = self.make_params(args=args)
@@ -354,6 +355,7 @@ class _FakeRemote(SimpleNamespace):
 
 #############################################################################
 class TestRunSshCommand(AbstractTestCase):
+
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
@@ -436,6 +438,7 @@ class TestRunSshCommand(AbstractTestCase):
 
 #############################################################################
 class TestTrySshCommand(AbstractTestCase):
+
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
@@ -551,6 +554,7 @@ class TestRefreshSshConnection(AbstractTestCase):
 
 #############################################################################
 class TestTimeout(AbstractTestCase):
+
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
@@ -574,6 +578,7 @@ class TestTimeout(AbstractTestCase):
 
 #############################################################################
 class TestMaybeInjectError(AbstractTestCase):
+
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.injection_lock = threading.Lock()
@@ -604,6 +609,7 @@ class TestMaybeInjectError(AbstractTestCase):
 
 #############################################################################
 class TestDecrementInjectionCounter(AbstractTestCase):
+
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.injection_lock = threading.Lock()

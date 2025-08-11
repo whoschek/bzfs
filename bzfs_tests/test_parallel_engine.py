@@ -53,6 +53,7 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestBuildTree(unittest.TestCase):
+
     def assert_keys_sorted(self, tree: dict[str, Any]) -> None:
         keys = list(tree.keys())
         self.assertEqual(sorted(keys), keys, f"Keys are not sorted: {keys}")
@@ -173,6 +174,7 @@ class TestBuildTree(unittest.TestCase):
 
 #############################################################################
 class TestProcessDatasetsInParallel(unittest.TestCase):
+
     def setUp(self) -> None:
         self.lock: threading.Lock = threading.Lock()
         self.log = MagicMock(spec=Logger)
