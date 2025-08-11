@@ -138,19 +138,30 @@ def tail(file: str, n: int, errors: str | None = None) -> Sequence[str]:
         return deque(fd, maxlen=n)
 
 
+NAMED_CAPTURING_GROUP: re.Pattern[str] = re.compile(r"^" + re.escape("(?P<") + r"[^\W\d]\w*" + re.escape(">"))
+
+
 def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     """Replaces regex capturing groups with non-capturing groups for better matching performance.
 
-    Example: '(.*/)?tmp(foo|bar)(?!public)\\(' --> '(?:.*/)?tmp(?:foo|bar)(?!public)\\('
-    Aka replaces brace '(' followed by a char other than question mark '?', but not preceded by a backslash
+    Unnamed capturing groups example: '(.*/)?tmp(foo|bar)(?!public)\\(' --> '(?:.*/)?tmp(?:foo|bar)(?!public)\\('
+    Aka replaces parenthesis '(' followed by a char other than question mark '?', but not preceded by a backslash
     with the replacement string '(?:'
+
+    Named capturing group example: '(?P<name>abc)' --> '(?:abc)'
+    Aka replaces '(?P<' followed by a valid name followed by '>', but not preceded by a backslash
+    with the replacement string '(?:'
+
     Also see https://docs.python.org/3/howto/regex.html#non-capturing-and-named-groups
     """
     i = len(regex) - 2
     while i >= 0:
         i = regex.rfind("(", 0, i + 1)
-        if i >= 0 and regex[i] == "(" and (regex[i + 1] != "?") and (i == 0 or regex[i - 1] != "\\"):
-            regex = f"{regex[0:i]}(?:{regex[i + 1:]}"
+        if i >= 0 and (i == 0 or regex[i - 1] != "\\"):
+            if regex[i + 1] != "?":
+                regex = f"{regex[0:i]}(?:{regex[i + 1:]}"  # unnamed capturing group
+            else:  # potentially a valid named capturing group
+                regex = regex[0:i] + NAMED_CAPTURING_GROUP.sub(repl="(?:", string=regex[i:], count=1)
         i -= 1
     return regex
 

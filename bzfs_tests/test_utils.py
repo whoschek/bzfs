@@ -118,6 +118,7 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestHelperFunctions(AbstractTestCase):
+
     def test_die_with_parser(self) -> None:
         parser = argparse.ArgumentParser()
         with self.assertRaises(SystemExit):
@@ -413,6 +414,7 @@ class TestTail(AbstractTestCase):
 
 #############################################################################
 class TestGetHomeDirectory(AbstractTestCase):
+
     def test_get_home_directory(self) -> None:
         old_home = os.environ.get("HOME")
         if old_home is not None:
@@ -543,6 +545,7 @@ class TestHumanReadable(AbstractTestCase):
 
 #############################################################################
 class TestOpenNoFollow(AbstractTestCase):
+
     def setUp(self) -> None:
         self.tmpdir = tempfile.mkdtemp()
         self.real_path = os.path.join(self.tmpdir, "file.txt")
@@ -795,71 +798,82 @@ class TestFindMatch(AbstractTestCase):
 
 #############################################################################
 class TestReplaceCapturingGroups(AbstractTestCase):
-    @staticmethod
-    def replace_capturing_group(regex: str) -> str:
-        return replace_capturing_groups_with_non_capturing_groups(regex)
 
     def test_basic_case(self) -> None:
-        self.assertEqual("(?:abc)", self.replace_capturing_group("(abc)"))
+        self.assertEqual("(?:abc)", replace_capturing_groups_with_non_capturing_groups("(abc)"))
 
     def test_nested_groups(self) -> None:
-        self.assertEqual("(?:a(?:bc)d)", self.replace_capturing_group("(a(bc)d)"))
+        self.assertEqual("(?:a(?:bc)d)", replace_capturing_groups_with_non_capturing_groups("(a(bc)d)"))
 
     def test_preceding_backslash(self) -> None:
-        self.assertEqual("\\(abc)", self.replace_capturing_group("\\(abc)"))
+        self.assertEqual("\\(abc)", replace_capturing_groups_with_non_capturing_groups("\\(abc)"))
 
     def test_group_starting_with_question_mark(self) -> None:
-        self.assertEqual("(?abc)", self.replace_capturing_group("(?abc)"))
+        self.assertEqual("(?abc)", replace_capturing_groups_with_non_capturing_groups("(?abc)"))
 
     def test_multiple_groups(self) -> None:
-        self.assertEqual("(?:abc)(?:def)", self.replace_capturing_group("(abc)(def)"))
+        self.assertEqual("(?:abc)(?:def)", replace_capturing_groups_with_non_capturing_groups("(abc)(def)"))
 
     def test_mixed_cases(self) -> None:
         self.assertEqual(
             "a(?:bc\\(de)f(?:gh)?i",
-            self.replace_capturing_group("a(bc\\(de)f(gh)?i"),
+            replace_capturing_groups_with_non_capturing_groups("a(bc\\(de)f(gh)?i"),
         )
 
     def test_empty_group(self) -> None:
-        self.assertEqual("(?:)", self.replace_capturing_group("()"))
+        self.assertEqual("(?:)", replace_capturing_groups_with_non_capturing_groups("()"))
 
-    def test_group_with_named_group(self) -> None:
-        self.assertEqual("(?P<name>abc)", self.replace_capturing_group("(?P<name>abc)"))
+    def test_named_capturing_groups(self) -> None:
+        testcases: dict[str, str] = {
+            "(?P<name>abc)": "(?:abc)",
+            "(?P<name1>(?P<name2>abc))": "(?:(?:abc))",
+            "(?P<name1>ab(?P<name2>c))": "(?:ab(?:c))",
+            "(?P<n>abc)": "(?:abc)",
+            "(?P<n789>abc)": "(?:abc)",
+            "(?P<789>abc)": "(?P<789>abc)",  # first char of name of named capturing group must not be a digit
+            "(?P<789>(?P<name1>a)bc)": "(?P<789>(?:a)bc)",  # first char of name of named capturing group must not be a digit
+            "(?P<789>(?P<345>a)bc)": "(?P<789>(?P<345>a)bc)",  # ... must not be a digit
+            "(?": "(?",  # not a valid capturing group
+            "(?P": "(?P",  # not a valid capturing group
+        }
+        for i, (pattern, expected_result) in enumerate(testcases.items()):
+            with self.subTest(i=i):
+                self.assertEqual(expected_result, replace_capturing_groups_with_non_capturing_groups(pattern))
 
     def test_group_with_non_capturing_group(self) -> None:
-        self.assertEqual("(?:a(?:bc)d)", self.replace_capturing_group("(a(?:bc)d)"))
+        self.assertEqual("(?:a(?:bc)d)", replace_capturing_groups_with_non_capturing_groups("(a(?:bc)d)"))
 
     def test_group_with_lookahead(self) -> None:
-        self.assertEqual("(?:abc)(?=def)", self.replace_capturing_group("(abc)(?=def)"))
+        self.assertEqual("(?:abc)(?=def)", replace_capturing_groups_with_non_capturing_groups("(abc)(?=def)"))
 
     def test_group_with_lookbehind(self) -> None:
-        self.assertEqual("(?<=abc)(?:def)", self.replace_capturing_group("(?<=abc)(def)"))
+        self.assertEqual("(?<=abc)(?:def)", replace_capturing_groups_with_non_capturing_groups("(?<=abc)(def)"))
 
     def test_escaped_characters(self) -> None:
         pattern = re.escape("(abc)")
-        self.assertEqual(pattern, self.replace_capturing_group(pattern))
+        self.assertEqual(pattern, replace_capturing_groups_with_non_capturing_groups(pattern))
 
     def test_complex_pattern_with_escape(self) -> None:
         complex_pattern = re.escape("(a[b]c{d}e|f.g)")
-        self.assertEqual(complex_pattern, self.replace_capturing_group(complex_pattern))
+        self.assertEqual(complex_pattern, replace_capturing_groups_with_non_capturing_groups(complex_pattern))
 
     def test_complex_pattern(self) -> None:
         complex_pattern = "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))"
         expected_result = "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))"
-        self.assertEqual(expected_result, self.replace_capturing_group(complex_pattern))
+        self.assertEqual(expected_result, replace_capturing_groups_with_non_capturing_groups(complex_pattern))
 
     def test_example(self) -> None:
         pattern = "(.*/)?tmp(foo|bar)(?!public)("
         expected_result = "(?:.*/)?tmp(?:foo|bar)(?!public)("
-        self.assertEqual(expected_result, self.replace_capturing_group(pattern))
+        self.assertEqual(expected_result, replace_capturing_groups_with_non_capturing_groups(pattern))
 
         pattern = "(.*/)?tmp(foo|bar)(?!public)\\("
         expected_result = "(?:.*/)?tmp(?:foo|bar)(?!public)\\("
-        self.assertEqual(expected_result, self.replace_capturing_group(pattern))
+        self.assertEqual(expected_result, replace_capturing_groups_with_non_capturing_groups(pattern))
 
         pattern += ")"
         expected_result += ")"
-        self.assertEqual(expected_result, self.replace_capturing_group(pattern))
+        self.assertEqual(expected_result, replace_capturing_groups_with_non_capturing_groups(pattern))
 
     def test_many_cases(self) -> None:
         testcases: dict[str, str] = {
@@ -873,6 +887,8 @@ class TestReplaceCapturingGroups(AbstractTestCase):
             "a(b)c": "a(?:b)c",
             "(a)(b)": "(?:a)(?:b)",  # consecutive non-empty groups
             "(a(b(c)))": "(?:a(?:b(?:c)))",  # triple-nested groups
+            "(((abc)))": "(?:(?:(?:abc)))",  # triple-nested groups
+            "(((a(b(c)))))": "(?:(?:(?:a(?:b(?:c)))))",  # six-nested groups
             "(?abc)": "(?abc)",  # special groups
             "(?:abc)": "(?:abc)",  # special groups
             "(?=abc)": "(?=abc)",  # special groups
@@ -894,11 +910,12 @@ class TestReplaceCapturingGroups(AbstractTestCase):
         }
         for i, (pattern, expected_result) in enumerate(testcases.items()):
             with self.subTest(i=i):
-                self.assertEqual(expected_result, self.replace_capturing_group(pattern))
+                self.assertEqual(expected_result, replace_capturing_groups_with_non_capturing_groups(pattern))
 
 
 #############################################################################
 class TestSubprocessRun(AbstractTestCase):
+
     def test_successful_command(self) -> None:
         result = subprocess_run(["true"], stdout=PIPE, stderr=subprocess.PIPE)
         self.assertEqual(0, result.returncode)
@@ -976,6 +993,7 @@ class TestPIDExists(AbstractTestCase):
 
 #############################################################################
 class TestTerminateProcessSubtree(AbstractTestCase):
+
     def setUp(self) -> None:
         self.children: list[subprocess.Popen[Any]] = []
 
@@ -1006,6 +1024,7 @@ class TestTerminateProcessSubtree(AbstractTestCase):
 
 #############################################################################
 class TestSmallPriorityQueue(AbstractTestCase):
+
     def setUp(self) -> None:
         self.pq: SmallPriorityQueue[int] = SmallPriorityQueue()
         self.pq_reverse: SmallPriorityQueue[int] = SmallPriorityQueue(reverse=True)
@@ -1134,6 +1153,7 @@ class TestSmallPriorityQueue(AbstractTestCase):
 
 #############################################################################
 class TestSynchronizedBool(AbstractTestCase):
+
     def test_initialization(self) -> None:
         b = SynchronizedBool(True)
         self.assertTrue(b.value)
@@ -1190,6 +1210,7 @@ class TestSynchronizedBool(AbstractTestCase):
 
 #############################################################################
 class TestSynchronizedDict(AbstractTestCase):
+
     def setUp(self) -> None:
         self.sync_dict: SynchronizedDict = SynchronizedDict({"a": 1, "b": 2, "c": 3})
 

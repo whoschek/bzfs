@@ -269,7 +269,7 @@ class ProgressReporter:
         if ":" in line:
             line = line.split(":", 1)[1].strip()
             sent_bytes, line = _pv_size_to_bytes(line)
-            line = ProgressReporter.NO_RATES_REGEX.sub("", line.lstrip(), 1)  # remove pv --timer, --rate, --average-rate
+            line = ProgressReporter.NO_RATES_REGEX.sub("", line.lstrip(), count=1)  # strip --timer, --rate, --avg-rate
             if match := ProgressReporter.TIME_REMAINING_ETA_REGEX.fullmatch(line):  # extract pv --eta duration
                 _, days, hours, minutes, secs, _ = match.groups()
                 time_remaining_secs = (86400 * int(days) if days else 0) + int(hours) * 3600 + int(minutes) * 60 + int(secs)
