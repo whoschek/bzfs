@@ -659,7 +659,7 @@ class Job:
 
         if p.delete_empty_dst_datasets and p.recursive and not failed:
             log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description)
-            dst_datasets = self.delete_empty_dst_datasets_task(basis_dst_datasets, dst_datasets)
+            basis_dst_datasets, dst_datasets = self.delete_empty_dst_datasets_task(basis_dst_datasets, dst_datasets)
 
         if p.compare_snapshot_lists and not failed:
             log.info("--compare-snapshot-lists: %s", task_description)
@@ -903,7 +903,9 @@ class Job:
         basis_dst_datasets = sorted(set(basis_dst_datasets).difference(to_delete))
         return basis_dst_datasets, sorted_dst_datasets
 
-    def delete_empty_dst_datasets_task(self, basis_dst_datasets: list[str], sorted_dst_datasets: list[str]) -> list[str]:
+    def delete_empty_dst_datasets_task(
+        self, basis_dst_datasets: list[str], sorted_dst_datasets: list[str]
+    ) -> tuple[list[str], list[str]]:
         """Deletes any existing destination dataset that has no snapshot and no bookmark if all descendants of that dataset
         do not have a snapshot or bookmark either; implements --delete-empty-dst-datasets.
 
@@ -953,7 +955,8 @@ class Job:
             else:
                 delete_datasets(self, dst, orphans)
                 sorted_dst_datasets = sorted(set(sorted_dst_datasets).difference(orphans))
-        return sorted_dst_datasets
+                basis_dst_datasets = sorted(set(basis_dst_datasets).difference(orphans))
+        return basis_dst_datasets, sorted_dst_datasets
 
     def monitor_snapshots_task(
         self, sorted_src_datasets: list[str], sorted_dst_datasets: list[str], task_description: str

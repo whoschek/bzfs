@@ -1062,8 +1062,9 @@ class TestDeleteEmptyDstDatasetsTask(AbstractTestCase):
             "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
             return_value=iter([["a/b/c@s1"]]),
         ) as mock_list, patch("bzfs_main.bzfs.delete_datasets") as mock_del:
-            result = job.delete_empty_dst_datasets_task(basis, datasets)
+            basis_datasets_result, result = job.delete_empty_dst_datasets_task(basis, datasets)
         self.assertListEqual(["a", "a/b", "a/b/c"], result)
+        self.assertListEqual(["a", "a/b", "a/b/c"], basis_datasets_result)
         mock_del.assert_called_once()
         self.assertSetEqual({"a/d"}, set(mock_del.call_args[0][2]))
         mock_list.assert_called_once()
@@ -1081,8 +1082,9 @@ class TestDeleteEmptyDstDatasetsTask(AbstractTestCase):
             "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
             return_value=iter([["b#bm1"]]),
         ) as mock_list, patch("bzfs_main.bzfs.delete_datasets") as mock_del:
-            result = job.delete_empty_dst_datasets_task(basis, datasets)
+            basis_datasets_result, result = job.delete_empty_dst_datasets_task(basis, datasets)
         self.assertListEqual(["b"], result)
+        self.assertListEqual(["b"], basis_datasets_result)
         mock_del.assert_called_once()
         self.assertSetEqual(set(), set(mock_del.call_args[0][2]))
         mock_list.assert_called_once()
@@ -1098,8 +1100,9 @@ class TestDeleteEmptyDstDatasetsTask(AbstractTestCase):
             "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
             return_value=iter([]),
         ) as mock_list, patch("bzfs_main.bzfs.delete_datasets") as mock_del:
-            result = job.delete_empty_dst_datasets_task(basis, datasets)
+            basis_datasets_result, result = job.delete_empty_dst_datasets_task(basis, datasets)
         self.assertListEqual([], result)
+        self.assertListEqual([], basis_datasets_result)
         mock_del.assert_called_once()
         self.assertSetEqual({"a", "a/b"}, set(mock_del.call_args[0][2]))
         mock_list.assert_called_once()
