@@ -57,22 +57,21 @@ Distribution = "https://pypi.org/project/bzfs"
 
 [project.optional-dependencies]
 dev = [  # for development only
-  "argparse-manpage==4.6",          # see https://github.com/praiskup/argparse-manpage
+  "argparse-manpage==4.7",          # see https://github.com/praiskup/argparse-manpage
   # "pandoc", # instead use this for v3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
   "genbadge[coverage]==1.1.2",      # see https://smarie.github.io/python-genbadge/
   "commitizen==4.8.3",              # see https://github.com/commitizen-tools/commitizen
   "pre-commit==4.3.0",              # see https://github.com/pre-commit/pre-commit
   "black==25.1",                    # see https://github.com/psf/black
-  "ruff==0.12.8",                   # see https://github.com/astral-sh/ruff
+  "ruff==0.12.9",                   # see https://github.com/astral-sh/ruff
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
   "mypy==1.16.1",                   # see https://github.com/python/mypy
   "docformatter==1.7.7",            # see https://github.com/PyCQA/docformatter
   "mdformat==0.7.22",               # see https://github.com/hukkin/mdformat
   "codespell==2.4.1",               # see https://github.com/codespell-project/codespell
-  "pylint==3.3.7",                  # see https://github.com/pylint-dev/pylint
-  "pyrefly==0.27.2",                # see https://github.com/facebook/pyrefly
-  "pytype==2024.10.11",             # see https://github.com/google/pytype
-  "ast-grep-cli==0.39.3",           # see https://github.com/ast-grep/ast-grep
+  "pylint==3.3.8",                  # see https://github.com/pylint-dev/pylint
+  "pyrefly==0.28.1",                # see https://github.com/facebook/pyrefly
+  "ast-grep-cli==0.39.4",           # see https://github.com/ast-grep/ast-grep
   "rope==1.14.0",                   # see https://github.com/python-rope/rope
 ]
 # Example that installs the optional python development dependencies (see above) into a venv:
@@ -303,21 +302,11 @@ disable_error_code = [  # toggles to exclude overly strict `mypy` checks in deve
 #    "var-annotated",
 ]
 
-[tool.pytype]
-python_version = "3.11"
-inputs = [
-    "bzfs_main",
-]
-disable = [  # see https://google.github.io/pytype/errors.html
-]
-keep_going = true
-jobs = "auto"
-
 [tool.pyrefly]
 python-version = "3.8"
 #untyped-def-behavior = "check-and-infer-return-type"
 #project-includes = ["**/bzfs_*/**"]
-#project-excludes = ["**/tests/**", "**/.venv/**"]
+project-excludes = ["bzfs_tests/bzfs_job_example.py", "**/.venv/**"]
 
 [tool.codespell]  # Auto-fix typos
 skip = "bzfs_tests/test_*.py,venv*,dist*,*.egg-info*,htmlcov*"
