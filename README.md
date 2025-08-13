@@ -89,7 +89,7 @@ granted corresponding ZFS permissions by administrators via 'zfs allow' delegati
 
 bzfs is written in Python and continuously runs a wide set of unit tests and integration tests to
 ensure coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris,
-on all Python versions >= 3.8 (including latest stable which is currently python-3.13).
+on all Python versions ≥ 3.8 (including latest stable which is currently python-3.13).
 
 bzfs is a stand-alone program with zero required dependencies, akin to a stand-alone shell script
 or binary executable. It is designed to be able to run in restricted barebones server
@@ -907,7 +907,7 @@ usage: bzfs [-h] [--recursive]
     * c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05',
     '2024-10-05T14:48:55', '2024-10-05T14:48:55+02', '2024-10-05T14:48:55-04:30'. If the
     datetime string does not contain time zone info then it is assumed to be in the local time
-    zone. Timezone string support requires Python >= 3.11.
+    zone. Timezone string support requires Python ≥ 3.11.
 
     * d) a duration that indicates how long ago from the current time, using the following
     syntax: a non-negative integer, followed by an optional space, followed by a duration unit
@@ -1217,9 +1217,8 @@ usage: bzfs [-h] [--recursive]
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x
 
     Note: --preserve-properties uses the 'zfs recv -x' option and thus requires either OpenZFS
-    >= 2.2.0 (see
-    https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff), or that 'zfs
-    send --props' is not used.
+    ≥ 2.2.0 (see https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff),
+    or that 'zfs send --props' is not used.
 
 <!-- -->
 
@@ -1671,7 +1670,7 @@ usage: bzfs [-h] [--recursive]
     any changes to replicate or monitor (e.g. a snapshot is only created every day and/or deleted
     every day).
 
-    *Note:* This flag only has an effect on OpenZFS >= 2.2.
+    *Note:* This flag only has an effect on OpenZFS ≥ 2.2.
 
     *Note:* This flag is only relevant for snapshot creation on the src if
     --create-src-snapshots-even-if-not-due is not specified.
