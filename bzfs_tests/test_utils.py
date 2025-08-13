@@ -103,6 +103,7 @@ def suite() -> unittest.TestSuite:
         TestHumanReadable,
         TestOpenNoFollow,
         TestFindMatch,
+        TestReplaceCapturingGroups,
         TestSubprocessRun,
         TestPIDExists,
         TestTerminateProcessSubtree,
@@ -675,7 +676,7 @@ class TestFindMatch(AbstractTestCase):
         def condition(arg: str) -> bool:
             return arg.startswith("-")
 
-        lst = ["a", "b", "-c", "d"]
+        lst: list[str] = ["a", "b", "-c", "d"]
         self.assert_find_match(2, lst, condition)
 
         self.assert_find_match(2, lst, condition, -3)
