@@ -532,47 +532,47 @@ jobs:
         with:
           persist-credentials: false
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-test_ubuntu_24_04_hpnssh
           path: coverage-test_ubuntu_24_04_hpnssh
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_3_latest
           path: coverage-test_ubuntu_24_04_zfs_2_3_latest
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_2_latest
           path: coverage-test_ubuntu_24_04_zfs_2_2_latest
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-test_ubuntu_24_04
           path: coverage-test_ubuntu_24_04
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-test_ubuntu_22_04
           path: coverage-test_ubuntu_22_04
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-test_ubuntu_22_04_zfs_0_8_x
           path: coverage-test_ubuntu_22_04_zfs_0_8_x
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-test_freebsd_14_3
           path: coverage-test_freebsd_14_3
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-test_freebsd_13_4
           path: coverage-test_freebsd_13_4
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-test_solaris_11_4
           path: coverage-test_solaris_11_4
@@ -607,7 +607,7 @@ jobs:
       BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
     steps:
       - name: Download combined coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-combine_coverage_reports
           path: site/branch
@@ -650,7 +650,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Download website artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: generate_website
           path: generate_website
