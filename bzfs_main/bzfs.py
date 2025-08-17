@@ -733,6 +733,9 @@ class Job:
         guarantee), and thus be consistent. Dataset names that can't fit into a single command line are spread over multiple
         command line invocations, respecting the limits that the operating system places on the maximum length of a single
         command line, per `getconf ARG_MAX`.
+
+        Time complexity is O(max(N log N, M log M)) where N is the number of datasets and M is the number of snapshots per
+        dataset. Space complexity is O(max(N, M)).
         """
         p, log = self.params, self.params.log
         src = p.src
@@ -989,6 +992,9 @@ class Job:
         pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to check if snapshots
         are successfully taken on schedule, successfully replicated on schedule, and successfully pruned on schedule. Process
         exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
+
+        Time complexity is O(max(N log N, M log M)) where N is the number of datasets and M is the number of snapshots per
+        dataset. Space complexity is O(max(N, M)).
         """
         p, log = self.params, self.params.log
         alerts: list[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts

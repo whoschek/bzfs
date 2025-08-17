@@ -76,7 +76,8 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     Lists snapshots only contained in source (tagged with 'src'), only contained in destination (tagged with 'dst'), and
     contained in both source and destination (tagged with 'all'), in the form of a TSV file, along with other snapshot
     metadata. Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and any
-    number of snapshots. Assumes that both src_datasets and dst_datasets are sorted.
+    number of snapshots. Time complexity is O(max(N log N, M log M)) where N is the number of datasets and M is the number of
+    snapshots per dataset. Space complexity is O(max(N, M)). Assumes that both src_datasets and dst_datasets are sorted.
     """
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
