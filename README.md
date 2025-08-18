@@ -666,11 +666,11 @@ usage: bzfs [-h] [--recursive]
             [--millisecondly_microsecond INT]
             [--zfs-recv-o-targets {full,incremental,full+incremental}]
             [--zfs-recv-o-sources STRING]
-            [--zfs-recv-o-include-regex REGEX [REGEX ...]]
+            [--zfs-recv-o-include-regex [REGEX ...]]
             [--zfs-recv-o-exclude-regex REGEX [REGEX ...]]
             [--zfs-recv-x-targets {full,incremental,full+incremental}]
             [--zfs-recv-x-sources STRING]
-            [--zfs-recv-x-include-regex REGEX [REGEX ...]]
+            [--zfs-recv-x-include-regex [REGEX ...]]
             [--zfs-recv-x-exclude-regex REGEX [REGEX ...]] [--version]
             [--help, -h]
             SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
@@ -1168,8 +1168,8 @@ usage: bzfs [-h] [--recursive]
 
 *  Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs
     send' CLI. The value is split on runs of one or more whitespace characters. Default is
-    '--props --raw --compressed'. To run `zfs send` without options, specify the empty
-    string: `--zfs-send-program-opts=''`. See
+    '--raw --compressed'. To run `zfs send` without options, specify the empty string:
+    `--zfs-send-program-opts=''`. See
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html and
     https://github.com/openzfs/zfs/issues/13024
 
@@ -1731,18 +1731,16 @@ usage: bzfs [-h] [--recursive]
     corresponding ZFS permissions by administrators via 'zfs allow' delegation mechanism, like
     so: sudo zfs allow -u $SRC_NON_ROOT_USER_NAME snapshot,destroy,send,bookmark,hold
     $SRC_DATASET; sudo zfs allow -u $DST_NON_ROOT_USER_NAME
-    mount,create,receive,rollback,destroy,canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize
-    $DST_DATASET_OR_POOL.
+    mount,create,receive,rollback,destroy $DST_DATASET_OR_POOL.
+
+    If you do not plan to use the --force* flags and --delete-* CLI options then ZFS
+    permissions 'rollback,destroy' can be omitted, arriving at the absolutely minimal set of
+    required destination permissions: `mount,create,receive`.
 
     For extra security $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME,
     i.e. the sending Unix user on the source and the receiving Unix user at the destination should
     be separate Unix user accounts with separate private keys even if both accounts reside on the
-    same machine, per the principle of least privilege. Further, if you do not plan to use the
-    --force* flags and --delete-* CLI options then ZFS permissions 'rollback,destroy' can be
-    omitted. If you do not plan to customize the respective ZFS dataset property then ZFS
-    permissions 'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can
-    be omitted, arriving at the absolutely minimal set of required destination permissions:
-    `mount,create,receive`.
+    same machine, per the principle of least privilege.
 
     Also see https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES and
     https://tinyurl.com/9h97kh8n and https://youtu.be/o_jr13Z9f1k?si=7shzmIQJpzNJV6cq
@@ -2500,7 +2498,7 @@ created on the source by the --create-src-snapshots option.
 # ZFS-RECV-O (EXPERIMENTAL)
 
 The following group of parameters specifies additional zfs receive '-o' options that can be used
-to configure the copying of ZFS dataset properties from the source dataset to its corresponding
+to configure copying of ZFS dataset properties from the source dataset to its corresponding
 destination dataset. The 'zfs-recv-o' group of parameters is applied before the 'zfs-recv-x'
 group.
 
@@ -2510,8 +2508,8 @@ group.
 
 *  The zfs send phase or phases during which the extra '-o' options are passed to 'zfs
     receive'. This can be one of the following choices: 'full', 'incremental',
-    'full+incremental'. Default is 'full+incremental'. A 'full' send is sometimes also known
-    as an 'initial' send.
+    'full+incremental'. Default is 'full'. A 'full' send is sometimes also known as an
+    'initial' send.
 
 <!-- -->
 
@@ -2533,7 +2531,7 @@ group.
 
 <div id="--zfs-recv-o-include-regex"></div>
 
-**--zfs-recv-o-include-regex** *REGEX [REGEX ...]*
+**--zfs-recv-o-include-regex** *[REGEX ...]*
 
 *  Take the output properties of --zfs-recv-o-sources (see above) and filter them such that we
     only retain the properties whose name matches at least one of the --include regexes but none
@@ -2542,16 +2540,19 @@ group.
     '-o' options in --zfs-recv-program-opt(s), unless another '-o' or '-x' option with the
     same name already exists therein. In other words, --zfs-recv-program-opt(s) takes precedence.
 
-    The --zfs-recv-o-include-regex option can be specified multiple times. A leading `!`
-    character indicates logical negation, i.e. the regex matches if the regex with the leading
-    `!` character removed does not match. If the option starts with a `+` prefix then regexes
-    are read from the newline-separated UTF-8 text file given after the `+` prefix, one regex
-    per line inside of the text file.
+    Zero or more regexes can be specified. Specify zero regexes to append no extra '-o' option.
+    A leading `!` character indicates logical negation, i.e. the regex matches if the regex with
+    the leading `!` character removed does not match. If the option starts with a `+` prefix
+    then regexes are read from the newline-separated UTF-8 text file given after the `+` prefix,
+    one regex per line inside of the text file.
 
-    The default is to include no properties, thus by default no extra '-o' option is appended.
-    Example: `--zfs-recv-o-include-regex recordsize volblocksize`. More examples: `.*`
+    The default regex is
+    'aclinherit|aclmode|acltype|atime|checksum|compression|copies|logbias|primarycache|recordsize|redundant_metadata|relatime|secondarycache|snapdir|sync|xattr'.
+    Example: `--zfs-recv-o-include-regex compression recordsize`. More examples: `.*`
     (include all properties), `foo bar myapp:.*` (include three regexes)
     `+zfs-recv-o_regexes.txt`, `+/path/to/zfs-recv-o_regexes.txt`
+
+    See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
 
 <!-- -->
 
@@ -2566,7 +2567,7 @@ group.
 # ZFS-RECV-X (EXPERIMENTAL)
 
 The following group of parameters specifies additional zfs receive '-x' options that can be used
-to configure the copying of ZFS dataset properties from the source dataset to its corresponding
+to configure copying of ZFS dataset properties from the source dataset to its corresponding
 destination dataset. The 'zfs-recv-o' group of parameters is applied before the 'zfs-recv-x'
 group.
 
@@ -2600,7 +2601,7 @@ group.
 
 <div id="--zfs-recv-x-include-regex"></div>
 
-**--zfs-recv-x-include-regex** *REGEX [REGEX ...]*
+**--zfs-recv-x-include-regex** *[REGEX ...]*
 
 *  Take the output properties of --zfs-recv-x-sources (see above) and filter them such that we
     only retain the properties whose name matches at least one of the --include regexes but none
@@ -2609,16 +2610,18 @@ group.
     '-x' options in --zfs-recv-program-opt(s), unless another '-o' or '-x' option with the
     same name already exists therein. In other words, --zfs-recv-program-opt(s) takes precedence.
 
-    The --zfs-recv-x-include-regex option can be specified multiple times. A leading `!`
-    character indicates logical negation, i.e. the regex matches if the regex with the leading
-    `!` character removed does not match. If the option starts with a `+` prefix then regexes
-    are read from the newline-separated UTF-8 text file given after the `+` prefix, one regex
-    per line inside of the text file.
+    Zero or more regexes can be specified. Specify zero regexes to append no extra '-x' option.
+    A leading `!` character indicates logical negation, i.e. the regex matches if the regex with
+    the leading `!` character removed does not match. If the option starts with a `+` prefix
+    then regexes are read from the newline-separated UTF-8 text file given after the `+` prefix,
+    one regex per line inside of the text file.
 
     The default is to include no properties, thus by default no extra '-x' option is appended.
-    Example: `--zfs-recv-x-include-regex recordsize volblocksize`. More examples: `.*`
+    Example: `--zfs-recv-x-include-regex compression recordsize`. More examples: `.*`
     (include all properties), `foo bar myapp:.*` (include three regexes)
     `+zfs-recv-x_regexes.txt`, `+/path/to/zfs-recv-x_regexes.txt`
+
+    See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
 
 <!-- -->
 

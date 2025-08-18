@@ -272,13 +272,34 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 # extra_args += ["--exclude-dataset-regex", "bar.*", "baz.*"]
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
 # extra_args += ["--create-src-snapshots-timezone=UTC"]
-# extra_args += ["--zfs-send-program-opts=--props --raw --compressed"]  # this is already the default anyway
+# extra_args += ["--zfs-send-program-opts=--raw --compressed"]  # this is already the default anyway
 # extra_args += ["--zfs-send-program-opts="]  # run 'zfs send' without options
 # extra_args += ["--zfs-recv-program-opts=-u"]  # this is already the default anyway
 # extra_args += ["--zfs-recv-program-opts=-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption"]
 # extra_args += ["--zfs-recv-program-opts="]  # run 'zfs receive' without options
 # extra_args += ["--preserve-properties", "mountpoint", "overlay", "sharenfs", "sharesmb", "exec", "setuid", "devices",
 #                "encryption", "keyformat", "keylocation", "volsize"]
+# extra_args += [  # this is already the default anyway
+#     "--zfs-recv-o-include-regex",
+#     "aclinherit",  # see https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
+#     "aclmode",
+#     "acltype",
+#     "atime",
+#     "checksum",
+#     "compression",
+#     "copies",
+#     "logbias",
+#     "primarycache",
+#     "recordsize",
+#     "redundant_metadata",
+#     "relatime",
+#     "secondarycache",
+#     "snapdir",
+#     "sync",
+#     "xattr",
+# ]
+# extra_args += ["--zfs-recv-o-targets=full"]  # this is already the default anyway
+# extra_args += ["--zfs-recv-o-targets=full+incremental"]
 # extra_args += ["--force-rollback-to-latest-snapshot"]
 # extra_args += ["--force-rollback-to-latest-common-snapshot"]
 # extra_args += ["--force"]

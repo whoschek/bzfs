@@ -539,7 +539,9 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def test_appends_x_options_when_supported(self) -> None:
         recv_opts: list[str] = []
-        with patch.object(self.p, "is_program_available", return_value=True):
+        with patch.object(self.p, "is_program_available", return_value=True), patch(
+            "bzfs_main.replication._zfs_get", return_value={}
+        ):
             result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
         self.assertEqual(["-x", "xprop1", "-x", "xprop2"], result_opts)
         self.assertEqual([], set_opts)
@@ -548,11 +550,63 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def test_skips_x_options_when_not_supported(self) -> None:
         recv_opts: list[str] = []
-        with patch.object(self.p, "is_program_available", return_value=False):
+        with patch.object(self.p, "is_program_available", return_value=False), patch(
+            "bzfs_main.replication._zfs_get", return_value={}
+        ):
             result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
         self.assertEqual([], result_opts)
         self.assertEqual([], set_opts)
         self.assertEqual({"existing"}, self.p.zfs_recv_ox_names)
+
+    def test_default_o_regex_contains_safe_props(self) -> None:
+        """Ensure default zfs_recv_o regex whitelists safe properties."""
+        pattern, _ = self.p.zfs_recv_o_config.include_regexes[0]
+        self.assertIn("compression", pattern.pattern)
+        self.assertNotIn("mountpoint", pattern.pattern)
+
+    def test_appends_o_options_for_whitelisted_props(self) -> None:
+        """Add '-o' options for properties allowed by default regex."""
+        self.p.zfs_recv_x_names = []
+        self.p.zfs_recv_ox_names = set()
+        recv_opts: list[str] = []
+
+        def fake_zfs_get(*args: object) -> dict[str, str | None]:
+            propnames = args[5]
+            if propnames == "all":
+                return {"compression": None}
+            if propnames == "compression":
+                return {"compression": "on"}
+            raise AssertionError(f"unexpected props {propnames}")
+
+        with patch.object(self.p, "is_program_available", return_value=True), patch(
+            "bzfs_main.replication._zfs_get", side_effect=fake_zfs_get
+        ):
+            result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
+        self.assertEqual(["-o", "compression=on"], result_opts)
+        self.assertEqual([], set_opts)
+        self.assertEqual(set(), self.p.zfs_recv_ox_names)
+
+    def test_skips_o_options_for_non_whitelisted_props(self) -> None:
+        """Ignore properties that are absent from default whitelist."""
+        self.p.zfs_recv_x_names = []
+        self.p.zfs_recv_ox_names = set()
+        recv_opts: list[str] = []
+
+        def fake_zfs_get(*args: object) -> dict[str, str | None]:
+            propnames = args[5]
+            if propnames == "all":
+                return {"mountpoint": None}
+            if propnames == "":
+                return {}
+            raise AssertionError(f"unexpected props {propnames}")
+
+        with patch.object(self.p, "is_program_available", return_value=True), patch(
+            "bzfs_main.replication._zfs_get", side_effect=fake_zfs_get
+        ):
+            result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
+        self.assertEqual([], result_opts)
+        self.assertEqual([], set_opts)
+        self.assertEqual(set(), self.p.zfs_recv_ox_names)
 
 
 #############################################################################

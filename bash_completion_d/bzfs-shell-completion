@@ -25,7 +25,9 @@ __choices_bzfs() {
     --skip-on-error) echo dataset fail tree ;;
     --ssh-program) echo - hpnssh ssh ;;
     --sudo-program) echo - sudo ;;
+    --zfs-recv-o-include-regex) echo [] ;;
     --zfs-recv-o-targets) echo full full+incremental incremental ;;
+    --zfs-recv-x-include-regex) echo [] ;;
     --zfs-recv-x-targets) echo full full+incremental incremental ;;
     --zpool-program) echo - zpool ;;
     -n) echo recv send ;;

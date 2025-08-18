@@ -331,7 +331,7 @@ def find_match(
 
 
 def is_descendant(dataset: str, of_root_dataset: str) -> bool:
-    """Returns True if ``dataset`` lies under ``of_root_dataset``."""
+    """Returns True if ``dataset`` lies under ``of_root_dataset`` in the dataset hierarchy."""
     return (dataset + "/").startswith(of_root_dataset + "/")
 
 

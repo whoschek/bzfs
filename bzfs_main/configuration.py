@@ -47,6 +47,8 @@ from bzfs_main.argparse_actions import (
 from bzfs_main.argparse_cli import (
     LOG_DIR_DEFAULT,
     ZFS_RECV_GROUPS,
+    ZFS_RECV_O,
+    ZFS_RECV_O_INCLUDE_REGEX_DEFAULT,
     __version__,
 )
 from bzfs_main.detect import (
@@ -518,14 +520,19 @@ class CopyPropertiesConfig:
 
     def __init__(self, group: str, flag: str, args: argparse.Namespace, p: Params) -> None:
         """Reads from ArgumentParser via args."""
+        assert group in ZFS_RECV_GROUPS
         # immutable variables:
         grup: str = group
-        self.group: str = group
+        self.group: str = group  # one of zfs_recv_o, zfs_recv_x
         self.flag: str = flag  # one of -o or -x
         sources: str = p.validate_arg_str(getattr(args, f"{grup}_sources"))
         self.sources: str = ",".join(sorted([s.strip() for s in sources.strip().split(",")]))  # canonicalize
         self.targets: str = p.validate_arg_str(getattr(args, f"{grup}_targets"))
-        self.include_regexes: RegexList = compile_regexes(getattr(args, f"{grup}_include_regex"))
+        include_regexes: list[str] | None = getattr(args, f"{grup}_include_regex")
+        assert ZFS_RECV_O in ZFS_RECV_GROUPS
+        if include_regexes is None:
+            include_regexes = [ZFS_RECV_O_INCLUDE_REGEX_DEFAULT] if grup == ZFS_RECV_O else []
+        self.include_regexes: RegexList = compile_regexes(include_regexes)
         self.exclude_regexes: RegexList = compile_regexes(getattr(args, f"{grup}_exclude_regex"))
 
     def __repr__(self) -> str:

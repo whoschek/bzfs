@@ -1127,7 +1127,7 @@ def _add_recv_property_options(
                 props_any: dict = _zfs_get(job, p.src, dataset, config.sources, "property", "all", True, cache)
                 props_filtered: dict = filter_properties(p, props_any, config.include_regexes, config.exclude_regexes)
                 user_propnames: list[str] = [name for name in props_filtered if ":" in name]
-                sys_propnames: str = ",".join([name for name in props_filtered if ":" not in name])
+                sys_propnames: str = ",".join(name for name in props_filtered if ":" not in name)
                 props: dict = _zfs_get(job, p.src, dataset, config.sources, "property,value", sys_propnames, True, cache)
                 for propnames in user_propnames:
                     props.update(_zfs_get(job, p.src, dataset, config.sources, "property,value", propnames, False, cache))
@@ -1145,6 +1145,7 @@ def _add_recv_property_options(
                         recv_opts.append(propname)
                         ox_names.add(propname)
                 else:
+                    assert config is p.zfs_set_config
                     set_opts.append(f"{propname}={props[propname]}")
     return recv_opts, set_opts
 

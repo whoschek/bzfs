@@ -53,8 +53,30 @@ PROG_AUTHOR: str = "Wolfgang Hoschek"
 EXCLUDE_DATASET_REGEXES_DEFAULT: str = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 LOG_DIR_DEFAULT: str = PROG_NAME + "-logs"
 SKIP_ON_ERROR_DEFAULT: str = "dataset"
-ZFS_RECV_GROUPS: dict[str, str] = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 CMP_CHOICES_ITEMS: tuple[str, str, str] = ("src", "dst", "all")
+ZFS_RECV_O: str = "zfs_recv_o"
+ZFS_RECV_X: str = "zfs_recv_x"
+ZFS_RECV_GROUPS: dict[str, str] = {ZFS_RECV_O: "-o", ZFS_RECV_X: "-x", "zfs_set": ""}
+ZFS_RECV_O_INCLUDE_REGEX_DEFAULT: str = "|".join(
+    [
+        "aclinherit",
+        "aclmode",
+        "acltype",
+        "atime",
+        "checksum",
+        "compression",
+        "copies",
+        "logbias",
+        "primarycache",
+        "recordsize",
+        "redundant_metadata",
+        "relatime",
+        "secondarycache",
+        "snapdir",
+        "sync",
+        "xattr",
+    ]
+)
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -672,7 +694,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--create-src-snapshots-enable-snapshots-changed-cache", action="store_true",
         help=argparse.SUPPRESS)  # deprecated; was replaced by --cache-snapshots
     parser.add_argument(
-        "--zfs-send-program-opts", type=str, default="--props --raw --compressed", metavar="STRING",
+        "--zfs-send-program-opts", type=str, default="--raw --compressed", metavar="STRING",
         help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
              "The value is split on runs of one or more whitespace characters. "
              "Default is '%(default)s'. To run `zfs send` without options, specify the empty "
@@ -1037,17 +1059,14 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
              "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
              "sudo zfs allow -u $SRC_NON_ROOT_USER_NAME snapshot,destroy,send,bookmark,hold $SRC_DATASET; "
-             "sudo zfs allow -u $DST_NON_ROOT_USER_NAME mount,create,receive,rollback,destroy,canmount,mountpoint,"
-             "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL.\n\n"
+             "sudo zfs allow -u $DST_NON_ROOT_USER_NAME mount,create,receive,rollback,destroy $DST_DATASET_OR_POOL.\n\n"
+             "If you do not plan to use the --force* flags and --delete-* CLI options then ZFS permissions "
+             "'rollback,destroy' can be omitted, arriving at the absolutely minimal set of required destination "
+             "permissions: `mount,create,receive`.\n\n"
              "For extra security $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME, i.e. the "
              "sending Unix user on the source and the receiving Unix user at the destination should be separate Unix "
              "user accounts with separate private keys even if both accounts reside on the same machine, per the "
-             "principle of least privilege. Further, if you do not plan to use the --force* flags and "
-             "--delete-* CLI options then ZFS permissions 'rollback,destroy' can "
-             "be omitted. If you do not plan to customize the respective ZFS dataset property then ZFS permissions "
-             "'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be omitted, arriving "
-             "at the absolutely minimal set of required destination permissions: "
-             "`mount,create,receive`.\n\n"
+             "principle of least privilege.\n\n"
              "Also see https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES and "
              "https://tinyurl.com/9h97kh8n and "
              "https://youtu.be/o_jr13Z9f1k?si=7shzmIQJpzNJV6cq\n\n")
@@ -1390,17 +1409,16 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         flag = "'" + flag + "'"  # one of -o or -x
 
         def h(text: str, option_name: str=option_name) -> str:
-            return argparse.SUPPRESS if option_name == "zfs_set" else text
+            return argparse.SUPPRESS if option_name not in (ZFS_RECV_O, ZFS_RECV_X) else text
 
         argument_group = parser.add_argument_group(
             grup + " (Experimental)",
             description=h(f"The following group of parameters specifies additional zfs receive {flag} options that "
-                          "can be used to configure the copying of ZFS dataset properties from the source dataset to "
+                          "can be used to configure copying of ZFS dataset properties from the source dataset to "
                           "its corresponding destination dataset. The 'zfs-recv-o' group of parameters is applied "
                           "before the 'zfs-recv-x' group."))
-        target_choices_items = ["full", "incremental"]
-        target_choices_default = "+".join(target_choices_items)
-        target_choices = target_choices_items + [target_choices_default]
+        target_choices = ["full", "incremental", "full+incremental"]
+        target_choices_default = "full+incremental" if option_name == ZFS_RECV_X else "full"
         qq = "'"
         argument_group.add_argument(
             f"--{grup}-targets", choices=target_choices, default=target_choices_default,
@@ -1421,23 +1439,29 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
                    "properties to copy - https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html. P.S: Note "
                    "that the existing 'zfs send --props' option does not filter and that --props only reads properties "
                    f"from the 'local' ZFS property source (https://github.com/openzfs/zfs/issues/13024). {msg}\n\n"))
+        if option_name == ZFS_RECV_O:
+            group_include_regex_default_help: str = f"The default regex is '{ZFS_RECV_O_INCLUDE_REGEX_DEFAULT}'."
+        else:
+            group_include_regex_default_help = ("The default is to include no properties, thus by default no extra "
+                                                f"{flag} option is appended. ")
         argument_group.add_argument(
-            f"--{grup}-include-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
+            f"--{grup}-include-regex", action=FileOrLiteralAction, default=None, const=[], nargs="*", metavar="REGEX",
             help=h(f"Take the output properties of --{grup}-sources (see above) and filter them such that we only "
                    "retain the properties whose name matches at least one of the --include regexes but none of the "
                    "--exclude regexes. If a property is excluded this decision is never reconsidered because exclude "
                    f"takes precedence over include. Append each retained property to the list of {flag} options in "
                    "--zfs-recv-program-opt(s), unless another '-o' or '-x' option with the same name already exists "
                    "therein. In other words, --zfs-recv-program-opt(s) takes precedence.\n\n"
-                   f"The --{grup}-include-regex option can be specified multiple times. "
+                   f"Zero or more regexes can be specified. Specify zero regexes to append no extra {flag} option. "
                    "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
                    "leading `!` character removed does not match. "
                    "If the option starts with a `+` prefix then regexes are read from the newline-separated "
                    "UTF-8 text file given after the `+` prefix, one regex per line inside of the text file.\n\n"
-                   f"The default is to include no properties, thus by default no extra {flag} option is appended. "
-                   f"Example: `--{grup}-include-regex recordsize volblocksize`. "
+                   f"{group_include_regex_default_help} "
+                   f"Example: `--{grup}-include-regex compression recordsize`. "
                    "More examples: `.*` (include all properties), `foo bar myapp:.*` (include three regexes) "
-                   f"`+{grup}_regexes.txt`, `+/path/to/{grup}_regexes.txt`\n\n"))
+                   f"`+{grup}_regexes.txt`, `+/path/to/{grup}_regexes.txt`\n\n"
+                   "See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
         argument_group.add_argument(
             f"--{grup}-exclude-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
             help=h(f"Same syntax as --{grup}-include-regex (see above), and the default is to exclude no properties. "

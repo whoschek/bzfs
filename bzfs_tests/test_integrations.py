@@ -643,7 +643,7 @@ class IntegrationTestCase(ParametrizedTestCase):
 
     def generate_recv_resume_token(self, from_snapshot: str | None, to_snapshot: str, dst_dataset: str) -> None:
         snapshot_opts = to_snapshot if not from_snapshot else f"-i {from_snapshot} {to_snapshot}"
-        send = f"sudo -n zfs send --props --raw --compressed -v {snapshot_opts}"
+        send = f"sudo -n zfs send --raw --compressed -v {snapshot_opts}"
         c = INJECT_DST_PIPE_FAIL_KBYTES
         cmd = ["sh", "-c", f"{send} | dd bs=1024 count={c} 2>/dev/null | sudo zfs receive -v -F -u -s {dst_dataset}"]
         try:
@@ -669,6 +669,9 @@ class IntegrationTestCase(ParametrizedTestCase):
 #############################################################################
 class SmokeTestCase(IntegrationTestCase):
     """Runs only a small subset of tests."""
+
+    def test_aaa_log_diagnostics_first(self) -> None:
+        LocalTestCase(param=self.param).test_aaa_log_diagnostics_first()
 
     def test_include_snapshots_plan(self) -> None:
         LocalTestCase(param=self.param).test_include_snapshots_plan()
@@ -698,6 +701,9 @@ class AdhocTestCase(IntegrationTestCase):
 
     You can temporarily change the list of tests here. The current list is arbitrary and subject to change at any time.
     """
+
+    def test_aaa_log_diagnostics_first(self) -> None:
+        LocalTestCase(param=self.param).test_aaa_log_diagnostics_first()
 
     def test_include_snapshots_plan(self) -> None:
         LocalTestCase(param=self.param).test_include_snapshots_plan()
@@ -981,6 +987,9 @@ class TestSSHLatency(IntegrationTestCase):
 #############################################################################
 class LocalTestCase(IntegrationTestCase):
 
+    def test_aaa_log_diagnostics_first(self) -> None:
+        print(f"itest: self.param={self.param}")
+
     def test_basic_snapshotting_flat_simple(self) -> None:
         destroy(dst_root_dataset, recursive=True)
         self.assert_snapshots(src_root_dataset, 0)
@@ -1044,7 +1053,7 @@ class LocalTestCase(IntegrationTestCase):
         q = 0
         for m in range(2):
             for k in range(2):
-                for j in range(2):  # noqa: B007
+                for j in range(2):
                     for i in range(2):
                         self.tearDownAndSetup()
                         self.setup_basic()
@@ -1054,8 +1063,9 @@ class LocalTestCase(IntegrationTestCase):
                         self.assert_snapshots(src_root_dataset, n, "s")
                         self.assert_snapshots(src_root_dataset + "/boo", 0)
                         self.assert_snapshots(src_root_dataset + "/foo/b", 0)
-                        for b in range(3):  # noqa: B007
+                        for b in range(3):
                             with stop_on_failure_subtest(i=q):
+                                print(f"itest: zzz, m={m}, k={k}, j={j}, i={i}, b={b}, q={q}, self.param={self.param}")
                                 q += 1
                                 self.run_bzfs(
                                     src_root_dataset,
@@ -2625,10 +2635,11 @@ class LocalTestCase(IntegrationTestCase):
                 new_recordsize = 8 * 1024
                 assert old_recordsize != new_recordsize
                 zfs_set([src_root_dataset + "/foo"], {"recordsize": str(new_recordsize)})
-                preserve = ["--zfs-recv-o-include-regex", "recordsize", "volblocksize"] if i > 0 else []
+                preserve = ["recordsize", "volblocksize"] if i > 0 else []
                 self.run_bzfs(
                     src_root_dataset + "/foo",
                     dst_root_dataset + "/foo",
+                    "--zfs-recv-o-include-regex",
                     *preserve,
                     "--zfs-send-program-opts=",
                 )
@@ -5518,6 +5529,10 @@ class LocalTestCase(IntegrationTestCase):
 
 #############################################################################
 class MinimalRemoteTestCase(IntegrationTestCase):
+
+    def test_aaa_log_diagnostics_first(self) -> None:
+        LocalTestCase(param=self.param).test_aaa_log_diagnostics_first()
+
     def test_basic_replication_flat_simple(self) -> None:
         LocalTestCase(param=self.param).test_basic_replication_flat_simple()
 
