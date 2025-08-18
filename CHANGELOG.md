@@ -47,6 +47,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] On SIGTERM, send signal also to descendant processes to also terminate descendants.
 - [bzfs] [security] Added `--preserve-properties` CLI option which preserves the current value of ZFS properties with
   the given names on the destination datasets on replication.
+- [bzfs] [security] Nomore include `--props` in `zfs send` command by default; instead the new default is to merely copy
+  a whitelist of safe dataset properties (if locally set) from src dataset to dst dataset when doing a 'full send', via
+  new defaults for `--zfs-recv-o-include-regex` and `--zfs-recv-o-include-targets`. If you'd like to continue to use the
+  old behavior, manually set `--zfs-send-program-opts="--props --raw --compressed"` and `--zfs-recv-o-include-regex`
+  (without any regex)
 - [bzfs] [security] Removed CLI options `--ssh-{src|dst}-private-key`, `--ssh-{src|dst}-extra-opt(s)`, `--ssh-cipher`,
   as it is safer to specify these options via `--ssh-{src|dst}-config-file` in the ssh client config file.
 - [bzfs] [security] Enhanced validation of CLI options.
