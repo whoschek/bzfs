@@ -1473,16 +1473,16 @@ class Job:
                     for fn, is_reverse in fns:
                         creation_unixtime_secs: int = 0  # find creation time of latest or oldest snapshot matching the label
                         minmax_snapshot: str = ""
-                        for j, s in enumerate(reversed(snapshot_names) if is_reverse else snapshot_names):
+                        for j, snapshot_name in enumerate(reversed(snapshot_names) if is_reverse else snapshot_names):
                             if (
-                                s.endswith(end)
-                                and s.startswith(start)
-                                and len(s) >= minlen
-                                and (infix or year_with_4_digits_regex.fullmatch(s[year_slice]))
+                                snapshot_name.endswith(end)
+                                and snapshot_name.startswith(start)
+                                and len(snapshot_name) >= minlen
+                                and (infix or year_with_4_digits_regex.fullmatch(snapshot_name[year_slice]))
                             ):
                                 k: int = len(snapshots) - j - 1 if is_reverse else j
                                 creation_unixtime_secs = snapshots[k][1]
-                                minmax_snapshot = s
+                                minmax_snapshot = snapshot_name
                                 break
                         fn(i, creation_unixtime_secs, dataset, minmax_snapshot)
                 fn_on_finish_dataset(dataset)

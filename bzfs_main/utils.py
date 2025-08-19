@@ -331,8 +331,8 @@ def find_match(
 
 
 def is_descendant(dataset: str, of_root_dataset: str) -> bool:
-    """Returns True if ``dataset`` lies under ``of_root_dataset`` in the dataset hierarchy."""
-    return (dataset + "/").startswith(of_root_dataset + "/")
+    """Returns True if ``dataset`` lies under ``of_root_dataset`` in the dataset hierarchy, or is the same."""
+    return dataset == of_root_dataset or dataset.startswith(of_root_dataset + "/")
 
 
 def has_duplicates(sorted_list: list[Any]) -> bool:
@@ -711,14 +711,10 @@ class Interner(Generic[S]):
 
     def intern(self, item: S) -> S:
         """Interns the given item."""
-        interned_item = self._items.get(item)
-        if interned_item is None:
-            self._items[item] = item
-            return item
-        return interned_item
+        return self._items.setdefault(item, item)
 
     def interned(self, item: S) -> S:
-        """Returns the interned item if an equal item is contained, else returns the non-interned item."""
+        """Returns the interned (aka deduped) item if an equal item is contained, else returns the non-interned item."""
         return self._items.get(item, item)
 
     def __contains__(self, item: S) -> bool:
@@ -863,7 +859,7 @@ class SortedInterner(Generic[T]):
         self._lst: list[T] = sorted_list
 
     def interned(self, element: T) -> T:
-        """Returns the interned item if an equal item is contained, else returns the non-interned item."""
+        """Returns the interned (aka deduped) item if an equal item is contained, else returns the non-interned item."""
         lst = self._lst
         i = binary_search(lst, element)
         return lst[i] if i >= 0 else element
