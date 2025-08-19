@@ -20,12 +20,12 @@
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN DESCRIPTION SECTION -->
 This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS
-snapshot creation, replication, pruning, and monitoring, across N source hosts and M destination
-hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script. For example,
-this simplifies the deployment of an efficient geo-replicated backup service where each of the M
-destination hosts is located in a separate geographic region and receives replicas from (the same
-set of) N source hosts. It also simplifies low latency replication from a primary to a secondary
-or to M read replicas, or backup to removable drives, etc.
+snapshot creation, replication, pruning, and monitoring, across a fleet of N source hosts and M
+destination hosts, using a single fleet-wide shared [jobconfig](bzfs_tests/bzfs_job_example.py)
+script. For example, this simplifies the deployment of an efficient geo-replicated backup service
+where each of the M destination hosts is located in a separate geographic region and receives
+replicas from (the same set of) N source hosts. It also simplifies low latency replication from a
+primary to a secondary or to M read replicas, or backup to removable drives, etc.
 
 This program can be used to efficiently replicate ...
 

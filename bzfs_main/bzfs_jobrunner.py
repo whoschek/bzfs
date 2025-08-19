@@ -20,7 +20,8 @@
 #
 """
 * High-level orchestrator that calls `bzfs` as part of complex, periodic workflows to manage backup, replication, and pruning
-  jobs across a fleet of multiple source and destination hosts; driven by a job config file (e.g., `bzfs_job_example.py`).
+  jobs across a fleet of multiple source and destination hosts; driven by a fleet-wide job config file
+  (e.g., `bzfs_job_example.py`).
 * Overview of the bzfs_jobrunner.py codebase:
 * The codebase starts with docs, definition of input data and associated argument parsing of CLI options/parameters.
 * Control flow starts in main(), far below ..., which kicks off a "Job".
@@ -85,7 +86,7 @@ def argument_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawTextHelpFormatter,
         description=f"""
 This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS snapshot creation, replication,
-pruning, and monitoring, across N source hosts and M destination hosts, using a single shared
+pruning, and monitoring, across a fleet of N source hosts and M destination hosts, using a single fleet-wide shared
 [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service where each of the M destination
 hosts is located in a separate geographic region and receives replicas from (the same set of) N source hosts. It also

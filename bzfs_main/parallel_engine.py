@@ -335,7 +335,7 @@ def _complete_job_with_barriers(
     '/' directory separators within the dataset string, and multiple "datasets" form a job dependency tree by way of common
     dataset directory prefixes. Jobs that do not depend on each other can be executed in parallel, and jobs can be told to
     first wait for other jobs to complete successfully. The algorithm is based on a barrier primitive and is typically
-    disabled" it is only required for rare jobrunner configs.
+    disabled". It is only required for rare jobrunner configs.
 
     For example, a job scheduler can specify that all parallel push replications jobs to multiple destinations must succeed
     before the jobs of the pruning phase can start. More generally, with this algo, a job scheduler can specify that all jobs
