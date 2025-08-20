@@ -1025,11 +1025,7 @@ class Job:
             return f"{msg} but should be at most {human_readable_duration(delta_millis, unit='ms')} old{s}"
 
         def check_alert(
-            label: SnapshotLabel,
-            alert_cfg: AlertConfig | None,
-            creation_unixtime_secs: int,
-            dataset: str,
-            snapshot: str,
+            label: SnapshotLabel, alert_cfg: AlertConfig | None, creation_unixtime_secs: int, dataset: str, snapshot: str
         ) -> None:
             if alert_cfg is None:
                 return
@@ -1423,11 +1419,17 @@ class Job:
                 datasets_to_snapshot[lbl] = list(  # inputs to merge() are sorted, and outputs are sorted too
                     heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl], datasets_without_snapshots)
                 )
+
         msgs.sort()
-        prefx = "Next scheduled snapshot time: "
-        text = "\n".join(f"{prefx}{next_event_dt} for {dataset}@{label}{msg}" for next_event_dt, dataset, label, msg in msgs)
-        if len(text) > 0:
-            log.info("Next scheduled snapshot times ...\n%s", text)
+        if len(msgs) > 0:
+            log.info("Next scheduled snapshot times ...")
+            for i in range(0, len(msgs), 1000):  # reduce logging overhead via mini-batching
+                text = "\n".join(
+                    f"Next scheduled snapshot time: {next_event_dt} for {dataset}@{label}{msg}"
+                    for next_event_dt, dataset, label, msg in msgs[i : i + 1000]
+                )
+                log.info("%s", text)
+
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
         label_indexes: dict[SnapshotLabel, int] = {label: k for k, label in enumerate(config_labels)}
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
