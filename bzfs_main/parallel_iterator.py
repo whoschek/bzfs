@@ -33,7 +33,7 @@ T = TypeVar("T")
 
 
 def parallel_iterator(
-    iterator_builder: Callable[[ThreadPoolExecutor], list[Iterable[Future[T]]]],
+    iterator_builder: Callable[[ThreadPoolExecutor], Iterable[Iterable[Future[T]]]],
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
 ) -> Generator[T, None, None]:
@@ -76,8 +76,8 @@ def parallel_iterator(
 
     Parameters:
     -----------
-    iterator_builder : Callable[[ThreadPoolExecutor], list[Iterable[Future[T]]]]
-        Factory function that receives a ThreadPoolExecutor and returns a list of iterators. Each iterator should yield
+    iterator_builder : Callable[[ThreadPoolExecutor], Iterable[Iterable[Future[T]]]]
+        Factory function that receives a ThreadPoolExecutor and returns a series of iterators. Each iterator should yield
         Future objects representing submitted tasks. The builder is called once with the managed thread pool.
 
     max_workers : int, default=os.cpu_count() or 1
@@ -109,10 +109,7 @@ def parallel_iterator(
         process_ssh_result(result)
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        iterators: list[Iterable[Future[T]]] = iterator_builder(executor)
-        assert isinstance(iterators, list)
-        iterator: Iterator[Future[T]] = itertools.chain(*iterators)
-        iterators.clear()  # help gc
+        iterator: Iterator[Future[T]] = itertools.chain.from_iterable(iterator_builder(executor))
         # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
         fifo_buffer: deque[Future[T]] = deque(itertools.islice(iterator, max_workers))
         sentinel: Future = Future()

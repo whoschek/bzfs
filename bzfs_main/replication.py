@@ -926,7 +926,7 @@ def delete_bookmarks(job: Job, remote: Remote, dataset: str, snapshot_tags: list
     run_ssh_cmd_parallel(
         job,
         remote,
-        [(cmd, [f"{dataset}#{snapshot_tag}" for snapshot_tag in snapshot_tags])],
+        [(cmd, (f"{dataset}#{snapshot_tag}" for snapshot_tag in snapshot_tags))],
         lambda _cmd, batch: try_ssh_command(
             job, remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch, exists=False
         ),
