@@ -765,8 +765,9 @@ class Job:
             fn=lambda cmd, batch: run_ssh_command(self, src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
             max_batch_items=1 if is_solaris_zfs(p, src) else 2**29,  # solaris CLI doesn't accept multiple datasets
         )
-        # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
-        self.cache.update_last_modified_cache(basis_datasets_to_snapshot)
+        if is_caching_snapshots(p, src):
+            # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
+            self.cache.update_last_modified_cache(basis_datasets_to_snapshot)
 
     def delete_destination_snapshots_task(
         self, basis_src_datasets: list[str], dst_datasets: list[str], max_workers: int, task_description: str

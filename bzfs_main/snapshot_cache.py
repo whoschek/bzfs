@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Stores snapshot metadata in fast disk inodes to avoid repeated 'zfs list' calls, without adding external dependencies or
-complex databases."""
+"""Stores snapshot metadata in fast disk inodes to avoid repeated 'zfs list -t snapshot' calls, without adding external
+dependencies or complex databases."""
 
 from __future__ import annotations
 import os
@@ -27,9 +27,6 @@ from typing import TYPE_CHECKING
 
 from bzfs_main.connection import (
     run_ssh_command,
-)
-from bzfs_main.detect import (
-    is_caching_snapshots,
 )
 from bzfs_main.parallel_batch_cmd import (
     itr_ssh_cmd_parallel,
@@ -87,8 +84,6 @@ class SnapshotCache:
         """perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls."""
         p = self.job.params
         src = p.src
-        if not is_caching_snapshots(p, src):
-            return
         src_datasets_set: set[str] = set()
         dataset_labels: dict[str, list[SnapshotLabel]] = defaultdict(list)
         for label, datasets in datasets_to_snapshot.items():
