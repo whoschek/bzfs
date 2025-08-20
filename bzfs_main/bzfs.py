@@ -1125,7 +1125,7 @@ class Job:
         self.dedicated_tcp_connection_per_zfs_send = (
             p.dedicated_tcp_connection_per_zfs_send
             and max_workers > 1
-            and has_siblings(src_datasets)  # siblings can be replicated in parallel
+            and has_siblings(src_datasets, is_test_mode=self.is_test_mode)  # siblings can be replicated in parallel
         )
         log.info("Starting replication task: %s", task_description + f" [{len(src_datasets)} datasets]")
         start_time_nanos: int = time.monotonic_ns()
@@ -1519,8 +1519,10 @@ def fix_solaris_raw_mode(lst: list[str]) -> list[str]:
     return lst
 
 
-def has_siblings(sorted_datasets: list[str]) -> bool:
+def has_siblings(sorted_datasets: list[str], is_test_mode: bool = False) -> bool:
     """Returns whether the (sorted) list of input datasets contains any siblings."""
+    assert (not is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
+    assert (not is_test_mode) or not has_duplicates(sorted_datasets), "List contains duplicates"
     skip_dataset: str = DONT_SKIP_DATASET
     parents: set[str] = set()
     for dataset in sorted_datasets:

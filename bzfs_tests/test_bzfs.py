@@ -161,18 +161,21 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertListEqual(["-F"], bzfs.fix_solaris_raw_mode(["-F"]))
 
     def test_has_siblings(self) -> None:
-        self.assertFalse(bzfs.has_siblings([]))
-        self.assertFalse(bzfs.has_siblings(["a"]))
-        self.assertFalse(bzfs.has_siblings(["a", "a/b"]))
-        self.assertFalse(bzfs.has_siblings(["a", "a/b", "a/b/c"]))
-        self.assertTrue(bzfs.has_siblings(["a", "b"]))
-        self.assertTrue(bzfs.has_siblings(["a", "a/b", "a/d"]))
-        self.assertTrue(bzfs.has_siblings(["a", "a/b", "a/b/c", "a/b/d"]))
-        self.assertTrue(bzfs.has_siblings(["a/b/c", "d/e/f"]))  # multiple root datasets can be processed in parallel
-        self.assertFalse(bzfs.has_siblings(["a", "a/b/c"]))
-        self.assertFalse(bzfs.has_siblings(["a", "a/b/c/d"]))
-        self.assertTrue(bzfs.has_siblings(["a", "a/b/c", "a/b/d"]))
-        self.assertTrue(bzfs.has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
+        def has_siblings(sorted_datasets: list[str]) -> bool:
+            return bzfs.has_siblings(sorted_datasets, is_test_mode=True)
+
+        self.assertFalse(has_siblings([]))
+        self.assertFalse(has_siblings(["a"]))
+        self.assertFalse(has_siblings(["a", "a/b"]))
+        self.assertFalse(has_siblings(["a", "a/b", "a/b/c"]))
+        self.assertTrue(has_siblings(["a", "b"]))
+        self.assertTrue(has_siblings(["a", "a/b", "a/d"]))
+        self.assertTrue(has_siblings(["a", "a/b", "a/b/c", "a/b/d"]))
+        self.assertTrue(has_siblings(["a/b/c", "d/e/f"]))  # multiple root datasets can be processed in parallel
+        self.assertFalse(has_siblings(["a", "a/b/c"]))
+        self.assertFalse(has_siblings(["a", "a/b/c/d"]))
+        self.assertTrue(has_siblings(["a", "a/b/c", "a/b/d"]))
+        self.assertTrue(has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
 
     def test_is_zfs_dataset_busy_match(self) -> None:
         def is_busy(proc: str, dataset: str, busy_if_send: bool = True) -> bool:

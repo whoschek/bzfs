@@ -54,6 +54,7 @@ import bzfs_main.check_range
 import bzfs_main.utils
 from bzfs_main import bzfs
 from bzfs_main.argparse_cli import PROG_AUTHOR, SKIP_ON_ERROR_DEFAULT
+from bzfs_main.bzfs import has_siblings
 from bzfs_main.detect import DUMMY_DATASET
 from bzfs_main.loggers import get_simple_logger
 from bzfs_main.parallel_engine import (
@@ -875,7 +876,7 @@ class Job:
             time.sleep(sleep_nanos / 1_000_000_000)  # seconds
         sorted_subjobs = sorted(subjobs.keys())
         has_barrier = any(BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
-        if self.spawn_process_per_job or has_barrier or bzfs.has_siblings(sorted_subjobs):  # siblings can run in parallel
+        if self.spawn_process_per_job or has_barrier or has_siblings(sorted_subjobs, self.is_test_mode):  # run in parallel
             log.log(LOG_TRACE, "%s", "spawn_process_per_job: True")
             process_datasets_in_parallel_and_fault_tolerant(
                 log=log,
