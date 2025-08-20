@@ -158,6 +158,7 @@ from bzfs_main.utils import (
     PROG_NAME,
     SHELL_CHARS,
     YEAR_WITH_FOUR_DIGITS_REGEX,
+    Interner,
     SortedInterner,
     SynchronizedBool,
     SynchronizedDict,
@@ -1337,6 +1338,7 @@ class Job:
         config: CreateSrcSnapshotConfig = p.create_src_snapshots_config
         datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         is_caching: bool = False
+        interner: Interner[datetime] = Interner()  # reduces memory footprint
         msgs: list[tuple[datetime, str, SnapshotLabel, str]] = []
 
         def create_snapshot_if_latest_is_too_old(
@@ -1353,6 +1355,7 @@ class Job:
             if config.current_datetime >= next_event_dt:
                 datasets_to_snapshot[label].append(dataset)  # mark it as scheduled for snapshot creation
                 msg = " has passed"
+            next_event_dt = interner.intern(next_event_dt)
             msgs.append((next_event_dt, dataset, label, msg))
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
                 cache_file: str = self.cache.last_modified_cache_file(src, dataset, label)
@@ -1421,14 +1424,12 @@ class Job:
                 )
 
         msgs.sort()
-        if len(msgs) > 0:
-            log.info("Next scheduled snapshot times ...")
-            for i in range(0, len(msgs), 1000):  # reduce logging overhead via mini-batching
-                text = "\n".join(
-                    f"Next scheduled snapshot time: {next_event_dt} for {dataset}@{label}{msg}"
-                    for next_event_dt, dataset, label, msg in msgs[i : i + 1000]
-                )
-                log.info("%s", text)
+        for i in range(0, len(msgs), 10000):  # reduce logging overhead via mini-batching
+            text = "".join(
+                f"\nNext scheduled snapshot time: {next_event_dt} for {dataset}@{label}{msg}"
+                for next_event_dt, dataset, label, msg in msgs[i : i + 10000]
+            )
+            log.info("Next scheduled snapshot times ...%s", text)
 
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
         label_indexes: dict[SnapshotLabel, int] = {label: k for k, label in enumerate(config_labels)}
