@@ -48,8 +48,8 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Generator,
     Iterable,
+    Iterator,
     TypeVar,
 )
 
@@ -96,7 +96,7 @@ def itr_ssh_cmd_batched(
     fn: Callable[[list[str]], T],
     max_batch_items: int = 2**29,
     sep: str = " ",
-) -> Generator[T, None, None]:
+) -> Iterator[T]:
     """Runs fn(cmd_args) in sequential batches w/ cmd, without creating a cmdline that's too big for the OS to handle."""
     max_bytes: int = _max_batch_bytes(job, r, cmd, sep)
     return batch_cmd_iterator(cmd_args=cmd_args, fn=fn, max_batch_items=max_batch_items, max_batch_bytes=max_bytes, sep=sep)
@@ -120,7 +120,7 @@ def itr_ssh_cmd_parallel(
     fn: Callable[[list[str], list[str]], T],
     max_batch_items: int = 2**29,
     ordered: bool = True,
-) -> Generator[T, None, None]:
+) -> Iterator[T]:
     """Streams results from multiple parallel (batched) SSH commands; Returns output datasets in the same order as the input
     datasets (not in random order) if ordered == True."""
     return parallel_iterator(
@@ -137,7 +137,7 @@ def itr_ssh_cmd_parallel(
 
 def zfs_list_snapshots_in_parallel(
     job: Job, r: Remote, cmd: list[str], datasets: list[str], ordered: bool = True
-) -> Generator[list[str], None, None]:
+) -> Iterator[list[str]]:
     """Runs 'zfs list -t snapshot' on multiple datasets at the same time; Implemented with a time and space efficient
     streaming algorithm; easily scales to millions of datasets and any number of snapshots."""
     max_workers: int = job.max_workers[r.location]

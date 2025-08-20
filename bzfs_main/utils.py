@@ -45,7 +45,6 @@ from typing import (
     Any,
     Callable,
     Final,
-    Generator,
     Generic,
     ItemsView,
     Iterable,
@@ -353,7 +352,7 @@ def relativize_dataset(dataset: str, root_dataset: str) -> str:
     return dataset[len(root_dataset) :]
 
 
-def dataset_paths(dataset: str) -> Generator[str, None, None]:
+def dataset_paths(dataset: str) -> Iterator[str]:
     """Enumerates all paths of a valid ZFS dataset name; Example: "a/b/c" --> yields "a", "a/b", "a/b/c"."""
     i: int = 0
     while i >= 0:

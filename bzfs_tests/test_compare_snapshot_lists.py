@@ -19,7 +19,7 @@ import itertools
 import os
 import tempfile
 import unittest
-from typing import Any, Generator, Iterable
+from typing import Any, Iterable, Iterator
 from unittest.mock import MagicMock, patch
 
 import bzfs_main.compare_snapshot_lists
@@ -181,7 +181,7 @@ class TestCompareSnapshotLists(AbstractTestCase):
 
             def fake_zfs_list(
                 _job: Job, r: Any, _cmd: list[str], datasets: list[str], ordered: bool = True
-            ) -> Generator[list[str], None, None]:
+            ) -> Iterator[list[str]]:
                 mapping = src_lines if r.location == "src" else dst_lines
                 for ds in datasets:
                     yield mapping.get(ds, [])

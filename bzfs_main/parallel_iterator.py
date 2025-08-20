@@ -23,7 +23,6 @@ from collections import deque
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
 from typing import (
     Callable,
-    Generator,
     Iterable,
     Iterator,
     TypeVar,
@@ -36,7 +35,7 @@ def parallel_iterator(
     iterator_builder: Callable[[ThreadPoolExecutor], Iterable[Iterable[Future[T]]]],
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
-) -> Generator[T, None, None]:
+) -> Iterator[T]:
     """Executes multiple iterators in parallel/concurrently, with explicit backpressure and configurable result ordering;
     avoids pre-submitting the entire workload.
 
@@ -112,7 +111,7 @@ def parallel_iterator(
         iterator: Iterator[Future[T]] = itertools.chain.from_iterable(iterator_builder(executor))
         # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
         fifo_buffer: deque[Future[T]] = deque(itertools.islice(iterator, max_workers))
-        sentinel: Future = Future()
+        sentinel: Future[T] = Future()
         next_future: Future[T]
 
         if ordered:
@@ -155,13 +154,13 @@ def batch_cmd_iterator(
     max_batch_items: int = 2**29,  # max number of args per batch
     max_batch_bytes: int = 127 * 1024,  # max number of bytes per batch
     sep: str = " ",  # separator between batch args
-) -> Generator[T, None, None]:
+) -> Iterator[T]:
     """Returns an iterator that runs fn(cmd_args) in sequential batches, without creating a cmdline that's too big for the OS
     to handle; Can be seen as a Pythonic xargs -n / -s with OS-aware safety margin.
 
     Except for the max_batch_bytes logic, this is essentially the same as:
     >>>
-    while batch := list(itertools.islice(cmd_args, max_batch_items)):  # doctest: +SKIP
+    while batch := itertools.batched(cmd_args, max_batch_items):  # doctest: +SKIP
         yield fn(batch)
     """
     assert isinstance(sep, str)

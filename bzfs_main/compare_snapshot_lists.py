@@ -23,7 +23,6 @@ from dataclasses import dataclass, field
 from typing import (
     TYPE_CHECKING,
     Callable,
-    Generator,
     Iterable,
     Iterator,
     Sequence,
@@ -92,7 +91,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     is_first_row: bool = True
     now: int | None = None
 
-    def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Generator[str, None, None]:
+    def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Iterator[str]:
         """Lists snapshots sorted by dataset name; All snapshots of a given dataset will be adjacent."""
         assert (not job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
         written_zfs_prop: str = "written"  # https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
@@ -106,9 +105,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         for lines in zfs_list_snapshots_in_parallel(job, r, cmd, sorted_datasets):
             yield from lines
 
-    def snapshot_iterator(
-        root_dataset: str, sorted_itr: Generator[str, None, None]
-    ) -> Generator[ComparableSnapshot, None, None]:
+    def snapshot_iterator(root_dataset: str, sorted_itr: Iterator[str]) -> Iterator[ComparableSnapshot]:
         """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that any two snapshots
         with the same GUID will lie adjacent to each other during the upcoming phase that merges src snapshots and dst
         snapshots."""
@@ -297,7 +294,7 @@ def _merge_sorted_iterators(
     choice: str,  # Example: "src+dst+all"
     src_itr: Iterator[T],
     dst_itr: Iterator[T],
-) -> Generator[tuple[str, T] | tuple[str, T, T], None, None]:
+) -> Iterator[tuple[str, T] | tuple[str, T, T]]:
     """The typical pipelined merge algorithm of a merge sort, slightly adapted to our specific use case."""
     assert len(choices) == 3
     assert choice
