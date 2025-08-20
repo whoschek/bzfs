@@ -19,7 +19,11 @@ import itertools
 import os
 import tempfile
 import unittest
-from typing import Any, Iterable, Iterator
+from typing import (
+    Any,
+    Iterable,
+    Iterator,
+)
 from unittest.mock import MagicMock, patch
 
 import bzfs_main.compare_snapshot_lists

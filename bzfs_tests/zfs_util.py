@@ -18,7 +18,12 @@ from __future__ import annotations
 import platform
 import re
 import subprocess
-from typing import List, Mapping, Sequence, cast
+from typing import (
+    List,
+    Mapping,
+    Sequence,
+    cast,
+)
 
 sudo_cmd = []
 

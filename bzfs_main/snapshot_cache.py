@@ -23,7 +23,9 @@ from os import utime as os_utime
 from os.path import exists as os_path_exists
 from os.path import join as os_path_join
 from subprocess import CalledProcessError
-from typing import TYPE_CHECKING
+from typing import (
+    TYPE_CHECKING,
+)
 
 from bzfs_main.connection import (
     run_ssh_command,

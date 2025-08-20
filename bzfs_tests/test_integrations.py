@@ -43,7 +43,12 @@ import unittest
 from collections import Counter
 from pathlib import Path
 from subprocess import DEVNULL, PIPE
-from typing import Any, Callable, Iterable, cast
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    cast,
+)
 from unittest.mock import patch
 
 import bzfs_main.replication

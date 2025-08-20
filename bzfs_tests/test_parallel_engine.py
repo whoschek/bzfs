@@ -26,7 +26,9 @@ import threading
 import time
 import unittest
 from logging import Logger
-from typing import Any
+from typing import (
+    Any,
+)
 from unittest.mock import MagicMock
 
 from bzfs_main.loggers import get_simple_logger

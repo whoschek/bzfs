@@ -19,7 +19,9 @@ import shlex
 import subprocess
 import unittest
 from collections import defaultdict
-from typing import Callable
+from typing import (
+    Callable,
+)
 from unittest.mock import MagicMock, call, patch
 
 from bzfs_main.replication import (

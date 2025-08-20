@@ -18,7 +18,9 @@ correctly."""
 from __future__ import annotations
 import time
 import unittest
-from typing import Iterable
+from typing import (
+    Iterable,
+)
 
 from bzfs_main import bzfs
 from bzfs_main.configuration import Remote

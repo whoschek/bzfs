@@ -22,7 +22,9 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any
+from typing import (
+    Any,
+)
 
 from bzfs_main.check_range import CheckRange
 from bzfs_main.filter import (

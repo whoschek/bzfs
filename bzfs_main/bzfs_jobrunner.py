@@ -47,7 +47,12 @@ import uuid
 from ast import literal_eval
 from logging import Logger
 from subprocess import DEVNULL, PIPE
-from typing import Any, Iterable, TypeVar, Union
+from typing import (
+    Any,
+    Iterable,
+    TypeVar,
+    Union,
+)
 
 import bzfs_main.argparse_actions
 import bzfs_main.check_range
