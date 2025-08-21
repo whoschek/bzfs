@@ -32,8 +32,8 @@ import bzfs_tests.test_integrations
 import bzfs_tests.test_interner
 import bzfs_tests.test_jobrunner
 import bzfs_tests.test_loggers
+import bzfs_tests.test_parallel_batch_cmd
 import bzfs_tests.test_parallel_engine
-import bzfs_tests.test_parallel_iterator
 import bzfs_tests.test_period_anchors
 import bzfs_tests.test_progress_reporter
 import bzfs_tests.test_replication
@@ -51,7 +51,7 @@ def main() -> None:
         bzfs_tests.test_retry.suite(),
         bzfs_tests.test_period_anchors.suite(),
         bzfs_tests.test_progress_reporter.suite(),
-        bzfs_tests.test_parallel_iterator.suite(),
+        bzfs_tests.test_parallel_batch_cmd.suite(),
         bzfs_tests.test_parallel_engine.suite(),
         bzfs_tests.test_filter.suite(),
         bzfs_tests.test_connection.suite(),

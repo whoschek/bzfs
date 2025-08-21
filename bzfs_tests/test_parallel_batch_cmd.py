@@ -36,7 +36,7 @@ from bzfs_tests.abstract_testcase import AbstractTestCase
 #############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
-        TestParallelIterator,
+        TestItrSshCmdParallel,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -69,7 +69,7 @@ def dummy_fn_race(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str
     return cmd, batch
 
 
-class TestParallelIterator(AbstractTestCase):
+class TestItrSshCmdParallel(AbstractTestCase):
 
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
