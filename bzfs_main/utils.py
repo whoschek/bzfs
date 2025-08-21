@@ -110,7 +110,7 @@ def cut(field: int = -1, separator: str = "\t", lines: list[str] | None = None) 
 def drain(iterable: Iterable[Any]) -> None:
     """Consumes all items in the iterable, effectively draining it."""
     for _ in iterable:
-        pass
+        _ = None  # help gc
 
 
 K_ = TypeVar("K_")

@@ -281,7 +281,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 todo_futures.add(future)
             return len(todo_futures) > 0
 
-        def process_datasets() -> None:
+        def complete_datasets() -> None:
             nonlocal todo_futures
             done_futures: set[Future[bool]]
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
@@ -307,7 +307,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
 
         # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
         while submit_datasets():
-            process_datasets()
+            complete_datasets()
 
         assert len(priority_queue) == 0
         assert len(todo_futures) == 0
