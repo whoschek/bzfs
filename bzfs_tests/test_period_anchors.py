@@ -21,7 +21,6 @@ from datetime import datetime, timedelta, timezone
 
 import bzfs_main.period_anchors
 from bzfs_main.period_anchors import PeriodAnchors
-from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
 #############################################################################
@@ -42,7 +41,7 @@ def round_datetime_up_to_duration_multiple(
     )
 
 
-class TestRoundDatetimeUpToDurationMultiple(AbstractTestCase):
+class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
 
     def setUp(self) -> None:
         # Use a fixed timezone (e.g. Eastern Standard Time, UTC-5) for all tests.

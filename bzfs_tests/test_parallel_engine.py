@@ -31,7 +31,6 @@ from typing import (
 )
 from unittest.mock import MagicMock
 
-from bzfs_main.loggers import get_simple_logger
 from bzfs_main.parallel_engine import (
     BARRIER_CHAR,
     Tree,
@@ -524,7 +523,11 @@ class TestParallelEngineBenchmark(unittest.TestCase):
             """A dummy function that never skips."""
             return False
 
-        log = get_simple_logger("TestParallelEngineBenchmark")
+        log = logging.getLogger("TestParallelEngineBenchmark")
+        log.setLevel(logging.INFO)
+        if not log.handlers:
+            log.addHandler(logging.StreamHandler())
+
         datasets = self.generate_unique_datasets(num_datasets=num_datasets, length=100)
 
         import gc
