@@ -955,8 +955,7 @@ class Job:
                 for snapshots in zfs_list_snapshots_in_parallel(self, dst, cmd, sorted(orphans), ordered=False):
                     if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
                         replace_in_lines(snapshots, old="#", new="@", count=1)  # treat bookmarks as snapshots
-                    datasets_having_snapshots: set[str] = set(cut(field=1, separator="@", lines=snapshots))
-                    dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
+                    dst_datasets_having_snapshots.update(snap[0 : snap.index("@")] for snap in snapshots)  # union
             else:
                 delete_datasets(self, dst, orphans)
                 sorted_dst_datasets = sorted(set(sorted_dst_datasets).difference(orphans))
