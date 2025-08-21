@@ -252,6 +252,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         todo_futures: set[Future[bool]] = set()
         future_to_node: dict[Future[bool], TreeNode] = {}
+        sentinel: Future[bool] = Future()
         submitted: int = 0
         next_update_nanos: int = time.monotonic_ns()
         fw_timeout: float | None = None
@@ -303,6 +304,8 @@ def process_datasets_in_parallel_and_fault_tolerant(
                     _complete_job_with_barriers(done_node, no_skip, priority_queue, datasets_set, immutable_empty_barrier)
                 elif no_skip:  # This simple algorithm is sufficient for almost all use cases
                     _simple_enqueue_children(done_node, priority_queue, datasets_set)
+            done_futures.clear()  # help gc
+            done_future = sentinel  # help gc
         assert len(priority_queue) == 0
         assert len(todo_futures) == 0
         assert len(future_to_node) == 0

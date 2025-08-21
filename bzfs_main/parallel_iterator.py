@@ -127,11 +127,11 @@ def parallel_iterator(
             done_futures: set[Future[T]]
             while todo_futures:
                 done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
-                for done_future in done_futures:  # submit the next CLI call whenever a CLI call returns
+                while done_futures:  # submit the next CLI call whenever a CLI call returns
                     next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
                     if next_future is not sentinel:
                         todo_futures.add(next_future)
-                    yield done_future.result()  # does not block as processing has already completed
+                    yield done_futures.pop().result()  # does not block as processing has already completed
         assert next(iterator, sentinel) is sentinel
 
 
