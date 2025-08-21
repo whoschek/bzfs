@@ -971,11 +971,11 @@ def _create_zfs_filesystem(job: Job, filesystem: str) -> None:
                 run_ssh_command(job, p.dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             except subprocess.CalledProcessError as e:
                 # ignore harmless error caused by 'zfs create' without the -u flag, or by dataset already existing
-                if (
-                    "filesystem successfully created, but it may only be mounted by root" not in e.stderr
-                    and "filesystem successfully created, but not mounted" not in e.stderr  # SolarisZFS
-                    and "dataset already exists" not in e.stderr
-                    and "filesystem already exists" not in e.stderr  # SolarisZFS?
+                if not (
+                    "filesystem successfully created, but it may only be mounted by root" in e.stderr
+                    or "filesystem successfully created, but not mounted" in e.stderr  # SolarisZFS
+                    or "dataset already exists" in e.stderr
+                    or "filesystem already exists" in e.stderr  # SolarisZFS?
                 ):
                     raise
             if not p.dry_run:
