@@ -252,10 +252,10 @@ def process_datasets_in_parallel_and_fault_tolerant(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         todo_futures: set[Future[bool]] = set()
         future_to_node: dict[Future[bool], TreeNode] = {}
-        sentinel: Future[bool] = Future()
         submitted: int = 0
         next_update_nanos: int = time.monotonic_ns()
         fw_timeout: float | None = None
+        failed: bool = False
 
         def submit_datasets() -> bool:
             """Submits available datasets to worker threads and returns False if all tasks have been completed."""
@@ -281,9 +281,8 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 todo_futures.add(future)
             return len(todo_futures) > 0
 
-        # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
-        failed: bool = False
-        while submit_datasets():
+        def process_datasets() -> None:
+            nonlocal todo_futures
             done_futures: set[Future[bool]]
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
             for done_future in done_futures:
@@ -292,6 +291,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 try:
                     no_skip: bool = done_future.result()  # does not block as processing has already completed
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                    nonlocal failed
                     failed = True
                     if skip_on_error == "fail":
                         [todo_future.cancel() for todo_future in todo_futures]
@@ -304,8 +304,11 @@ def process_datasets_in_parallel_and_fault_tolerant(
                     _complete_job_with_barriers(done_node, no_skip, priority_queue, datasets_set, immutable_empty_barrier)
                 elif no_skip:  # This simple algorithm is sufficient for almost all use cases
                     _simple_enqueue_children(done_node, priority_queue, datasets_set)
-            done_futures.clear()  # help gc
-            done_future = sentinel  # help gc
+
+        # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
+        while submit_datasets():
+            process_datasets()
+
         assert len(priority_queue) == 0
         assert len(todo_futures) == 0
         assert len(future_to_node) == 0
