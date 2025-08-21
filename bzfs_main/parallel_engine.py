@@ -132,19 +132,21 @@ def _make_tree_node(dataset: str, children: Tree, parent: TreeNode | None = None
 
 def process_datasets_in_parallel_and_fault_tolerant(
     log: Logger,
-    datasets: list[str],
-    process_dataset: Callable[[str, str, Retry], bool],  # lambda[dataset, tid, Retry]; must be thread-safe
-    skip_tree_on_error: Callable[[str], bool],  # lambda[dataset]
+    datasets: list[str],  # (sorted) list of datasets to process
+    process_dataset: Callable[
+        [str, str, Retry], bool  # lambda: dataset, tid, Retry; return False to skip subtree; must be thread-safe
+    ],
+    skip_tree_on_error: Callable[[str], bool],  # lambda: dataset # called on error; return True to skip subtree on error
     skip_on_error: str = "fail",
     max_workers: int = os.cpu_count() or 1,
     interval_nanos: Callable[[str], int] = lambda dataset: 0,  # optionally, spread tasks out over time; e.g. for jitter
     task_name: str = "Task",
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
-    append_exception: Callable[[BaseException, str, str], None] = lambda ex, task_name, task_description: None,
+    append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error
     retry_policy: RetryPolicy | None = None,
     dry_run: bool = False,
     is_test_mode: bool = False,
-) -> bool:
+) -> bool:  # returns True if any dataset processing failed, False if all succeeded
     """Executes dataset processing operations in parallel with dependency-aware scheduling and fault tolerance.
 
     This function orchestrates parallel execution of dataset operations while maintaining strict hierarchical

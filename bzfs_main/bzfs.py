@@ -1293,6 +1293,10 @@ class Job:
         See root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct() in the unit test suite for an alternative
         impl that's easier to grok.
         """
+        assert (not self.is_test_mode) or datasets == sorted(datasets), "List is not sorted"
+        assert (not self.is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
+        assert (not self.is_test_mode) or basis_datasets == sorted(basis_datasets), "List is not sorted"
+        assert (not self.is_test_mode) or not has_duplicates(basis_datasets), "List contains duplicates"
         datasets_set: set[str] = set(datasets)
         root_datasets: list[str] = self.find_root_datasets(datasets)
         len_root_datasets = len(root_datasets)
@@ -1423,16 +1427,20 @@ class Job:
                 datasets_to_snapshot[lbl] = list(  # inputs to merge() are sorted, and outputs are sorted too
                     heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl], datasets_without_snapshots)
                 )
+        for label, datasets in datasets_to_snapshot.items():
+            assert (not self.is_test_mode) or datasets == sorted(datasets), "List is not sorted"
+            assert (not self.is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
+            assert label
 
-        msgs.sort()
-        for i in range(0, len(msgs), 10000):  # reduce logging overhead via mini-batching
+        msgs.sort()  # sort by time, dataset, label
+        for i in range(0, len(msgs), 10_000):  # reduce logging overhead via mini-batching
             text = "".join(
                 f"\nNext scheduled snapshot time: {next_event_dt} for {dataset}@{label}{msg}"
-                for next_event_dt, dataset, label, msg in msgs[i : i + 10000]
+                for next_event_dt, dataset, label, msg in msgs[i : i + 10_000]
             )
             log.info("Next scheduled snapshot times ...%s", text)
 
-        # sort to ensure that we take snapshots for dailies before hourlies, and so on
+        # sort keys to ensure that we take snapshots for dailies before hourlies, and so on
         label_indexes: dict[SnapshotLabel, int] = {label: k for k, label in enumerate(config_labels)}
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
         return datasets_to_snapshot
@@ -1544,7 +1552,7 @@ def has_siblings(sorted_datasets: list[str], is_test_mode: bool = False) -> bool
 def parse_dataset_locator(
     input_text: str, validate: bool = True, user: str | None = None, host: str | None = None, port: int | None = None
 ) -> tuple[str, str, str, str, str]:
-    """Splits user@host:pool/dataset into its components with optional checks."""
+    """Splits user@host:dataset into its components with optional checks."""
 
     def convert_ipv6(hostname: str) -> str:  # support IPv6 without getting confused by host:dataset colon separator ...
         return hostname.replace("|", ":")  # ... and any colons that may be part of a (valid) ZFS dataset name
