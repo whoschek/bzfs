@@ -1296,6 +1296,7 @@ class Job:
         assert (not self.is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
         assert (not self.is_test_mode) or basis_datasets == sorted(basis_datasets), "List is not sorted"
         assert (not self.is_test_mode) or not has_duplicates(basis_datasets), "List contains duplicates"
+        assert (not self.is_test_mode) or set(datasets).issubset(set(basis_datasets)), "Not a subset"
         datasets_set: set[str] = set(datasets)
         root_datasets: list[str] = self.find_root_datasets(datasets)
         len_root_datasets = len(root_datasets)

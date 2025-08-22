@@ -229,7 +229,9 @@ class TestHelperFunctions(AbstractTestCase):
             expected = self.root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(
                 src_datasets, basis_src_datasets
             )
-            actual = bzfs.Job().root_datasets_if_recursive_zfs_snapshot_is_possible(src_datasets, basis_src_datasets)
+            job = bzfs.Job()
+            job.is_test_mode = True
+            actual = job.root_datasets_if_recursive_zfs_snapshot_is_possible(src_datasets, basis_src_datasets)
             if expected is not None:
                 self.assertListEqual(expected, cast(List[str], actual))
             self.assertEqual(expected, actual)
