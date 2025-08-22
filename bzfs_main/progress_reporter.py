@@ -199,6 +199,12 @@ class ProgressReporter:
                 start_time_nanos = time.monotonic_ns()
                 next_update_nanos = start_time_nanos + update_interval_nanos
                 latest_samples: deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measurements
+                for fd in fds:
+                    selector_key: selectors.SelectorKey = selector.get_key(fd)
+                    transfer_stat = selector_key.data[1]
+                    transfer_stat.bytes_in_flight = 0
+                    transfer_stat.eta.timestamp_nanos = 0
+                    transfer_stat.eta.line_tail = ""
             for pv_log_file in local_file_name_queue:
                 try:
                     Path(pv_log_file).touch()
@@ -215,12 +221,11 @@ class ProgressReporter:
             readables: list[tuple[selectors.SelectorKey, int]] = selector.select(timeout=0)  # 0 indicates "don't block"
             has_line: bool = False
             curr_time_nanos: int = time.monotonic_ns()
-            selector_key: selectors.SelectorKey
             for selector_key, _ in readables:  # for each file that's ready for non-blocking read
                 num_readables += 1
-                iter_fd, s = selector_key.data
+                iter_fd, transfer_stat = selector_key.data
                 for line in iter_fd:  # aka iter(fd)
-                    sent_bytes += self._update_transfer_stat(line, s, curr_time_nanos)
+                    sent_bytes += self._update_transfer_stat(line, transfer_stat, curr_time_nanos)
                     num_lines += 1
                     has_line = True
             if curr_time_nanos >= next_update_nanos:
