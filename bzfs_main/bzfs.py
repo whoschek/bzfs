@@ -1297,11 +1297,12 @@ class Job:
         assert (not self.is_test_mode) or basis_datasets == sorted(basis_datasets), "List is not sorted"
         assert (not self.is_test_mode) or not has_duplicates(basis_datasets), "List contains duplicates"
         assert (not self.is_test_mode) or set(datasets).issubset(set(basis_datasets)), "Not a subset"
-        datasets_set: set[str] = set(datasets)
         root_datasets: list[str] = self.find_root_datasets(datasets)
+        datasets_set: set[str] = set(datasets)  # Alternatively, containment check could also be done via binary search
+        i = 0
+        j = 0
         len_root_datasets = len(root_datasets)
         len_basis_datasets = len(basis_datasets)
-        i, j = 0, 0
         while i < len_root_datasets and j < len_basis_datasets:  # walk and "merge" both sorted lists, in sync
             if basis_datasets[j] < root_datasets[i]:  # irrelevant subtree?
                 j += 1  # move to the next basis_src_dataset
