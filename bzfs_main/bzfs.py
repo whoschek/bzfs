@@ -1464,10 +1464,10 @@ class Job:
         interner: SortedInterner[str] = SortedInterner(sorted_datasets)  # reduces memory footprint
         for lines in zfs_list_snapshots_in_parallel(self, remote, cmd, sorted_datasets, ordered=False):
             # streaming group by dataset name (consumes constant memory only)
-            for dataset, group in itertools.groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
+            for dataset, group in itertools.groupby(lines, key=lambda line: line.rsplit("\t", 1)[1].split("@", 1)[0]):
                 dataset = interner.interned(dataset)
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
-                    (int(createtxg), int(creation_unixtime_secs), name[name.index("@") + 1 :])
+                    (int(createtxg), int(creation_unixtime_secs), name.split("@", 1)[1])
                     for createtxg, creation_unixtime_secs, name in (line.split("\t", 2) for line in group)
                 )
                 assert len(snapshots) > 0
