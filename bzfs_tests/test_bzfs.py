@@ -585,10 +585,10 @@ class TestHelperFunctions(AbstractTestCase):
             ],
         ]
         for ex_basis_set in exhaustive_basis_sets:
-            if True:
-                basis_sets = [ex_basis_set]
-            else:
+            if False:  # can take minutes; toggle this when you modify root_datasets_if_recursive_zfs_snapshot_is_possible()
                 basis_sets = [list(subset) for r in range(len(ex_basis_set) + 1) for subset in combinations(ex_basis_set, r)]
+            else:
+                basis_sets = [ex_basis_set]
             for basis in basis_sets:
                 for subset in [list(subset2) for s in range(len(basis) + 1) for subset2 in combinations(basis, s)]:
                     with stop_on_failure_subtest(basis=basis, subset=subset):
