@@ -52,7 +52,6 @@ from bzfs_main.utils import (
     get_home_directory,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
-from bzfs_tests.tools import suppress_output
 
 
 #############################################################################
@@ -112,23 +111,21 @@ class TestHelperFunctions(AbstractTestCase):
         log_params = LogParams(args)
         log = get_logger(log_params, args, root_logger)
         self.assertTrue(log is root_logger)
-        with suppress_output():
-            log.info(f"{prefix}aaa1")
+        log.info(f"{prefix}aaa1")
 
         args = self.argparser_parse_args(args=["src", "dst"])
         log_params = LogParams(args)
         log = get_logger(log_params, args)
-        with suppress_output():
-            log.log(LOG_STDERR, "%s", prefix + "bbbe1")
-            log.log(LOG_STDOUT, "%s", prefix + "bbbo1")
-            log.info("%s", prefix + "bbb3")
-            log.setLevel(logging.WARNING)
-            log.log(LOG_STDERR, "%s", prefix + "bbbe2")
-            log.log(LOG_STDOUT, "%s", prefix + "bbbo2")
-            log.info("%s", prefix + "bbb4")
-            log.log(LOG_TRACE, "%s", prefix + "bbb5")
-            log.setLevel(LOG_TRACE)
-            log.log(LOG_TRACE, "%s", prefix + "bbb6")
+        log.log(LOG_STDERR, "%s", prefix + "bbbe1")
+        log.log(LOG_STDOUT, "%s", prefix + "bbbo1")
+        log.info("%s", prefix + "bbb3")
+        log.setLevel(logging.WARNING)
+        log.log(LOG_STDERR, "%s", prefix + "bbbe2")
+        log.log(LOG_STDOUT, "%s", prefix + "bbbo2")
+        log.info("%s", prefix + "bbb4")
+        log.log(LOG_TRACE, "%s", prefix + "bbb5")
+        log.setLevel(LOG_TRACE)
+        log.log(LOG_TRACE, "%s", prefix + "bbb6")
         files = {os.path.abspath(log_params.log_file)}
         check(log, files)
 
