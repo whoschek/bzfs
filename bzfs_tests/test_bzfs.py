@@ -20,6 +20,7 @@ import subprocess
 import time
 import unittest
 from datetime import datetime, timezone
+from itertools import combinations
 from typing import (
     Callable,
     Iterator,
@@ -63,9 +64,10 @@ from bzfs_main.snapshot_cache import (
 )
 from bzfs_main.utils import (
     DIE_STATUS,
+    is_descendant,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
-from bzfs_tests.tools import suppress_output
+from bzfs_tests.tools import stop_on_failure_subtest, suppress_output
 from bzfs_tests.zfs_util import (
     is_solaris_zfs,
 )
@@ -221,7 +223,31 @@ class TestHelperFunctions(AbstractTestCase):
                         return None
         return root_datasets
 
+    @staticmethod
+    def root_datasets_if_recursive_zfs_snapshot_is_possible_faster_but_not_ideal(  # compare faster algo to this ok impl
+        datasets: list[str], basis_datasets: list[str]
+    ) -> list[str] | None:
+        # Assumes that src_datasets and basis_src_datasets are both sorted (and thus root_datasets is sorted too)
+        root_datasets = bzfs.Job().find_root_datasets(datasets)
+        datasets_set: set[str] = set(datasets)
+        i = 0
+        j = 0
+        len_root_datasets = len(root_datasets)
+        len_basis_datasets = len(basis_datasets)
+        while i < len_root_datasets and j < len_basis_datasets:  # walk and "merge" both sorted lists, in sync
+            if basis_datasets[j] < root_datasets[i]:  # irrelevant subtree?
+                j += 1  # move to the next basis_src_dataset
+            elif is_descendant(basis_datasets[j], of_root_dataset=root_datasets[i]):  # relevant subtree?
+                if basis_datasets[j] not in datasets_set:  # was dataset chopped off by schedule or --incl/exclude-dataset*?
+                    return None  # detected filter pruning that is incompatible with 'zfs snapshot -r'
+                j += 1  # move to the next basis_src_dataset
+            else:
+                i += 1  # move to next root dataset; no need to check root_datasets that are nomore (or not yet) reachable
+        return root_datasets
+
     def test_root_datasets_if_recursive_zfs_snapshot_is_possible(self) -> None:
+        """Also exhaustively compares optimized root dataset detection against a baseline impl that is slow but correct."""
+
         def run_filter(src_datasets: list[str], basis_src_datasets: list[str]) -> list[str]:
             assert set(src_datasets).issubset(set(basis_src_datasets))
             src_datasets = sorted(src_datasets)
@@ -232,6 +258,12 @@ class TestHelperFunctions(AbstractTestCase):
             job = bzfs.Job()
             job.is_test_mode = True
             actual = job.root_datasets_if_recursive_zfs_snapshot_is_possible(src_datasets, basis_src_datasets)
+            if expected is not None:
+                self.assertListEqual(expected, cast(List[str], actual))
+            self.assertEqual(expected, actual)
+            expected = self.root_datasets_if_recursive_zfs_snapshot_is_possible_faster_but_not_ideal(
+                src_datasets, basis_src_datasets
+            )
             if expected is not None:
                 self.assertListEqual(expected, cast(List[str], actual))
             self.assertEqual(expected, actual)
@@ -304,6 +336,263 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertListEqual(["a/D", "a/b"], run_filter(["a/b", "a/b/c", "a/D"], basis_src_datasets))
         self.assertListEqual(["a/B", "a/D", "a/b"], run_filter(["a/B", "a/B/c", "a/b", "a/b/c", "a/D"], basis_src_datasets))
         self.assertListEqual(["a/B", "a/D", "a/X"], run_filter(["a/B", "a/B/c", "a/X", "a/X/c", "a/D"], basis_src_datasets))
+
+        exhaustive_basis_sets: list[list[str]] = [
+            ["a", "a/b", "a/b/c", "a/d"],
+            ["a", "a/b", "a/b/c", "a/d", "e", "e/f"],
+            ["a", "e", "h"],
+            ["a", "e", "e/f", "h", "h/g"],
+            ["a", "e", "e/f", "h", "h/g", "k", "k/l"],
+            ["a", "e", "e/f", "h", "h/g", "hh", "hh/g", "k", "kk", "k/l", "kk/l"],
+            ["a", "e", "e/f", "h", "h/g", "hh", "hh/g", "kk", "kk/l"],
+            ["a", "a/b", "a/b/c", "a/B", "a/B/c", "a/D", "a/X", "a/X/c"],
+            [],
+            ["a"],
+            ["a", "b"],
+            ["a", "b", "c"],
+            ["a", "a/b", "c"],
+            ["a", "a/b", "a/b/c", "a/d"],  # branching tree
+            ["a", "a/b", "a/b/c"],  # simple chain
+            ["a", "b"],  # multiple roots
+            ["a", "a/b", "d", "d/e"],
+            ["a", "a/b", "a/c", "d", "d/e"],
+            ["x", "x/y", "x/y/z", "x/q", "r", "r/s"],
+            ["a", "ab", "ab/c"],
+            ["a", "a/b1", "a/b1/c1", "a/b2", "a/b2/c2", "a/b2/c2/d2"],
+            [],
+            ["a1", "a1/b", "a2", "a2/b"],
+            ["a-b", "a-b/c-d", "x_y", "x_y/z"],
+            ["foo", "foo/bar", "foo/bar/baz", "foo2", "foo2/bar"],
+            ["a", "a/b", "b", "b/c", "c", "c/d"],
+            ["alpha", "alpha/beta", "alpha/beta/gamma", "alpha2", "alpha2/beta2", "alpha2/beta2/gamma2", "delta"],
+            ["p", "p/q", "pq", "pq/r", "pqr", "pqr/s"],
+            ["root", "root/a", "root/a/b", "root/a/b/c", "other", "other/a", "other/a/b"],
+            ["a", "a/b", "a/bc", "a/bc/d", "ab", "ab/c"],
+            [
+                "deep",
+                "deep/a",
+                "deep/a/b",
+                "deep/a/b/c",
+                "deep/a/b/c/d",
+                "deep/a/b/c/d/e",
+                "deep/a/b/c/d/e/f",
+                "deep/a/b/c/d/e/f/g",
+                "deep/a/b/c/d/e/f/g/h",
+                "deep/a/b/c/d/e/f/g/h/i",
+            ],  # deep chain of 10
+            [
+                "main",
+                "main/branch1",
+                "main/branch1/leaf",
+                "main/branch2",
+                "main/branch2/leaf",
+                "main/branch2/leaf2",
+                "aux",
+                "aux/branch",
+                "aux/branch/leaf",
+            ],  # root with multiple deep branches
+            [
+                "r1",
+                "r1/a",
+                "r1/a/b",
+                "r2",
+                "r2/a",
+                "r2/a/b",
+                "r3",
+                "r3/a",
+                "r3/a/b",
+                "r4",
+            ],  # four roots varying depths
+            [
+                "a",
+                "ab",
+                "abc",
+                "abc/d",
+                "ab/c",
+                "abcd",
+                "abcd/e",
+                "b",
+                "bc",
+                "bc/d",
+            ],  # prefix but not descendant
+            [
+                "1",
+                "1/2",
+                "1/2/3",
+                "1/2/3/4",
+                "2",
+                "2/3",
+                "10",
+                "10/1",
+                "20",
+                "20/0",
+            ],  # numeric names
+            [
+                "a-b",
+                "a-b/c-d",
+                "a-b/c-d/e-f",
+                "a_b",
+                "a_b/c_d",
+                "a_b/c_d/e_f",
+                "x-y",
+                "x-y/z-w",
+                "x_y",
+                "x_y/z_w",
+            ],  # hyphen and underscore combos
+            [
+                "A",
+                "A/B",
+                "A/B/c",
+                "A/D",
+                "A/D/e",
+                "F",
+                "F/g",
+                "F/g/H",
+                "i",
+                "i/j",
+            ],  # mixed case names
+            [
+                "a.b",
+                "a.b/c.d",
+                "a.b/c.d/e.f",
+                "g.h",
+                "g.h/i.j",
+                "g.h/i.j/k.l",
+                "m.n",
+                "m.n/o.p",
+                "q.r",
+                "q.r/s.t",
+            ],  # dotted names
+            [
+                "a1",
+                "a1/b2",
+                "a1/b2/c3",
+                "a2",
+                "a2/b3",
+                "a2/b3/c4",
+                "b1",
+                "b1/c2",
+                "b1/c2/d3",
+                "b2",
+            ],  # alphanumeric segments
+            [
+                "x",
+                "x/y",
+                "x/y/z1",
+                "x/y/z1/w",
+                "x/y/z2",
+                "x/y/z2/w",
+                "y",
+                "y/x",
+                "y/x/z",
+                "y/x/z/w",
+            ],  # cross-linked roots
+            ["a", "a/b", "a/b/c", "a/b/c/d", "a/b/c/d/e", "a/b/c/d/e/f", "a/b/c/d/e/f/g"],
+            ["a", "a/b", "a/b/c", "a/b/c/d", "a/b/e", "a/b/e/f", "a/g", "a/g/h", "a/g/h/i"],
+            ["r1", "r1/a", "r1/a/b", "r2", "r2/a", "r2/a/b", "r3", "r3/a", "r3/a/b", "r4"],
+            ["ab", "ab/c", "a/b", "a/b/c", "abc", "abc/d", "a/bcd", "a/bcd/e"],
+            ["foo", "foo/bar", "foo/bar-baz", "foo/bar-baz/qux", "foo_bar", "foo_bar/baz", "foo_bar/baz/qux"],
+            ["A", "A/B", "A/B/C", "a", "a/b", "a/B", "a/B/c", "a/b/c"],
+            ["d1", "d1/e1", "d1/e1/f1", "d2", "d2/e2", "d2/e2/f2", "d3", "d3/e3"],
+            ["x", "x/y", "x/y/z", "x/y/z/a", "x/y/z/a/b", "u", "u/v", "u/v/w", "u/v/w/x"],
+            [
+                "root1",
+                "root1/child1",
+                "root1/child1/grand",
+                "root2",
+                "root2/child2",
+                "root2/child2/grand2",
+                "root3",
+                "root3/child3",
+                "root3/child3/grand3",
+                "root4",
+            ],
+            ["a1", "a1/b-1", "a1/b-1/c_1", "a2", "a2/b-2", "a2/b-2/c_2", "a2/b-2/c_2/d", "a3", "a3/b_3"],
+            [
+                "a",
+                "a/b",
+                "a/b/c",
+                "a/b/c/d",
+                "a/b/c/d/e",
+                "a/b/c/d/e/f",
+                "a/b/c/d/e/f/g",
+                "a/b/c/d/e/f/g/h",
+                "a/b/c/d/e/f/g/h/i",
+                "a/b/c/d/e/f/g/h/i/j",
+            ],
+            ["root", "root/a", "root/b", "root/c", "root/d", "root/e", "root/f", "root/g", "root/h", "root/i"],
+            ["r1", "r1/a", "r1/a/b", "r1/a/b/c", "r1/a/b/c/d", "r2", "r2/a", "r2/a/b", "r2/a/b/c", "r2/a/b/c/d"],
+            ["a", "ab", "ab/c", "abc", "abc/d", "abcd", "abcd/e", "abcde", "abcde/f", "a/b"],
+            [
+                "pkg-1",
+                "pkg-1/mod_1",
+                "pkg-1/mod_1/sub-1",
+                "pkg_2",
+                "pkg_2/mod-2",
+                "pkg_2/mod-2/sub_2",
+                "pkg3",
+                "pkg3/mod3",
+                "pkg3/mod3/sub-3",
+                "pkg3/mod3/sub-3/leaf_3",
+            ],
+            ["A", "A/B", "A/B/C", "a", "a/b", "a/b/c", "Alpha", "Alpha/Beta", "alpha", "alpha/beta"],
+            [
+                "top",
+                "top/mid1",
+                "top/mid1/leaf1",
+                "top/mid2",
+                "top/mid2/leaf2",
+                "top/mid2/leaf2/subleaf",
+                "top2",
+                "top2/mid",
+                "top2/mid/leaf",
+                "top2/mid/leaf/sub",
+            ],
+            ["d0", "d0/e1", "d0/e1/f2", "d0/e1/f2/g3", "d1", "d1/e2", "d2", "d2/e3", "d2/e3/f4", "d2/e3/f4/g5"],
+            ["x", "x/y", "x/y/z", "x/y1", "x/y1/z1", "x2", "x2/y", "x2/y/z", "x2/y/z/a", "x2/y1"],
+            ["m_n", "m_n/o", "m_n/o/p", "m-n", "m-n/o", "m-n/o/p", "mn", "mn/o", "mn/o/p", "mn/op"],
+            [
+                "a",
+                "a/b",
+                "a/b/c",
+                "a/b/c/d",
+                "a/b/c/d/e",
+                "a/b/c/d/e/f",
+                "a/b/c/d/e/f/g",
+                "a/b/c/d/e/f/g/h",
+                "a/b/c/d/e/f/g/h/i",
+                "a/b/c/d/e/f/g/h/i/j",
+            ],
+            ["root", "root/a", "root/a/b", "root/a/c", "root/d", "root/d/e", "root/d/f", "other", "other/x", "other/x/y"],
+            ["a", "A", "a/b", "A/B", "a/b/c", "A/B/C", "d", "D", "d/e", "D/E"],
+            ["a1", "a1/b1", "a1/b1/c1", "a1/b2", "a1/b2/c2", "a2", "a2/b1", "a2/b1/c1", "a2/b2", "a2/b2/c2"],
+            ["ab-c", "ab-c/d", "ab-c/d/e", "x_y", "x_y/z", "x_y/z/a", "foo-bar", "foo-bar/baz", "foo_bar", "foo_bar/qux"],
+            ["a", "ab", "ab/c", "abc", "abc/d", "b", "b/c", "bc", "bc/d", "c"],
+            ["m/n/p/q", "m", "m/n", "m/n/p", "m/x", "m/x/y", "n", "n/o", "n/o/p", "n/o/p/q"],
+            ["tank", "tank/a", "tank/a/b", "tank/aa", "tank/aa/b", "tank/aa/b/c", "tanka", "tanka/b", "tanka/b/c", "tankb"],
+            ["x", "x/a", "x/a/b", "x/a/b/c", "y", "y/a", "y/a/b", "z", "z/a", "z/a/b"],
+            [
+                "data",
+                "data/child",
+                "data/child/grand",
+                "data0",
+                "data0/child",
+                "data1",
+                "data1/child",
+                "data2",
+                "data2/child",
+                "data2/child/grand",
+            ],
+        ]
+        for ex_basis_set in exhaustive_basis_sets:
+            if True:
+                basis_sets = [ex_basis_set]
+            else:
+                basis_sets = [list(subset) for r in range(len(ex_basis_set) + 1) for subset in combinations(ex_basis_set, r)]
+            for basis in basis_sets:
+                for subset in [list(subset2) for s in range(len(basis) + 1) for subset2 in combinations(basis, s)]:
+                    with stop_on_failure_subtest(basis=basis, subset=subset):
+                        run_filter(subset, basis)
 
 
 #############################################################################

@@ -1297,16 +1297,19 @@ class Job:
         assert (not self.is_test_mode) or not has_duplicates(basis_datasets), "List contains duplicates"
         assert (not self.is_test_mode) or set(datasets).issubset(set(basis_datasets)), "Not a subset"
         root_datasets: list[str] = self.find_root_datasets(datasets)
-        datasets_set: set[str] = set(datasets)  # Alternatively, containment check could also be done via binary search
         i = 0
         j = 0
+        k = 0
         len_root_datasets = len(root_datasets)
         len_basis_datasets = len(basis_datasets)
-        while i < len_root_datasets and j < len_basis_datasets:  # walk and "merge" both sorted lists, in sync
+        len_datasets = len(datasets)
+        while i < len_root_datasets and j < len_basis_datasets:  # walk and "merge" the sorted lists, in sync
             if basis_datasets[j] < root_datasets[i]:  # irrelevant subtree?
                 j += 1  # move to the next basis_src_dataset
             elif is_descendant(basis_datasets[j], of_root_dataset=root_datasets[i]):  # relevant subtree?
-                if basis_datasets[j] not in datasets_set:  # was dataset chopped off by schedule or --incl/exclude-dataset*?
+                while k < len_datasets and datasets[k] < basis_datasets[j]:
+                    k += 1  # move to the next item in datasets
+                if k == len_datasets or datasets[k] != basis_datasets[j]:  # dataset chopped off by schedule or --incl/excl*?
                     return None  # detected filter pruning that is incompatible with 'zfs snapshot -r'
                 j += 1  # move to the next basis_src_dataset
             else:
