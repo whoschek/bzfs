@@ -73,7 +73,7 @@ def main() -> None:
 
     failfast = False if os.getenv("CI") else True  # no need to fail fast when running within GitHub Action
     print(f"Running in failfast mode: {failfast} ...")
-    result = unittest.TextTestRunner(failfast=failfast, verbosity=2).run(suite)
+    result = unittest.TextTestRunner(failfast=failfast, verbosity=2, descriptions=False).run(suite)
     sys.exit(not result.wasSuccessful())
 
 

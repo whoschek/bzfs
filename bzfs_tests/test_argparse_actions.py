@@ -23,6 +23,7 @@ import bzfs_main.utils
 from bzfs_main import argparse_actions
 from bzfs_main.check_range import CheckRange
 from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.tools import suppress_output
 
 
 ###############################################################################
@@ -55,7 +56,7 @@ class TestDatasetPairsAction(AbstractTestCase):
         self.assertEqual([("src1", "dst1")], args.input)
 
     def test_direct_value_without_corresponding_dst(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["--input", "src1"])
 
     def test_file_input(self) -> None:
@@ -87,18 +88,18 @@ class TestDatasetPairsAction(AbstractTestCase):
 
     def test_file_missing_tab(self) -> None:
         with patch("bzfs_main.argparse_actions.open_nofollow", mock_open(read_data="src1\nsrc2")):
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit), suppress_output():
                 self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
 
     def test_file_whitespace_only(self) -> None:
         with patch("bzfs_main.argparse_actions.open_nofollow", mock_open(read_data=" \tdst1")):
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit), suppress_output():
                 self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
         with patch("bzfs_main.argparse_actions.open_nofollow", mock_open(read_data="src1\t ")):
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit), suppress_output():
                 self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
         with patch("bzfs_main.argparse_actions.open_nofollow", side_effect=FileNotFoundError):
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit), suppress_output():
                 self.parser.parse_args(["--input", "+nonexistent_test_bzfs_argument_file"])
 
     def test_option_not_specified(self) -> None:
@@ -107,7 +108,7 @@ class TestDatasetPairsAction(AbstractTestCase):
 
     def test_dataset_pairs_action_invalid_basename(self) -> None:
         with patch("bzfs_main.argparse_actions.open_nofollow", mock_open(read_data="src\tdst\n")):
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit), suppress_output():
                 self.parser.parse_args(["--input", "+bad_file_name"])
 
 
@@ -139,7 +140,7 @@ class TestFileOrLiteralAction(AbstractTestCase):
 
     def test_file_not_found(self) -> None:
         with patch("bzfs_main.argparse_actions.open_nofollow", side_effect=FileNotFoundError):
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit), suppress_output():
                 self.parser.parse_args(["--input", "+nonexistent_test_bzfs_argument_file"])
 
     def test_option_not_specified(self) -> None:
@@ -148,7 +149,7 @@ class TestFileOrLiteralAction(AbstractTestCase):
 
     def test_file_or_literal_action_invalid_basename(self) -> None:
         with patch("bzfs_main.argparse_actions.open_nofollow", mock_open(read_data="line")):
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit), suppress_output():
                 self.parser.parse_args(["--input", "+bad_file_name"])
 
 
@@ -178,7 +179,7 @@ class TestNonEmptyStringAction(AbstractTestCase):
         self.parser.add_argument("--name", action=argparse_actions.NonEmptyStringAction)
 
     def test_non_empty_string_action_empty(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["--name", " "])
 
 
@@ -194,7 +195,7 @@ class TestLogConfigVariablesAction(AbstractTestCase):
         self.assertEqual(["name1:val1", "name2:val2"], args.log_config_var)
 
         for var in ["", "  ", "varWithoutColon", ":valueWithoutName", " nameWithWhitespace:value"]:
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit), suppress_output():
                 self.parser.parse_args(["--log-config-var", var])
 
 
@@ -210,7 +211,7 @@ class SSHConfigFileNameAction(AbstractTestCase):
         self.assertEqual("file1.txt", args.filename)
 
     def test_empty_filename(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args([""])
 
     def test_filename_in_subdirectory(self) -> None:
@@ -220,7 +221,7 @@ class SSHConfigFileNameAction(AbstractTestCase):
         self.parser.parse_args(["./file.txt"])
 
     def test_ssh_config_filename_action_invalid_chars(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["foo bar"])
 
 
@@ -240,27 +241,27 @@ class TestSafeFileNameAction(AbstractTestCase):
         self.assertEqual("", args.filename)
 
     def test_filename_in_subdirectory(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["subdir/safe_file.txt"])
 
     def test_unsafe_filename_with_parent_directory_reference(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["../escape.txt"])
 
     def test_unsafe_filename_with_absolute_path(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["/unsafe_file.txt"])
 
     def test_unsafe_nested_parent_directory(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["../../another_escape.txt"])
 
     def test_filename_with_single_dot_slash(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["./file.txt"])
 
     def test_filename_with_tab(self) -> None:
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["foo\nbar.txt"])
 
 
@@ -276,13 +277,13 @@ class TestSafeDirectoryNameAction(AbstractTestCase):
     def test_empty_directory_name_raises_error(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--dir", action=argparse_actions.SafeDirectoryNameAction)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--dir", ""])
 
     def test_directory_name_with_invalid_whitespace_raises_error(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--dir", action=argparse_actions.SafeDirectoryNameAction)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--dir", "invalid\nname"])
 
     def test_directory_name_with_leading_or_trailing_spaces_is_trimmed(self) -> None:
@@ -298,7 +299,7 @@ class TestValidateNoArgumentFile(AbstractTestCase):
     def test_validate_no_argument_file_raises(self) -> None:
         parser = argparse.ArgumentParser()
         ns = argparse.Namespace(no_argument_file=True)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             argparse_actions.validate_no_argument_file("afile", ns, err_prefix="e", parser=parser)
 
 
@@ -320,13 +321,13 @@ class TestCheckRange(AbstractTestCase):
     def test_invalid_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=CheckRange, min=0, max=100)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--age", "-1"])
 
     def test_invalid_range_inf_sup(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=CheckRange, inf=0, sup=100)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--age", "101"])
 
     def test_invalid_combination_min_inf(self) -> None:
@@ -348,7 +349,7 @@ class TestCheckRange(AbstractTestCase):
     def test_invalid_float_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--age", "-0.1"])
 
     def test_valid_edge_case_min(self) -> None:
@@ -366,13 +367,13 @@ class TestCheckRange(AbstractTestCase):
     def test_invalid_edge_case_sup(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=CheckRange, inf=0.0, sup=100.0)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--age", "100.0"])
 
     def test_invalid_edge_case_inf(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=CheckRange, inf=0.0, sup=100.0)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--age", "0.0"])
 
     def test_no_range_constraints(self) -> None:
@@ -450,9 +451,9 @@ class TestCheckPercentRange(AbstractTestCase):
     def test_invalid(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--threads", action=argparse_actions.CheckPercentRange, min=1)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--threads", "0"])
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--threads", "0%"])
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--threads", "abc"])

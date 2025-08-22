@@ -35,9 +35,13 @@ from typing import (
 from unittest.mock import MagicMock, patch
 
 from bzfs_main import bzfs, progress_reporter
-from bzfs_main.progress_reporter import PV_FILE_THREAD_SEPARATOR, ProgressReporter, count_num_bytes_transferred_by_zfs_send
+from bzfs_main.progress_reporter import (
+    PV_FILE_THREAD_SEPARATOR,
+    ProgressReporter,
+    count_num_bytes_transferred_by_zfs_send,
+)
 from bzfs_main.utils import tail
-from bzfs_tests.test_utils import stop_on_failure_subtest
+from bzfs_tests.tools import stop_on_failure_subtest
 
 
 #############################################################################
@@ -94,7 +98,8 @@ class TestHelperFunctions(unittest.TestCase):
         try:
             subprocess.run(cmd, shell=True, check=True)
             num_bytes = count_num_bytes_transferred_by_zfs_send(pv_file)
-            print("pv_log_file: " + "\n".join(tail(pv_file, 10)))
+            # print("pv_log_file: " + "\n".join(tail(pv_file, 10)))
+            self.assertTrue(tail(pv_file, 10)[-1].lstrip().startswith("275GiB: 16.0KiB"))
             self.assertEqual(16 * 1024, num_bytes)
         finally:
             Path(pv_file).unlink(missing_ok=True)

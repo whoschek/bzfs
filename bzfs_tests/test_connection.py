@@ -280,7 +280,6 @@ class TestConnectionPool(AbstractTestCase):
                 i = rng.randint(0, len(conns) - 1) if j == 0 else 0 if j == 1 else len(conns) - 1
                 conn, donn = conns.pop(i)
                 self.return_connection(cpool, conn, dpool, donn)
-            print(f"cpool: {cpool}")
 
     def test_long_random_walk(self) -> None:
         log = logging.getLogger(bzfs.__name__)

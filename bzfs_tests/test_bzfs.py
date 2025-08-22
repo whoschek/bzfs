@@ -15,8 +15,6 @@
 """Unit tests for the ``bzfs`` CLI."""
 
 from __future__ import annotations
-import contextlib
-import io
 import re
 import subprocess
 import time
@@ -67,6 +65,7 @@ from bzfs_main.utils import (
     DIE_STATUS,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.tools import suppress_output
 from bzfs_tests.zfs_util import (
     is_solaris_zfs,
 )
@@ -109,7 +108,7 @@ class TestHelperFunctions(AbstractTestCase):
         job.params = self.make_params(args=args)
 
         with patch("time.monotonic_ns", side_effect=ValueError("my value error")):
-            with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+            with self.assertRaises(SystemExit), suppress_output():
                 job.run_main(args)
 
     def test_recv_option_property_names(self) -> None:
@@ -498,31 +497,31 @@ class TestArgumentParser(AbstractTestCase):
         if is_solaris_zfs():
             self.skipTest("FIXME: BlockingIOError: [Errno 11] write could not complete without blocking")
         parser = bzfs.argument_parser()
-        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as e:
+        with self.assertRaises(SystemExit) as e, suppress_output():
             parser.parse_args(["--help"])
         self.assertEqual(0, e.exception.code)
 
     def test_version(self) -> None:
         parser = bzfs.argument_parser()
-        with self.assertRaises(SystemExit) as e:
+        with self.assertRaises(SystemExit) as e, suppress_output():
             parser.parse_args(["--version"])
         self.assertEqual(0, e.exception.code)
 
     def test_missing_datasets(self) -> None:
         parser = bzfs.argument_parser()
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as e:
+        with self.assertRaises(SystemExit) as e, suppress_output():
             parser.parse_args(["--retries=1"])
         self.assertEqual(2, e.exception.code)
 
     def test_missing_dst_dataset(self) -> None:
         parser = bzfs.argument_parser()
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as e:
+        with self.assertRaises(SystemExit) as e, suppress_output():
             parser.parse_args(["src_dataset"])  # Each SRC_DATASET must have a corresponding DST_DATASET
         self.assertEqual(2, e.exception.code)
 
     def test_program_must_not_be_empty_string(self) -> None:
         parser = bzfs.argument_parser()
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as e:
+        with self.assertRaises(SystemExit) as e, suppress_output():
             parser.parse_args(["src_dataset", "src_dataset", "--zfs-program="])
         self.assertEqual(2, e.exception.code)
 
@@ -1029,7 +1028,8 @@ class TestPythonVersionCheck(AbstractTestCase):
     @patch("sys.exit")
     @patch("sys.version_info", new=(3, 6))
     def test_version_below_3_8(self, mock_exit: MagicMock) -> None:
-        with patch("sys.stderr"):
+        """Verifies exit on unsupported Python version while silencing output."""
+        with patch("sys.stdout"), patch("sys.stderr"):
             import importlib
 
             from bzfs_main import bzfs

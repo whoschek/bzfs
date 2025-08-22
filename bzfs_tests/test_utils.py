@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 import argparse
-import contextlib
 import errno
 import os
 import re
@@ -36,7 +35,6 @@ from subprocess import PIPE
 from typing import (
     Any,
     Callable,
-    Iterator,
     Sequence,
     Union,
     cast,
@@ -87,6 +85,7 @@ from bzfs_main.utils import (
     xfinally,
     xprint,
 )
+from bzfs_tests.tools import suppress_output
 
 
 #############################################################################
@@ -122,7 +121,7 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_die_with_parser(self) -> None:
         parser = argparse.ArgumentParser()
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             die("boom", parser=parser)
 
     def test_has_duplicates(self) -> None:
@@ -204,7 +203,7 @@ class TestHelperFunctions(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             parse_duration_to_milliseconds("foo")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parse_duration_to_milliseconds("foo", context="ctx")
 
     def test_format_dict(self) -> None:
@@ -1426,12 +1425,3 @@ class TestCurrentDateTime(unittest.TestCase):
         self.assertEqual("Europe/Vienna", getattr(zone, "key", None))
         with self.assertRaises(ValueError):
             get_timezone("bad-tz")
-
-
-@contextlib.contextmanager
-def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
-    """Context manager to mimic UnitTest.subTest() but stop on first failure."""
-    try:
-        yield
-    except AssertionError as e:
-        raise AssertionError(f"SubTest failed with parameters: {params}") from e

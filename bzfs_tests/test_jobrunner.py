@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 import argparse
-import contextlib
-import io
 import platform
 import shutil
 import signal
@@ -35,6 +33,7 @@ from unittest.mock import MagicMock, patch
 from bzfs_main import bzfs_jobrunner
 from bzfs_main.utils import DIE_STATUS
 from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.tools import suppress_output
 
 
 #############################################################################
@@ -59,48 +58,53 @@ class TestHelperFunctions(AbstractTestCase):
         self.job = bzfs_jobrunner.Job()
 
     def test_validate_type(self) -> None:
+        """Ensure validate_type accepts expected types and exits on mismatches quietly."""
         self.job.validate_type("foo", str, "name")
         self.job.validate_type(123, int, "name")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_type(123, str, "name")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_type("foo", int, "name")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_type(None, str, "name")
         self.job.validate_type("foo", Union[str, int], "name")
         self.job.validate_type(123, Union[str, int], "name")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_type([], Union[str, int], "name")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_type(None, Union[str, int], "name")
 
     def test_validate_non_empty_string(self) -> None:
+        """Reject empty strings while keeping the log output silent."""
         self.job.validate_non_empty_string("valid_string", "name")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_non_empty_string("", "name")
 
     def test_validate_non_negative_int(self) -> None:
+        """Verify negative integers abort without leaking error logs."""
         self.job.validate_non_negative_int(1, "name")
         self.job.validate_non_negative_int(0, "name")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_non_negative_int(-1, "name")
 
     def test_validate_true(self) -> None:
+        """Expect false values to trigger exit, capturing any error message."""
         self.job.validate_true(1, "name")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_true(0, "name")
 
     def test_validate_is_subset(self) -> None:
+        """Confirm subset validation handles errors without emitting logs."""
         self.job.validate_is_subset(["1"], ["1", "2"], "x", "y")
         self.job.validate_is_subset([], ["1", "2"], "x", "y")
         self.job.validate_is_subset([], [], "x", "y")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_is_subset(["3"], ["1", "2"], "x", "y")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_is_subset(["3", "4"], [], "x", "y")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_is_subset("foo", ["3"], "x", "y")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
             self.job.validate_is_subset(["3"], "foo", "x", "y")
 
     def _make_mock_socket(self, bind_side_effect: Exception | None = None) -> MagicMock:
@@ -137,29 +141,28 @@ class TestHelperFunctions(AbstractTestCase):
         if is_solaris_zfs():
             self.skipTest("FIXME: BlockingIOError: [Errno 11] write could not complete without blocking")
         parser = bzfs_jobrunner.argument_parser()
-        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as e:
+        with self.assertRaises(SystemExit) as e, suppress_output():
             parser.parse_args(["--help"])
         self.assertEqual(0, e.exception.code)
 
     def test_version(self) -> None:
         parser = bzfs_jobrunner.argument_parser()
-        with self.assertRaises(SystemExit) as e:
+        with self.assertRaises(SystemExit) as e, suppress_output():
             parser.parse_args(["--version"])
         self.assertEqual(0, e.exception.code)
 
     def test_reject_argument_action(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--secret", action=bzfs_jobrunner.RejectArgumentAction)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--secret", "x"])
 
     def test_inapplicable_cli_option(self) -> None:
         opts = ["--create-src-snapshots", "--job-id=myid", "--root-dataset-pairs", "src", "dst"]
         parser = bzfs_jobrunner.argument_parser()
         parser.parse_args(opts)
-        with contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                parser.parse_args(["--delete-dst-snapshots"] + opts)
+        with self.assertRaises(SystemExit), suppress_output():
+            parser.parse_args(["--delete-dst-snapshots"] + opts)
 
     def test_stats_repr(self) -> None:
         stats = bzfs_jobrunner.Stats()
@@ -727,9 +730,11 @@ class TestRunSubJobInCurrentThread(AbstractTestCase):
         mock_bzfs_run_main.assert_called_once_with(cmd)
 
     def test_unexpected_exception(self, mock_bzfs_run_main: MagicMock) -> None:
+        """Suppress unexpected-exception logs and ensure the worker reports a fatal status."""
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = ValueError
-        result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
+        with suppress_output():
+            result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(DIE_STATUS, result)
 
 
@@ -742,30 +747,39 @@ class TestRunSubJob(AbstractTestCase):
         self.assertIsNone(self.job.first_exception)
 
     def test_success(self) -> None:
-        result = self.job.run_subjob(cmd=["true"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+        """Run a successful subjob and silence its informational logs."""
+        with suppress_output():
+            result = self.job.run_subjob(cmd=["true"], name="j0", timeout_secs=None, spawn_process_per_job=True)
         self.assertEqual(0, result)
 
     def test_failure(self) -> None:
+        """Verify failing subjobs yield errors while keeping log output quiet."""
         self.job.stats.jobs_all = 2
-        result = self.job.run_subjob(cmd=["false"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+        with suppress_output():
+            result = self.job.run_subjob(cmd=["false"], name="j0", timeout_secs=None, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
         self.assertTrue(self.job.first_exception != 0)
 
-        result = self.job.run_subjob(cmd=["false"], name="j1", timeout_secs=None, spawn_process_per_job=True)
+        with suppress_output():
+            result = self.job.run_subjob(cmd=["false"], name="j1", timeout_secs=None, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
         self.assertTrue(self.job.first_exception != 0)
 
     def test_timeout(self) -> None:
+        """Check subjobs respect timeouts and silence their logs."""
         self.job.stats.jobs_all = 2
-        result = self.job.run_subjob(cmd=["sleep", "0"], name="j0", timeout_secs=1, spawn_process_per_job=True)
+        with suppress_output():
+            result = self.job.run_subjob(cmd=["sleep", "0"], name="j0", timeout_secs=1, spawn_process_per_job=True)
         self.assertEqual(0, result)
-        result = self.job.run_subjob(cmd=["sleep", "1"], name="j1", timeout_secs=0.01, spawn_process_per_job=True)
+        with suppress_output():
+            result = self.job.run_subjob(cmd=["sleep", "1"], name="j1", timeout_secs=0.01, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
 
     def test_nonexisting_cmd(self) -> None:
-        with self.assertRaises(FileNotFoundError):
+        """Ensure missing commands raise FileNotFoundError without noisy logs."""
+        with self.assertRaises(FileNotFoundError), suppress_output():
             self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
 
 

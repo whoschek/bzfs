@@ -37,7 +37,7 @@ from bzfs_main.detect import (
     detect_available_programs,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
-from bzfs_tests.test_utils import stop_on_failure_subtest
+from bzfs_tests.tools import stop_on_failure_subtest
 
 
 #############################################################################

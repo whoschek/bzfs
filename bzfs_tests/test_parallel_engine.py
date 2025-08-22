@@ -39,7 +39,7 @@ from bzfs_main.parallel_engine import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
 from bzfs_main.retry import Retry, RetryPolicy
-from bzfs_tests.test_utils import stop_on_failure_subtest
+from bzfs_tests.tools import stop_on_failure_subtest
 
 
 #############################################################################

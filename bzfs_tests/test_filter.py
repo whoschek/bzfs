@@ -61,6 +61,7 @@ from bzfs_main.utils import (
     unixtime_fromisoformat,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.tools import suppress_output
 
 
 #############################################################################
@@ -230,10 +231,12 @@ class TestTimeRangeAction(CommonTest):
         self.parser.add_argument("--time-n-ranks", action=bzfs_main.argparse_actions.TimeRangeAndRankRangeAction, nargs="+")
 
     def parse_duration(self, arg: str) -> argparse.Namespace:
-        return self.parser.parse_args(["--time-n-ranks", arg + " ago..anytime"])
+        with suppress_output():
+            return self.parser.parse_args(["--time-n-ranks", arg + " ago..anytime"])
 
     def parse_timestamp(self, arg: str) -> argparse.Namespace:
-        return self.parser.parse_args(["--time-n-ranks", arg + "..anytime"])
+        with suppress_output():
+            return self.parser.parse_args(["--time-n-ranks", arg + "..anytime"])
 
     def test_parse_unix_time(self) -> None:  # Test Unix time in integer seconds
         args = self.parse_timestamp("1696510080")
@@ -315,10 +318,10 @@ class TestTimeRangeAction(CommonTest):
         with self.assertRaises(SystemExit):
             self.parse_timestamp("2024-10-35")  # Month does not have 35 days
 
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["--time-n-ranks", "60_mins..anytime"])  # Missing 'ago'
 
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["--time-n-ranks", "60_mins_ago"])  # Missing ..
 
     def test_parse_datetime(self) -> None:
@@ -433,7 +436,8 @@ class TestRankRangeAction(CommonTest):
         self.parser.add_argument("--ranks", nargs="+", action=bzfs_main.argparse_actions.TimeRangeAndRankRangeAction)
 
     def parse_args(self, arg: str) -> argparse.Namespace:
-        return self.parser.parse_args(["--ranks", "0..0", arg])
+        with suppress_output():
+            return self.parser.parse_args(["--ranks", "0..0", arg])
 
     def test_valid_ranks(self) -> None:
         self.assertEqual((("latest", 0, False), ("latest", 2, True)), self.parse_args("latest0..latest2%").ranks[1])

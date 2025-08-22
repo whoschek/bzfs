@@ -24,7 +24,7 @@ import bzfs_main.incremental_send_steps
 from bzfs_main.incremental_send_steps import (
     send_step_to_str,
 )
-from bzfs_tests.test_utils import (
+from bzfs_tests.tools import (
     stop_on_failure_subtest,
 )
 
