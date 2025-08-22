@@ -897,11 +897,11 @@ class Job:
             parent: str = os.path.dirname(dst_dataset)
             children[parent].add(dst_dataset)
         to_delete: set[str] = set()
-        for dst_dataset in reversed(sorted_dst_datasets):
+        for dst_dataset in reversed(sorted_dst_datasets):  # Reverse order facilitates efficient O(N) time algorithm
             if children[dst_dataset].issubset(to_delete):
                 to_delete.add(dst_dataset)  # all children are deletable, thus the dataset itself is deletable too
         to_delete = to_delete.difference(
-            {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in basis_src_datasets}
+            replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in basis_src_datasets
         )
         delete_datasets(self, dst, to_delete)
         sorted_dst_datasets = sorted(set(sorted_dst_datasets).difference(to_delete))
@@ -922,9 +922,6 @@ class Job:
         """
         p = self.params
         dst = p.dst
-        delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: bool = (
-            p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and are_bookmarks_enabled(p, dst)
-        )
 
         # Compute the direct children of each NON-FILTERED dataset. Thus, no non-selected dataset and no ancestor of a
         # non-selected dataset will ever be added to the "orphan" set. In other words, this treats non-selected dataset
@@ -935,31 +932,33 @@ class Job:
             parent: str = os.path.dirname(dst_dataset)
             children[parent].add(dst_dataset)
 
-        # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of one
-        # filter run is an optimization. The first run only computes candidate orphans, without incurring I/O, to reduce
-        # the list of datasets for which we list snapshots via 'zfs list -t snapshot ...' from dst_datasets to a subset
-        # of dst_datasets, which in turn reduces I/O and improves perf. Essentially, this eliminates the I/O to list
-        # snapshots for ancestors of excluded datasets. The second run computes the real orphans.
-        btype: str = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
-        dst_datasets_having_snapshots: set[str] = set()
-        for run in range(2):
+        def compute_orphans(datasets_having_snapshots: set[str]) -> set[str]:
+            """Returns destination datasets having zero snapshots whose children are all orphans."""
             orphans: set[str] = set()
-            for dst_dataset in reversed(sorted_dst_datasets):
-                if children[dst_dataset].issubset(orphans):
-                    # all children turned out to be orphans, thus the dataset itself could be an orphan
-                    if dst_dataset not in dst_datasets_having_snapshots:  # always True during first filter run
-                        orphans.add(dst_dataset)
-            if run == 0:
-                # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
-                cmd: list[str] = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
-                for snapshots in zfs_list_snapshots_in_parallel(self, dst, cmd, sorted(orphans), ordered=False):
-                    if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
-                        replace_in_lines(snapshots, old="#", new="@", count=1)  # treat bookmarks as snapshots
-                    dst_datasets_having_snapshots.update(snap[0 : snap.index("@")] for snap in snapshots)  # union
-            else:
-                delete_datasets(self, dst, orphans)
-                sorted_dst_datasets = sorted(set(sorted_dst_datasets).difference(orphans))
-                basis_dst_datasets = sorted(set(basis_dst_datasets).difference(orphans))
+            for dst_dataset in reversed(sorted_dst_datasets):  # Reverse order facilitates efficient O(N) time algorithm
+                if (dst_dataset not in datasets_having_snapshots) and children[dst_dataset].issubset(orphans):
+                    orphans.add(dst_dataset)
+            return orphans
+
+        # Compute candidate orphan datasets, which reduces the list of datasets for which we list snapshots via
+        # 'zfs list -t snapshot ...' from dst_datasets to a subset of dst_datasets, which in turn reduces I/O and improves
+        # perf. Essentially, this eliminates the I/O to list snapshots for ancestors of excluded datasets.
+        candidate_orphans: set[str] = compute_orphans(set())
+
+        # Compute destination datasets having more than zero snapshots
+        dst_datasets_having_snapshots: set[str] = set()
+        with_bookmarks: bool = p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and are_bookmarks_enabled(p, dst)
+        btype: str = "bookmark,snapshot" if with_bookmarks else "snapshot"
+        cmd: list[str] = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
+        for snapshots in zfs_list_snapshots_in_parallel(self, dst, cmd, sorted(candidate_orphans), ordered=False):
+            if with_bookmarks:
+                replace_in_lines(snapshots, old="#", new="@", count=1)  # treat bookmarks as snapshots
+            dst_datasets_having_snapshots.update(snap[0 : snap.index("@")] for snap in snapshots)  # union
+
+        orphans = compute_orphans(dst_datasets_having_snapshots)  # compute the real orphans
+        delete_datasets(self, dst, orphans)  # finally, delete the orphan datasets in an efficient way
+        sorted_dst_datasets = sorted(set(sorted_dst_datasets).difference(orphans))
+        basis_dst_datasets = sorted(set(basis_dst_datasets).difference(orphans))
         return basis_dst_datasets, sorted_dst_datasets
 
     def monitor_snapshots_task(
