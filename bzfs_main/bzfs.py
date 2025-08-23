@@ -1476,6 +1476,8 @@ class Job:
                 datasets_with_snapshots.add(dataset)
                 snapshot_names: list[str] = [snapshot[-1] for snapshot in snapshots]
                 year_with_4_digits_regex: re.Pattern[str] = YEAR_WITH_FOUR_DIGITS_REGEX
+                startswith = str.startswith
+                endswith = str.endswith
                 fns = ((fn_latest, True),) if fn_oldest is None else ((fn_latest, True), (fn_oldest, False))
                 for i, label in enumerate(labels):
                     infix: str = label.infix
@@ -1484,16 +1486,16 @@ class Job:
                     startlen: int = len(start)
                     endlen: int = len(end)
                     minlen: int = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
-                    year_slice: slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
+                    startlen_4: int = startlen + 4  # [startlen:startlen+4]  # year_with_four_digits_regex
                     for fn, is_reverse in fns:
                         creation_unixtime_secs: int = 0  # find creation time of latest or oldest snapshot matching the label
                         minmax_snapshot: str = ""
                         for j, snapshot_name in enumerate(reversed(snapshot_names) if is_reverse else snapshot_names):
                             if (
-                                snapshot_name.endswith(end)
-                                and snapshot_name.startswith(start)
+                                endswith(snapshot_name, end)
+                                and startswith(snapshot_name, start)
                                 and len(snapshot_name) >= minlen
-                                and (infix or year_with_4_digits_regex.fullmatch(snapshot_name[year_slice]))
+                                and (infix or year_with_4_digits_regex.fullmatch(snapshot_name, startlen, startlen_4))
                             ):
                                 k: int = len(snapshots) - j - 1 if is_reverse else j
                                 creation_unixtime_secs = snapshots[k][1]
