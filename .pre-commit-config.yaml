@@ -3,22 +3,22 @@
 # ---------------------------------------------------------------------------
 # How to enable the Git hook on your machine (do this once per clone):
 #   1. Install the helper tool:
-#        pip install pre-commit
+#          pip install pre-commit
 #   2. From the project root directory run:
-#        pre-commit install --install-hooks
-#      This writes an executable hook into .git/hooks/pre-commit that will
-#      run the checks defined below every time you commit.
-#   3. After updating this YAML file, run the same command again so the hook picks
-#      up the new configuration.
+#          pre-commit install --install-hooks
+#      This writes an executable hook into .git/hooks/pre-commit that will run the checks
+#      defined below every time you commit.
+#   3. Whenever you update this YAML config file, run that same command again so the hook
+#      picks up the new configuration.
 #
 # Optional maintenance commands:
-#   * pre-commit run --all-files    # run hooks on the whole repo
-#   * pre-commit autoupdate         # bump pinned revs to latest released tags
+#   * pre-commit run --all-files        # Run hooks on the whole repo
+#   * pre-commit autoupdate             # Bump pinned revs to latest released tags
 #
 # These steps should also be mirrored in CI (e.g. `pre-commit run --all-files`)
 # to guarantee that the same checks are enforced everywhere.
 # ---------------------------------------------------------------------------
-fail_fast: true  # abort on first failing hook
+fail_fast: true                         # Abort on first failing hook
 default_install_hook_types:
   - pre-commit
   - commit-msg
@@ -42,14 +42,15 @@ repos:
         args: [
           --autofix,
           --indent=4,
-          --no-ensure-ascii,            # keep non-ASCII chars verbatim
-          --no-sort-keys,               # preserve original key order
-          --top-keys="",                # no keys forced to the top
+          --no-ensure-ascii,            # Keep non-ASCII chars verbatim
+          --no-sort-keys,               # Preserve original key order
+          --top-keys="",                # No keys forced to the top
         ]
       - id: check-symlinks              # Check for symlinks that do not point to anything
       - id: mixed-line-ending
         args: [--fix=lf]                # Replace line endings with linefeed
       - id: trailing-whitespace         # Remove whitespace from the end of lines
+      - id: end-of-file-fixer           # Remove whitespace from the end of files and replace end of files with linefeed
   - repo: https://github.com/python-jsonschema/check-jsonschema
     rev: 0.33.3
     hooks:

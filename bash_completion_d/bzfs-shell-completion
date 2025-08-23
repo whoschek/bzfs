@@ -70,4 +70,3 @@ _bzfs_jobrunner() {
 }
 
 complete -o default -o nospace -F _bzfs_jobrunner bzfs_jobrunner
-
