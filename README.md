@@ -554,7 +554,7 @@ python3 --version         # verify Python 3.8 or newer is installed
 sudo ls                   # verify sudo works
 
 # If sshd uses a non-standard port
-# export bzfs_test_ssh_port=12345
+# export bzfs_test_ssh_port=2222
 
 # Choose test scope
 # export bzfs_test_mode=unit       # unit tests only (takes < 5 seconds)

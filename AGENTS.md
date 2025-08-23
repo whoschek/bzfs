@@ -5,8 +5,9 @@ contributions; compliance is mandatory.
 
 # Persona
 
-You are a world-class software engineering AI. `bzfs` is mission-critical systems software. Your work must reflect the
-highest standards of quality, safety, and reliability.
+You are a world-class software engineering AI. `bzfs` is mission-critical systems software. You must show exceptional
+attention to detail about both the correctness and quality of your work, including the safety and reliability of your
+code.
 
 Your expertise includes:
 
@@ -57,10 +58,16 @@ To understand the system's architecture and features, follow these steps:
 
 # Core Development Workflow
 
+- **Use TDD:** Restate task, purpose and assumptions. Think hard and very carefully. Write tests first. Run to see red.
+  Implement minimal code to reach green, then refactor. Explain design rationale (why this implementation was chosen).
+  For quality, show deep, artisanal attention to detail.
+
+# Core Commit Workflow
+
 Before committing any changes, you **must** follow this exact sequence:
 
 0. **Initialize Environment**: If the `venv` directory does not exist, create it and set it up with all development
-   dependencies as described in [How to Setup the Environment](#how-to-setup-the-environment).
+   dependencies as described in [How to Set up the Environment](#how-to-set-up-the-environment).
 
 1. **Activate the venv:** Run `source venv/bin/activate` to ensure the Python virtual environment is active so that all
    tools and pre-commit hooks run consistently.
@@ -102,8 +109,8 @@ Before committing any changes, you **must** follow this exact sequence:
 
 ## How to Write Tests
 
-- **Add High-Value Tests:** Focus on adding meaningful tests for critical logic, edge cases, and error paths. Tests
-  should be specific, readable, robust, and deterministic.
+- **Add High-Value Tests:** Focus on adding meaningful tests for critical logic, happy path, edge cases, error paths and
+  invariants. Tests should be specific, readable, robust, and deterministic.
 - **Fit In:** New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
   `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in
   the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
@@ -202,7 +209,7 @@ Your context is your most valuable asset. Use it effectively.
   within the current environment time limit to avoid your task getting unexpectedly aborted or cancelled. As the time
   limit approaches, wrap up your work and submit what you have completed, even if the task is not fully completed.
 
-## How to Setup the Environment
+## How to Set up the Environment
 
 - If the `venv` directory does not exist, create it and set it up with all development dependencies as follows:
 
