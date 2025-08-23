@@ -23,7 +23,9 @@ import socket
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from logging import Logger
+from typing import Any
 from unittest.mock import (
     MagicMock,
     patch,
@@ -34,13 +36,17 @@ from bzfs_main.configuration import (
     LogParams,
 )
 from bzfs_main.loggers import (
+    LOG_LEVEL_PREFIXES,
+    Tee,
     _get_default_logger,
     _get_dict_config_logger,
     _get_syslog_address,
     _remove_json_comments,
     _validate_log_config_dict,
+    get_default_log_formatter,
     get_logger,
     get_logger_subname,
+    get_simple_logger,
     reset_logger,
     validate_log_config_variable,
 )
@@ -59,6 +65,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestHelperFunctions,
         TestLogging,
+        TestTee,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -179,6 +186,7 @@ class TestHelperFunctions(AbstractTestCase):
 
 #############################################################################
 class TestLogging(AbstractTestCase):
+    """Tests logging helpers including default and simple formatter behavior."""
 
     def test_get_default_logger(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
@@ -243,6 +251,82 @@ class TestLogging(AbstractTestCase):
                 mock_warning.assert_called_once()
         finally:
             reset_logger()
+
+    def test_default_log_formatter_with_exc_info(self) -> None:
+        """Ensures DefaultLogFormatter outputs traceback when exc_info is set."""
+        formatter = get_default_log_formatter()
+        try:
+            raise RuntimeError("boom")
+        except RuntimeError:
+            record = logging.LogRecord(
+                name="test",
+                level=logging.ERROR,
+                pathname=__file__,
+                lineno=1,
+                msg="problem",
+                args=(),
+                exc_info=sys.exc_info(),
+            )
+        formatted = formatter.format(record)
+        self.assertIn("RuntimeError: boom", formatted)
+        self.assertIn("problem", formatted)
+
+    def test_default_log_formatter_pads_placeholder(self) -> None:
+        """Pads message left of '%s' to 54 characters before substitution."""
+        formatter = get_default_log_formatter()
+        with patch("bzfs_main.loggers.datetime") as mock_datetime:
+            mock_datetime.now.return_value = datetime(2000, 1, 1, 0, 0, 0)
+            record = logging.LogRecord(
+                name="test",
+                level=logging.INFO,
+                pathname=__file__,
+                lineno=1,
+                msg="before %s after",
+                args=("X",),
+                exc_info=None,
+            )
+            formatted = formatter.format(record)
+        self.assertEqual(54, formatted.index("X"))
+        self.assertTrue(formatted.endswith("after"))
+
+    def test_default_log_formatter_formats_args(self) -> None:
+        """Substitutes arguments into message when no exception is present."""
+        formatter = get_default_log_formatter()
+        with patch("bzfs_main.loggers.datetime") as mock_datetime:
+            mock_datetime.now.return_value = datetime(2000, 1, 1, 0, 0, 0)
+            record = logging.LogRecord(
+                name="test",
+                level=logging.INFO,
+                pathname=__file__,
+                lineno=1,
+                msg="%s start",
+                args=("Go",),
+                exc_info=None,
+            )
+            formatted = formatter.format(record)
+        self.assertIn("Go start", formatted)
+        self.assertNotIn("%s", formatted)
+
+    def test_level_formatter_injects_fields(self) -> None:
+        """LevelFormatter attaches level prefix and program name to records."""
+        logger = get_simple_logger("demo")
+        handler = logger.handlers[0]
+        formatter = handler.formatter
+        assert formatter is not None
+        record = logging.LogRecord(
+            name="test",
+            level=logging.WARNING,
+            pathname=__file__,
+            lineno=1,
+            msg="hi",
+            args=(),
+            exc_info=None,
+        )
+        formatted = formatter.format(record)
+        rec_any: Any = record
+        self.assertEqual(LOG_LEVEL_PREFIXES[logging.WARNING], rec_any.level_prefix)
+        self.assertEqual("demo", rec_any.program)
+        self.assertIn("[demo]", formatted)
 
     def test_remove_json_comments(self) -> None:
         config_str = (
@@ -327,3 +411,33 @@ class TestLogging(AbstractTestCase):
             mock_system.assert_not_called()
 
         _validate_log_config_dict(None)  # type: ignore[arg-type]
+
+
+#############################################################################
+class TestTee(AbstractTestCase):
+    """Tests the Tee class that duplicates writes to multiple streams."""
+
+    def test_write_flushes_all_streams(self) -> None:
+        """Write() forwards text and flush() to each target file."""
+        file1 = MagicMock()
+        file2 = MagicMock()
+        tee = Tee(file1, file2)
+        tee.write("abc")
+        for f in (file1, file2):
+            f.write.assert_called_once_with("abc")
+            f.flush.assert_called_once()
+
+    def test_flush_only(self) -> None:
+        """Flush() independently flushes all target streams."""
+        file1 = MagicMock()
+        file2 = MagicMock()
+        tee = Tee(file1, file2)
+        tee.flush()
+        file1.flush.assert_called_once()
+        file2.flush.assert_called_once()
+
+    def test_fileno_returns_first_descriptor(self) -> None:
+        """Fileno() exposes the descriptor of the first underlying stream."""
+        with tempfile.TemporaryFile() as f1, tempfile.TemporaryFile() as f2:
+            tee = Tee(f1, f2)
+            self.assertEqual(f1.fileno(), tee.fileno())
