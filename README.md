@@ -634,7 +634,7 @@ usage: bzfs [-h] [--recursive]
             [--ssh-dst-config-file FILE] [--threads INT[%]]
             [--max-concurrent-ssh-sessions-per-tcp-connection INT]
             [--bwlimit STRING]
-            [--compression-program {zstd,lz4,pzstd,pigz,gzip,bzip2,-}]
+            [--compression-program {zstd,lz4,pzstd,pigz,gzip,-}]
             [--compression-program-opts STRING]
             [--mbuffer-program {mbuffer,-}]
             [--mbuffer-program-opts STRING] [--ps-program {ps,-}]
@@ -1992,7 +1992,7 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--compression-program"></div>
 
-**--compression-program** *{zstd,lz4,pzstd,pigz,gzip,bzip2,-}*
+**--compression-program** *{zstd,lz4,pzstd,pigz,gzip,-}*
 
 *  The name of the 'zstd' executable (optional). Default is 'zstd'. Use '-' to disable the
     use of this program. The use is auto-disabled if data is transferred locally instead of via

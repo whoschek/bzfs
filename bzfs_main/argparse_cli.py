@@ -1253,7 +1253,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 
     msg: str = f"Use '{DISABLE_PRG}' to disable the use of this program.\n\n"
     parser.add_argument(
-        "--compression-program", default="zstd", choices=["zstd", "lz4", "pzstd", "pigz", "gzip", "bzip2", DISABLE_PRG],
+        "--compression-program", default="zstd", choices=["zstd", "lz4", "pzstd", "pigz", "gzip", DISABLE_PRG],
         help=hlp("zstd") + msg.rstrip() + " The use is auto-disabled if data is transferred locally instead of via the "
                                           "network. This option is about transparent compression-on-the-wire, not about "
                                           "compression-at-rest.\n\n")
