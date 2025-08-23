@@ -51,7 +51,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   a whitelist of safe dataset properties (if locally set) from src dataset to dst dataset when doing a 'full send', via
   new defaults for `--zfs-recv-o-include-regex` and `--zfs-recv-o-include-targets`. If you'd like to continue to use the
   old behavior, manually set `--zfs-send-program-opts="--props --raw --compressed"` and `--zfs-recv-o-include-regex`
-  (without any regex)
+  (without any regex) and `-zfs-recv-o-targets=full+incremental`.
 - [bzfs] [security] Removed CLI options `--ssh-{src|dst}-private-key`, `--ssh-{src|dst}-extra-opt(s)`, `--ssh-cipher`,
   as it is safer to specify these options via `--ssh-{src|dst}-config-file` in the ssh client config file.
 - [bzfs] [security] Enhanced validation of CLI options.
