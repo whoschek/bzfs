@@ -130,7 +130,7 @@ jobs:
     - name: Run pre-commit
       run: |
         python -m pip install --upgrade pip
-        pip install --upgrade "pre-commit==4.2"
+        pip install --upgrade "pre-commit==4.3"
         pre-commit run --all-files
     - name: Test with unittest
       run: |
@@ -203,7 +203,7 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_3_latest:  # currently uses zfs-2.3.3
+  test_ubuntu_24_04_zfs_2_3_latest:  # currently uses zfs-2.3.4
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_3_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_3_latest')
     runs-on: ubuntu-24.04
