@@ -233,11 +233,6 @@ class Job:
         self.dedicated_tcp_connection_per_zfs_send: bool = True
         self.max_datasets_per_minibatch_on_list_snaps: dict[str, int] = {}
         self.max_workers: dict[str, int] = {}
-        self.stats_lock: threading.Lock = threading.Lock()
-        self.num_cache_hits: int = 0
-        self.num_cache_misses: int = 0
-        self.num_snapshots_found: int = 0
-        self.num_snapshots_replicated: int = 0
         self.control_persist_secs: int = 90
         self.control_persist_margin_secs: int = 2
         self.progress_reporter: ProgressReporter = cast(ProgressReporter, None)
@@ -245,6 +240,11 @@ class Job:
         self.replication_start_time_nanos: int = time.monotonic_ns()
         self.timeout_nanos: int | None = None
         self.cache: SnapshotCache = SnapshotCache(self)
+        self.stats_lock: threading.Lock = threading.Lock()
+        self.num_cache_hits: int = 0
+        self.num_cache_misses: int = 0
+        self.num_snapshots_found: int = 0
+        self.num_snapshots_replicated: int = 0
 
         self.is_test_mode: bool = False  # for testing only
         self.creation_prefix: str = ""  # for testing only
@@ -1492,8 +1492,8 @@ class Job:
                         minmax_snapshot: str = ""
                         for j, snapshot_name in enumerate(reversed(snapshot_names) if is_reverse else snapshot_names):
                             if (
-                                endswith(snapshot_name, end)
-                                and startswith(snapshot_name, start)
+                                endswith(snapshot_name, end)  # aka snapshot_name.endswith(end)
+                                and startswith(snapshot_name, start)  # aka snapshot_name.startswith(end)
                                 and len(snapshot_name) >= minlen
                                 and (infix or year_with_4_digits_regex.fullmatch(snapshot_name, startlen, startlen_4))
                             ):

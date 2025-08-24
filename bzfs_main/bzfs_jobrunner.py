@@ -899,7 +899,7 @@ class Job:
                 dry_run=False,
                 is_test_mode=self.is_test_mode,
             )
-        else:
+        else:  # run sequentially
             log.log(LOG_TRACE, "%s", "spawn_process_per_job: False")
             next_update_nanos = time.monotonic_ns()
             for subjob in sorted_subjobs:
