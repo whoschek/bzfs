@@ -38,6 +38,7 @@ from bzfs_main import bzfs, progress_reporter
 from bzfs_main.progress_reporter import (
     PV_FILE_THREAD_SEPARATOR,
     ProgressReporter,
+    State,
     count_num_bytes_transferred_by_zfs_send,
 )
 from bzfs_main.utils import tail
@@ -418,8 +419,7 @@ class TestHelperFunctions(unittest.TestCase):
             reporter.sleeper.interrupt()
 
         reporter.sleeper.sleep = fake_sleep  # type: ignore[assignment]
-        with reporter.lock:
-            reporter.is_pausing = True
+        reporter.pause()
         selector = MagicMock()
         selector.select.return_value = []
         with self.assertRaises(ValueError):
@@ -430,8 +430,6 @@ class TestHelperFunctions(unittest.TestCase):
     def test_run_internal_reset_triggers_progress_output(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
         fds: list[IO[Any]] = []
-        with reporter.lock:
-            reporter.is_resetting = True
         selector = MagicMock()
         selector.select.return_value = []
         with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
@@ -505,8 +503,6 @@ class TestHelperFunctions(unittest.TestCase):
     def test_run_internal_calls_sleep_when_no_lines(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(2, 2))
         fds: list[IO[Any]] = []
-        with reporter.lock:
-            reporter.is_resetting = True
         sleep_args: list[int] = []
 
         def fake_sleep(n: int) -> None:
@@ -554,8 +550,6 @@ class TestHelperFunctions(unittest.TestCase):
     def test_run_internal_status_line_without_etas(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
         fds: list[IO[Any]] = []
-        with reporter.lock:
-            reporter.is_resetting = True
         selector = MagicMock()
         selector.select.return_value = []
         with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
@@ -567,12 +561,22 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_pause_and_reset_flags(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=None)
+        self.assertListEqual([State.IS_RESETTING], reporter.states)
         reporter.pause()
         with reporter.lock:
-            self.assertTrue(reporter.is_pausing)
+            self.assertListEqual([State.IS_RESETTING, State.IS_PAUSING], reporter.states)
+        reporter.pause()
+        with reporter.lock:
+            self.assertListEqual([State.IS_RESETTING, State.IS_PAUSING], reporter.states)
         reporter.reset()
         with reporter.lock:
-            self.assertTrue(reporter.is_resetting)
+            self.assertListEqual([State.IS_PAUSING, State.IS_RESETTING], reporter.states)
+        reporter.reset()
+        with reporter.lock:
+            self.assertListEqual([State.IS_PAUSING, State.IS_RESETTING], reporter.states)
+        reporter.pause()
+        with reporter.lock:
+            self.assertListEqual([State.IS_RESETTING, State.IS_PAUSING], reporter.states)
 
     def test_run_finally_closes_fds(self) -> None:
         mock_log = MagicMock(spec=Logger)

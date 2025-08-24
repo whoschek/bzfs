@@ -31,6 +31,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum, auto
 from logging import Logger
 from pathlib import Path
 from typing import (
@@ -49,6 +50,14 @@ from bzfs_main.utils import (
 PV_FILE_THREAD_SEPARATOR: str = "_"
 ARABIC_DECIMAL_SEPARATOR: str = "\u066b"  # "٫"  # noqa: RUF003
 PV_SIZE_TO_BYTES_REGEX: re.Pattern = re.compile(rf"(\d+[.,{ARABIC_DECIMAL_SEPARATOR}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)")
+
+
+#############################################################################
+class State(Enum):
+    """Progress reporter lifecycle state transitions."""
+
+    IS_PAUSING = auto()
+    IS_RESETTING = auto()
 
 
 #############################################################################
@@ -88,8 +97,7 @@ class ProgressReporter:
         self.sleeper: InterruptibleSleep = InterruptibleSleep(self.lock)  # sleeper shares lock with reporter
         self.file_name_queue: set[str] = set()
         self.file_name_set: set[str] = set()
-        self.is_resetting: bool = True
-        self.is_pausing: bool = False
+        self.states: list[State] = [State.IS_RESETTING]
 
     def start(self) -> None:
         """Starts the monitoring thread and begins asynchronous parsing of ``pv`` log files."""
@@ -110,14 +118,22 @@ class ProgressReporter:
 
     def pause(self) -> None:
         """Temporarily suspends status logging."""
-        with self.lock:
-            self.is_pausing = True
+        self._append_state(State.IS_PAUSING)
 
     def reset(self) -> None:
         """Clears metrics before processing a new batch of logs; the purpose is to discard previous totals to avoid mixing
         unrelated transfers."""
+        self._append_state(State.IS_RESETTING)
+
+    def _append_state(self, state: State) -> None:
         with self.lock:
-            self.is_resetting = True
+            states: list[State] = self.states
+            if len(states) > 0 and states[-1] is state:
+                return  # same state twice in a row is a no-op
+            states.append(state)
+            if len(states) >= 3:
+                del states[0]  # cap time and memory consumption by removing redundant state transitions
+            self.states = states
 
     def enqueue_pv_log_file(self, pv_log_file: str) -> None:
         """Tells progress reporter thread to also monitor and tail the given pv log file."""
@@ -177,6 +193,7 @@ class ProgressReporter:
         etas: list[ProgressReporter.TransferStat.ETA] = []
         while True:
             empty_file_name_queue: set[str] = set()
+            empty_states: list[State] = []
             with self.lock:
                 if self.sleeper.is_stopping:
                     return
@@ -187,24 +204,18 @@ class ProgressReporter:
                 assert len(self.file_name_set) == n + m  # aka assert (previous) file_name_set.isdisjoint(file_name_queue)
                 local_file_name_queue: set[str] = self.file_name_queue
                 self.file_name_queue = empty_file_name_queue  # exchange buffers
-                is_pausing: bool = self.is_pausing
-                self.is_pausing = False
-                is_resetting: bool = self.is_resetting
-                self.is_resetting = False
-            if is_pausing:
-                next_update_nanos: int = time.monotonic_ns() + 10 * 365 * 86400 * 1_000_000_000  # infinity
-            if is_resetting:
-                sent_bytes, last_status_len = 0, 0
-                num_lines, num_readables = 0, 0
-                start_time_nanos = time.monotonic_ns()
-                next_update_nanos = start_time_nanos + update_interval_nanos
-                latest_samples: deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measurements
-                for fd in fds:
-                    selector_key: selectors.SelectorKey = selector.get_key(fd)
-                    transfer_stat = selector_key.data[1]
-                    transfer_stat.bytes_in_flight = 0
-                    transfer_stat.eta.timestamp_nanos = 0
-                    transfer_stat.eta.line_tail = ""
+                states: list[State] = self.states
+                self.states = empty_states  # exchange buffers
+            for state in states:
+                if state is State.IS_PAUSING:
+                    next_update_nanos: int = time.monotonic_ns() + 10 * 365 * 86400 * 1_000_000_000  # infinity
+                else:
+                    assert state is State.IS_RESETTING
+                    sent_bytes, last_status_len = 0, 0
+                    num_lines, num_readables = 0, 0
+                    start_time_nanos = time.monotonic_ns()
+                    next_update_nanos = start_time_nanos + update_interval_nanos
+                    latest_samples: deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measures
             for pv_log_file in local_file_name_queue:
                 try:
                     Path(pv_log_file).touch()

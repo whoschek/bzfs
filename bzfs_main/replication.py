@@ -76,6 +76,7 @@ from bzfs_main.retry import (
 )
 from bzfs_main.utils import (
     DONT_SKIP_DATASET,
+    FILE_PERMISSIONS,
     LOG_DEBUG,
     LOG_TRACE,
     append_if_absent,
@@ -85,6 +86,7 @@ from bzfs_main.utils import (
     human_readable_bytes,
     is_descendant,
     list_formatter,
+    open_nofollow,
     replace_prefix,
     stderr_to_str,
     subprocess_run,
@@ -852,6 +854,9 @@ def _pv_cmd(
                 job.progress_reporter.start()
             job.replication_start_time_nanos = time.monotonic_ns()
         if job.isatty and not p.quiet:
+            with open_nofollow(pv_log_file, "a", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
+                fd.write("\n")  # mark start of new stream so ProgressReporter can reliably reset bytes_in_flight
+                fd.flush()
             job.progress_reporter.enqueue_pv_log_file(pv_log_file)
         pv_program_opts: list[str] = [p.pv_program] + p.pv_program_opts
         if job.progress_update_intervals is not None:  # for testing
