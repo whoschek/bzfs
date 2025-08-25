@@ -97,6 +97,7 @@ class ProgressReporter:
         self.sleeper: InterruptibleSleep = InterruptibleSleep(self.lock)  # sleeper shares lock with reporter
         self.file_name_queue: set[str] = set()
         self.file_name_set: set[str] = set()
+        self._is_stopping = False
         self.states: list[State] = [State.IS_RESETTING]
 
     def start(self) -> None:
@@ -108,6 +109,8 @@ class ProgressReporter:
 
     def stop(self) -> None:
         """Blocks until reporter is stopped, then reraises any exception that may have happened during log processing."""
+        with self.lock:
+            self._is_stopping = True
         self.sleeper.interrupt()
         t = self.thread
         if t is not None:
@@ -133,7 +136,7 @@ class ProgressReporter:
             states.append(state)
             if len(states) >= 3:
                 del states[0]  # cap time and memory consumption by removing redundant state transitions
-            self.states = states
+        self.sleeper.interrupt()
 
     def enqueue_pv_log_file(self, pv_log_file: str) -> None:
         """Tells progress reporter thread to also monitor and tail the given pv log file."""
@@ -189,13 +192,13 @@ class ProgressReporter:
         )
         update_interval_nanos: int = round(update_interval_secs * 1_000_000_000)
         sliding_window_nanos: int = round(sliding_window_secs * 1_000_000_000)
-        sleep_nanos: int = round(update_interval_nanos / 2.5)
+        sleep_nanos: int = 0
         etas: list[ProgressReporter.TransferStat.ETA] = []
         while True:
             empty_file_name_queue: set[str] = set()
             empty_states: list[State] = []
             with self.lock:
-                if self.sleeper.is_stopping:
+                if self._is_stopping:
                     return
                 # progress reporter thread picks up pv log files that so far aren't being tailed
                 n = len(self.file_name_queue)
@@ -209,12 +212,14 @@ class ProgressReporter:
             for state in states:
                 if state is State.IS_PAUSING:
                     next_update_nanos: int = time.monotonic_ns() + 10 * 365 * 86400 * 1_000_000_000  # infinity
+                    sleep_nanos = next_update_nanos
                 else:
                     assert state is State.IS_RESETTING
                     sent_bytes, last_status_len = 0, 0
                     num_lines, num_readables = 0, 0
                     start_time_nanos = time.monotonic_ns()
                     next_update_nanos = start_time_nanos + update_interval_nanos
+                    sleep_nanos = round(update_interval_nanos / 2.5)
                     latest_samples: deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measures
             for pv_log_file in local_file_name_queue:
                 try:
@@ -263,7 +268,8 @@ class ProgressReporter:
             elif not has_line:
                 # Avoid burning CPU busily spinning on I/O readiness as fds are almost always ready for non-blocking read
                 # even if no new pv log line has been written. Yet retain ability to wake up immediately on reporter.stop().
-                self.sleeper.sleep(min(sleep_nanos, next_update_nanos - curr_time_nanos))
+                if self.sleeper.sleep(min(sleep_nanos, next_update_nanos - curr_time_nanos)):
+                    self.sleeper.reset()  # sleep was interrupted; ensure we can sleep normally again
             if self.inject_error:
                 raise ValueError("Injected ProgressReporter error")  # for testing only
 

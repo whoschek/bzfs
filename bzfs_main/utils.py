@@ -993,7 +993,7 @@ class InterruptibleSleep:
         self._condition: threading.Condition = threading.Condition(self._lock)
 
     def sleep(self, duration_nanos: int) -> bool:
-        """Delays the current thread by the given number of nanoseconds."""
+        """Delays the current thread by the given number of nanoseconds; Returns True if the sleep got interrupted."""
         end_time_nanos: int = time.monotonic_ns() + duration_nanos
         with self._lock:
             while not self.is_stopping:
@@ -1009,6 +1009,11 @@ class InterruptibleSleep:
             if not self.is_stopping:
                 self.is_stopping = True
                 self._condition.notify_all()
+
+    def reset(self) -> None:
+        """Makes any future sleep()s nomore a noop."""
+        with self._lock:
+            self.is_stopping = False
 
 
 #############################################################################

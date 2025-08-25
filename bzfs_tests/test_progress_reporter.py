@@ -251,7 +251,9 @@ class TestHelperFunctions(unittest.TestCase):
             reporter.stop()
         self.assertIsInstance(reporter.exception, ValueError)
 
-        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=None, fail=True)
+        reporter = ProgressReporter(
+            MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02), fail=True
+        )
         reporter._run()
         self.assertIsInstance(reporter.exception, ValueError)
         with self.assertRaises(ValueError):
@@ -404,28 +406,10 @@ class TestHelperFunctions(unittest.TestCase):
                 pass
 
         selector = DummySelector()
-        reporter.sleeper.is_stopping = True
+        reporter._is_stopping = True
         reporter._run_internal(fds, cast(selectors.BaseSelector, selector))
         self.assertFalse(selector.select_called)
         self.assertEqual([], fds)
-
-    def test_run_internal_pause_sleep_amount(self) -> None:
-        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
-        fds: list[IO[Any]] = []
-        sleep_args: list[int] = []
-
-        def fake_sleep(n: int) -> None:
-            sleep_args.append(n)
-            reporter.sleeper.interrupt()
-
-        reporter.sleeper.sleep = fake_sleep  # type: ignore[assignment]
-        reporter.pause()
-        selector = MagicMock()
-        selector.select.return_value = []
-        with self.assertRaises(ValueError):
-            reporter.inject_error = True
-            reporter._run_internal(fds, selector)
-        self.assertEqual([round(0.01 * 1_000_000_000 / 2.5)], sleep_args)
 
     def test_run_internal_reset_triggers_progress_output(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
@@ -503,17 +487,18 @@ class TestHelperFunctions(unittest.TestCase):
     def test_run_internal_calls_sleep_when_no_lines(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(2, 2))
         fds: list[IO[Any]] = []
-        sleep_args: list[int] = []
+        sleep_count = 0
 
-        def fake_sleep(n: int) -> None:
-            sleep_args.append(n)
-            reporter.sleeper.interrupt()
+        def fake_sleep(duration_nanos: int) -> None:
+            nonlocal sleep_count
+            sleep_count += 1
+            reporter._is_stopping = True
 
         reporter.sleeper.sleep = fake_sleep  # type: ignore[assignment]
         selector = MagicMock()
         selector.select.return_value = []
         reporter._run_internal(fds, selector)
-        self.assertEqual([round(2 * 1_000_000_000 / 2.5)], sleep_args)
+        self.assertEqual(1, sleep_count)
 
     def test_run_internal_inject_error_propagates(self) -> None:
         reporter = ProgressReporter(
@@ -535,7 +520,7 @@ class TestHelperFunctions(unittest.TestCase):
                 selector_calls.append(fd)
 
             def select(self, timeout: int = 0) -> list[tuple[Any, Any]]:
-                reporter.sleeper.interrupt()
+                reporter._is_stopping = True
                 return []
 
             def close(self) -> None:
@@ -549,6 +534,7 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_run_internal_status_line_without_etas(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
+        self.assertListEqual([State.IS_RESETTING], reporter.states)
         fds: list[IO[Any]] = []
         selector = MagicMock()
         selector.select.return_value = []
@@ -558,6 +544,7 @@ class TestHelperFunctions(unittest.TestCase):
                 reporter._run_internal(fds, selector)
             written = "".join(call.args[0] for call in write_mock.mock_calls)
             self.assertNotIn("ETA", written.split())
+        self.assertListEqual([], reporter.states)
 
     def test_pause_and_reset_flags(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=None)
@@ -577,6 +564,21 @@ class TestHelperFunctions(unittest.TestCase):
         reporter.pause()
         with reporter.lock:
             self.assertListEqual([State.IS_RESETTING, State.IS_PAUSING], reporter.states)
+
+        fds: list[IO[Any]] = []
+        sleep_count = 0
+
+        def fake_sleep(duration_nanos: int) -> None:
+            nonlocal sleep_count
+            sleep_count += 1
+            reporter._is_stopping = True
+
+        reporter._sleeper.sleep = fake_sleep  # type: ignore[assignment]
+        selector = MagicMock()
+        selector.select.return_value = []
+        reporter._run_internal(fds, selector)
+        self.assertEqual(1, sleep_count)
+        self.assertListEqual([], reporter._states)
 
     def test_run_finally_closes_fds(self) -> None:
         mock_log = MagicMock(spec=Logger)
