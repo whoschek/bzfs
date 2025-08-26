@@ -1300,11 +1300,11 @@ class TestJobMethods(AbstractTestCase):
         p.log_params.pv_log_file = "pv.log"
         job.num_snapshots_replicated = 5
         with patch("time.monotonic_ns", return_value=2_000_000_000), patch(
-            "bzfs_main.bzfs.count_num_bytes_transferred_by_zfs_send", return_value=1_048_576
+            "bzfs_main.bzfs.count_num_bytes_transferred_by_zfs_send", return_value=1024 * 1024
         ):
             job.print_replication_stats(0)
         msg = cast(MagicMock, p.log.info).call_args[0][1]
-        self.assertIn("Replicated 5 snapshots in 2s.", msg)
+        self.assertIn("zfs sent 5 snapshots in 2s.", msg)
         self.assertIn("zfs sent 1 MiB [512 KiB/s].", msg)
 
 

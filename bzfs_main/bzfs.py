@@ -446,7 +446,7 @@ class Job:
         """Logs overall replication statistics after a job cycle completes."""
         p, log = self.params, self.params.log
         elapsed_nanos = time.monotonic_ns() - start_time_nanos
-        msg = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
+        msg = p.dry(f"zfs sent {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if p.is_program_available("pv", "local"):
             sent_bytes: int = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
             sent_bytes_per_sec: int = round(1_000_000_000 * sent_bytes / elapsed_nanos)

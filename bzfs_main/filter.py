@@ -79,7 +79,7 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
     is_debug: bool = p.log.isEnabledFor(LOG_DEBUG)
     for dataset in results:
         if is_debug:
-            log.debug("Finally included %s dataset: %s", remote.location, dataset)
+            log.debug(f"Finally included {remote.location} dataset: %s", dataset)
     if job.is_test_mode:
         assert results == sorted(results), "List is not sorted"
         # Asserts the following: If a dataset is excluded its descendants are automatically excluded too, and this
