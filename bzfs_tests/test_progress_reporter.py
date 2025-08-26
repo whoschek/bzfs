@@ -243,25 +243,25 @@ class TestHelperFunctions(unittest.TestCase):
         )
         reporter.stop()
         reporter.stop()  # test stopping more than once is ok
-        reporter.exception = ValueError()
+        reporter._exception = ValueError()
         with self.assertRaises(ValueError):
             reporter.stop()
-        self.assertIsInstance(reporter.exception, ValueError)
+        self.assertIsInstance(reporter._exception, ValueError)
         with self.assertRaises(ValueError):
             reporter.stop()
-        self.assertIsInstance(reporter.exception, ValueError)
+        self.assertIsInstance(reporter._exception, ValueError)
 
         reporter = ProgressReporter(
             MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02), fail=True
         )
         reporter._run()
-        self.assertIsInstance(reporter.exception, ValueError)
+        self.assertIsInstance(reporter._exception, ValueError)
         with self.assertRaises(ValueError):
             reporter.stop()
-        self.assertIsInstance(reporter.exception, ValueError)
+        self.assertIsInstance(reporter._exception, ValueError)
         with self.assertRaises(ValueError):
             reporter.stop()
-        self.assertIsInstance(reporter.exception, ValueError)
+        self.assertIsInstance(reporter._exception, ValueError)
 
     def test_progress_reporter_exhausted_iterator_sees_appended_data(self) -> None:
         # Create a temporary file. We will keep the file descriptor from mkstemp open for the read iterator
@@ -364,11 +364,11 @@ class TestHelperFunctions(unittest.TestCase):
         self.addCleanup(shutil.rmtree, temp_dir)
         pv_log_file = os.path.join(temp_dir, "test.pv")
         reporter = ProgressReporter(mock_log, [], use_select=False, progress_update_intervals=None)
-        self.assertSetEqual(set(), reporter.file_name_set)
-        self.assertSetEqual(set(), reporter.file_name_queue)
+        self.assertSetEqual(set(), reporter._file_name_set)
+        self.assertSetEqual(set(), reporter._file_name_queue)
         reporter.enqueue_pv_log_file(pv_log_file)
-        self.assertSetEqual(set(), reporter.file_name_set)
-        self.assertSetEqual({pv_log_file}, reporter.file_name_queue)
+        self.assertSetEqual(set(), reporter._file_name_set)
+        self.assertSetEqual({pv_log_file}, reporter._file_name_queue)
 
         def mock_open(*args: Any, **kwargs: Any) -> Any:
             if args[0] == pv_log_file:
@@ -383,9 +383,9 @@ class TestHelperFunctions(unittest.TestCase):
         mock_log.warning.assert_called_with(
             "ProgressReporter: pv log file disappeared before initial open, skipping: %s", pv_log_file
         )
-        self.assertSetEqual(set(), reporter.file_name_set)
-        self.assertSetEqual(set(), reporter.file_name_queue)
-        self.assertIsNone(reporter.exception)
+        self.assertSetEqual(set(), reporter._file_name_set)
+        self.assertSetEqual(set(), reporter._file_name_queue)
+        self.assertIsNone(reporter._exception)
 
     def test_run_internal_returns_when_stopping(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
@@ -418,7 +418,7 @@ class TestHelperFunctions(unittest.TestCase):
         selector.select.return_value = []
         with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
             with self.assertRaises(ValueError):
-                reporter.inject_error = True
+                reporter._inject_error = True
                 reporter._run_internal(fds, selector)
             self.assertTrue(write_mock.called)
 
@@ -426,20 +426,20 @@ class TestHelperFunctions(unittest.TestCase):
         mock_log = MagicMock(spec=Logger)
         reporter = ProgressReporter(mock_log, [], use_select=False, progress_update_intervals=(0.01, 0.02))
         pv_file = "nonexist.pv"
-        with reporter.lock:
-            reporter.file_name_queue.add(pv_file)
+        with reporter._lock:
+            reporter._file_name_queue.add(pv_file)
         selector = MagicMock()
         selector.select.return_value = []
         with patch.object(progress_reporter, "open_nofollow", side_effect=FileNotFoundError()), patch.object(
             Path, "touch", lambda self: None
         ):
             with self.assertRaises(ValueError):
-                reporter.inject_error = True
+                reporter._inject_error = True
                 reporter._run_internal([], selector)
         mock_log.warning.assert_called_with(
             "ProgressReporter: pv log file disappeared before initial open, skipping: %s", pv_file
         )
-        self.assertNotIn(pv_file, reporter.file_name_set)
+        self.assertNotIn(pv_file, reporter._file_name_set)
 
     def test_run_internal_reads_lines(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
@@ -451,7 +451,7 @@ class TestHelperFunctions(unittest.TestCase):
         selector.select.return_value = [(key, None)]
         with patch.object(reporter, "_update_transfer_stat", return_value=1) as upd_mock:
             with self.assertRaises(ValueError):
-                reporter.inject_error = True
+                reporter._inject_error = True
                 reporter._run_internal(fds, selector)
             self.assertEqual(2, upd_mock.call_count)
 
@@ -466,8 +466,8 @@ class TestHelperFunctions(unittest.TestCase):
         stat2 = reporter.TransferStat(bytes_in_flight=0, eta=eta2)
         key1 = types.SimpleNamespace(data=(iter(fd1), stat1))
         key2 = types.SimpleNamespace(data=(iter(fd2), stat2))
-        with reporter.lock:
-            reporter.file_name_queue.update({"f1", "f2"})
+        with reporter._lock:
+            reporter._file_name_queue.update({"f1", "f2"})
 
         selector = MagicMock()
         selector.select.return_value = [(key1, None), (key2, None)]
@@ -480,7 +480,7 @@ class TestHelperFunctions(unittest.TestCase):
         ), patch.object(reporter, "_update_transfer_stat", return_value=0):
             with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
                 with self.assertRaises(ValueError):
-                    reporter.inject_error = True
+                    reporter._inject_error = True
                     reporter._run_internal(fds, cast(selectors.BaseSelector, selector))
                 self.assertTrue(write_mock.called)
 
@@ -494,7 +494,7 @@ class TestHelperFunctions(unittest.TestCase):
             sleep_count += 1
             reporter._is_stopping = True
 
-        reporter.sleeper.sleep = fake_sleep  # type: ignore[assignment]
+        reporter._sleeper.sleep = fake_sleep  # type: ignore[assignment]
         selector = MagicMock()
         selector.select.return_value = []
         reporter._run_internal(fds, selector)
@@ -511,8 +511,8 @@ class TestHelperFunctions(unittest.TestCase):
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
         paths = ["f1", "f2"]
         for p in paths:
-            with reporter.lock:
-                reporter.file_name_queue.add(p)
+            with reporter._lock:
+                reporter._file_name_queue.add(p)
         selector_calls: list[Any] = []
 
         class DummySelector:
@@ -534,36 +534,36 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_run_internal_status_line_without_etas(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
-        self.assertListEqual([State.IS_RESETTING], reporter.states)
+        self.assertListEqual([State.IS_RESETTING], reporter._states)
         fds: list[IO[Any]] = []
         selector = MagicMock()
         selector.select.return_value = []
         with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
             with self.assertRaises(ValueError):
-                reporter.inject_error = True
+                reporter._inject_error = True
                 reporter._run_internal(fds, selector)
             written = "".join(call.args[0] for call in write_mock.mock_calls)
             self.assertNotIn("ETA", written.split())
-        self.assertListEqual([], reporter.states)
+        self.assertListEqual([], reporter._states)
 
     def test_pause_and_reset_flags(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=None)
-        self.assertListEqual([State.IS_RESETTING], reporter.states)
+        self.assertListEqual([State.IS_RESETTING], reporter._states)
         reporter.pause()
-        with reporter.lock:
-            self.assertListEqual([State.IS_RESETTING, State.IS_PAUSING], reporter.states)
+        with reporter._lock:
+            self.assertListEqual([State.IS_RESETTING, State.IS_PAUSING], reporter._states)
         reporter.pause()
-        with reporter.lock:
-            self.assertListEqual([State.IS_RESETTING, State.IS_PAUSING], reporter.states)
+        with reporter._lock:
+            self.assertListEqual([State.IS_RESETTING, State.IS_PAUSING], reporter._states)
         reporter.reset()
-        with reporter.lock:
-            self.assertListEqual([State.IS_PAUSING, State.IS_RESETTING], reporter.states)
+        with reporter._lock:
+            self.assertListEqual([State.IS_PAUSING, State.IS_RESETTING], reporter._states)
         reporter.reset()
-        with reporter.lock:
-            self.assertListEqual([State.IS_PAUSING, State.IS_RESETTING], reporter.states)
+        with reporter._lock:
+            self.assertListEqual([State.IS_PAUSING, State.IS_RESETTING], reporter._states)
         reporter.pause()
-        with reporter.lock:
-            self.assertListEqual([State.IS_RESETTING, State.IS_PAUSING], reporter.states)
+        with reporter._lock:
+            self.assertListEqual([State.IS_RESETTING, State.IS_PAUSING], reporter._states)
 
         fds: list[IO[Any]] = []
         sleep_count = 0
@@ -595,7 +595,7 @@ class TestHelperFunctions(unittest.TestCase):
                 reporter._run()
         fake_fd.close.assert_called_once()
         selector.close.assert_called_once()
-        self.assertIsInstance(reporter.exception, ValueError)
+        self.assertIsInstance(reporter._exception, ValueError)
 
     def test_format_sent_bytes(self) -> None:
         self.assertEqual(("0.00 B", "[0.00 B/s]"), ProgressReporter._format_sent_bytes(0, 1))

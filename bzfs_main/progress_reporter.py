@@ -84,38 +84,38 @@ class ProgressReporter:
     ) -> None:
         """Creates a reporter configured for ``pv`` log parsing."""
         # immutable variables:
-        self.log: Logger = log
-        self.pv_program_opts: list[str] = pv_program_opts
-        self.use_select: bool = use_select
-        self.progress_update_intervals: tuple[float, float] | None = progress_update_intervals
-        self.inject_error: bool = fail  # for testing only
+        self._log: Logger = log
+        self._pv_program_opts: list[str] = pv_program_opts
+        self._use_select: bool = use_select
+        self._progress_update_intervals: tuple[float, float] | None = progress_update_intervals
+        self._inject_error: bool = fail  # for testing only
 
         # mutable variables:
-        self.thread: threading.Thread | None = None
-        self.exception: BaseException | None = None
-        self.lock: threading.Lock = threading.Lock()
-        self.sleeper: InterruptibleSleep = InterruptibleSleep(self.lock)  # sleeper shares lock with reporter
-        self.file_name_queue: set[str] = set()
-        self.file_name_set: set[str] = set()
+        self._thread: threading.Thread | None = None
+        self._exception: BaseException | None = None
+        self._lock: threading.Lock = threading.Lock()
+        self._sleeper: InterruptibleSleep = InterruptibleSleep(self._lock)  # sleeper shares lock with reporter
+        self._file_name_queue: set[str] = set()
+        self._file_name_set: set[str] = set()
         self._is_stopping = False
-        self.states: list[State] = [State.IS_RESETTING]
+        self._states: list[State] = [State.IS_RESETTING]
 
     def start(self) -> None:
         """Starts the monitoring thread and begins asynchronous parsing of ``pv`` log files."""
-        with self.lock:
-            assert self.thread is None
-            self.thread = threading.Thread(target=lambda: self._run(), name="progress_reporter", daemon=True)
-            self.thread.start()
+        with self._lock:
+            assert self._thread is None
+            self._thread = threading.Thread(target=lambda: self._run(), name="progress_reporter", daemon=True)
+            self._thread.start()
 
     def stop(self) -> None:
         """Blocks until reporter is stopped, then reraises any exception that may have happened during log processing."""
-        with self.lock:
+        with self._lock:
             self._is_stopping = True
-        self.sleeper.interrupt()
-        t = self.thread
+        self._sleeper.interrupt()
+        t = self._thread
         if t is not None:
             t.join()
-        e = self.exception
+        e = self._exception
         if e is not None:
             raise e  # reraise exception in current thread
 
@@ -129,28 +129,28 @@ class ProgressReporter:
         self._append_state(State.IS_RESETTING)
 
     def _append_state(self, state: State) -> None:
-        with self.lock:
-            states: list[State] = self.states
+        with self._lock:
+            states: list[State] = self._states
             if len(states) > 0 and states[-1] is state:
                 return  # same state twice in a row is a no-op
             states.append(state)
             if len(states) >= 3:
                 del states[0]  # cap time and memory consumption by removing redundant state transitions
-        self.sleeper.interrupt()
+        self._sleeper.interrupt()
 
     def enqueue_pv_log_file(self, pv_log_file: str) -> None:
         """Tells progress reporter thread to also monitor and tail the given pv log file."""
-        with self.lock:
-            if pv_log_file not in self.file_name_set:
-                self.file_name_queue.add(pv_log_file)
+        with self._lock:
+            if pv_log_file not in self._file_name_set:
+                self._file_name_queue.add(pv_log_file)
 
     def _run(self) -> None:
         """Thread entry point consuming pv logs and updating metrics."""
-        log = self.log
+        log = self._log
         try:
             fds: list[IO[Any]] = []
             try:
-                selector = selectors.SelectSelector() if self.use_select else selectors.PollSelector()
+                selector = selectors.SelectSelector() if self._use_select else selectors.PollSelector()
                 try:
                     self._run_internal(fds, selector)
                 finally:
@@ -159,7 +159,7 @@ class ProgressReporter:
                 for fd in fds:
                     fd.close()
         except BaseException as e:
-            self.exception = e  # will be reraised in stop()
+            self._exception = e  # will be reraised in stop()
             log.exception("%s", "ProgressReporter:")
 
     @dataclass
@@ -186,9 +186,9 @@ class ProgressReporter:
             sent_bytes: int
             timestamp_nanos: int
 
-        log = self.log
+        log = self._log
         update_interval_secs, sliding_window_secs = (
-            self.progress_update_intervals if self.progress_update_intervals is not None else self._get_update_intervals()
+            self._progress_update_intervals if self._progress_update_intervals is not None else self._get_update_intervals()
         )
         update_interval_nanos: int = round(update_interval_secs * 1_000_000_000)
         sliding_window_nanos: int = round(sliding_window_secs * 1_000_000_000)
@@ -197,18 +197,18 @@ class ProgressReporter:
         while True:
             empty_file_name_queue: set[str] = set()
             empty_states: list[State] = []
-            with self.lock:
+            with self._lock:
                 if self._is_stopping:
                     return
                 # progress reporter thread picks up pv log files that so far aren't being tailed
-                n = len(self.file_name_queue)
-                m = len(self.file_name_set)
-                self.file_name_set.update(self.file_name_queue)  # union
-                assert len(self.file_name_set) == n + m  # aka assert (previous) file_name_set.isdisjoint(file_name_queue)
-                local_file_name_queue: set[str] = self.file_name_queue
-                self.file_name_queue = empty_file_name_queue  # exchange buffers
-                states: list[State] = self.states
-                self.states = empty_states  # exchange buffers
+                n = len(self._file_name_queue)
+                m = len(self._file_name_set)
+                self._file_name_set.update(self._file_name_queue)  # union
+                assert len(self._file_name_set) == n + m  # aka assert (previous) file_name_set.isdisjoint(file_name_queue)
+                local_file_name_queue: set[str] = self._file_name_queue
+                self._file_name_queue = empty_file_name_queue  # exchange buffers
+                states: list[State] = self._states
+                self._states = empty_states  # exchange buffers
             for state in states:
                 if state is State.IS_PAUSING:
                     next_update_nanos: int = time.monotonic_ns() + 10 * 365 * 86400 * 1_000_000_000  # infinity
@@ -226,8 +226,8 @@ class ProgressReporter:
                     Path(pv_log_file).touch()
                     fd = open_nofollow(pv_log_file, mode="r", newline="", encoding="utf-8")
                 except FileNotFoundError:  # a third party has somehow deleted the log file or directory
-                    with self.lock:
-                        self.file_name_set.discard(pv_log_file)  # enable re-adding the file later via enqueue_pv_log_file()
+                    with self._lock:
+                        self._file_name_set.discard(pv_log_file)  # enable re-adding the file later via enqueue_pv_log_file()
                     log.warning("ProgressReporter: pv log file disappeared before initial open, skipping: %s", pv_log_file)
                     continue  # skip to the next file in the queue
                 fds.append(fd)
@@ -268,9 +268,9 @@ class ProgressReporter:
             elif not has_line:
                 # Avoid burning CPU busily spinning on I/O readiness as fds are almost always ready for non-blocking read
                 # even if no new pv log line has been written. Yet retain ability to wake up immediately on reporter.stop().
-                if self.sleeper.sleep(min(sleep_nanos, next_update_nanos - curr_time_nanos)):
-                    self.sleeper.reset()  # sleep was interrupted; ensure we can sleep normally again
-            if self.inject_error:
+                if self._sleeper.sleep(min(sleep_nanos, next_update_nanos - curr_time_nanos)):
+                    self._sleeper.reset()  # sleep was interrupted; ensure we can sleep normally again
+            if self._inject_error:
                 raise ValueError("Injected ProgressReporter error")  # for testing only
 
     def _update_transfer_stat(self, line: str, s: TransferStat, curr_time_nanos: int) -> int:
@@ -318,7 +318,7 @@ class ProgressReporter:
         parser = argparse.ArgumentParser(allow_abbrev=False)
         parser.add_argument("--interval", "-i", type=float, default=1)
         parser.add_argument("--average-rate-window", "-m", type=float, default=30)
-        args, _ = parser.parse_known_args(args=self.pv_program_opts)
+        args, _ = parser.parse_known_args(args=self._pv_program_opts)
         interval: float = min(60 * 60, max(args.interval, 0.1))
         return interval, min(60 * 60, max(args.average_rate_window, interval))
 

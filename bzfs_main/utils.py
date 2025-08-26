@@ -988,7 +988,7 @@ class InterruptibleSleep:
     """Provides a sleep(timeout) function that can be interrupted by another thread."""
 
     def __init__(self, lock: threading.Lock | None = None) -> None:
-        self.is_stopping: bool = False
+        self._is_stopping: bool = False
         self._lock: threading.Lock = lock if lock is not None else threading.Lock()
         self._condition: threading.Condition = threading.Condition(self._lock)
 
@@ -996,7 +996,7 @@ class InterruptibleSleep:
         """Delays the current thread by the given number of nanoseconds; Returns True if the sleep got interrupted."""
         end_time_nanos: int = time.monotonic_ns() + duration_nanos
         with self._lock:
-            while not self.is_stopping:
+            while not self._is_stopping:
                 diff_nanos: int = end_time_nanos - time.monotonic_ns()
                 if diff_nanos <= 0:
                     return False
@@ -1006,14 +1006,14 @@ class InterruptibleSleep:
     def interrupt(self) -> None:
         """Wakes up currently sleeping threads and makes any future sleep()s a noop."""
         with self._lock:
-            if not self.is_stopping:
-                self.is_stopping = True
+            if not self._is_stopping:
+                self._is_stopping = True
                 self._condition.notify_all()
 
     def reset(self) -> None:
         """Makes any future sleep()s nomore a noop."""
         with self._lock:
-            self.is_stopping = False
+            self._is_stopping = False
 
 
 #############################################################################
