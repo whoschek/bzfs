@@ -543,6 +543,7 @@ class Job:
         localhost_ids: set[str] = {"localhost", "127.0.0.1", "::1", socket.gethostname()}  # ::1 is IPv6 loopback address
         localhost_ids.update(self.get_localhost_ips())  # union
         localhost_ids.add(localhostname)
+        log.log(LOG_TRACE, "localhost_ids: %s", sorted(localhost_ids))
 
         def zero_pad(number: int, width: int = 6) -> str:
             """Pads number with leading '0' chars to the given width."""
@@ -1140,14 +1141,16 @@ class Job:
     def get_localhost_ips(self) -> set[str]:
         """Returns all network addresses of the local host, i.e. all configured addresses on all network interfaces, without
         depending on name resolution."""
+        ips: set[str] = set()
         if sys.platform == "linux":
             try:
                 proc = subprocess.run(["hostname", "-I"], stdin=DEVNULL, stdout=PIPE, text=True, check=True)  # noqa: S607
             except Exception as e:
                 self.log.warning("Cannot run 'hostname -I' on localhost: %s", e)
             else:
-                return {ip for ip in proc.stdout.strip().split() if ip}
-        return set()
+                ips = {ip for ip in proc.stdout.strip().split() if ip}
+        self.log.log(LOG_TRACE, "localhost_ips: %s", sorted(ips))
+        return ips
 
 
 #############################################################################

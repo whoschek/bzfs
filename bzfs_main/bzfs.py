@@ -1019,7 +1019,7 @@ class Job:
             if snapshot_age_millis >= current_unixtime_millis:
                 return f"No snapshot exists for {dataset}@{lbl}"
             msg = f"{kind} snapshot for {dataset}@{lbl} is {human_readable_duration(snapshot_age_millis, unit='ms')} old"
-            s = f" ({snapshot})" if snapshot else ""
+            s = f" (@{snapshot})" if snapshot else ""
             if delta_millis == -1:
                 return f"{msg}{s}"
             return f"{msg} but should be at most {human_readable_duration(delta_millis, unit='ms')} old{s}"
