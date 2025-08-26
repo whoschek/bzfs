@@ -219,9 +219,10 @@ jobs:
         persist-credentials: false
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
-        # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.3.3
-        sudo add-apt-repository ppa:weiers/openzfs-2.3.3; sudo apt update
-        sudo apt-get -y install openzfs-zfs-dkms
+        # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
+        sudo add-apt-repository ppa:patrickdk/zfs; sudo apt update
+        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
+        sudo apt-get -y install zfs-dkms zfsutils-linux
         zfs --version
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
