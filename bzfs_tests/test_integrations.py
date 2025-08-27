@@ -109,7 +109,7 @@ from bzfs_tests.zfs_util import (
 
 # constants:
 SRC_POOL_NAME = "wb_src"
-DST_POOL_NAME = "wb_dest"
+DST_POOL_NAME = "wb_dst"
 POOL_SIZE_BYTES_DEFAULT: int = 100 * 1024 * 1024
 ENCRYPTION_ALGO = "aes-256-gcm"
 AFIX = ""
@@ -649,7 +649,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         snapshot_opts = to_snapshot if not from_snapshot else f"-i {from_snapshot} {to_snapshot}"
         send = f"sudo -n zfs send --raw --compressed -v {snapshot_opts}"
         c = INJECT_DST_PIPE_FAIL_KBYTES
-        cmd = ["sh", "-c", f"{send} | dd bs=1024 count={c} 2>/dev/null | sudo zfs receive -v -F -u -s {dst_dataset}"]
+        cmd = ["sh", "-c", f"{send} | dd bs=1024 count={c} 2>/dev/null | sudo -n zfs receive -v -F -u -s {dst_dataset}"]
         try:
             subprocess.run(cmd, stdout=PIPE, stderr=PIPE, text=True, check=True)
         except subprocess.CalledProcessError as e:
@@ -795,7 +795,7 @@ class IncrementalSendStepsTestCase(IntegrationTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[0]}"
-        cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        cmd = f"sudo -n zfs send {src_snapshot} | sudo -n zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assert_snapshot_names(dst_foo, [expected_results[0]])
         self.run_bzfs(src_foo, dst_foo, "--include-snapshot-regex", "d.*", "--exclude-snapshot-regex", "h.*")
@@ -806,7 +806,7 @@ class IncrementalSendStepsTestCase(IntegrationTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[0]}"
-        cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        cmd = f"sudo -n zfs send {src_snapshot} | sudo -n zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assert_snapshot_names(dst_foo, [expected_results[0]])
         if are_bookmarks_enabled("src"):
@@ -825,7 +825,7 @@ class IncrementalSendStepsTestCase(IntegrationTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
-        cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        cmd = f"sudo -n zfs send {src_snapshot} | sudo -n zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assert_snapshot_names(dst_foo, [expected_results[1]])
         self.run_bzfs(
@@ -844,7 +844,7 @@ class IncrementalSendStepsTestCase(IntegrationTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
-        cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        cmd = f"sudo -n zfs send {src_snapshot} | sudo -n zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assert_snapshot_names(dst_foo, [expected_results[1]])
         self.run_bzfs(
@@ -862,7 +862,7 @@ class IncrementalSendStepsTestCase(IntegrationTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
-        cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        cmd = f"sudo -n zfs send {src_snapshot} | sudo -n zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assert_snapshot_names(dst_foo, [expected_results[1]])
         self.run_bzfs(
@@ -2872,7 +2872,7 @@ class LocalTestCase(IntegrationTestCase):
         dst_foo = dst_root_dataset + "/foo"
         dst_foo_a = dst_foo + "/a"
         run_cmd(["sudo", "-n", "zfs", "mount", dst_foo])
-        # run_cmd(['sudo', 'zfs', 'mount', dst_foo_a])
+        # run_cmd(["sudo", "-n", "zfs", "mount", dst_foo_a])
         take_snapshot(dst_foo, fix("x1"))  # --force will need to rollback that dst snap
         take_snapshot(dst_foo_a, fix("y1"))  # --force will need to rollback that dst snap
         # self.run_bzfs(src_root_dataset, dst_root_dataset, '--force', '--recursive')
