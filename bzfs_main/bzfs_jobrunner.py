@@ -631,7 +631,7 @@ class Job:
                             (resolve_dataset(src_host, src), resolve_dst_dataset(dst_hostname, dst))
                             for src, dst in args.root_dataset_pairs
                         ]
-                        dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
+                        dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs, worker_timeout_seconds)
                         if len(dataset_pairs) > 0:
                             subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + _flatten(dataset_pairs)
                             j += 1
@@ -685,7 +685,7 @@ class Job:
                     )
                     opts += ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
-                    dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
+                    dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs, worker_timeout_seconds)
                     if len(dataset_pairs) > 0:
                         subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + _flatten(dataset_pairs)
                         j += 1
@@ -751,7 +751,7 @@ class Job:
                     )
                     opts += ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
-                    dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
+                    dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs, worker_timeout_seconds)
                     if len(dataset_pairs) > 0:
                         subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + _flatten(dataset_pairs)
                         j += 1
@@ -809,7 +809,9 @@ class Job:
             opts += [f"--log-file-suffix={SEP}{job_run}{_log_suffix(localhostname, src_hostname, dst_hostname)}{SEP}"]
         return opts
 
-    def skip_nonexisting_local_dst_pools(self, root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    def skip_nonexisting_local_dst_pools(
+        self, root_dataset_pairs: list[tuple[str, str]], timeout_secs: float | None = None
+    ) -> list[tuple[str, str]]:
         """Skip datasets that point to removable destination drives that are not currently (locally) attached, if any."""
 
         def zpool(dataset: str) -> str:
@@ -826,7 +828,7 @@ class Job:
         if len(unknown_local_dst_pools) > 0:  # `zfs list` if local
             existing_pools = {pool[len("-:") :] for pool in unknown_local_dst_pools}
             cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(existing_pools)
-            sp = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+            sp = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout_secs)
             if sp.returncode not in (0, 1):  # 1 means dataset not found
                 self.die(f"Unexpected error {sp.returncode} on checking for existing local dst pools: {sp.stderr.strip()}")
             existing_pools = {"-:" + pool for pool in sp.stdout.splitlines()}

@@ -356,7 +356,7 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
         self.assertSetEqual({"-:dstpool1"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool1"}, self.job.cache_known_dst_pools)
         expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["dstpool1"]
-        mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+        mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=None)
 
     @patch("subprocess.run")
     def test_single_nonexisting_pool(self, mock_run: MagicMock) -> None:
@@ -460,7 +460,7 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
         self.assertSetEqual({"-:dstpool4"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool4"}, self.job.cache_known_dst_pools)
         expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["dstpool4"]
-        mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+        mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=None)
 
     # dst without slash, non-existing pool
     @patch("subprocess.run")
@@ -498,7 +498,7 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
         self.assertSetEqual({"-:local1", "127.0.0.1:dstpool1"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:local1", "127.0.0.1:dstpool1"}, self.job.cache_known_dst_pools)
         expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["local1"]
-        mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+        mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=None)
         self.log_mock.warning.assert_not_called()
 
     @patch("subprocess.run")
@@ -515,7 +515,7 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
         self.assertSetEqual({"127.0.0.1:dstpool1"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:local2", "127.0.0.1:dstpool1"}, self.job.cache_known_dst_pools)
         expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["local2"]
-        mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+        mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=None)
         self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:local2/src1"
         )
