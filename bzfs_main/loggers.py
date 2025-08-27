@@ -239,8 +239,8 @@ def _get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | t
     return address, socktype
 
 
-def _remove_json_comments(config_str: str) -> str:  # not standard but practical
-    """Strips line and end-of-line comments from a JSON string."""
+def _remove_json_comments(config_str: str) -> str:
+    """Strips line and end-of-line comments from a JSON string; not standard but practical."""
     lines: list[str] = []
     for line in config_str.splitlines():
         stripped: str = line.strip()

@@ -558,10 +558,12 @@ class TestParallelEngineBenchmark(unittest.TestCase):
         for enable_barriers in [False, True]:
             self._run_benchmark(num_datasets=10_000, enable_barriers=enable_barriers)
 
-    # def test_benchmark_100k_datasets(self) -> None:
-    #     for enable_barriers in [False, True]:
-    #         self._run_benchmark(num_datasets=100_000, enable_barriers=enable_barriers)
-    #
-    # def test_benchmark_1M_datasets(self) -> None:
-    #     for enable_barriers in [False, True]:
-    #         self._run_benchmark(num_datasets=1_000_000, enable_barriers=enable_barriers)
+    @unittest.skip("benchmark; enable for performance comparison")
+    def test_benchmark_100k_datasets(self) -> None:
+        for enable_barriers in [False, True]:
+            self._run_benchmark(num_datasets=100_000, enable_barriers=enable_barriers)
+
+    @unittest.skip("benchmark; enable for performance comparison")
+    def test_benchmark_1m_datasets(self) -> None:
+        for enable_barriers in [False, True]:
+            self._run_benchmark(num_datasets=1_000_000, enable_barriers=enable_barriers)
