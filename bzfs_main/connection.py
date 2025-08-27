@@ -248,9 +248,13 @@ class Connection:
         if ssh_cmd:
             ssh_socket_cmd: list[str] = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
             p.log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_socket_cmd))
-            process: CompletedProcess = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
-            if process.returncode != 0:
-                p.log.log(LOG_TRACE, "%s", process.stderr.rstrip())
+            try:
+                proc: CompletedProcess = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=0.1)
+            except subprocess.TimeoutExpired as e:  # harmless as master conn auto-exits after control_persist_secs anyway
+                p.log.log(LOG_TRACE, "Harmless ssh master connection shutdown timeout: %s", e)
+            else:
+                if proc.returncode != 0:  # harmless for the same reason
+                    p.log.log(LOG_TRACE, "Harmless ssh master connection shutdown issue: %s", proc.stderr.rstrip())
 
 
 #############################################################################
