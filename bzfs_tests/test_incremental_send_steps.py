@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Unit tests for computing incremental send steps; Verifies that snapshot replication uses minimal sends while respecting
-dependency order."""
+"""Unit tests for computing incremental send steps via incremental_send_steps(); Verifies that snapshot replication uses
+minimal sends while respecting dependency order."""
 
 from __future__ import annotations
 import itertools
@@ -89,17 +89,17 @@ class TestIncrementalSendSteps(unittest.TestCase):
         testcases: list[defaultdict[str | None, list[str]]] = []
         for L in range(max_length + 1):  # noqa: N806
             for N in range(L + 1):  # noqa: N806
-                steps = "d" * N + "h" * (L - N)
+                steps: str = "d" * N + "h" * (L - N)  # e.g. "ddddh"
                 # compute a permutation of several 'd' and 'h' chars that represents the snapshot series
-                for permutation in sorted(set(itertools.permutations(steps, len(steps)))):
+                for permutation in sorted(set(itertools.permutations(steps, len(steps)))):  # e.g. permutation = "dhddd"
                     snaps: defaultdict[str | None, list[str]] = defaultdict(list)
                     count: defaultdict[str, int] = defaultdict(int)
                     for char in permutation:
                         count[char] += 1  # tag snapshots with a monotonically increasing number within each category
-                        char_count = f"{count[char]:01}" if max_length < 10 else f"{count[char]:02}"  # zero pad number
-                        snapshot = f"{char}{char_count}"
+                        char_count: str = f"{count[char]:01}" if max_length < 10 else f"{count[char]:02}"  # zero pad number
+                        snapshot: str = f"{char}{char_count}"
                         snaps[None].append(snapshot)
-                        snaps[char].append(snapshot)  # represents expected results for test verification
+                        snaps[char].append(snapshot)  # represents expected results for test verification, e.g. [d1,d2,d3,d4]
                     testcases.append(snaps)
         return testcases
 
@@ -111,7 +111,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
         for is_resume in [False, True]:  # via --no-resume-recv
             for src_dataset in ["", "s@"]:
                 for force_convert_I_to_i in [False, True]:  # noqa: N806
-                    steps = self.incremental_send_steps1(
+                    steps: list[tuple] = self.incremental_send_steps1(
                         input_snapshots,
                         src_dataset=src_dataset,
                         is_resume=is_resume,
@@ -119,11 +119,11 @@ class TestIncrementalSendSteps(unittest.TestCase):
                     )
                     # print(f"input_snapshots:" + ",".join(input_snapshots))
                     # print("steps: " + ",".join([self.send_step_to_str(step) for step in steps]))
-                    output_snapshots = [] if len(expected_results) == 0 else [expected_results[0]]
+                    output_snapshots: list[str] = [] if len(expected_results) == 0 else [expected_results[0]]
                     output_snapshots += self.apply_incremental_send_steps(steps, input_snapshots)
                     # print(f"output_snapshots:" + ','.join(output_snapshots))
                     self.assertListEqual(expected_results, output_snapshots)
-                    all_to_snapshots = []
+                    all_to_snapshots: list[str] = []
                     for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:  # noqa: B007
                         self.assertIn(incr_flag, ["-I", "-i"])
                         self.assertGreaterEqual(len(to_snapshots), 1)
@@ -143,8 +143,8 @@ class TestIncrementalSendSteps(unittest.TestCase):
         for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:  # noqa: B007
             start_snapshot = start_snapshot[start_snapshot.find("@") + 1 :]
             end_snapshot = end_snapshot[end_snapshot.find("@") + 1 :]
-            start = input_snapshots.index(start_snapshot)
-            end = input_snapshots.index(end_snapshot)
+            start: int = input_snapshots.index(start_snapshot)
+            end: int = input_snapshots.index(end_snapshot)
             if incr_flag == "-I":
                 for j in range(start + 1, end + 1):
                     output_snapshots.append(input_snapshots[j])
@@ -176,7 +176,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
     ) -> list[tuple]:
         guids: list[str] = []
         input_snapshots: list[str] = []
-        included_guids = set()
+        included_guids: set[str] = set()
         for line in origin_src_snapshots_with_guids:
             guid, snapshot = line.split("\t", 1)
             guids.append(guid)

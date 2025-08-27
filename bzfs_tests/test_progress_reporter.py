@@ -601,7 +601,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(("0.00 B", "[0.00 B/s]"), ProgressReporter._format_sent_bytes(0, 1))
         self.assertEqual(
             ("1.00 MiB", "[512.00 KiB/s]"),
-            ProgressReporter._format_sent_bytes(1_048_576, 2_000_000_000),
+            ProgressReporter._format_sent_bytes(1024 * 1024, 2_000_000_000),
         )
 
     def test_format_duration(self) -> None:

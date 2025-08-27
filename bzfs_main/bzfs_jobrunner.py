@@ -568,16 +568,20 @@ class Job:
 
         def resolve_dataset(hostname: str, dataset: str, is_src: bool = True) -> str:
             """Returns host:dataset string resolving IPv6 and localhost cases."""
+            assert hostname
+            assert dataset
             ssh_user = ssh_src_user if is_src else ssh_dst_user
             ssh_user = ssh_user if ssh_user else username
             lb: str = self.loopback_address
-            lhi: set[str] = localhost_ids
-            hostname = hostname if hostname not in lhi else (lb if lb else hostname) if username != ssh_user else "-"
+            local_ids: set[str] = localhost_ids
+            hostname = hostname if hostname not in local_ids else (lb if lb else hostname) if username != ssh_user else "-"
             hostname = convert_ipv6(hostname)
             return f"{hostname}:{dataset}"
 
         def resolve_dst_dataset(dst_hostname: str, dst_dataset: str) -> str:
             """Expands ``dst_dataset`` relative to ``dst_hostname`` roots."""
+            assert dst_hostname
+            assert dst_dataset
             root_dataset: str | None = dst_root_datasets.get(dst_hostname)
             assert root_dataset is not None, dst_hostname  # f"Hostname '{dst_hostname}' missing in --dst-root-datasets"
             root_dataset = root_dataset.replace(SRC_MAGIC_SUBSTITUTION_TOKEN, src_host)
@@ -586,6 +590,10 @@ class Job:
             bzfs_main.utils.validate_dataset_name(resolved_dst_dataset, dst_dataset)
             return resolve_dataset(dst_hostname, resolved_dst_dataset, is_src=False)
 
+        for src_host in src_hosts:
+            assert src_host
+        for dst_hostname in dst_hosts:
+            assert dst_hostname
         dummy: str = DUMMY_DATASET
         lhn: str = localhostname
         bzfs_prog_header: list[str] = [BZFS_PROG_NAME, "--no-argument-file"] + unknown_args

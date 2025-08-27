@@ -61,6 +61,7 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
 
     Assumes the list of input datasets is sorted. The list of output datasets will be sorted too.
     """
+    assert (not job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
     p, log = job.params, job.params.log
     results: list[str] = []
     for i, dataset in enumerate(sorted_datasets):
