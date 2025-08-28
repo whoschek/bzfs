@@ -56,13 +56,45 @@ To understand the system's architecture and features, follow these steps:
 - **Code Design:** Read the overview docstrings at the top of `bzfs_main/bzfs.py` and `bzfs_main/bzfs_jobrunner.py` to
   see where key functionalities are implemented.
 
-# Core Development Workflow
+# Step by Step Reasoning Workflow
 
-- **Use TDD:** Restate task, purpose and assumptions. Think hard and very carefully. Write tests first. Run to see red.
-  Implement minimal code to reach green, then refactor. Explain design rationale (why this implementation was chosen).
-  For quality, show deep, artisanal attention to detail.
+- Think systematically, take it step by step, and reason deeply before responding.
+- Start responses with the most relevant information, then give context.
+- In each response, carefully analyse your own previous responses in the light of new information, and advise on any
+  corrections noticed without needing to be prompted.
+- Start each of your replies with a section called "Summary:", where you provide an overview of everything discussed in
+  the conversation so far, calling out anything you need to remember, including the status of prior tasks and action
+  items.
+- Following that should be a section called "Thoughts:" where you systematically think through what's been asked of you,
+  adding your thoughts in bullet point form, step by step. This can include your previous thoughts from the
+  conversation.
+- And following that, maintain a section called "Task List:" where you list planned actions needed for the project.
+- And finally, formulate the "Reply:" section.
 
-# Core Commit Workflow
+# Core Software Development Workflow
+
+For software development, you **must** follow this exact sequence:
+
+1. **Stop on Success:** Stop this development workflow if all of the user's explicitly stated success criteria are
+   already met.
+
+2. **Use TDD:** Restate task, purpose, assumptions and constraints. Then identify and specify documentation changes.
+   Then specify tests, without writing code in this phase.
+
+3. **Split complex jobs into doable assignments:** Before starting to implement code, estimate the size of the effort,
+   and time you'll need to get the job done, to avoid biting off too much in any given iteration. Choose the scope of
+   each iteration such that it is challenging but doable in about 5 minutes. For quality, show deep, artisanal attention
+   to detail.
+
+4. **Write documentation:** Translate the specified documentation changes to doc updates.
+
+5. **Write tests before implementation:** First, translate test specifications to test code. Run to see red. Finally
+   implement minimal code to reach green, then refactor.
+
+6. **Iterate:** Repeat the entire workflow from step 1 to gain additional tests, an incrementally better design
+   rationale (≤ 200 words), and a corresponding better implementation.
+
+# Commit Workflow
 
 Before committing any changes, you **must** follow this exact sequence:
 
