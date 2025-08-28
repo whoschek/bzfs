@@ -69,7 +69,7 @@ To understand the system's architecture and features, follow these steps:
   adding your thoughts in bullet point form, step by step. This can include your previous thoughts from the
   conversation.
 - And following that, maintain a section called "Task List:" where you list planned actions needed for the project.
-- And finally, formulate the "Reply:" section.
+- And finally, formulate the contents of the "Reply:" section.
 
 # Core Software Development Workflow
 
@@ -81,15 +81,15 @@ For software development, you **must** follow this exact sequence:
 2. **Use TDD:** Restate task, purpose, assumptions and constraints. Then identify and specify documentation changes.
    Then specify tests, without writing code in this phase.
 
-3. **Split complex jobs into doable assignments:** Before starting to implement code, estimate the size of the effort,
-   and time you'll need to get the job done, to avoid biting off too much in any given iteration. Choose the scope of
-   each iteration such that it is challenging but doable in about 5 minutes. For quality, show deep, artisanal attention
-   to detail.
+3. **Split complex jobs into doable assignments:** Before starting to implement code, estimate the size of the effort
+   including the time you'll need to get the job done, to avoid biting off too much in any given iteration. Choose the
+   scope of each iteration such that it is challenging but doable in about 5 minutes. For quality, show deep, artisanal
+   attention to detail.
 
-4. **Write documentation:** Translate the specified documentation changes to doc updates.
+4. **Write documentation:** Translate the specified documentation changes to file updates.
 
-5. **Write tests before implementation:** First, translate test specifications to test code. Run to see red. Finally
-   implement minimal code to reach green, then refactor.
+5. **Use TDD: Write tests before implementation:** First, translate test specifications to test code. Run to see red.
+   Finally implement minimal code to reach green, then refactor.
 
 6. **Iterate:** Repeat the entire workflow from step 1 to gain additional tests, an incrementally better design
    rationale (≤ 200 words), and a corresponding better implementation.
@@ -98,26 +98,26 @@ For software development, you **must** follow this exact sequence:
 
 Before committing any changes, you **must** follow this exact sequence:
 
-0. **Initialize Environment**: If the `venv` directory does not exist, create it and set it up with all development
+1. **Initialize Environment**: If the `venv` directory does not exist, create it and set it up with all development
    dependencies as described in [How to Set up the Environment](#how-to-set-up-the-environment).
 
-1. **Activate the venv:** Run `source venv/bin/activate` to ensure the Python virtual environment is active so that all
+2. **Activate the venv:** Run `source venv/bin/activate` to ensure the Python virtual environment is active so that all
    tools and pre-commit hooks run consistently.
 
-2. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite. Iterate on your code until
+3. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite. Iterate on your code until
    all tests pass before proceeding.
 
-3. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run the `pre-commit` hooks specified in
+4. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run the `pre-commit` hooks specified in
    `.pre-commit-hooks.yaml` and configured in `pyproject.toml`, for example for linting (with `ruff`), formatting (with
    `black`), type checking (with `mypy`). Fix any reported issues and iterate until all hooks pass.
 
-4. **Update Documentation (if applicable):** Run `./update_readme.sh` if you have changed any `argparse` help text in
+5. **Update Documentation (if applicable):** Run `./update_readme.sh` if you have changed any `argparse` help text in
    `.py` files, to regenerate the README files.
 
-5. **Final Review:** If you made any changes during steps 2-4, repeat the entire workflow from step 2 to ensure all
+6. **Final Review:** If you made any changes during steps 3-5, repeat the entire workflow from step 3 to ensure all
    checks still pass.
 
-6. **Commit:**
+7. **Commit:**
 
 - Use `git commit -s` to sign off on your work.
 - Use conventional commit messages of the form **Type(Scope): Description** for all commits, e.g. 'feat(bzfs_jobrunner):
@@ -125,7 +125,7 @@ Before committing any changes, you **must** follow this exact sequence:
   - **Types:** `build`, `bump`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `style`, `test`
   - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`
 
-7. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
+8. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
    to be installed, and thus run externally in GitHub Actions, which unfortunately you do not have access to.
 
 # Guidelines and Best Practices
