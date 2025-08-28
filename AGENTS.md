@@ -81,12 +81,12 @@ For software development, you **must** follow this exact sequence:
 2. **Use TDD:** Restate task, purpose, assumptions and constraints. Then identify and specify documentation changes.
    Then specify tests, without writing code in this phase.
 
-3. **Split complex jobs into doable assignments:** Before starting to implement code, estimate the size of the effort,
-   and time you'll need to get the job done, to avoid biting off too much in any given iteration. Choose the scope of
-   each iteration such that it is challenging but doable in about 5 minutes. For quality, show deep, artisanal attention
-   to detail.
+3. **Split complex jobs into doable assignments:** Before starting to implement code, estimate the size of the effort
+   including the time you'll need to get the job done, to avoid biting off too much in any given iteration. Choose the
+   scope of each iteration such that it is challenging but doable in about 5 minutes. For quality, show deep, artisanal
+   attention to detail.
 
-4. **Write documentation:** Translate the specified documentation changes to doc updates.
+4. **Write documentation:** Translate the specified documentation changes to file updates.
 
 5. **Write tests before implementation:** First, translate test specifications to test code. Run to see red. Finally
    implement minimal code to reach green, then refactor.
