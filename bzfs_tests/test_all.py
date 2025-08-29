@@ -30,6 +30,7 @@ import bzfs_tests.test_filter
 import bzfs_tests.test_incremental_send_steps
 import bzfs_tests.test_integrations
 import bzfs_tests.test_interner
+import bzfs_tests.test_joblauncher
 import bzfs_tests.test_jobrunner
 import bzfs_tests.test_loggers
 import bzfs_tests.test_parallel_batch_cmd
@@ -64,6 +65,7 @@ def main() -> None:
         bzfs_tests.test_compare_snapshot_lists.suite(),
         bzfs_tests.test_snapshot_cache.suite(),
         bzfs_tests.test_jobrunner.suite(),
+        bzfs_tests.test_joblauncher.suite(),
     ]
     suite.addTests(suites)
     test_mode = bzfs_main.utils.getenv_any("test_mode", "")  # Consider toggling this when testing

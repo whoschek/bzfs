@@ -23,7 +23,7 @@ import argparse
 import importlib
 from pathlib import Path
 
-programs = ("bzfs", "bzfs_jobrunner")
+programs = ("bzfs", "bzfs_jobrunner", "bzfs_joblauncher")
 
 
 def _version_line() -> str:
