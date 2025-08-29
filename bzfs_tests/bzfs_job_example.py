@@ -43,7 +43,7 @@ Typically, this script should be periodically executed on each source host and e
 (or similar). However, you can also run it on a single third-party host and have that talk to all source hosts and
 destination hosts, which is convenient for basic use cases and for testing.
 This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the
-actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach. A plain Python script offers readable
+actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach. A plain Python script offers flexible, readable
 customization without needing a separate configuration format.
 """
 )
