@@ -21,7 +21,6 @@ if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
   export TMPDIR
   mkdir -p "$TMPDIR"
 fi
-echo "TMPDIR: $TMPDIR"
 
 cd "$(dirname "$(realpath "$0")")"
 python3 -m bzfs_tests.test_all
