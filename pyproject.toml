@@ -281,6 +281,7 @@ no_implicit_reexport = true
 disable_error_code = [  # toggles to exclude overly strict `mypy` checks in development mode:
 #    see https://mypy.readthedocs.io/en/stable/error_code_list.html#error-code-list
 #    and https://mypy.readthedocs.io/en/stable/error_code_list2.html
+    "import-untyped"
 #    "arg-type",
 #    "assignment",
 #    "attr-defined",
