@@ -70,3 +70,21 @@ _bzfs_jobrunner() {
 }
 
 complete -o default -o nospace -F _bzfs_jobrunner bzfs_jobrunner
+
+__opts_bzfs_joblauncher='--help --version -h'
+
+__choices_bzfs_joblauncher() { :; }
+
+_bzfs_joblauncher() {
+    local cur prev lst
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    lst=$(__choices_bzfs_joblauncher "$prev")
+    [[ -z $lst ]] && lst="$__opts_bzfs_joblauncher"
+    # shellcheck disable=SC2207
+    COMPREPLY=( $(compgen -W "$lst" -- "$cur") )
+    return 0
+}
+
+complete -o default -o nospace -F _bzfs_joblauncher bzfs_joblauncher

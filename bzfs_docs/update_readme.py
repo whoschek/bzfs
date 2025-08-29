@@ -33,7 +33,7 @@ import subprocess
 import sys
 import tempfile
 
-from bzfs_main import bzfs, bzfs_jobrunner
+from bzfs_main import bzfs, bzfs_joblauncher, bzfs_jobrunner
 from bzfs_main.utils import find_match
 
 
@@ -87,6 +87,8 @@ def main() -> None:
     # Step 4a: Extract replacement from cleaned markdown, which is the text between "# DESCRIPTION" and "**SRC_DATASET"
     begin_desc_markdown_tag = "# DESCRIPTION"
     begin_help_markdown_tags = ["**SRC_DATASET", "**--create-src-snapshots"]
+    if "_joblauncher" in bzfs_module:
+        begin_help_markdown_tags = ["config"]
     begin_desc_markdown_idx = find_match(
         manpage,
         lambda line: line.startswith(begin_desc_markdown_tag),
@@ -98,7 +100,13 @@ def main() -> None:
         start=begin_desc_markdown_idx,
         raises=f"{begin_help_markdown_tags} not found in the cleaned markdown",
     )
-    replacement = "".join(manpage[begin_desc_markdown_idx + 1 : begin_help_markdown_idx]).strip()
+    desc_line = manpage[begin_desc_markdown_idx]
+    replacement = (
+        desc_line[len(begin_desc_markdown_tag) :].lstrip()
+        + "".join(manpage[begin_desc_markdown_idx + 1 : begin_help_markdown_idx])
+    ).strip()
+    if not replacement and "_joblauncher" in bzfs_module:
+        replacement = bzfs_joblauncher.argument_parser().description or ""
 
     # Step 4b: replace text between '<!-- DESCRIPTION BEGIN -->' and '<!-- END DESCRIPTION SECTION -->' in README.md
     begin_desc_readme_tag = "<!-- BEGIN DESCRIPTION SECTION -->"
@@ -133,11 +141,12 @@ def main() -> None:
         raises=f"{end_help_overview_tag} not found in {readme_file}",
     )
     os.environ["COLUMNS"] = "72"
-    help_msg_str = (
-        bzfs.argument_parser().format_usage()
-        if "_jobrunner" not in bzfs_module
-        else bzfs_jobrunner.argument_parser().format_usage()
-    )
+    if "_jobrunner" in bzfs_module:
+        help_msg_str = bzfs_jobrunner.argument_parser().format_usage()
+    elif "_joblauncher" in bzfs_module:
+        help_msg_str = bzfs_joblauncher.argument_parser().format_usage()
+    else:
+        help_msg_str = bzfs.argument_parser().format_usage()
     help_msg = ["```\n"] + help_msg_str.splitlines(keepends=True) + ["```\n"]
     readme = readme[: begin_help_overview_idx + 1] + help_msg + readme[end_help_overview_idx:]
 

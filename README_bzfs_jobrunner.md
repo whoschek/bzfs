@@ -124,7 +124,7 @@ daemons but this is benign as these new processes immediately exit with a messag
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN HELP OVERVIEW SECTION -->
 ```
-usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
+usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
                       [--prune-src-snapshots] [--prune-src-bookmarks]
                       [--prune-dst-snapshots]
                       [--monitor-src-snapshots]
@@ -151,7 +151,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
                       [--daemon-prune-src-frequency STRING]
                       [--daemon-prune-dst-frequency STRING]
                       [--daemon-monitor-snapshots-frequency STRING]
-                      --root-dataset-pairs SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
+                      --root-dataset-pairs SRC_DATASET DST_DATASET
+                      [SRC_DATASET DST_DATASET ...]
 ```
 <!-- END HELP OVERVIEW SECTION -->
 
