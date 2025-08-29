@@ -246,10 +246,10 @@ Your context is your most valuable asset. Use it effectively.
 - If the `venv` directory does not exist, create it and set it up with all development dependencies as follows:
 
   ```
-  python3 -m venv venv                # Create a Python virtual environment
-  source venv/bin/activate            # Activate it
-  pip install -e '.[dev]'             # Install all development dependencies
-  pre-commit install --install-hooks  # Ensure Linters and Formatters run on every commit
+  python3 -m venv venv                      # Create a Python virtual environment
+  source venv/bin/activate                  # Activate it
+  pip install -e '.[dev]'                   # Install all development dependencies
+  pre-commit install --install-hooks        # Ensure Linters and Formatters run on every commit
   ```
 
 ## How to Improve This Document

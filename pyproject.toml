@@ -77,10 +77,10 @@ dev = [  # for development only
 # Example that installs the optional python development dependencies (see above) into a venv:
 # cd ~/devel/bzfs
 # rm -rf venv
-# python3 -m venv venv                # Create a Python virtual environment
-# source venv/bin/activate            # Activate it
-# pip install -e '.[dev]'             # Install all development dependencies
-# pre-commit install --install-hooks  # Ensure Linters and Formatters run on every commit
+# python3 -m venv venv                      # Create a Python virtual environment
+# source venv/bin/activate                  # Activate it
+# pip install -e '.[dev]'                   # Install all development dependencies
+# pre-commit install --install-hooks        # Ensure Linters and Formatters run on every commit
 # pip list --not-required
 
 [project.scripts]
