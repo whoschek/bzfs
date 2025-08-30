@@ -886,10 +886,18 @@ class Job:
         num_intervals = 1 + len(subjobs) if jitter else len(subjobs)
         interval_nanos = 0 if len(subjobs) == 0 else round(1_000_000_000 * max(0.0, work_period_seconds) / num_intervals)
         assert interval_nanos >= 0
+        next_update_nanos: int = time.monotonic_ns()
+
+        def interval_nanos_fn(subjob_: str) -> int:
+            nonlocal next_update_nanos
+            next_update_nanos += interval_nanos
+            return next_update_nanos
+
         if jitter:  # randomize job start time to avoid potential thundering herd problems in large distributed systems
             sleep_nanos = random.randint(0, interval_nanos)  # noqa: S311
             log.info("Jitter: Delaying job start time by sleeping for %s ...", human_readable_duration(sleep_nanos))
             time.sleep(sleep_nanos / 1_000_000_000)  # seconds
+            next_update_nanos += sleep_nanos
         sorted_subjobs = sorted(subjobs.keys())
         has_barrier = any(BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
         if self.spawn_process_per_job or has_barrier or has_siblings(sorted_subjobs, self.is_test_mode):  # run in parallel
@@ -904,7 +912,7 @@ class Job:
                 skip_tree_on_error=lambda subjob: True,
                 skip_on_error=SKIP_ON_ERROR_DEFAULT,
                 max_workers=max_workers,
-                interval_nanos=lambda subjob: interval_nanos,
+                interval_nanos=interval_nanos_fn,
                 task_name="Subjob",
                 retry_policy=None,  # no retries
                 dry_run=False,
@@ -912,10 +920,9 @@ class Job:
             )
         else:  # run sequentially
             log.log(LOG_TRACE, "%s", "spawn_process_per_job: False")
-            next_update_nanos = time.monotonic_ns()
             for subjob in sorted_subjobs:
                 time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)  # seconds
-                next_update_nanos += interval_nanos
+                interval_nanos_fn(subjob)
                 s = subjob
                 if not self.run_subjob(subjobs[subjob], name=s, timeout_secs=timeout_secs, spawn_process_per_job=False) == 0:
                     break
