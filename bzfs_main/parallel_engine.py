@@ -275,7 +275,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                     # If so it's preferable to submit to the thread pool the smaller one first.
                     break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
                 node: TreeNode = heapq.heappop(priority_queue)  # pick "smallest" dataset (wrt. sort order)
-                next_update_nanos += max(0, interval_nanos(node.dataset))
+                next_update_nanos = max(0, interval_nanos(node.dataset))
                 nonlocal submitted
                 submitted += 1
                 future: Future[bool] = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
