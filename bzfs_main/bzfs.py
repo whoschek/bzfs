@@ -449,7 +449,7 @@ class Job:
         msg = p.dry(f"zfs sent {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if p.is_program_available("pv", "local"):
             sent_bytes: int = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
-            sent_bytes_per_sec: int = round(1_000_000_000 * sent_bytes / elapsed_nanos)
+            sent_bytes_per_sec: int = round(1_000_000_000 * sent_bytes / (elapsed_nanos or 1))
             msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s]."
         log.info("%s", msg.ljust(p.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
 
