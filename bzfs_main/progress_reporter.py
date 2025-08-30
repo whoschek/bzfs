@@ -360,6 +360,7 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
                 with open_nofollow(file, mode="r", newline="", encoding="utf-8") as fd:
                     line: str | None = None
                     for line in fd:
+                        assert line is not None
                         if line.endswith("\r"):
                             continue  # skip all but the most recent status update of each transfer
                         total_bytes += parse_pv_line(line)
