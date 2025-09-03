@@ -100,20 +100,19 @@ class SnapshotCache:
         for src_dataset in sorted_datasets:
             snapshots_changed: int = snapshots_changed_dict.get(src_dataset, 0)
             self.job.src_properties[src_dataset].snapshots_changed = snapshots_changed
-            if snapshots_changed == 0:
-                self.invalidate_last_modified_cache_dataset(src_dataset)
-            else:
-                cache_file: str = self.last_modified_cache_file(src, src_dataset)
-                cache_dir: str = os.path.dirname(cache_file)
-                if not p.dry_run:
+            dataset_cache_file: str = self.last_modified_cache_file(src, src_dataset)
+            if not p.dry_run:
+                if snapshots_changed == 0:
+                    # selective invalidation: only zero the dataset-level '=' cache entry
                     try:
-                        os.makedirs(cache_dir, exist_ok=True)
-                        set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True)
-                        for label in dataset_labels[src_dataset]:
-                            cache_file = self.last_modified_cache_file(src, src_dataset, label)
-                            set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True)
+                        os_utime(dataset_cache_file, times=(0, 0))
                     except FileNotFoundError:
                         pass  # harmless
+                else:
+                    # update dataset-level '=' cache monotonically; do NOT touch per-label creation caches here
+                    set_last_modification_time_safe(
+                        dataset_cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True
+                    )
 
     def zfs_get_snapshots_changed(self, remote: Remote, sorted_datasets: list[str]) -> dict[str, int]:
         """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds;
