@@ -430,6 +430,9 @@ class Params:
         """Return True if ``program`` was detected on ``location`` host."""
         return program in self.available_programs.get(location, {})
 
+    def __repr__(self) -> str:
+        return str(self.__dict__)
+
 
 #############################################################################
 class Remote:
