@@ -16,11 +16,13 @@
 dependencies or complex databases."""
 
 from __future__ import annotations
+import errno
+import fcntl
 import os
+import stat
 from collections import defaultdict
 from os import stat as os_stat
 from os import utime as os_utime
-from os.path import exists as os_path_exists
 from os.path import join as os_path_join
 from subprocess import CalledProcessError
 from typing import (
@@ -164,13 +166,42 @@ def set_last_modification_time(
     unixtime_in_secs: int | tuple[int, int],
     if_more_recent: bool = False,
 ) -> None:
-    """if_more_recent=True is a concurrency control mechanism that prevents us from overwriting a newer (monotonically
+    """Atomically sets the atime/mtime of the file with the given ``path``, with a monotonic guard.
+
+    if_more_recent=True is a concurrency control mechanism that prevents us from overwriting a newer (monotonically
     increasing) snapshots_changed value (which is a UTC Unix time in integer seconds) that might have been written to the
-    cache file by a different, more up-to-date bzfs process."""
-    unixtime_in_secs = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
-    if not os_path_exists(path):
-        with open(path, "ab"):
-            pass
-    elif if_more_recent and unixtime_in_secs[1] <= round(os_stat(path).st_mtime):
-        return
-    os_utime(path, times=unixtime_in_secs)
+    cache file by a different, more up-to-date bzfs process.
+
+    For a brand-new file created by this call, we always update the file's timestamp to avoid retaining the file's implicit
+    creation time ("now") instead of the intended timestamp.
+
+    Design Rationale: Open without O_CREAT first; if missing, create exclusively (O_CREAT|O_EXCL) to detect that this call
+    created the file. Only apply the monotonic early-return check when the file pre-existed; otherwise perform the initial
+    timestamp write unconditionally. This preserves concurrency safety and prevents silent skips on first write.
+    """
+    unixtimes = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
+    perm: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
+    flags_base = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+    created_by_other_process = True
+
+    try:
+        fd = os.open(path, flags_base)
+    except FileNotFoundError:
+        try:
+            fd = os.open(path, flags_base | os.O_CREAT | os.O_EXCL, mode=perm)
+            created_by_other_process = False
+        except FileExistsError:
+            fd = os.open(path, flags_base)  # we lost the race, open existing file
+
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        stats = os.fstat(fd)
+        st_uid: int = stats.st_uid
+        if st_uid != os.geteuid():  # verify ownership is current effective UID; same as open_nofollow()
+            raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
+
+        if created_by_other_process and if_more_recent and unixtimes[1] <= int(stats.st_mtime):
+            return
+        os.utime(fd, times=unixtimes)
+    finally:
+        os.close(fd)
