@@ -113,21 +113,75 @@ class TestSnapshotCache(AbstractTestCase):
         """
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            f = os.path.join(tmpdir, "f")
-            desired = int(time.time()) - 5  # recent past
-            set_last_modification_time_safe(f, unixtime_in_secs=desired, if_more_recent=True)
-            self.assertEqual(desired, round(os.stat(f).st_mtime))
+            file = os.path.join(tmpdir, "f")
+            expected = int(time.time()) - 5  # recent past
+            set_last_modification_time_safe(file, unixtime_in_secs=expected, if_more_recent=True)
+            self.assertEqual(expected, round(os.stat(file).st_mtime))
+
+    def test_set_last_modification_time_with_file_not_found_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file = os.path.join(tmpdir, "foo")
+            with patch("os.utime", side_effect=FileNotFoundError):
+                with self.assertRaises(FileNotFoundError):
+                    set_last_modification_time(file + "nonexisting", unixtime_in_secs=1001, if_more_recent=False)
+                file = os.path.join(file, "x", "nonexisting2")
+                set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=False)
+
+    @patch("bzfs_main.snapshot_cache.itr_ssh_cmd_parallel")
+    def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
+        job = bzfs.Job()
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            job.params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
+        self.mock_remote = MagicMock(spec=Remote)  # spec helps catch calls to non-existent attrs
+
+        mock_itr_parallel.return_value = [  # normal input
+            [
+                "12345\tdataset/valid1",
+                "789\tdataset/valid2",
+            ]
+        ]
+        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        self.assertDictEqual({"dataset/valid1": 12345, "dataset/valid2": 789}, results)
+
+        # Simulate output from a failing 'zfs list' command captured on its stdout.
+        # This could be partial output, or error messages if zfs wrote them to stdout.
+        mock_itr_parallel.return_value = [
+            [
+                "12345\tdataset/valid1",
+                "ERROR: zfs command failed for dataset/invalid2",  # Line without tab, from stdout
+                "789\tdataset/valid2",
+            ]
+        ]
+        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        self.assertDictEqual({"dataset/valid1": 12345}, results)
+
+        mock_itr_parallel.return_value = [
+            [
+                "12345\tdataset/valid1",
+                "123\t",  # empty dataset
+                "789\tdataset/valid2",
+            ]
+        ]
+        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        self.assertDictEqual({"dataset/valid1": 12345}, results)
+
+        mock_itr_parallel.return_value = [
+            [
+                "12345\tdataset/valid1",
+                "\tfoo",  # missing timestamp
+                "789\tdataset/valid2",
+            ]
+        ]
+        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        self.assertDictEqual({"dataset/valid1": 12345, "foo": 0, "dataset/valid2": 789}, results)
 
     def test_monitor_initial_write_persists_creation_and_changed(self) -> None:
         """Monitor path must persist (creation, snapshots_changed) on first write to a new file.
 
-        This validates that the monotonic guard does not suppress initial writes when desired times are <= the file creation
-        time.
+        Validates that the monotonic guard does not suppress initial writes when desired times are <= the file creation time.
         """
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             args = self.argparser_parse_args(
                 [
                     "--monitor-snapshots",
@@ -180,65 +234,6 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(creation, at)
             self.assertEqual(changed, mt)
 
-    def test_set_last_modification_time_with_file_not_found_error(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            file = os.path.join(tmpdir, "foo")
-            with patch("os.utime", side_effect=FileNotFoundError):
-                with self.assertRaises(FileNotFoundError):
-                    set_last_modification_time(file + "nonexisting", unixtime_in_secs=1001, if_more_recent=False)
-                file = os.path.join(file, "x", "nonexisting2")
-                set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=False)
-
-    @patch("bzfs_main.snapshot_cache.itr_ssh_cmd_parallel")
-    def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
-        job = bzfs.Job()
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
-            job.params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
-        self.mock_remote = MagicMock(spec=Remote)  # spec helps catch calls to non-existent attrs
-
-        mock_itr_parallel.return_value = [  # normal input
-            [
-                "12345\tdataset/valid1",
-                "789\tdataset/valid2",
-            ]
-        ]
-        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
-        self.assertDictEqual({"dataset/valid1": 12345, "dataset/valid2": 789}, results)
-
-        # Simulate output from a failing 'zfs list' command captured on its stdout.
-        # This could be partial output, or error messages if zfs wrote them to stdout.
-        mock_itr_parallel.return_value = [
-            [
-                "12345\tdataset/valid1",
-                "ERROR: zfs command failed for dataset/invalid2",  # Line without tab, from stdout
-                "789\tdataset/valid2",
-            ]
-        ]
-        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
-        self.assertDictEqual({"dataset/valid1": 12345}, results)
-
-        mock_itr_parallel.return_value = [
-            [
-                "12345\tdataset/valid1",
-                "123\t",  # empty dataset
-                "789\tdataset/valid2",
-            ]
-        ]
-        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
-        self.assertDictEqual({"dataset/valid1": 12345}, results)
-
-        mock_itr_parallel.return_value = [
-            [
-                "12345\tdataset/valid1",
-                "\tfoo",  # missing timestamp
-                "789\tdataset/valid2",
-            ]
-        ]
-        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
-        self.assertDictEqual({"dataset/valid1": 12345, "foo": 0, "dataset/valid2": 789}, results)
-
     def test_last_replicated_cache_must_be_monotonic(self) -> None:
         """Purpose: Prove the src→dst "last replicated" cache (the src-side "==" marker keyed by user/host+dst+filters)
         never regresses even when an older job finishes after a newer job. This cache is a correctness accelerator for
@@ -261,11 +256,7 @@ class TestSnapshotCache(AbstractTestCase):
         emulate realistic sequencing, while maintaining strict determinism. Using actual file timestamps provides a
         faithful signal of what downstream code will observe."""
 
-        # Arrange minimal job with a temporary cache directory
-
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             args = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
             log_params = MagicMock()
             log_params.last_modified_cache_dir = tmpdir
@@ -334,9 +325,7 @@ class TestSnapshotCache(AbstractTestCase):
         Design Rationale: Using the real code path and filesystem timestamps yields a high-fidelity check of the
         monotonicity contract without introducing external dependencies or flakiness."""
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             args = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
             log_params = MagicMock()
             log_params.last_modified_cache_dir = tmpdir
@@ -392,17 +381,8 @@ class TestSnapshotCache(AbstractTestCase):
 
         Design Rationale: Focused unit-level setup isolates the cache responsibility from discovery logic while testing
         the exact write behavior of update_last_modified_cache()."""
-        # This test guards against a critical logic bug where update_last_modified_cache()
-        # overwrote per-label cache files (intended to track latest snapshot creation time)
-        # with the dataset-level snapshots_changed timestamp. Doing so causes future
-        # create-src-snapshots scheduling to incorrectly believe that a label's latest
-        # snapshot is newer than it actually is, potentially skipping due snapshots.
 
-        # Arrange
-
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             # Build Params with a minimal real last_modified_cache_dir under tmpdir
             args = self.argparser_parse_args(["pool/src", "pool/dst"])  # dataset names are arbitrary for this unit test
             log_params = MagicMock()
@@ -464,9 +444,7 @@ class TestSnapshotCache(AbstractTestCase):
         is unavailable or returns 0. Only the dataset-level cache ("=") should be invalidated.
         """
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             args = self.argparser_parse_args(["pool/src", "pool/dst"])  # dataset names arbitrary
             log_params = MagicMock()
             log_params.last_modified_cache_dir = tmpdir
@@ -518,9 +496,7 @@ class TestSnapshotCache(AbstractTestCase):
         Design Rationale: Exercising monitor's real write path with deterministic inputs tests the behavior that matters
         for operations, without requiring a live pool. This keeps the test fast, hermetic, and high-fidelity."""
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             plan = {"org": {"onsite": {"daily": {"latest": {"warning": "1 seconds", "critical": "2 seconds"}}}}}
             args = self.argparser_parse_args(
                 [
@@ -609,10 +585,7 @@ class TestSnapshotCache(AbstractTestCase):
         We assert stale_datasets length (misses) and cache hits reflect threshold gating.
         """
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
-
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             # Configure monitor job for one dataset/label
             plan = {"org": {"onsite": {"daily": {"latest": {"warning": "1 seconds", "critical": "2 seconds"}}}}}
             args = self.argparser_parse_args(
@@ -708,10 +681,7 @@ class TestSnapshotCache(AbstractTestCase):
         We assert replicate_dataset invocation count and cache hit/miss counters.
         """
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
-
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             args = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
             log_params = MagicMock()
             log_params.last_modified_cache_dir = tmpdir
@@ -793,10 +763,7 @@ class TestSnapshotCache(AbstractTestCase):
         Job B has older timestamps and writes later. With monotonic guards, final cache values must remain those of A.
         """
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
-
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             # Common args and datasets
             args = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
 
@@ -907,10 +874,7 @@ class TestSnapshotCache(AbstractTestCase):
         caches (== last replicated, and dst '='). Each should preserve monotonic values independently.
         """
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
-
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             # Build a job for monitor and a separate job for replicate
             plan = {"org": {"onsite": {"daily": {"latest": {"warning": "1 seconds", "critical": "2 seconds"}}}}}
             args_m = self.argparser_parse_args(
@@ -1050,10 +1014,7 @@ class TestSnapshotCache(AbstractTestCase):
         ensures no regression across either while running in parallel.
         """
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
-
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             args = self.argparser_parse_args(
                 [
                     "--create-src-snapshots",
@@ -1190,10 +1151,7 @@ class TestSnapshotCache(AbstractTestCase):
           6) Replicate attempts older write (must not regress)
         """
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
-
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             # Build jobs
             plan = {"org": {"onsite": {"daily": {"latest": {"warning": "1 seconds", "critical": "2 seconds"}}}}}
             args_m = self.argparser_parse_args(
@@ -1427,10 +1385,7 @@ class TestSnapshotCache(AbstractTestCase):
                  monotonic behavior.
         """
 
-        with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
-        ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
-
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
             # Jobs
             plan = {"org": {"onsite": {"daily": {"latest": {"warning": "1 seconds", "critical": "2 seconds"}}}}}
             args_m = self.argparser_parse_args(
