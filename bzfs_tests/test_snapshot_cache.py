@@ -862,27 +862,24 @@ class TestSnapshotCache(AbstractTestCase):
                     ev_a_written.set()
 
             def run_job_a() -> None:
-                with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                    "bzfs_main.bzfs.replicate_dataset", return_value=True
-                ), patch.object(job_a.cache, "zfs_get_snapshots_changed", side_effect=zgs_a), patch(
-                    "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm_time_safe
-                ):
+                with patch.object(job_a.cache, "zfs_get_snapshots_changed", side_effect=zgs_a):
                     job_a.replicate_datasets([src_dataset], task_description="A", max_workers=1)
 
             def run_job_b() -> None:
                 # Wait until A has written to last_repl_file, then run B so it attempts to write older
                 ev_a_written.wait(timeout=5)
-                with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                    "bzfs_main.bzfs.replicate_dataset", return_value=True
-                ), patch.object(job_b.cache, "zfs_get_snapshots_changed", side_effect=zgs_b):
+                with patch.object(job_b.cache, "zfs_get_snapshots_changed", side_effect=zgs_b):
                     job_b.replicate_datasets([src_dataset], task_description="B", max_workers=1)
 
-            t_a = threading.Thread(target=run_job_a)
-            t_b = threading.Thread(target=run_job_b)
-            t_a.start()
-            t_b.start()
-            t_a.join()
-            t_b.join()
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
+                "bzfs_main.bzfs.replicate_dataset", return_value=True
+            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm_time_safe):
+                t_a = threading.Thread(target=run_job_a)
+                t_b = threading.Thread(target=run_job_b)
+                t_a.start()
+                t_b.start()
+                t_a.join()
+                t_b.join()
 
             # Assert: both files reflect A's newer timestamps
             self.assertEqual(a_src_changed, SnapshotCache(job_a).get_snapshots_changed(last_repl_file))
@@ -975,7 +972,6 @@ class TestSnapshotCache(AbstractTestCase):
             job_m.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=mon_snap_changed)
 
             def fake_handle(
-                self: Job,
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1006,24 +1002,23 @@ class TestSnapshotCache(AbstractTestCase):
                 return {} if i == 0 else {dst_dataset: repl_dst_changed_a}
 
             def run_monitor() -> None:
-                with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                    Job, "handle_minmax_snapshots", new=fake_handle
-                ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm_time_safe):
+                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle):
                     job_m.monitor_snapshots(job_m.params.src, [src_dataset])
 
             def run_replicate() -> None:
                 ev_mon_written.wait(timeout=5)
-                with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                    "bzfs_main.bzfs.replicate_dataset", return_value=True
-                ), patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r):
+                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r):
                     job_r.replicate_datasets([src_dataset], task_description="R", max_workers=1)
 
-            t_m = threading.Thread(target=run_monitor)
-            t_r = threading.Thread(target=run_replicate)
-            t_m.start()
-            t_r.start()
-            t_m.join()
-            t_r.join()
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
+                "bzfs_main.bzfs.replicate_dataset", return_value=True
+            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm_time_safe):
+                t_m = threading.Thread(target=run_monitor)
+                t_r = threading.Thread(target=run_replicate)
+                t_m.start()
+                t_r.start()
+                t_m.join()
+                t_r.join()
 
             # Assert: monitor cache remains at newer values; replicate caches reflect its own writes
             atime, mtime = SnapshotCache(job_m).get_snapshots_changed2(mon_cache_file)
@@ -1111,7 +1106,6 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Patch handle_minmax to provide creation time; ensure caching path is taken
             def fake_handle(
-                self: Job,
                 remote: Remote,
                 datasets: list[str],
                 labels_list: list[SnapshotLabel],
@@ -1141,25 +1135,24 @@ class TestSnapshotCache(AbstractTestCase):
                 return {} if i == 0 else {dst_dataset: repl_dst_changed}
 
             def run_snapshot() -> None:
-                with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                    Job, "handle_minmax_snapshots", new=fake_handle
-                ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm):
+                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle):
                     # Just compute plan; we don't need to create snapshots
                     job_s.find_datasets_to_snapshot([src_dataset])
 
             def run_replicate() -> None:
                 ev_snapshot_written.wait(timeout=5)
-                with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                    "bzfs_main.bzfs.replicate_dataset", return_value=True
-                ), patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r):
+                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r):
                     job_r.replicate_datasets([src_dataset], task_description="R", max_workers=1)
 
-            t_s = threading.Thread(target=run_snapshot)
-            t_r = threading.Thread(target=run_replicate)
-            t_s.start()
-            t_r.start()
-            t_s.join()
-            t_r.join()
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
+                "bzfs_main.bzfs.replicate_dataset", return_value=True
+            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm):
+                t_s = threading.Thread(target=run_snapshot)
+                t_r = threading.Thread(target=run_replicate)
+                t_s.start()
+                t_r.start()
+                t_s.join()
+                t_r.join()
 
             # Assert snapshot caches reflect newer values and replicate caches reflect their written values
             at, mt = SnapshotCache(job_s).get_snapshots_changed2(label_cache_file)
@@ -1288,7 +1281,6 @@ class TestSnapshotCache(AbstractTestCase):
                     ev_snap_written.set()
 
             def fake_handle_mon(
-                self: Job,
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1300,7 +1292,6 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             def fake_handle_snap(
-                self: Job,
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1322,34 +1313,31 @@ class TestSnapshotCache(AbstractTestCase):
 
             # First phase: Monitor -> Snapshot -> Replicate (older)
             def run_monitor() -> None:
-                with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                    Job, "handle_minmax_snapshots", new=fake_handle_mon
-                ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm):
+                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_mon):
                     job_m.monitor_snapshots(job_m.params.src, [src_dataset])
 
             def run_snapshot() -> None:
                 ev_mon_written.wait(timeout=5)
-                with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                    Job, "handle_minmax_snapshots", new=fake_handle_snap
-                ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm):
+                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_snap):
                     job_s.find_datasets_to_snapshot([src_dataset])
 
             def run_replicate() -> None:
                 ev_snap_written.wait(timeout=5)
-                with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                    "bzfs_main.bzfs.replicate_dataset", return_value=True
-                ), patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r):
+                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r):
                     job_r.replicate_datasets([src_dataset], task_description="R", max_workers=1)
 
-            t_m = threading.Thread(target=run_monitor)
-            t_s = threading.Thread(target=run_snapshot)
-            t_r = threading.Thread(target=run_replicate)
-            t_m.start()
-            t_s.start()
-            t_r.start()
-            t_m.join()
-            t_s.join()
-            t_r.join()
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
+                "bzfs_main.bzfs.replicate_dataset", return_value=True
+            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm):
+                t_m = threading.Thread(target=run_monitor)
+                t_s = threading.Thread(target=run_snapshot)
+                t_r = threading.Thread(target=run_replicate)
+                t_m.start()
+                t_s.start()
+                t_r.start()
+                t_m.join()
+                t_s.join()
+                t_r.join()
 
             # Second phase: older attempts shall not regress
             job_m.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=m_sc_old)
@@ -1357,7 +1345,6 @@ class TestSnapshotCache(AbstractTestCase):
             job_r.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=r_src_old)
 
             def fake_handle_mon_old(
-                self: Job,
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1369,7 +1356,6 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             def fake_handle_snap_old(
-                self: Job,
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1388,20 +1374,21 @@ class TestSnapshotCache(AbstractTestCase):
                 zgs_r_old_state["i"] = i + 1
                 return {} if i == 0 else {dst_dataset: r_dst_old}
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_mon_old
-            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm):
-                job_m.monitor_snapshots(job_m.params.src, [src_dataset])
-
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_snap_old
-            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm):
-                job_s.find_datasets_to_snapshot([src_dataset])
-
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r_old):
-                job_r.replicate_datasets([src_dataset], task_description="R2", max_workers=1)
+            ):
+                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_mon_old), patch(
+                    "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm
+                ):
+                    job_m.monitor_snapshots(job_m.params.src, [src_dataset])
+
+                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_snap_old), patch(
+                    "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm
+                ):
+                    job_s.find_datasets_to_snapshot([src_dataset])
+
+                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r_old):
+                    job_r.replicate_datasets([src_dataset], task_description="R2", max_workers=1)
 
             # Final assertions across all families
             at, mt = SnapshotCache(job_m).get_snapshots_changed2(mon_cache_file)
