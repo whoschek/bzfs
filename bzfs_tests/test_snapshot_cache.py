@@ -48,22 +48,27 @@ observables that production code relies on.
 
 from __future__ import annotations
 import argparse
+import hashlib
 import os
 import tempfile
+import threading
+import time
 import unittest
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Callable
 from unittest.mock import (
     MagicMock,
     patch,
 )
 
-from bzfs_main import bzfs
+from bzfs_main import bzfs, snapshot_cache
 from bzfs_main.bzfs import (
     DatasetProperties,
     Job,
 )
 from bzfs_main.configuration import Remote, SnapshotLabel
 from bzfs_main.snapshot_cache import (
+    SnapshotCache,
     set_last_modification_time,
     set_last_modification_time_safe,
 )
@@ -107,8 +112,6 @@ class TestSnapshotCache(AbstractTestCase):
         The file's mtime must equal the provided timestamp, not the implicit creation time ("now").
         """
 
-        import time
-
         with tempfile.TemporaryDirectory() as tmpdir:
             f = os.path.join(tmpdir, "f")
             desired = int(time.time()) - 5  # recent past
@@ -121,14 +124,6 @@ class TestSnapshotCache(AbstractTestCase):
         This validates that the monotonic guard does not suppress initial writes when desired times are <= the file creation
         time.
         """
-
-        import hashlib
-        import time
-        from datetime import datetime, timezone
-
-        from bzfs_main.bzfs import DatasetProperties, Job
-        from bzfs_main.configuration import SnapshotLabel
-        from bzfs_main.snapshot_cache import SnapshotCache
 
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
@@ -266,11 +261,6 @@ class TestSnapshotCache(AbstractTestCase):
         emulate realistic sequencing, while maintaining strict determinism. Using actual file timestamps provides a
         faithful signal of what downstream code will observe."""
 
-        import hashlib
-
-        from bzfs_main.configuration import SnapshotLabel
-        from bzfs_main.snapshot_cache import SnapshotCache
-
         # Arrange minimal job with a temporary cache directory
 
         with tempfile.TemporaryDirectory() as tmpdir, patch(
@@ -344,8 +334,6 @@ class TestSnapshotCache(AbstractTestCase):
         Design Rationale: Using the real code path and filesystem timestamps yields a high-fidelity check of the
         monotonicity contract without introducing external dependencies or flakiness."""
 
-        from bzfs_main.snapshot_cache import SnapshotCache
-
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
         ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
@@ -411,8 +399,6 @@ class TestSnapshotCache(AbstractTestCase):
         # snapshot is newer than it actually is, potentially skipping due snapshots.
 
         # Arrange
-        from bzfs_main.configuration import SnapshotLabel
-        from bzfs_main.snapshot_cache import SnapshotCache
 
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
@@ -478,9 +464,6 @@ class TestSnapshotCache(AbstractTestCase):
         is unavailable or returns 0. Only the dataset-level cache ("=") should be invalidated.
         """
 
-        from bzfs_main.configuration import SnapshotLabel
-        from bzfs_main.snapshot_cache import SnapshotCache
-
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
         ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
@@ -534,11 +517,6 @@ class TestSnapshotCache(AbstractTestCase):
 
         Design Rationale: Exercising monitor's real write path with deterministic inputs tests the behavior that matters
         for operations, without requiring a live pool. This keeps the test fast, hermetic, and high-fidelity."""
-
-        import hashlib
-        from datetime import datetime, timezone
-
-        from bzfs_main.snapshot_cache import SnapshotCache
 
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
@@ -630,9 +608,6 @@ class TestSnapshotCache(AbstractTestCase):
 
         We assert stale_datasets length (misses) and cache hits reflect threshold gating.
         """
-
-        import hashlib
-        from datetime import datetime, timezone
 
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
@@ -733,8 +708,6 @@ class TestSnapshotCache(AbstractTestCase):
         We assert replicate_dataset invocation count and cache hit/miss counters.
         """
 
-        import hashlib
-
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
         ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
@@ -820,12 +793,6 @@ class TestSnapshotCache(AbstractTestCase):
         Job B has older timestamps and writes later. With monotonic guards, final cache values must remain those of A.
         """
 
-        import hashlib
-        import threading
-
-        from bzfs_main.configuration import SnapshotLabel
-        from bzfs_main.snapshot_cache import SnapshotCache
-
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
         ), patch("bzfs_main.configuration.get_home_directory", return_value=tmpdir):
@@ -885,8 +852,6 @@ class TestSnapshotCache(AbstractTestCase):
             # Synchronize start so that A writes first, then B writes after
             ev_a_written = threading.Event()
 
-            from bzfs_main import snapshot_cache
-
             orig_set_lm_time_safe = snapshot_cache.set_last_modification_time_safe
 
             def wrapped_set_lm_time_safe(path: str, unixtime_in_secs: int, if_more_recent: bool = False) -> None:
@@ -944,13 +909,6 @@ class TestSnapshotCache(AbstractTestCase):
         Monitor writes per-label monitor caches (===) with newer values; Replication then attempts older writes to its own
         caches (== last replicated, and dst '='). Each should preserve monotonic values independently.
         """
-
-        import hashlib
-        import threading
-        from datetime import datetime, timezone
-
-        from bzfs_main.configuration import SnapshotLabel
-        from bzfs_main.snapshot_cache import SnapshotCache
 
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
@@ -1031,7 +989,6 @@ class TestSnapshotCache(AbstractTestCase):
             # Setup replicate job behavior
             job_r.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=repl_src_changed_a)
             ev_mon_written = threading.Event()
-            from bzfs_main import snapshot_cache
 
             orig_set_lm_time_safe = snapshot_cache.set_last_modification_time_safe
 
@@ -1097,12 +1054,6 @@ class TestSnapshotCache(AbstractTestCase):
         Snapshot scheduling writes per-label creation caches and src '='; Replicate writes last replicated and dst '='. This
         ensures no regression across either while running in parallel.
         """
-
-        import hashlib
-        import threading
-
-        from bzfs_main.configuration import SnapshotLabel
-        from bzfs_main.snapshot_cache import SnapshotCache
 
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
@@ -1174,7 +1125,6 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             ev_snapshot_written = threading.Event()
-            from bzfs_main import snapshot_cache
 
             orig_set_lm = snapshot_cache.set_last_modification_time_safe
 
@@ -1246,13 +1196,6 @@ class TestSnapshotCache(AbstractTestCase):
           5) Snapshot attempts older write (must not regress)
           6) Replicate attempts older write (must not regress)
         """
-
-        import hashlib
-        import threading
-        from datetime import datetime, timezone
-
-        from bzfs_main.configuration import SnapshotLabel
-        from bzfs_main.snapshot_cache import SnapshotCache
 
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
@@ -1334,7 +1277,6 @@ class TestSnapshotCache(AbstractTestCase):
             # Event sequencing
             ev_mon_written = threading.Event()
             ev_snap_written = threading.Event()
-            from bzfs_main import snapshot_cache
 
             orig_set_lm = snapshot_cache.set_last_modification_time_safe
 
@@ -1497,12 +1439,6 @@ class TestSnapshotCache(AbstractTestCase):
         Phase B: Run monitor, snapshot, and replicate to repopulate each cache, then attempt older writes and assert
                  monotonic behavior.
         """
-
-        import hashlib
-        from datetime import datetime, timezone
-
-        from bzfs_main.configuration import SnapshotLabel
-        from bzfs_main.snapshot_cache import SnapshotCache
 
         with tempfile.TemporaryDirectory() as tmpdir, patch(
             "bzfs_tests.abstract_testcase.utils.get_home_directory", return_value=tmpdir
@@ -1668,7 +1604,6 @@ class TestSnapshotCache(AbstractTestCase):
 
     @unittest.skip("benchmark; enable for performance comparison")
     def test_benchmark_set_last_modification_time(self) -> None:
-        import time
 
         funcs = {
             "old": set_last_modification_time_old,
