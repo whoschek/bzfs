@@ -82,7 +82,7 @@ class SnapshotCache:
     def last_modified_cache_file(self, remote: Remote, dataset: str, label: SnapshotLabel | None = None) -> str:
         """Returns the path of the cache file that is tracking last snapshot modification."""
         cache_file: str = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
-        userhost_dir: str = remote.ssh_user_host if remote.ssh_user_host else "-"
+        userhost_dir: str = remote.cache_namespace()
         return os.path.join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:

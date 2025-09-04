@@ -88,6 +88,8 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestSnapshotCache(AbstractTestCase):
+    def dst_namespace(self, job: Job) -> str:
+        return job.params.dst.cache_namespace()
 
     def test_set_last_modification_time(self) -> None:
         for func in [set_last_modification_time, set_last_modification_time_old]:
@@ -272,7 +274,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Compute the replication-scoped cache file path used by replicate_datasets()
             hash_key = tuple(tuple(f) for f in job.params.snapshot_filters)
             hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
-            userhost_dir = job.params.dst.ssh_user_host or "-"
+            userhost_dir = self.dst_namespace(job)
             cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
             last_repl_file = SnapshotCache(job).last_modified_cache_file(job.params.src, src_dataset, cache_label)
 
@@ -697,7 +699,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Build replication-scoped cache file path for src '==' and dst '=' path
             hash_key = tuple(tuple(f) for f in job.params.snapshot_filters)
             hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
-            userhost_dir = job.params.dst.ssh_user_host or "-"
+            userhost_dir = self.dst_namespace(job)
             repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
             src_repl_file = job.cache.last_modified_cache_file(job.params.src, src_dataset, repl_cache_label)
             dst_eq_file = job.cache.last_modified_cache_file(job.params.dst, dst_dataset)
@@ -788,7 +790,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Compute file paths to assert at end (same for both jobs)
             hash_key = tuple(tuple(f) for f in job_a.params.snapshot_filters)
             hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
-            userhost_dir = job_a.params.dst.ssh_user_host or "-"
+            userhost_dir = self.dst_namespace(job_a)
             cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
             last_repl_file = SnapshotCache(job_a).last_modified_cache_file(job_a.params.src, src_dataset, cache_label)
             dst_cache_file = SnapshotCache(job_a).last_modified_cache_file(job_a.params.dst, dst_dataset)
@@ -920,7 +922,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Identify replicate cache files
             hash_key = tuple(tuple(f) for f in job_r.params.snapshot_filters)
             hash_code2 = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
-            userhost_dir = job_r.params.dst.ssh_user_host or "-"
+            userhost_dir = self.dst_namespace(job_r)
             repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code2), "", "", "")
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, src_dataset, repl_cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, dst_dataset)
@@ -1051,7 +1053,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Replicate cache files
             hash_key = tuple(tuple(f) for f in job_r.params.snapshot_filters)
             hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
-            userhost_dir = job_r.params.dst.ssh_user_host or "-"
+            userhost_dir = self.dst_namespace(job_r)
             repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, src_dataset, repl_cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, dst_dataset)
@@ -1208,7 +1210,7 @@ class TestSnapshotCache(AbstractTestCase):
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, src_dataset)
 
             h_r = hashlib.sha256(str(tuple(tuple(f) for f in job_r.params.snapshot_filters)).encode("utf-8")).hexdigest()
-            userhost_dir = job_r.params.dst.ssh_user_host or "-"
+            userhost_dir = self.dst_namespace(job_r)
             repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, h_r), "", "", "")
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, src_dataset, repl_cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, dst_dataset)
@@ -1435,7 +1437,7 @@ class TestSnapshotCache(AbstractTestCase):
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, src_dataset)
 
             h_r2 = hashlib.sha256(str(tuple(tuple(f) for f in job_r.params.snapshot_filters)).encode("utf-8")).hexdigest()
-            userhost_dir = job_r.params.dst.ssh_user_host or "-"
+            userhost_dir = self.dst_namespace(job_r)
             repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, h_r2), "", "", "")
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, src_dataset, repl_cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, dst_dataset)
@@ -1796,6 +1798,141 @@ class TestSnapshotCache(AbstractTestCase):
             # Must fall back to handler due to mtime mismatch
             self.assertListEqual([dataset], received)
 
+    def test_replication_cache_must_not_collide_across_dst_ports(self) -> None:
+        """Purpose: Prove that replication-scoped caches (the src-side "==" markers) must be namespaced by
+        destination SSH port in addition to user@host to avoid cross-port collisions.
+
+        Scenario: Operators often reach different destinations behind the same user@host via distinct SSH ports
+        (for example, multiple port forwards, multi-tenant gateways, or ephemeral test hosts). If the replication
+        cache path only keys on ``user@host`` and omits the port, two independent destinations will read and write
+        the same "==" file. That cross-contamination can cause cheap-skip logic to misclassify datasets as
+        "Already up-to-date [cached]" on the wrong destination, silently skipping a required replication.
+
+        Setup: We construct two Jobs targeting the same dataset pair and identical snapshot filters, differing only
+        by the destination port. We compute the replication-scoped cache file for each and assert those paths are
+        different. If they were identical, a later job could overwrite the marker established by another job pointed
+        at a different endpoint, undermining correctness.
+
+        Expectation: Paths must differ across ports; otherwise, the design is unsafe.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            # Common args (datasets only)
+            args = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
+
+            def mk_job(port: int) -> Job:
+                j = Job()
+                lp = MagicMock()
+                lp.last_modified_cache_dir = tmpdir
+                j.params = self.make_params(args=args, log_params=lp)
+                j.params.src.root_dataset = "pool/src"
+                j.params.dst.root_dataset = "pool/dst"
+                # Same user@host, different port
+                j.params.dst.basis_ssh_user = "u"
+                j.params.dst.basis_ssh_host = "h"
+                j.params.dst.ssh_port = port
+                # parse_dataset_locator() is applied in validate_task(); emulate essential derived fields here
+                j.params.dst.ssh_user = "u"
+                j.params.dst.ssh_host = "h"
+                j.params.dst.ssh_user_host = "u@h"
+                return j
+
+            job_a = mk_job(1111)
+            job_b = mk_job(2222)
+
+            # Build the replication-scoped cache label and path for each job (same user@host, dataset, filters)
+            def repl_file(job: Job) -> str:
+                hash_key = tuple(tuple(f) for f in job.params.snapshot_filters)
+                hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
+                userhost_dir = self.dst_namespace(job)
+                cache_label = SnapshotLabel(
+                    os.path.join("==", userhost_dir, job.params.dst.root_dataset, hash_code), "", "", ""
+                )
+                return SnapshotCache(job).last_modified_cache_file(job.params.src, job.params.src.root_dataset, cache_label)
+
+            path_a = repl_file(job_a)
+            path_b = repl_file(job_b)
+
+            self.assertNotEqual(
+                path_a, path_b, msg=f"Replication cache path must include port to avoid collisions: {path_a}"
+            )
+
+    def test_replication_cache_collision_prevented_by_port_namespace(self) -> None:
+        """Purpose: Demonstrate that port-aware cache namespacing prevents false cheap-skips across distinct
+        destinations that share the same user@host.
+
+        Scenario: Job A (user@host:1111) replicates and writes both the src "==" marker and the dst "=" cache with a
+        mature value. Job B (user@host:2222) subsequently runs against a different endpoint. If cache paths were
+        user@host-only, Job B would see Job A's mature markers, conclude that both sides match and are older than the
+        threshold, and skip replication for the wrong destination. Such a skip risks divergence.
+
+        Setup: We seed Job A's caches with a mature, equal timestamp and configure Job B to observe the same live
+        src/dst values. We then run Job B with port-aware namespacing enabled (via Remote.cache_namespace()).
+
+        Expectation: Because the port is part of the namespace, Job B reads different files from Job A and must not
+        see those seeded markers. As a result, it processes the dataset (invokes replicate_dataset), proving that the
+        namespacing prevents cross-port contamination in practice.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            args = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
+
+            def mk_job(port: int) -> Job:
+                j = Job()
+                lp = MagicMock()
+                lp.last_modified_cache_dir = tmpdir
+                j.params = self.make_params(args=args, log_params=lp)
+                j.params.src.root_dataset = "pool/src"
+                j.params.dst.root_dataset = "pool/dst"
+                j.params.dst.basis_ssh_user = "u"
+                j.params.dst.basis_ssh_host = "h"
+                j.params.dst.ssh_port = port
+                j.params.dst.ssh_user = "u"
+                j.params.dst.ssh_host = "h"
+                j.params.dst.ssh_user_host = "u@h"
+                j.dst_dataset_exists[j.params.dst.root_dataset] = True
+                return j
+
+            job_a = mk_job(1111)
+            job_b = mk_job(2222)
+
+            src_dataset = job_a.params.src.root_dataset
+            dst_dataset = job_a.params.dst.root_dataset
+
+            # Shared hash but distinct cache file paths due to port segregation
+            hash_key = tuple(tuple(f) for f in job_a.params.snapshot_filters)
+            hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
+            userhost_dir = self.dst_namespace(job_a)
+            repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
+            src_repl_file = SnapshotCache(job_a).last_modified_cache_file(job_a.params.src, src_dataset, repl_cache_label)
+            dst_eq_file = SnapshotCache(job_a).last_modified_cache_file(job_a.params.dst, dst_dataset)
+
+            # Prepare timestamps: mature + equal across caches
+            t_src = int(time.time()) - int(bzfs.TIME_THRESHOLD_SECS) - 5
+            t_dst = t_src
+
+            # Seed Job A caches as if it had just replicated
+            set_last_modification_time_safe(src_repl_file, unixtime_in_secs=t_src, if_more_recent=True)
+            set_last_modification_time_safe(dst_eq_file, unixtime_in_secs=t_dst, if_more_recent=True)
+
+            # Job B observed live properties (simulate via stubs)
+            job_b.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=t_src)
+
+            called: list[str] = []
+
+            def fake_replicate_dataset(job_: Job, ds: str, tid: str, retry: RetryPolicy) -> bool:
+                called.append(ds)
+                return True
+
+            # zfs_get_snapshots_changed(dst) returns t_dst for dst_dataset (equal to cached dst '=')
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
+                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
+            ), patch.object(job_b.cache, "zfs_get_snapshots_changed", return_value={dst_dataset: t_dst}):
+                job_b.replicate_datasets([src_dataset], task_description="T", max_workers=1)
+
+            # Because paths are segregated by port, Job B processes the dataset (no false cheap-skip)
+            self.assertListEqual([src_dataset], called)
+
     @unittest.skip("benchmark; enable for performance comparison")
     def test_benchmark_set_last_modification_time(self) -> None:
 
@@ -1812,7 +1949,7 @@ class TestSnapshotCache(AbstractTestCase):
                     func(file, i)
                 elapsed = time.perf_counter() - start
                 print(name, elapsed)
-            self.assertEqual(iterations - 1, round(os.stat(file).st_mtime))
+        self.assertEqual(iterations - 1, round(os.stat(file).st_mtime))
 
 
 def set_last_modification_time_old(  # racy
