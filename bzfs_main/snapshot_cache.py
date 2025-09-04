@@ -38,9 +38,6 @@ import fcntl
 import os
 import stat
 from collections import defaultdict
-from os import stat as os_stat
-from os import utime as os_utime
-from os.path import join as os_path_join
 from subprocess import CalledProcessError
 from typing import (
     TYPE_CHECKING,
@@ -77,7 +74,7 @@ class SnapshotCache:
     def get_snapshots_changed2(path: str) -> tuple[int, int]:
         """Like zfs_get_snapshots_changed() but reads from local cache."""
         try:  # perf: inode metadata reads and writes are fast - ballpark O(200k) ops/sec.
-            s = os_stat(path)
+            s = os.stat(path)
             return round(s.st_atime), round(s.st_mtime)
         except FileNotFoundError:
             return 0, 0  # harmless
@@ -86,7 +83,7 @@ class SnapshotCache:
         """Returns the path of the cache file that is tracking last snapshot modification."""
         cache_file: str = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
         userhost_dir: str = remote.ssh_user_host if remote.ssh_user_host else "-"
-        return os_path_join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
+        return os.path.join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
@@ -95,6 +92,7 @@ class SnapshotCache:
         if not p.dry_run:
             try:  # there's no need for locking on invalidating the cache
                 zero_times = (0, 0)
+                os_utime = os.utime
                 for entry in os.scandir(os.path.dirname(cache_file)):
                     os_utime(entry.path, times=zero_times)
                 os_utime(cache_file, times=zero_times)
@@ -122,7 +120,7 @@ class SnapshotCache:
                 if snapshots_changed == 0:
                     # selective invalidation: only zero the dataset-level '=' cache entry
                     try:
-                        os_utime(dataset_cache_file, times=(0, 0))
+                        os.utime(dataset_cache_file, times=(0, 0))
                     except FileNotFoundError:
                         pass  # harmless
                 else:

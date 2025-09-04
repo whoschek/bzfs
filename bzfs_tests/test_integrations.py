@@ -3560,7 +3560,7 @@ class LocalTestCase(IntegrationTestCase):
             take_snapshot(src_root_dataset, fix(f"s{j}"))
         run_cmd(f"sudo -n zfs unmount {src_root_dataset}".split())
 
-    def test_all_snapshots_are_fully_replicated_even_though_every_recv_is_interrupted_and_resumed(self) -> None:
+    def test_snapshots_are_all_fully_replicated_even_though_every_recv_is_interrupted_and_resumed(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
         n = 4
