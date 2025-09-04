@@ -1032,7 +1032,9 @@ class Job:
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
                 snapshots_changed: int = snapshots_changed_dict.get(dataset, 0)
                 cache_file: str = monitor_last_modified_cache_file(remote, dataset, label, alert_cfg)
-                set_last_modification_time_safe(cache_file, unixtime_in_secs=(creation_unixtime_secs, snapshots_changed))
+                set_last_modification_time_safe(
+                    cache_file, unixtime_in_secs=(creation_unixtime_secs, snapshots_changed), if_more_recent=True
+                )
             warning_millis: int = alert_cfg.warning_millis
             critical_millis: int = alert_cfg.critical_millis
             alert_kind = alert_cfg.kind
@@ -1225,8 +1227,12 @@ class Job:
                 src_dataset: str = dst2src(dst_dataset)
                 src_snapshots_changed: int = self.src_properties[src_dataset].snapshots_changed
                 if not p.dry_run:
-                    set_last_modification_time_safe(cache_files[src_dataset], unixtime_in_secs=src_snapshots_changed)
-                    set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=dst_snapshots_changed)
+                    set_last_modification_time_safe(
+                        cache_files[src_dataset], unixtime_in_secs=src_snapshots_changed, if_more_recent=True
+                    )
+                    set_last_modification_time_safe(
+                        dst_cache_file, unixtime_in_secs=dst_snapshots_changed, if_more_recent=True
+                    )
 
         elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
         log.info(
@@ -1396,11 +1402,15 @@ class Job:
                     continue
                 creation_unixtimes: list[int] = []
                 for label in labels:
-                    creation_unixtime: int = cache.get_snapshots_changed(cache.last_modified_cache_file(src, dataset, label))
-                    if creation_unixtime == 0:
+                    # For per-label files, atime stores the latest matching snapshot's creation time,
+                    # while mtime stores the dataset-level snapshots_changed observed when this label file was written.
+                    # Sanity check: trust the label cache only if its mtime matches the current dataset-level '=' cache,
+                    # otherwise fall back to probing to avoid stale creation times after newer changes.
+                    atime, mtime = cache.get_snapshots_changed2(cache.last_modified_cache_file(src, dataset, label))
+                    if atime == 0 or (mtime != 0 and mtime != cached_snapshots_changed):
                         sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                         break
-                    creation_unixtimes.append(creation_unixtime)
+                    creation_unixtimes.append(atime)
                 if len(creation_unixtimes) == len(labels):
                     for j, label in enumerate(labels):
                         create_snapshot_if_latest_is_too_old(
