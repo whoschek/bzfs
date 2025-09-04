@@ -220,8 +220,8 @@ class TestSnapshotCache(AbstractTestCase):
             alert = alerts[0]
             cfg = alert.latest
             assert cfg is not None
-            h = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-            cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(alert.label), h), "", "", "")
+            hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(alert.label), hash_code), "", "", "")
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, cache_label)
 
             def fake_handle_minmax_snapshots(
@@ -291,7 +291,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Patch caching detection and network interactions to keep it unit-level
             call_state = {"i": 0}
 
-            def zgs_side_effect(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
+            def fake_zfs_get_snapshots_changed(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
                 i = call_state["i"]
                 call_state["i"] = i + 1
                 # Calls: 0=find_stale (maybe empty) -> return {}
@@ -304,7 +304,7 @@ class TestSnapshotCache(AbstractTestCase):
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=zgs_side_effect):
+            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed):
 
                 # First replication with newer snapshots_changed
                 job.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_000)
@@ -349,12 +349,11 @@ class TestSnapshotCache(AbstractTestCase):
             src_dataset = "pool/src"
             dst_dataset = "pool/dst"
             job.dst_dataset_exists[dst_dataset] = True
-
             dst_cache_file = SnapshotCache(job).last_modified_cache_file(job.params.dst, dst_dataset)
 
             call_state = {"i": 0}
 
-            def zgs_side_effect(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
+            def fake_zfs_get_snapshots_changed(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
                 i = call_state["i"]
                 call_state["i"] = i + 1
                 if i in (0, 2):
@@ -363,7 +362,7 @@ class TestSnapshotCache(AbstractTestCase):
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=zgs_side_effect):
+            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed):
 
                 job.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_000)
                 job.replicate_datasets([src_dataset], task_description="t", max_workers=1)
@@ -628,7 +627,6 @@ class TestSnapshotCache(AbstractTestCase):
             job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
 
             hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-
             cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(label), hash_code), "", "", "")
             cache_file = job.cache.last_modified_cache_file(job.params.src, dataset, cache_label)
             set_last_modification_time_safe(cache_file, unixtime_in_secs=(creation, snapshots_changed), if_more_recent=True)
@@ -818,41 +816,43 @@ class TestSnapshotCache(AbstractTestCase):
             a_call = {"i": 0}
             b_call = {"i": 0}
 
-            def zgs_a(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
+            def fake_zfs_get_snapshots_changed_a(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
                 i = a_call["i"]
                 a_call["i"] = i + 1
                 return {} if i == 0 else {dst_dataset: a_dst_changed}
 
-            def zgs_b(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
+            def fake_zfs_get_snapshots_changed_b(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
                 i = b_call["i"]
                 b_call["i"] = i + 1
                 return {} if i == 0 else {dst_dataset: b_dst_changed}
 
             # Synchronize start so that A writes first, then B writes after
-            ev_a_written = threading.Event()
+            event_a_written = threading.Event()
 
-            orig_set_lm_time_safe = snapshot_cache.set_last_modification_time_safe
+            orig_set_last_modification_time_safe = snapshot_cache.set_last_modification_time_safe
 
-            def wrapped_set_lm_time_safe(path: str, unixtime_in_secs: int, if_more_recent: bool = False) -> None:
+            def wrapped_set_last_modification_time_safe(
+                path: str, unixtime_in_secs: int, if_more_recent: bool = False
+            ) -> None:
                 # Call through to real function
-                orig_set_lm_time_safe(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
+                orig_set_last_modification_time_safe(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
                 # Mark when A wrote to the replication-scoped marker; use existence check to avoid flakiness
                 if path == last_repl_file:
-                    ev_a_written.set()
+                    event_a_written.set()
 
             def run_job_a() -> None:
-                with patch.object(job_a.cache, "zfs_get_snapshots_changed", side_effect=zgs_a):
+                with patch.object(job_a.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_a):
                     job_a.replicate_datasets([src_dataset], task_description="A", max_workers=1)
 
             def run_job_b() -> None:
                 # Wait until A has written to last_repl_file, then run B so it attempts to write older
-                ev_a_written.wait(timeout=5)
-                with patch.object(job_b.cache, "zfs_get_snapshots_changed", side_effect=zgs_b):
+                event_a_written.wait(timeout=5)
+                with patch.object(job_b.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_b):
                     job_b.replicate_datasets([src_dataset], task_description="B", max_workers=1)
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm_time_safe):
+            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe):
                 t_a = threading.Thread(target=run_job_a)
                 t_b = threading.Thread(target=run_job_b)
                 t_a.start()
@@ -960,37 +960,39 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Setup replicate job behavior
             job_r.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=repl_src_changed_a)
-            ev_mon_written = threading.Event()
+            event_monitoring_written = threading.Event()
 
-            orig_set_lm_time_safe = snapshot_cache.set_last_modification_time_safe
+            orig_set_last_modification_time_safe = snapshot_cache.set_last_modification_time_safe
 
-            def wrapped_set_lm_time_safe(path: str, unixtime_in_secs: int, if_more_recent: bool = False) -> None:
-                orig_set_lm_time_safe(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
+            def wrapped_set_last_modification_time_safe(
+                path: str, unixtime_in_secs: int, if_more_recent: bool = False
+            ) -> None:
+                orig_set_last_modification_time_safe(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
                 if path == mon_cache_file:
-                    ev_mon_written.set()
+                    event_monitoring_written.set()
 
-            zgs_r_state = {"i": 0}
+            fake_zfs_get_snapshots_changed_r_state = {"i": 0}
 
-            def zgs_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
+            def fake_zfs_get_snapshots_changed_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
                 # find-stale then refresh
-                i = zgs_r_state["i"]
-                zgs_r_state["i"] = i + 1
+                i = fake_zfs_get_snapshots_changed_r_state["i"]
+                fake_zfs_get_snapshots_changed_r_state["i"] = i + 1
                 return {} if i == 0 else {dst_dataset: repl_dst_changed_a}
 
-            def run_monitor() -> None:
+            def run_monitor_snapshots() -> None:
                 with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots):
                     job_m.monitor_snapshots(job_m.params.src, [src_dataset])
 
-            def run_replicate() -> None:
-                ev_mon_written.wait(timeout=5)
-                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r):
+            def run_replicate_datasets() -> None:
+                event_monitoring_written.wait(timeout=5)
+                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_r):
                     job_r.replicate_datasets([src_dataset], task_description="R", max_workers=1)
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm_time_safe):
-                t_m = threading.Thread(target=run_monitor)
-                t_r = threading.Thread(target=run_replicate)
+            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe):
+                t_m = threading.Thread(target=run_monitor_snapshots)
+                t_r = threading.Thread(target=run_replicate_datasets)
                 t_m.start()
                 t_r.start()
                 t_m.join()
@@ -1091,37 +1093,37 @@ class TestSnapshotCache(AbstractTestCase):
                     fn_on_finish_dataset(src_dataset)
                 return []
 
-            ev_snapshot_written = threading.Event()
+            event_snapshot_written = threading.Event()
 
-            orig_set_lm = snapshot_cache.set_last_modification_time_safe
+            orig_set_last_modification_time = snapshot_cache.set_last_modification_time_safe
 
-            def wrapped_set_lm(path: str, unixtime_in_secs: int, if_more_recent: bool = False) -> None:
-                orig_set_lm(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
+            def wrapped_set_last_modification_time(path: str, unixtime_in_secs: int, if_more_recent: bool = False) -> None:
+                orig_set_last_modification_time(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
                 if path in (label_cache_file, src_cache_file):
-                    ev_snapshot_written.set()
+                    event_snapshot_written.set()
 
-            zgs_r_state2 = {"i": 0}
+            fake_zfs_get_snapshots_changed_r_state2 = {"i": 0}
 
-            def zgs_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                i = zgs_r_state2["i"]
-                zgs_r_state2["i"] = i + 1
+            def fake_zfs_get_snapshots_changed_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
+                i = fake_zfs_get_snapshots_changed_r_state2["i"]
+                fake_zfs_get_snapshots_changed_r_state2["i"] = i + 1
                 return {} if i == 0 else {dst_dataset: repl_dst_changed}
 
-            def run_snapshot() -> None:
+            def run_find_datasets_to_snapshot() -> None:
                 with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots):
                     # Just compute plan; we don't need to create snapshots
                     job_s.find_datasets_to_snapshot([src_dataset])
 
-            def run_replicate() -> None:
-                ev_snapshot_written.wait(timeout=5)
-                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r):
+            def run_replicate_datasets() -> None:
+                event_snapshot_written.wait(timeout=5)
+                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_r):
                     job_r.replicate_datasets([src_dataset], task_description="R", max_workers=1)
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm):
-                t_s = threading.Thread(target=run_snapshot)
-                t_r = threading.Thread(target=run_replicate)
+            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time):
+                t_s = threading.Thread(target=run_find_datasets_to_snapshot)
+                t_r = threading.Thread(target=run_replicate_datasets)
                 t_s.start()
                 t_r.start()
                 t_s.join()
@@ -1211,17 +1213,19 @@ class TestSnapshotCache(AbstractTestCase):
             lbl_mon = alert.label
             cfg = alert.latest
             assert cfg is not None
-            h_m = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-            mon_cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(lbl_mon), h_m), "", "", "")
+            hashcode_m = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            mon_cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(lbl_mon), hashcode_m), "", "", "")
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, src_dataset, mon_cache_label)
 
             lbl_s = job_s.params.create_src_snapshots_config.snapshot_labels()[0]
             label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, src_dataset, lbl_s)
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, src_dataset)
 
-            h_r = hashlib.sha256(str(tuple(tuple(f) for f in job_r.params.snapshot_filters)).encode("utf-8")).hexdigest()
+            hashcode_r = hashlib.sha256(
+                str(tuple(tuple(f) for f in job_r.params.snapshot_filters)).encode("utf-8")
+            ).hexdigest()
             userhost_dir = self.dst_namespace(job_r)
-            repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, h_r), "", "", "")
+            repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hashcode_r), "", "", "")
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, src_dataset, repl_cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, dst_dataset)
 
@@ -1239,19 +1243,19 @@ class TestSnapshotCache(AbstractTestCase):
             job_r.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=r_src_sc)
 
             # Event sequencing
-            ev_mon_written = threading.Event()
-            ev_snap_written = threading.Event()
+            event_monitoring_written = threading.Event()
+            event_snap_written = threading.Event()
 
-            orig_set_lm = snapshot_cache.set_last_modification_time_safe
+            orig_set_last_modification_time = snapshot_cache.set_last_modification_time_safe
 
-            def wrapped_set_lm(path: str, unixtime_in_secs: int, if_more_recent: bool = False) -> None:
-                orig_set_lm(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
+            def wrapped_set_last_modification_time(path: str, unixtime_in_secs: int, if_more_recent: bool = False) -> None:
+                orig_set_last_modification_time(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
                 if path == mon_cache_file:
-                    ev_mon_written.set()
+                    event_monitoring_written.set()
                 if path in (label_cache_file, src_cache_file):
-                    ev_snap_written.set()
+                    event_snap_written.set()
 
-            def fake_handle_minmax_snapshots_mon(
+            def fake_handle_minmax_snapshots_monitor(
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1262,7 +1266,7 @@ class TestSnapshotCache(AbstractTestCase):
                 fn_latest(0, m_cre, src_dataset, "")
                 return []
 
-            def fake_handle_minmax_snapshots_snap(
+            def fake_handle_minmax_snapshots_on_find_snapshots(
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1275,34 +1279,34 @@ class TestSnapshotCache(AbstractTestCase):
                     fn_on_finish_dataset(src_dataset)
                 return []
 
-            zgs_r_state3 = {"i": 0}
+            fake_zfs_get_snapshots_changed_r_state3 = {"i": 0}
 
-            def zgs_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                i = zgs_r_state3["i"]
-                zgs_r_state3["i"] = i + 1
+            def fake_zfs_get_snapshots_changed_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
+                i = fake_zfs_get_snapshots_changed_r_state3["i"]
+                fake_zfs_get_snapshots_changed_r_state3["i"] = i + 1
                 return {} if i == 0 else {dst_dataset: r_dst_sc}
 
             # First phase: Monitor -> Snapshot -> Replicate (older)
-            def run_monitor() -> None:
-                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_mon):
+            def run_monitor_snapshots() -> None:
+                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_monitor):
                     job_m.monitor_snapshots(job_m.params.src, [src_dataset])
 
-            def run_snapshot() -> None:
-                ev_mon_written.wait(timeout=5)
-                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_snap):
+            def run_find_datasets_to_snapshot() -> None:
+                event_monitoring_written.wait(timeout=5)
+                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_on_find_snapshots):
                     job_s.find_datasets_to_snapshot([src_dataset])
 
-            def run_replicate() -> None:
-                ev_snap_written.wait(timeout=5)
-                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r):
+            def run_replicate_datasets() -> None:
+                event_snap_written.wait(timeout=5)
+                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_r):
                     job_r.replicate_datasets([src_dataset], task_description="R", max_workers=1)
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm):
-                t_m = threading.Thread(target=run_monitor)
-                t_s = threading.Thread(target=run_snapshot)
-                t_r = threading.Thread(target=run_replicate)
+            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time):
+                t_m = threading.Thread(target=run_monitor_snapshots)
+                t_s = threading.Thread(target=run_find_datasets_to_snapshot)
+                t_r = threading.Thread(target=run_replicate_datasets)
                 t_m.start()
                 t_s.start()
                 t_r.start()
@@ -1315,7 +1319,7 @@ class TestSnapshotCache(AbstractTestCase):
             job_s.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=s_sc)
             job_r.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=r_src_old)
 
-            def fake_handle_minmax_snapshots_mon_old(
+            def fake_handle_minmax_snapshots_monitor_old(
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1326,7 +1330,7 @@ class TestSnapshotCache(AbstractTestCase):
                 fn_latest(0, m_cre_old, src_dataset, "")
                 return []
 
-            def fake_handle_minmax_snapshots_snap_old(
+            def fake_handle_minmax_snapshots_on_find_snapshots_old(
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1338,27 +1342,29 @@ class TestSnapshotCache(AbstractTestCase):
                     fn_on_finish_dataset(src_dataset)
                 return []
 
-            zgs_r_old_state = {"i": 0}
+            fake_zfs_get_snapshots_changed_r_old_state = {"i": 0}
 
-            def zgs_r_old(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                i = zgs_r_old_state["i"]
-                zgs_r_old_state["i"] = i + 1
+            def fake_zfs_get_snapshots_changed_r_old(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
+                i = fake_zfs_get_snapshots_changed_r_old_state["i"]
+                fake_zfs_get_snapshots_changed_r_old_state["i"] = i + 1
                 return {} if i == 0 else {dst_dataset: r_dst_old}
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
             ):
-                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_mon_old), patch(
-                    "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm
+                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_monitor_old), patch(
+                    "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time
                 ):
                     job_m.monitor_snapshots(job_m.params.src, [src_dataset])
 
-                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_snap_old), patch(
-                    "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm
-                ):
+                with patch.object(
+                    job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_on_find_snapshots_old
+                ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time):
                     job_s.find_datasets_to_snapshot([src_dataset])
 
-                with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r_old):
+                with patch.object(
+                    job_r.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_r_old
+                ):
                     job_r.replicate_datasets([src_dataset], task_description="R2", max_workers=1)
 
             # Final assertions across all families
@@ -1446,9 +1452,9 @@ class TestSnapshotCache(AbstractTestCase):
             label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, src_dataset, lbl)
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, src_dataset)
 
-            h_r2 = hashlib.sha256(str(tuple(tuple(f) for f in job_r.params.snapshot_filters)).encode("utf-8")).hexdigest()
+            hash_r2 = hashlib.sha256(str(tuple(tuple(f) for f in job_r.params.snapshot_filters)).encode("utf-8")).hexdigest()
             userhost_dir = self.dst_namespace(job_r)
-            repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, h_r2), "", "", "")
+            repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_r2), "", "", "")
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, src_dataset, repl_cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, dst_dataset)
 
@@ -1488,11 +1494,11 @@ class TestSnapshotCache(AbstractTestCase):
             lbl_mon = alert.label
             cfg = alert.latest
             assert cfg is not None
-            h_m2 = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-            mon_cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(lbl_mon), h_m2), "", "", "")
+            hashcode_m2 = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            mon_cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(lbl_mon), hashcode_m2), "", "", "")
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, src_dataset, mon_cache_label)
 
-            def fake_handle_minmax_snapshots_mon(
+            def fake_handle_minmax_snapshots_monitor(
                 self: Job,
                 remote: Remote,
                 datasets: list[str],
@@ -1505,7 +1511,7 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_mon
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_monitor
             ):
                 job_m.monitor_snapshots(job_m.params.src, [src_dataset])
 
@@ -1544,16 +1550,16 @@ class TestSnapshotCache(AbstractTestCase):
             # Replicate repopulates last replicated and dst '='
             job_r.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_130)
 
-            zgs_r_state4 = {"i": 0}
+            fake_zfs_get_snapshots_changed_r_state4 = {"i": 0}
 
-            def zgs_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                i = zgs_r_state4["i"]
-                zgs_r_state4["i"] = i + 1
+            def fake_zfs_get_snapshots_changed_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
+                i = fake_zfs_get_snapshots_changed_r_state4["i"]
+                fake_zfs_get_snapshots_changed_r_state4["i"] = i + 1
                 return {} if i == 0 else {dst_dataset: 2_000_000_140}
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=zgs_r):
+            ), patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_r):
                 job_r.replicate_datasets([src_dataset], task_description="R", max_workers=1)
 
             self.assertEqual(2_000_000_130, SnapshotCache(job_r).get_snapshots_changed(last_repl_file))
@@ -2005,21 +2011,21 @@ class TestSnapshotCache(AbstractTestCase):
             args = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
 
             def mk_job(port: int) -> Job:
-                j = Job()
+                job = Job()
                 lp = MagicMock()
                 lp.last_modified_cache_dir = tmpdir
-                j.params = self.make_params(args=args, log_params=lp)
-                j.params.src.root_dataset = "pool/src"
-                j.params.dst.root_dataset = "pool/dst"
+                job.params = self.make_params(args=args, log_params=lp)
+                job.params.src.root_dataset = "pool/src"
+                job.params.dst.root_dataset = "pool/dst"
                 # Same user@host, different port
-                j.params.dst.basis_ssh_user = "u"
-                j.params.dst.basis_ssh_host = "h"
-                j.params.dst.ssh_port = port
+                job.params.dst.basis_ssh_user = "u"
+                job.params.dst.basis_ssh_host = "h"
+                job.params.dst.ssh_port = port
                 # parse_dataset_locator() is applied in validate_task(); emulate essential derived fields here
-                j.params.dst.ssh_user = "u"
-                j.params.dst.ssh_host = "h"
-                j.params.dst.ssh_user_host = "u@h"
-                return j
+                job.params.dst.ssh_user = "u"
+                job.params.dst.ssh_host = "h"
+                job.params.dst.ssh_user_host = "u@h"
+                return job
 
             job_a = mk_job(1111)
             job_b = mk_job(2222)
@@ -2062,20 +2068,20 @@ class TestSnapshotCache(AbstractTestCase):
             args = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
 
             def mk_job(port: int) -> Job:
-                j = Job()
+                job = Job()
                 lp = MagicMock()
                 lp.last_modified_cache_dir = tmpdir
-                j.params = self.make_params(args=args, log_params=lp)
-                j.params.src.root_dataset = "pool/src"
-                j.params.dst.root_dataset = "pool/dst"
-                j.params.dst.basis_ssh_user = "u"
-                j.params.dst.basis_ssh_host = "h"
-                j.params.dst.ssh_port = port
-                j.params.dst.ssh_user = "u"
-                j.params.dst.ssh_host = "h"
-                j.params.dst.ssh_user_host = "u@h"
-                j.dst_dataset_exists[j.params.dst.root_dataset] = True
-                return j
+                job.params = self.make_params(args=args, log_params=lp)
+                job.params.src.root_dataset = "pool/src"
+                job.params.dst.root_dataset = "pool/dst"
+                job.params.dst.basis_ssh_user = "u"
+                job.params.dst.basis_ssh_host = "h"
+                job.params.dst.ssh_port = port
+                job.params.dst.ssh_user = "u"
+                job.params.dst.ssh_host = "h"
+                job.params.dst.ssh_user_host = "u@h"
+                job.dst_dataset_exists[job.params.dst.root_dataset] = True
+                return job
 
             job_a = mk_job(1111)
             job_b = mk_job(2222)
@@ -2162,7 +2168,7 @@ class TestSnapshotCache(AbstractTestCase):
                 job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc)
 
             # Stub out remote queries; caching is enabled and dst snapshots_changed remains unchanged
-            def zgs_side_effect(_remote: Remote, datasets: list[str]) -> dict[str, int]:
+            def fake_zfs_get_snapshots_changed(_remote: Remote, datasets: list[str]) -> dict[str, int]:
                 return dict.fromkeys(datasets, sc)
 
             called: list[str] = []
@@ -2176,7 +2182,7 @@ class TestSnapshotCache(AbstractTestCase):
             called.clear()
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
-            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=zgs_side_effect):
+            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed):
                 job.replicate_datasets(src_datasets, task_description="stress-1", max_workers=1)
 
             self.assertEqual(n, job.num_cache_misses)
@@ -2203,7 +2209,7 @@ class TestSnapshotCache(AbstractTestCase):
             called.clear()
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
-            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=zgs_side_effect):
+            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed):
                 job.replicate_datasets(src_datasets, task_description="stress-2", max_workers=1)
 
             self.assertEqual(before_misses, job.num_cache_misses)  # no additional misses
@@ -2283,8 +2289,8 @@ class TestSnapshotCache(AbstractTestCase):
             alert = alerts[0]
             cfg = alert.latest
             assert cfg is not None
-            h = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-            cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(alert.label), h), "", "", "")
+            hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(alert.label), hash_code), "", "", "")
             sample = src_datasets[0]
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, sample, cache_label)
             at, mt = SnapshotCache(job).get_snapshots_changed2(cache_file)
