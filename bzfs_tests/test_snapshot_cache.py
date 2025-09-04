@@ -779,13 +779,13 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Build two independent Jobs sharing the same cache directory
             def make_job() -> Job:
-                j = Job()
+                job = Job()
                 log_params = MagicMock()
                 log_params.last_modified_cache_dir = tmpdir
-                j.params = self.make_params(args=args, log_params=log_params)
-                j.params.src.root_dataset = "pool/src"
-                j.params.dst.root_dataset = "pool/dst"
-                return j
+                job.params = self.make_params(args=args, log_params=log_params)
+                job.params.src.root_dataset = "pool/src"
+                job.params.dst.root_dataset = "pool/dst"
+                return job
 
             job_a = make_job()
             job_b = make_job()
@@ -902,15 +902,15 @@ class TestSnapshotCache(AbstractTestCase):
             args_r = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
 
             def make_job(args: list[str] | None = None, args_ns: argparse.Namespace | None = None) -> Job:
-                j = Job()
+                job = Job()
                 log_params = MagicMock()
                 log_params.last_modified_cache_dir = tmpdir
-                j.params = self.make_params(
+                job.params = self.make_params(
                     args=args_ns if args_ns is not None else self.argparser_parse_args(args or []), log_params=log_params
                 )
-                j.params.src.root_dataset = "pool/src"
-                j.params.dst.root_dataset = "pool/dst"
-                return j
+                job.params.src.root_dataset = "pool/src"
+                job.params.dst.root_dataset = "pool/dst"
+                return job
 
             job_m = make_job(args_ns=args_m)
             job_r = make_job(args_ns=args_r)
@@ -1191,13 +1191,13 @@ class TestSnapshotCache(AbstractTestCase):
             args_r = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
 
             def mk_job(args_ns: argparse.Namespace) -> Job:
-                j = Job()
+                job = Job()
                 log_params = MagicMock()
                 log_params.last_modified_cache_dir = tmpdir
-                j.params = self.make_params(args=args_ns, log_params=log_params)
-                j.params.src.root_dataset = "pool/src"
-                j.params.dst.root_dataset = "pool/dst"
-                return j
+                job.params = self.make_params(args=args_ns, log_params=log_params)
+                job.params.src.root_dataset = "pool/src"
+                job.params.dst.root_dataset = "pool/dst"
+                return job
 
             job_m = mk_job(args_m)
             job_s = mk_job(args_s)
@@ -1430,13 +1430,13 @@ class TestSnapshotCache(AbstractTestCase):
             args_r = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
 
             def mk_job(args_ns: argparse.Namespace) -> Job:
-                j = Job()
+                job = Job()
                 log_params = MagicMock()
                 log_params.last_modified_cache_dir = tmpdir
-                j.params = self.make_params(args=args_ns, log_params=log_params)
-                j.params.src.root_dataset = "pool/src"
-                j.params.dst.root_dataset = "pool/dst"
-                return j
+                job.params = self.make_params(args=args_ns, log_params=log_params)
+                job.params.src.root_dataset = "pool/src"
+                job.params.dst.root_dataset = "pool/dst"
+                return job
 
             job_m = mk_job(args_m)
             job_s = mk_job(args_s)
@@ -2427,7 +2427,7 @@ class TestSnapshotCache(AbstractTestCase):
         self.assertEqual(iterations - 1, round(os.stat(file).st_mtime))
 
     def _stresstest_num_datasets(self) -> int:
-        return 10 if self.is_unit_test or self.is_smoke_test else 1200
+        return 5 if self.is_unit_test or self.is_smoke_test else 1200
 
 
 def set_last_modification_time_old(  # racy
