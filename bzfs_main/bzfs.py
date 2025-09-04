@@ -1371,8 +1371,11 @@ class Job:
             next_event_dt = interner.intern(next_event_dt)
             msgs.append((next_event_dt, dataset, label, msg))
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
+                # Per-label cache stores (atime=creation, mtime=snapshots_changed) so later runs can safely trust
+                # creation only when the label's mtime matches the current dataset-level '=' cache value.
                 cache_file: str = self.cache.last_modified_cache_file(src, dataset, label)
-                set_last_modification_time_safe(cache_file, unixtime_in_secs=creation_unixtime, if_more_recent=True)
+                unixtimes: tuple[int, int] = (creation_unixtime, self.src_properties[dataset].snapshots_changed)
+                set_last_modification_time_safe(cache_file, unixtime_in_secs=unixtimes, if_more_recent=True)
 
         labels: list[SnapshotLabel] = []
         config_labels: list[SnapshotLabel] = config.snapshot_labels()
