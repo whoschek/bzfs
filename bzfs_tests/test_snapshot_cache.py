@@ -1803,6 +1803,93 @@ class TestSnapshotCache(AbstractTestCase):
                 job.find_datasets_to_snapshot([dataset])
             self.assertListEqual([], received)
 
+    def test_scheduler_label_cache_mtime_zero_is_untrusted(self) -> None:
+        """Scheduler must not trust per-label caches when label.mtime == 0.
+
+        This test formalizes a critical safety rule for the snapshot scheduler's fast path when
+        ``--cache-snapshots`` is enabled. Our cache model separates two pieces of state per dataset:
+        the dataset-level "=" cache file, whose mtime is the ZFS ``snapshots_changed`` property, and
+        per-label cache files, which encode a pair (creation, snapshots_changed) as
+        (atime, mtime). The scheduler may avoid probing via ``zfs list -t snapshot`` only when it
+        can prove that the per-label creation time (atime) was recorded under the same live
+        ``snapshots_changed`` value as currently observed in the dataset-level cache. That proof is
+        established by strict equality between the label file's mtime and the dataset "=" file's
+        mtime. Any deviation—including a zero mtime—indicates unknown provenance or a stale write
+        and must force a safe fallback probe.
+
+        We model a realistic scenario: the dataset-level "=" cache is seeded with a matured value
+        ``t0``, while the per-label file is pre-populated with a plausible creation time but
+        ``mtime=0``. Despite caches being "mature" with respect to the global threshold gating
+        (``TIME_THRESHOLD_SECS``), the per-label file lacks the essential consistency witness (the
+        matching mtime). Treating ``mtime==0`` as trusted would incorrectly permit reuse of this
+        per-label creation time, potentially skipping a due snapshot and undermining correctness.
+
+        The test stubs ``Job.handle_minmax_snapshots`` to record datasets for which a fallback is
+        invoked. With caching enabled and time advanced beyond the threshold, the scheduler should
+        decline the fast path and call the handler for our dataset. We assert that the dataset is
+        indeed recorded, proving that ``mtime==0`` is untrusted and that a probe is required.
+
+        This specification guards against subtle races and partial writes where per-label caches may
+        exist without a known-good ``snapshots_changed`` context. By codifying "mtime must equal the
+        dataset-level '=' mtime" and treating zero as untrusted, we maintain a soundness property for
+        the cache: fast decisions are taken only when both signals—creation time and change marker—are
+        internally consistent and sufficiently aged, otherwise the scheduler safely falls back to an
+        O(M log M) probe.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            args = self.argparser_parse_args(
+                [
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-plan",
+                    str({"bzfs": {"onsite": {"hourly": 1}}}),
+                    "pool/src",
+                    "pool/dst",
+                ]
+            )
+            job = Job()
+            lp = MagicMock()
+            lp.last_modified_cache_dir = tmpdir
+            job.params = self.make_params(args=args, log_params=lp)
+            job.params.src.root_dataset = "pool/src"
+
+            dataset = "pool/src"
+            label = job.params.create_src_snapshots_config.snapshot_labels()[0]
+            t0 = 2_000_000_000
+            creation_old = t0 - 3600
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t0)
+
+            # Seed dataset '=' with matured t0
+            dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
+            set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=t0, if_more_recent=True)
+
+            # Seed per-label cache with mtime=0 (unknown) and some creation time
+            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+            set_last_modification_time_safe(label_file, unixtime_in_secs=(creation_old, 0), if_more_recent=True)
+
+            received: list[str] = []
+
+            def fake_handle_minmax_snapshots(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                received.extend(datasets)
+                return []
+
+            # Advance time beyond threshold so maturity does not block cache trust
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ), patch("time.time", return_value=t0 + bzfs.TIME_THRESHOLD_SECS + 0.2):
+                job.find_datasets_to_snapshot([dataset])
+
+            # Correct behavior: fallback invoked due to label.mtime==0 (untrusted)
+            self.assertListEqual([dataset], received)
+
     def test_scheduler_label_cache_mtime_must_match_dataset_cache(self) -> None:
         """Validates the scheduler's staleness guard for per-label cache files: trust the label's atime (latest matching
         snapshot creation) only if the label file's mtime equals the dataset-level "=" file's ``snapshots_changed`` value at
