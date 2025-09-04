@@ -13,14 +13,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# shellcheck disable=SC2154
 
 set -e
-# Use tmpfs (RAM disk) as fast backing storage where available
-if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
-  TMPDIR="/run/user/$(id -u)/bzfs" # for Github Action on Linux, etc
-  export TMPDIR
-  mkdir -p "$TMPDIR"
-fi
-
 cd "$(dirname "$(realpath "$0")")"
-python3 -m bzfs_tests.test_all
+if [ "$bzfs_test_remote_userhost" = "" ]; then
+  # Use tmpfs (RAM disk) as fast backing storage where available
+  if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
+    TMPDIR="/run/user/$(id -u)/bzfs" # for Github Action on Linux, etc
+    export TMPDIR
+    mkdir -p "$TMPDIR"
+  fi
+  python3 -m bzfs_tests.test_all
+else
+  ./test_host.sh  # rsync's the local repo to remote host and runs tests there
+fi
