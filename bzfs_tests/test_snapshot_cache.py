@@ -17,7 +17,8 @@
 This module exercises the correctness invariants of bzfs snapshot caching across all cache families and interactions:
 
 - Dataset-level caches "=": One per dataset and location (src/dst) that stores the ZFS snapshots_changed property.
-  Used to cheaply decide whether further probing is necessary. Writes must be monotonic and trusted only when mature.
+  Used to cheaply decide whether "zfs list -t snapshot" (aka probing) is necessary. Writes must be monotonic and
+  trusted only when mature.
 
 - Replication-scoped caches "==": One per src dataset, destination user@host+dataset and snapshot-filter hash that
   records the last time a successful replication observed the src at a given snapshots_changed. Critical for cheap
@@ -55,18 +56,27 @@ import threading
 import time
 import unittest
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Callable
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+)
 from unittest.mock import (
     MagicMock,
     patch,
 )
 
-from bzfs_main import bzfs, snapshot_cache
+from bzfs_main import (
+    bzfs,
+    snapshot_cache,
+)
 from bzfs_main.bzfs import (
     DatasetProperties,
     Job,
 )
-from bzfs_main.configuration import Remote, SnapshotLabel
+from bzfs_main.configuration import (
+    Remote,
+    SnapshotLabel,
+)
 from bzfs_main.snapshot_cache import (
     SnapshotCache,
     set_last_modification_time,
@@ -1723,20 +1733,20 @@ class TestSnapshotCache(AbstractTestCase):
         ``zfs list -t snapshot`` by reading two local cache files: the dataset-level "=" file
         (mtime = ZFS ``snapshots_changed``) and a per-label file (atime = latest matching snapshot creation,
         mtime = the same ``snapshots_changed`` observed at write time). To defend against equal-second races and clock
-        skew, the cache must be “mature” before it is trusted. Monitor and replication already enforce this via
+        skew, the cache must be "mature" before it is trusted. Monitor and replication already enforce this via
         ``TIME_THRESHOLD_SECS``; this test locks in the same guarantee for the scheduler.
 
         Scenario and expectations: We construct a single-dataset scheduler job with an hourly plan. We pre-populate the
         dataset-level "=" cache with a recent ``snapshots_changed`` time (``t0``) and the label cache with a creation
         time older than the schedule window, paired with the same ``t0`` in mtime, modeling a fresh write. We then drive
-        two cases by patching ``time.time``: (1) “too recent”: now <= ``t0 + TIME_THRESHOLD_SECS``; (2) “mature”:
+        two cases by patching ``time.time``: (1) "too recent": now <= ``t0 + TIME_THRESHOLD_SECS``; (2) "mature":
         now > ``t0 + TIME_THRESHOLD_SECS``. In the first case, the scheduler must not trust caches and should fall back
         to probing (we assert the fallback handler is invoked for the dataset). In the second case, with the same cache
         and live state, the scheduler should trust caches and avoid probing (we assert the handler is not invoked).
 
         Why this matters: The maturity gate prevents unsafe reuse of just-written caches when ZFS timestamps advance in
         integer seconds. Without it, the scheduler could incorrectly skip probing immediately after writes, potentially
-        producing wrong “due” decisions and undermining both correctness and performance. With the gate, we retain the
+        producing wrong "due" decisions and undermining both correctness and performance. With the gate, we retain the
         intended performance benefits when it is safe, while guaranteeing a fallback when it is not.
 
         Test methodology: This test is hermetic (no ZFS). It uses a temporary directory for caches, mocks the scheduler's
@@ -1814,7 +1824,7 @@ class TestSnapshotCache(AbstractTestCase):
         can prove that the per-label creation time (atime) was recorded under the same live
         ``snapshots_changed`` value as currently observed in the dataset-level cache. That proof is
         established by strict equality between the label file's mtime and the dataset "=" file's
-        mtime. Any deviation—including a zero mtime—indicates unknown provenance or a stale write
+        mtime. Any deviation - including a zero mtime - indicates unknown provenance or a stale write
         and must force a safe fallback probe.
 
         We model a realistic scenario: the dataset-level "=" cache is seeded with a matured value
@@ -1832,7 +1842,7 @@ class TestSnapshotCache(AbstractTestCase):
         This specification guards against subtle races and partial writes where per-label caches may
         exist without a known-good ``snapshots_changed`` context. By codifying "mtime must equal the
         dataset-level '=' mtime" and treating zero as untrusted, we maintain a soundness property for
-        the cache: fast decisions are taken only when both signals—creation time and change marker—are
+        the cache: fast decisions are taken only when both signals - creation time and change marker - are
         internally consistent and sufficiently aged, otherwise the scheduler safely falls back to an
         O(M log M) probe.
         """
@@ -2107,6 +2117,291 @@ class TestSnapshotCache(AbstractTestCase):
             # Because paths are segregated by port, Job B processes the dataset (no false cheap-skip)
             self.assertListEqual([src_dataset], called)
 
+    def test_xcache_hits_when_replicating_many_unchanging_datasets(self) -> None:
+        """Stress test: validate high cache hit rates for replicating large number of datasets that do not change.
+
+        This test exercises the replicate path across a sizable, flat dataset tree (n=1200) to prove that the snapshot
+        cache eliminates repeated probing when input state is stable. The first pass initializes the replication-scoped
+        src "==" markers and the dst dataset-level "=" markers from real filesystem timestamps via
+        set_last_modification_time_safe(), guarded by flock and if_more_recent=True. The second pass is intentionally a
+        no-change cycle: src snapshots_changed remains identical and the dst snapshots_changed returned by the stubbed
+        zfs_get_snapshots_changed() side effect matches. The replicate planner therefore classifies all datasets as
+        already up-to-date using cache equality under the TIME_THRESHOLD_SECS maturity guard, yielding 100% cache hits
+        and zero further work (replicate_dataset is never invoked).
+
+        The test verifies: (1) hit/miss counters (first run: misses=n, second run: hits=n), (2) on-disk cache contents
+        for a representative dataset (src "==" and dst "=" carry the expected integer seconds), and (3) strict
+        unit-level isolation without requiring the zfs CLI or network access. This provides a realistic, repeatable
+        performance signal for the --cache-snapshots feature in large deployments.
+        """
+
+        # Large but safe number of datasets for stress; adjust if CI is slow
+        n = self._stresstest_num_datasets()
+        now = int(time.time())
+        sc = now - 5  # matured snapshots_changed to pass threshold gating; pretends last snapshot was created 5 seconds ago
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            args = self.argparser_parse_args(["pool/src", "pool/dst"])  # datasets only
+            log_params = MagicMock()
+            log_params.last_modified_cache_dir = tmpdir
+            job = Job()
+            job.params = self.make_params(args=args, log_params=log_params)
+            job.params.src.root_dataset = "pool/src"
+            job.params.dst.root_dataset = "pool/dst"
+
+            # Build a large, flat tree of src datasets and corresponding dst datasets
+            src_datasets = [f"pool/src/d{i:04d}" for i in range(n)]
+            dst_datasets = [ds.replace("pool/src", "pool/dst", 1) for ds in src_datasets]
+
+            # Mark dst existence to avoid error-based skipping
+            for ds in dst_datasets:
+                job.dst_dataset_exists[ds] = True
+
+            # Populate src properties with unchanged snapshots_changed
+            for ds in src_datasets:
+                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc)
+
+            # Stub out remote queries; caching is enabled and dst snapshots_changed remains unchanged
+            def zgs_side_effect(_remote: Remote, datasets: list[str]) -> dict[str, int]:
+                return dict.fromkeys(datasets, sc)
+
+            called: list[str] = []
+
+            def fake_replicate_dataset(job_: Job, ds: str, tid: str, retry: RetryPolicy) -> bool:
+                called.append(ds)
+                return True
+
+            # First run: populate caches (expect misses == N, hits == 0; replicate called N times)
+            job.num_cache_hits = job.num_cache_misses = 0
+            called.clear()
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
+                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
+            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=zgs_side_effect):
+                job.replicate_datasets(src_datasets, task_description="stress-1", max_workers=1)
+
+            self.assertEqual(n, job.num_cache_misses)
+            self.assertEqual(0, job.num_cache_hits)
+            self.assertEqual(n, len(called))  # processed all datasets on first run
+
+            # Verify on-disk cache timestamps for a sample dataset hit disk (src "==" and dst "=")
+            sample_src = src_datasets[0]
+            sample_dst = dst_datasets[0]
+            # Replication-scoped src "==" cache path used by replicate_datasets()
+            hash_key = tuple(tuple(f) for f in job.params.snapshot_filters)
+            hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
+            userhost_dir = job.params.dst.cache_namespace()
+            repl_cache_label = SnapshotLabel(os.path.join("==", userhost_dir, sample_dst, hash_code), "", "", "")
+            src_repl_file = job.cache.last_modified_cache_file(job.params.src, sample_src, repl_cache_label)
+            # Dataset-level dst "=" cache path
+            dst_eq_file = job.cache.last_modified_cache_file(job.params.dst, sample_dst)
+            # Read back (ensure actual disk timestamps match expected values)
+            self.assertEqual(sc, SnapshotCache(job).get_snapshots_changed(src_repl_file))
+            self.assertEqual(sc, SnapshotCache(job).get_snapshots_changed(dst_eq_file))
+
+            # Second run: unchanged; should be cheap-skipped entirely via caches
+            before_hits, before_misses = job.num_cache_hits, job.num_cache_misses
+            called.clear()
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
+                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
+            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=zgs_side_effect):
+                job.replicate_datasets(src_datasets, task_description="stress-2", max_workers=1)
+
+            self.assertEqual(before_misses, job.num_cache_misses)  # no additional misses
+            self.assertEqual(before_hits + n, job.num_cache_hits)  # all datasets hit cache
+            self.assertEqual(0, len(called))  # replicate not invoked on second run
+
+    def test_xcache_hits_when_monitoring_many_unchanging_datasets(self) -> None:
+        """Stress test: monitor path fully leverages the cache under no-change cycles across many datasets.
+
+        This test validates that --monitor-snapshots achieves complete cache hits when snapshots_changed has not
+        advanced since the prior run. We simulate a large set of datasets (n=1200) and perform two monitor passes. The
+        first pass uses a stubbed handle_minmax_snapshots() to provide the creation time for each monitored label and
+        writes per-dataset-and-label "===" cache entries on disk: atime stores the creation, mtime stores the dataset's
+        snapshots_changed. On the second pass, we advance wall-clock time beyond TIME_THRESHOLD_SECS so those entries are
+        considered "mature". Given equality between live snapshots_changed (from job.src_properties) and cached mtime,
+        monitor trusts the cache and emits alerts (OK in our setup) without performing any fallback scanning.
+
+        We assert: (1) first run increments misses by n (cache population), (2) second run increments hits by n with no
+        additional misses, (3) a sample "===" cache file contains the exact creation and snapshots_changed seconds, and
+        (4) no fallback to handle_minmax_snapshots occurs on the second pass. No zfs CLI is required.
+        """
+
+        n = self._stresstest_num_datasets()
+        creation = 1_700_000_000  # arbitrary, stable
+        sc = creation + 50  # snapshots_changed > creation
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            plan = {"org": {"onsite": {"daily": {"latest": {"warning": "1 seconds", "critical": "2 seconds"}}}}}
+            args = self.argparser_parse_args(
+                [
+                    "--monitor-snapshots",
+                    str(plan),
+                    "--monitor-snapshots-dont-warn",
+                    "--monitor-snapshots-dont-crit",
+                    "pool/src",
+                    "pool/dst",
+                ]
+            )
+            lp = MagicMock()
+            lp.last_modified_cache_dir = tmpdir
+            job = Job()
+            job.params = self.make_params(args=args, log_params=lp)
+            job.params.src.root_dataset = "pool/src"
+            job.params.dst.root_dataset = "pool/dst"
+            # prevent alerts by aligning current time with creation
+            job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(creation, tz=timezone.utc)
+
+            src_datasets = [f"pool/src/d{i:04d}" for i in range(n)]
+            for ds in src_datasets:
+                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc)
+
+            # First run: populate monitor caches via handle_minmax
+            def fake_handle_minmax_snapshots1(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                for ds in datasets:
+                    fn_latest(0, creation, ds, "s")
+                return []
+
+            job.num_cache_hits = job.num_cache_misses = 0
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots1
+            ):
+                job.monitor_snapshots(job.params.src, src_datasets)
+
+            self.assertEqual(n, job.num_cache_misses)
+            self.assertEqual(0, job.num_cache_hits)
+
+            # Verify on-disk per-label monitor cache for one dataset
+            alerts = job.params.monitor_snapshots_config.alerts
+            alert = alerts[0]
+            cfg = alert.latest
+            assert cfg is not None
+            h = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(alert.label), h), "", "", "")
+            sample = src_datasets[0]
+            cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, sample, cache_label)
+            at, mt = SnapshotCache(job).get_snapshots_changed2(cache_file)
+            self.assertEqual(creation, at)
+            self.assertEqual(sc, mt)
+
+            # Second run: matured trust → all cache hits; ensure no fallback invocation
+            received_count = {"n": 0}
+
+            def fake_handle_minmax_snapshots2(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                received_count["n"] += len(datasets)
+                return []
+
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots2
+            ), patch("time.time", return_value=sc + bzfs.TIME_THRESHOLD_SECS + 1.0):
+                job.monitor_snapshots(job.params.src, src_datasets)
+
+            self.assertEqual(n, job.num_cache_hits)  # added n hits
+            self.assertEqual(n, job.num_cache_misses)  # unchanged
+            self.assertEqual(0, received_count["n"])  # no fallback
+
+    def test_xcache_hits_when_snapshotting_many_unchanging_datasets_that_are_not_due_yet(self) -> None:
+        """Stress test: snapshot scheduler relies exclusively on caches when the system is steady-state.
+
+        This test covers the snapshot scheduling path used by --create-src-snapshots. We pre-populate both the dataset-
+        level "=" cache (mtime = snapshots_changed) and the per-label creation caches (atime = creation, mtime = the
+        same snapshots_changed) for n=1200 datasets. With these cache invariants in place, find_datasets_to_snapshot()
+        can answer entirely from the cache as long as two conditions hold: (1) the dataset-level "=" entry equals the
+        currently observed snapshots_changed (from job.src_properties) and is older than TIME_THRESHOLD_SECS; and (2) the
+        per-label cache's mtime equals the dataset "=" entry, preventing stale creation times.
+
+        We set the current scheduler time to a known instant (timezone-aware) and ensure that no dataset is due. The
+        test asserts: (a) zero fallback to handle_minmax_snapshots(), and (b) the returned per-label mapping contains
+        only empty lists (no datasets scheduled). This validates the intended, high-performance "all cache, no probing"
+        steady-state behavior..
+        """
+
+        n = self._stresstest_num_datasets()
+        # Use a fixed timestamp for deterministic label and creation
+        base_dt = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        creation = int(base_dt.timestamp())
+        sc = creation + 50
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            args = self.argparser_parse_args(
+                [
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-plan",
+                    str({"bzfs": {"onsite": {"hourly": 1}}}),
+                    "pool/src",
+                    "pool/dst",
+                ]
+            )
+            lp = MagicMock()
+            lp.last_modified_cache_dir = tmpdir
+            job = Job()
+            job.params = self.make_params(args=args, log_params=lp)
+            job.params.src.root_dataset = "pool/src"
+            job.params.dst.root_dataset = "pool/dst"
+            job.params.create_src_snapshots_config.current_datetime = base_dt
+            # Ensure scheduler uses timezone-aware datetimes for cache trust and next_event comparisons
+            job.params.create_src_snapshots_config.tz = timezone.utc
+
+            src_datasets = [f"pool/src/d{i:04d}" for i in range(n)]
+            src_datasets.sort()
+            for ds in src_datasets:
+                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc)
+
+            # Prepare caches: dataset-level '=' and per-label caches with matching mtime=sc and atime=creation
+            labels = job.params.create_src_snapshots_config.snapshot_labels()
+            self.assertGreaterEqual(len(labels), 1)
+            for ds in src_datasets:
+                # '=' dataset-level cache
+                set_last_modification_time_safe(
+                    SnapshotCache(job).last_modified_cache_file(job.params.src, ds), unixtime_in_secs=sc, if_more_recent=True
+                )
+                # Per-label caches (atime=creation, mtime=sc)
+                for lbl in labels:
+                    set_last_modification_time_safe(
+                        SnapshotCache(job).last_modified_cache_file(job.params.src, ds, lbl),
+                        unixtime_in_secs=(creation, sc),
+                        if_more_recent=True,
+                    )
+
+            # Detect any fallback: should be none when caches are trusted and equal
+            received_count = {"n": 0}
+
+            def fake_handle_minmax_snapshots(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels_: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                received_count["n"] += len(datasets)
+                return []
+
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ), patch("time.time", return_value=sc + bzfs.TIME_THRESHOLD_SECS + 1.0):
+                mapping = job.find_datasets_to_snapshot(src_datasets)
+
+            # No datasets are due; mapping contains only empty lists; and no fallback probing was required
+            self.assertTrue(all(len(v) == 0 for v in mapping.values()))
+            self.assertEqual(0, received_count["n"])  # everything answered from caches
+
     @unittest.skip("benchmark; enable for performance comparison")
     def test_benchmark_set_last_modification_time(self) -> None:
 
@@ -2124,6 +2419,9 @@ class TestSnapshotCache(AbstractTestCase):
                 elapsed = time.perf_counter() - start
                 print(name, elapsed)
         self.assertEqual(iterations - 1, round(os.stat(file).st_mtime))
+
+    def _stresstest_num_datasets(self) -> int:
+        return 10 if self.is_unit_test or self.is_smoke_test else 1200
 
 
 def set_last_modification_time_old(  # racy
