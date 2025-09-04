@@ -1118,7 +1118,8 @@ class TestSnapshotCache(AbstractTestCase):
             # Assert snapshot caches reflect newer values and replicate caches reflect their written values
             at, mt = SnapshotCache(job_s).get_snapshots_changed2(label_cache_file)
             self.assertEqual(snap_creation, at)
-            self.assertEqual(snap_creation, mt)
+            # Scheduler per-label mtime must equal snapshots_changed observed at write time
+            self.assertEqual(snap_src_changed, mt)
             self.assertEqual(snap_src_changed, SnapshotCache(job_s).get_snapshots_changed(src_cache_file))
             self.assertEqual(repl_src_changed, SnapshotCache(job_r).get_snapshots_changed(last_repl_file))
             self.assertEqual(repl_dst_changed, SnapshotCache(job_r).get_snapshots_changed(dst_cache_file))
@@ -1354,7 +1355,8 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(m_sc, mt)
             at, mt = SnapshotCache(job_s).get_snapshots_changed2(label_cache_file)
             self.assertEqual(s_cre, at)
-            self.assertEqual(s_cre, mt)
+            # Scheduler per-label mtime must equal snapshots_changed
+            self.assertEqual(s_sc, mt)
             self.assertEqual(s_sc, SnapshotCache(job_s).get_snapshots_changed(src_cache_file))
             self.assertEqual(r_src_sc, SnapshotCache(job_r).get_snapshots_changed(last_repl_file))
             self.assertEqual(r_dst_sc, SnapshotCache(job_r).get_snapshots_changed(dst_cache_file))
@@ -1523,7 +1525,8 @@ class TestSnapshotCache(AbstractTestCase):
 
             at, mt = SnapshotCache(job_s).get_snapshots_changed2(label_cache_file)
             self.assertEqual(2_000_000_090, at)
-            self.assertEqual(2_000_000_090, mt)
+            # Scheduler per-label mtime must equal snapshots_changed
+            self.assertEqual(s_sc, mt)
             self.assertEqual(s_sc, SnapshotCache(job_s).get_snapshots_changed(src_cache_file))
 
             # Replicate repopulates last replicated and dst '='
@@ -1625,6 +1628,91 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertIn(dataset, result[label])
             # And we should not have needed to fall back to handle_minmax
             self.assertListEqual([], called)
+
+    def test_scheduler_populates_label_cache_with_snapshots_changed_mtime(self) -> None:
+        """Scheduler must persist per-label caches as (atime=creation, mtime=snapshots_changed).
+
+        Purpose: Lock in the intended contract for the snapshot scheduler's per-label cache format under
+        ``--cache-snapshots``. The cache for each label must encode two distinct signals that downstream logic relies
+        on: the creation time of the latest matching snapshot (atime) and the dataset's current ``snapshots_changed``
+        property observed at the time of writing (mtime). Correctly separating these concerns enables a safe, cheap
+        fast path in subsequent scheduler runs: we may trust the cached creation time only when the label file's mtime
+        equals the dataset-level "=" cache file's mtime, i.e. when both reflect the same live ``snapshots_changed``.
+
+        Background: The scheduler first attempts to answer "is a new snapshot due?" purely from cache. If the dataset-
+        level "=" cache indicates a mature, unchanged ``snapshots_changed`` value and the per-label cache also reflects
+        that same value in mtime, then the per-label atime is considered trustworthy and an expensive probe via
+        ``zfs list -t snapshot`` can be avoided. However, if the label cache encodes the wrong mtime (e.g., duplicates
+        the creation time instead of the live ``snapshots_changed``), the equality check fails and the scheduler is
+        forced to fall back to probing on every run, silently defeating the design and its performance/correctness
+        trade-off.
+
+        Setup: We construct a minimal scheduler job with an hourly plan and deterministic timestamps. We deliberately
+        drive the fallback path by leaving the dataset "=" cache initially empty, then supply a specific creation time
+        through a stubbed ``handle_minmax_snapshots`` while also invoking the scheduler's dataset-finish hook so that the
+        dataset-level "=" file records the same ``snapshots_changed`` used by the scheduler during this write.
+
+        Verification: After ``find_datasets_to_snapshot`` completes, we read the per-label cache and assert that
+        atime equals the supplied creation time and mtime equals the scheduler's observed ``snapshots_changed``. This
+        proves that future runs can trust the label atime when the dataset "=" cache matches, satisfying the design's
+        safety invariant.
+
+        Non-goals: This test does not exercise scheduling decisions themselves nor timerange logic; those are covered
+        elsewhere. It strictly validates the persistence format and its precondition for safe reuse.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            # Arrange: scheduler job with hourly plan
+            args = self.argparser_parse_args(
+                [
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-plan",
+                    str({"bzfs": {"onsite": {"hourly": 1}}}),
+                    "pool/src",
+                    "pool/dst",
+                ]
+            )
+            job = Job()
+            lp = MagicMock()
+            lp.last_modified_cache_dir = tmpdir
+            job.params = self.make_params(args=args, log_params=lp)
+            job.params.src.root_dataset = "pool/src"
+
+            # Fixed times
+            creation = 2_000_000_000
+            snapshots_changed = 2_000_003_600
+            dataset = "pool/src"
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
+
+            # Resolve label file path
+            label = job.params.create_src_snapshots_config.snapshot_labels()[0]
+            label_path = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+
+            # Force fallback by leaving dataset '=' cache empty and feed creation via handle_minmax
+            def fake_handle_minmax_snapshots(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                fn_latest(0, creation, dataset, "s")
+                # Ensure dataset-level '=' is also updated by the scheduler path
+                if fn_on_finish_dataset:
+                    fn_on_finish_dataset(dataset)
+                return []
+
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ):
+                job.find_datasets_to_snapshot([dataset])
+
+            # Assert: per-label cache must have (creation, snapshots_changed)
+            atime, mtime = SnapshotCache(job).get_snapshots_changed2(label_path)
+            self.assertEqual(creation, atime)
+            self.assertEqual(snapshots_changed, mtime)
 
     def test_scheduler_label_cache_mtime_must_match_dataset_cache(self) -> None:
         """Validates the scheduler's staleness guard for per-label cache files: trust the label's atime (latest matching
