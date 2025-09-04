@@ -204,10 +204,10 @@ class TestSnapshotCache(AbstractTestCase):
                     "pool/dst",
                 ]
             )
-            lp = MagicMock()
-            lp.last_modified_cache_dir = tmpdir
+            log_params = MagicMock()
+            log_params.last_modified_cache_dir = tmpdir
             job = Job()
-            job.params = self.make_params(args=args, log_params=lp)
+            job.params = self.make_params(args=args, log_params=log_params)
             job.params.create_src_snapshots_config.current_datetime = datetime(2024, 1, 1, 0, 0, 10, tzinfo=timezone.utc)
 
             dataset = "pool/src"
@@ -780,9 +780,9 @@ class TestSnapshotCache(AbstractTestCase):
             # Build two independent Jobs sharing the same cache directory
             def make_job() -> Job:
                 j = Job()
-                lp = MagicMock()
-                lp.last_modified_cache_dir = tmpdir
-                j.params = self.make_params(args=args, log_params=lp)
+                log_params = MagicMock()
+                log_params.last_modified_cache_dir = tmpdir
+                j.params = self.make_params(args=args, log_params=log_params)
                 j.params.src.root_dataset = "pool/src"
                 j.params.dst.root_dataset = "pool/dst"
                 return j
@@ -903,10 +903,10 @@ class TestSnapshotCache(AbstractTestCase):
 
             def make_job(args: list[str] | None = None, args_ns: argparse.Namespace | None = None) -> Job:
                 j = Job()
-                lp = MagicMock()
-                lp.last_modified_cache_dir = tmpdir
+                log_params = MagicMock()
+                log_params.last_modified_cache_dir = tmpdir
                 j.params = self.make_params(
-                    args=args_ns if args_ns is not None else self.argparser_parse_args(args or []), log_params=lp
+                    args=args_ns if args_ns is not None else self.argparser_parse_args(args or []), log_params=log_params
                 )
                 j.params.src.root_dataset = "pool/src"
                 j.params.dst.root_dataset = "pool/dst"
@@ -1039,16 +1039,16 @@ class TestSnapshotCache(AbstractTestCase):
                 ]
             )
             job_s = Job()
-            lp = MagicMock()
-            lp.last_modified_cache_dir = tmpdir
-            job_s.params = self.make_params(args=args, log_params=lp)
+            log_params = MagicMock()
+            log_params.last_modified_cache_dir = tmpdir
+            job_s.params = self.make_params(args=args, log_params=log_params)
             job_s.params.src.root_dataset = "pool/src"
             job_s.params.dst.root_dataset = "pool/dst"
 
             job_r = Job()  # replicate job
-            lp2 = MagicMock()
-            lp2.last_modified_cache_dir = tmpdir
-            job_r.params = self.make_params(args=self.argparser_parse_args(["pool/src", "pool/dst"]), log_params=lp2)
+            log_params2 = MagicMock()
+            log_params2.last_modified_cache_dir = tmpdir
+            job_r.params = self.make_params(args=self.argparser_parse_args(["pool/src", "pool/dst"]), log_params=log_params2)
             job_r.params.src.root_dataset = "pool/src"
             job_r.params.dst.root_dataset = "pool/dst"
             job_r.dst_dataset_exists["pool/dst"] = True
@@ -1192,9 +1192,9 @@ class TestSnapshotCache(AbstractTestCase):
 
             def mk_job(args_ns: argparse.Namespace) -> Job:
                 j = Job()
-                lp = MagicMock()
-                lp.last_modified_cache_dir = tmpdir
-                j.params = self.make_params(args=args_ns, log_params=lp)
+                log_params = MagicMock()
+                log_params.last_modified_cache_dir = tmpdir
+                j.params = self.make_params(args=args_ns, log_params=log_params)
                 j.params.src.root_dataset = "pool/src"
                 j.params.dst.root_dataset = "pool/dst"
                 return j
@@ -1431,9 +1431,9 @@ class TestSnapshotCache(AbstractTestCase):
 
             def mk_job(args_ns: argparse.Namespace) -> Job:
                 j = Job()
-                lp = MagicMock()
-                lp.last_modified_cache_dir = tmpdir
-                j.params = self.make_params(args=args_ns, log_params=lp)
+                log_params = MagicMock()
+                log_params.last_modified_cache_dir = tmpdir
+                j.params = self.make_params(args=args_ns, log_params=log_params)
                 j.params.src.root_dataset = "pool/src"
                 j.params.dst.root_dataset = "pool/dst"
                 return j
@@ -1591,9 +1591,9 @@ class TestSnapshotCache(AbstractTestCase):
                 ]
             )
             job = Job()
-            lp = MagicMock()
-            lp.last_modified_cache_dir = tmpdir
-            job.params = self.make_params(args=args, log_params=lp)
+            log_params = MagicMock()
+            log_params.last_modified_cache_dir = tmpdir
+            job.params = self.make_params(args=args, log_params=log_params)
             job.params.src.root_dataset = "pool/src"
 
             # Times: creation much older than hourly interval; snapshots_changed is recent
@@ -1691,9 +1691,9 @@ class TestSnapshotCache(AbstractTestCase):
                 ]
             )
             job = Job()
-            lp = MagicMock()
-            lp.last_modified_cache_dir = tmpdir
-            job.params = self.make_params(args=args, log_params=lp)
+            log_params = MagicMock()
+            log_params.last_modified_cache_dir = tmpdir
+            job.params = self.make_params(args=args, log_params=log_params)
             job.params.src.root_dataset = "pool/src"
 
             # Fixed times
@@ -1772,9 +1772,9 @@ class TestSnapshotCache(AbstractTestCase):
                 ]
             )
             job = Job()
-            lp = MagicMock()
-            lp.last_modified_cache_dir = tmpdir
-            job.params = self.make_params(args=args, log_params=lp)
+            log_params = MagicMock()
+            log_params.last_modified_cache_dir = tmpdir
+            job.params = self.make_params(args=args, log_params=log_params)
             job.params.src.root_dataset = "pool/src"
 
             dataset = "pool/src"
@@ -1864,9 +1864,9 @@ class TestSnapshotCache(AbstractTestCase):
                 ]
             )
             job = Job()
-            lp = MagicMock()
-            lp.last_modified_cache_dir = tmpdir
-            job.params = self.make_params(args=args, log_params=lp)
+            log_params = MagicMock()
+            log_params.last_modified_cache_dir = tmpdir
+            job.params = self.make_params(args=args, log_params=log_params)
             job.params.src.root_dataset = "pool/src"
 
             dataset = "pool/src"
@@ -1946,9 +1946,9 @@ class TestSnapshotCache(AbstractTestCase):
                 ]
             )
             job = Job()
-            lp = MagicMock()
-            lp.last_modified_cache_dir = tmpdir
-            job.params = self.make_params(args=args, log_params=lp)
+            log_params = MagicMock()
+            log_params.last_modified_cache_dir = tmpdir
+            job.params = self.make_params(args=args, log_params=log_params)
             job.params.src.root_dataset = "pool/src"
 
             dataset = "pool/src"
@@ -2012,9 +2012,9 @@ class TestSnapshotCache(AbstractTestCase):
 
             def mk_job(port: int) -> Job:
                 job = Job()
-                lp = MagicMock()
-                lp.last_modified_cache_dir = tmpdir
-                job.params = self.make_params(args=args, log_params=lp)
+                log_params = MagicMock()
+                log_params.last_modified_cache_dir = tmpdir
+                job.params = self.make_params(args=args, log_params=log_params)
                 job.params.src.root_dataset = "pool/src"
                 job.params.dst.root_dataset = "pool/dst"
                 # Same user@host, different port
@@ -2069,9 +2069,9 @@ class TestSnapshotCache(AbstractTestCase):
 
             def mk_job(port: int) -> Job:
                 job = Job()
-                lp = MagicMock()
-                lp.last_modified_cache_dir = tmpdir
-                job.params = self.make_params(args=args, log_params=lp)
+                log_params = MagicMock()
+                log_params.last_modified_cache_dir = tmpdir
+                job.params = self.make_params(args=args, log_params=log_params)
                 job.params.src.root_dataset = "pool/src"
                 job.params.dst.root_dataset = "pool/dst"
                 job.params.dst.basis_ssh_user = "u"
@@ -2248,10 +2248,10 @@ class TestSnapshotCache(AbstractTestCase):
                     "pool/dst",
                 ]
             )
-            lp = MagicMock()
-            lp.last_modified_cache_dir = tmpdir
+            log_params = MagicMock()
+            log_params.last_modified_cache_dir = tmpdir
             job = Job()
-            job.params = self.make_params(args=args, log_params=lp)
+            job.params = self.make_params(args=args, log_params=log_params)
             job.params.src.root_dataset = "pool/src"
             job.params.dst.root_dataset = "pool/dst"
             # prevent alerts by aligning current time with creation
@@ -2353,10 +2353,10 @@ class TestSnapshotCache(AbstractTestCase):
                     "pool/dst",
                 ]
             )
-            lp = MagicMock()
-            lp.last_modified_cache_dir = tmpdir
+            log_params = MagicMock()
+            log_params.last_modified_cache_dir = tmpdir
             job = Job()
-            job.params = self.make_params(args=args, log_params=lp)
+            job.params = self.make_params(args=args, log_params=log_params)
             job.params.src.root_dataset = "pool/src"
             job.params.dst.root_dataset = "pool/dst"
             job.params.create_src_snapshots_config.current_datetime = base_dt
