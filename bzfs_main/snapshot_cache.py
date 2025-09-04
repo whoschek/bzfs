@@ -12,8 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Stores snapshot metadata in fast disk inodes to avoid repeated 'zfs list -t snapshot' calls, without adding external
-dependencies or complex databases."""
+"""Stores snapshot metadata in fast disk inodes to avoid repeated 'zfs list -t snapshot' calls.
+
+Purpose: Provide a lightweight, dependency-free cache for ZFS snapshot scheduling, monitoring and replication.
+
+Assumptions: OpenZFS timestamps are UTC integer seconds; file atime/mtime are reliable and atomically updateable with
+monotonic guards; multiple concurrent jobs may update cache files out of order.
+
+Design Rationale:
+- Dataset-level '=' file per dataset/location:
+    - mtime stores ZFS "snapshots_changed" (UTC unix seconds). Monotonic writes.
+- Replication-scoped '==' file per src dataset and dst+filters:
+    - mtime stores last replicated src snapshots_changed. Monotonic.
+- Monitor '===' per dataset and label:
+    - atime stores latest/oldest snapshot creation; mtime stores snapshots_changed.
+    - Monotonic writes with small time-threshold gating elsewhere before trusting fresh values.
+- Snapshot scheduler per-label cache (under src dataset):
+    - atime stores creation; mtime stores snapshots_changed at write time.
+    - The scheduler trusts atime only if the per-label mtime equals the current dataset-level '=' mtime to avoid staleness.
+"""
 
 from __future__ import annotations
 import errno
@@ -21,9 +38,6 @@ import fcntl
 import os
 import stat
 from collections import defaultdict
-from os import stat as os_stat
-from os import utime as os_utime
-from os.path import join as os_path_join
 from subprocess import CalledProcessError
 from typing import (
     TYPE_CHECKING,
@@ -60,7 +74,7 @@ class SnapshotCache:
     def get_snapshots_changed2(path: str) -> tuple[int, int]:
         """Like zfs_get_snapshots_changed() but reads from local cache."""
         try:  # perf: inode metadata reads and writes are fast - ballpark O(200k) ops/sec.
-            s = os_stat(path)
+            s = os.stat(path)
             return round(s.st_atime), round(s.st_mtime)
         except FileNotFoundError:
             return 0, 0  # harmless
@@ -68,16 +82,17 @@ class SnapshotCache:
     def last_modified_cache_file(self, remote: Remote, dataset: str, label: SnapshotLabel | None = None) -> str:
         """Returns the path of the cache file that is tracking last snapshot modification."""
         cache_file: str = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
-        userhost_dir: str = remote.ssh_user_host if remote.ssh_user_host else "-"
-        return os_path_join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
+        userhost_dir: str = remote.cache_namespace()
+        return os.path.join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
         p = self.job.params
         cache_file: str = self.last_modified_cache_file(p.src, dataset)
         if not p.dry_run:
-            try:
+            try:  # there's no need for locking on invalidating the cache
                 zero_times = (0, 0)
+                os_utime = os.utime
                 for entry in os.scandir(os.path.dirname(cache_file)):
                     os_utime(entry.path, times=zero_times)
                 os_utime(cache_file, times=zero_times)
@@ -100,20 +115,19 @@ class SnapshotCache:
         for src_dataset in sorted_datasets:
             snapshots_changed: int = snapshots_changed_dict.get(src_dataset, 0)
             self.job.src_properties[src_dataset].snapshots_changed = snapshots_changed
-            if snapshots_changed == 0:
-                self.invalidate_last_modified_cache_dataset(src_dataset)
-            else:
-                cache_file: str = self.last_modified_cache_file(src, src_dataset)
-                cache_dir: str = os.path.dirname(cache_file)
-                if not p.dry_run:
+            dataset_cache_file: str = self.last_modified_cache_file(src, src_dataset)
+            if not p.dry_run:
+                if snapshots_changed == 0:
+                    # selective invalidation: only zero the dataset-level '=' cache entry
                     try:
-                        os.makedirs(cache_dir, exist_ok=True)
-                        set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True)
-                        for label in dataset_labels[src_dataset]:
-                            cache_file = self.last_modified_cache_file(src, src_dataset, label)
-                            set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True)
+                        os.utime(dataset_cache_file, times=(0, 0))
                     except FileNotFoundError:
                         pass  # harmless
+                else:
+                    # update dataset-level '=' cache monotonically; do NOT touch per-label creation caches here
+                    set_last_modification_time_safe(
+                        dataset_cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True
+                    )
 
     def zfs_get_snapshots_changed(self, remote: Remote, sorted_datasets: list[str]) -> dict[str, int]:
         """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds;
@@ -181,8 +195,8 @@ def set_last_modification_time(
     """
     unixtimes = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
     perm: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
-    flags_base = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
-    created_by_other_process = True
+    flags_base: int = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+    created_by_other_process: bool = True
 
     try:
         fd = os.open(path, flags_base)
@@ -194,7 +208,10 @@ def set_last_modification_time(
             fd = os.open(path, flags_base)  # we lost the race, open existing file
 
     try:
+        # Acquire an exclusive lock; will block if lock is already held by another process.
+        # The (advisory) lock is auto-released when the process terminates or the fd is closed.
         fcntl.flock(fd, fcntl.LOCK_EX)
+
         stats = os.fstat(fd)
         st_uid: int = stats.st_uid
         if st_uid != os.geteuid():  # verify ownership is current effective UID; same as open_nofollow()
@@ -202,6 +219,6 @@ def set_last_modification_time(
 
         if created_by_other_process and if_more_recent and unixtimes[1] <= int(stats.st_mtime):
             return
-        os.utime(fd, times=unixtimes)
+        os.utime(fd, times=unixtimes)  # write timestamps
     finally:
         os.close(fd)

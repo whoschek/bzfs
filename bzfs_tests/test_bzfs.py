@@ -1755,6 +1755,16 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
             def get_snapshots_changed(self, cache_file: str) -> int:
                 return self.mapping.get(cache_file, 0)
 
+            # Emulate codepath that reads both atime and mtime, by returning (creation_time, snapshots_changed)
+            # for per-label paths and (0, snapshots_changed) for dataset-level '=' paths
+            def get_snapshots_changed2(self, cache_file: str) -> tuple[int, int]:
+                if cache_file in self.mapping:
+                    if "@" in cache_file:
+                        ds = cache_file.split("@", 1)[0]
+                        return (self.mapping[cache_file], self.mapping.get(ds, 0))
+                    return (0, self.mapping[cache_file])
+                return (0, 0)
+
             def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
                 """Do nothing for tests."""
 
