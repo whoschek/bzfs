@@ -56,7 +56,6 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from logging import Logger
-from os.path import join as os_path_join
 from pathlib import Path
 from subprocess import CalledProcessError
 from typing import (
@@ -1008,7 +1007,7 @@ class Job:
         is_caching: bool = False
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
-            cache_label = SnapshotLabel(os_path_join("===", alert_cfg.kind, str(label), hash_code), "", "", "")
+            cache_label = SnapshotLabel(os.path.join("===", alert_cfg.kind, str(label), hash_code), "", "", "")
             return self.cache.last_modified_cache_file(r, dataset, cache_label)
 
         def alert_msg(
