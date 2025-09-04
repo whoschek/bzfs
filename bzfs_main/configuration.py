@@ -509,6 +509,12 @@ class Remote:
         """Returns tuple uniquely identifying this Remote for caching."""
         return self.location, self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file
 
+    def cache_namespace(self) -> str:
+        """Returns cache namespace string which is a stable, unique directory component for snapshot caches that
+        distinguishes endpoints by username+host+port where applicable, and uses '-' when no user/host is present (local
+        mode)."""
+        return f"{self.ssh_user_host}:{self.ssh_port}" if self.ssh_user_host else "-"
+
     def __repr__(self) -> str:
         return str(self.__dict__)
 

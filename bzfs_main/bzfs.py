@@ -1148,8 +1148,7 @@ class Job:
             cache_files: dict[str, str] = {}
             stale_src_datasets1: list[str] = []
             maybe_stale_dst_datasets: list[str] = []
-            userhost_dir: str = p.dst.ssh_user_host  # cache is only valid for identical destination username+host
-            userhost_dir = userhost_dir if userhost_dir else "-"
+            userhost_dir: str = p.dst.cache_namespace()
             hash_key = tuple(tuple(f) for f in p.snapshot_filters)  # cache is only valid for same --include/excl-snapshot*
             hash_code: str = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
             for src_dataset in src_datasets:
