@@ -1370,8 +1370,8 @@ class Job:
             next_event_dt = interner.intern(next_event_dt)
             msgs.append((next_event_dt, dataset, label, msg))
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
-                # Per-label cache stores (atime=creation, mtime=snapshots_changed) so later runs can safely trust
-                # creation only when the label's mtime matches the current dataset-level '=' cache value.
+                # Per-label cache stores (atime=creation, mtime=snapshots_changed) so later runs can safely trust creation
+                # only when the label's mtime matches the current dataset-level '=' cache value.
                 cache_file: str = self.cache.last_modified_cache_file(src, dataset, label)
                 unixtimes: tuple[int, int] = (creation_unixtime, self.src_properties[dataset].snapshots_changed)
                 set_last_modification_time_safe(cache_file, unixtime_in_secs=unixtimes, if_more_recent=True)
@@ -1407,12 +1407,14 @@ class Job:
                     continue
                 creation_unixtimes: list[int] = []
                 for label in labels:
-                    # For per-label files, atime stores the latest matching snapshot's creation time,
-                    # while mtime stores the dataset-level snapshots_changed observed when this label file was written.
-                    # Sanity check: trust the label cache only if its mtime matches the current dataset-level '=' cache,
-                    # otherwise fall back to probing to avoid stale creation times after newer changes.
+                    # For per-label files, atime stores the latest matching snapshot's creation time, while mtime stores
+                    # the dataset-level snapshots_changed observed when this label file was written.
                     atime, mtime = cache.get_snapshots_changed2(cache.last_modified_cache_file(src, dataset, label))
-                    if atime == 0 or (mtime != 0 and mtime != cached_snapshots_changed):
+                    # Sanity check: trust the label cache only if its mtime matches the current dataset-level '=' cache,
+                    # otherwise fall back to 'zfs list -t snapshot' to avoid stale creation times after newer changes.
+                    # Trust per-label cache only if it encodes the same snapshots_changed as the dataset-level '=';
+                    # an mtime of 0 indicates unknown provenance and must force fallback to 'zfs list -t snapshot'.
+                    if atime == 0 or mtime == 0 or mtime != cached_snapshots_changed:
                         sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                         break
                     creation_unixtimes.append(atime)
