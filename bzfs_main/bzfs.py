@@ -1391,6 +1391,7 @@ class Job:
         cached_datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         if is_caching_snapshots(p, src):
             sorted_datasets_todo: list[str] = []
+            time_threshold: float = time.time() - TIME_THRESHOLD_SECS
             for dataset in sorted_datasets:
                 cache: SnapshotCache = self.cache
                 cached_snapshots_changed: int = cache.get_snapshots_changed(cache.last_modified_cache_file(src, dataset))
@@ -1400,6 +1401,9 @@ class Job:
                 if cached_snapshots_changed != self.src_properties[dataset].snapshots_changed:  # get that prop "for free"
                     cache.invalidate_last_modified_cache_dataset(dataset)
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
+                    continue
+                if cached_snapshots_changed >= time_threshold:  # Avoid equal-second races: only trust matured cache entries
+                    sorted_datasets_todo.append(dataset)  # cache entry isn't mature enough to be trusted; skip cache
                     continue
                 creation_unixtimes: list[int] = []
                 for label in labels:

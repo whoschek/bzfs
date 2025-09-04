@@ -1620,10 +1620,10 @@ class TestSnapshotCache(AbstractTestCase):
                 called.extend(datasets)
                 return []
 
-            # Run scheduler with caching enabled
+            # Run scheduler with caching enabled; ensure caches are considered mature
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
                 Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ):
+            ), patch("time.time", return_value=snapshots_changed_new + bzfs.TIME_THRESHOLD_SECS + 0.2):
                 result = job.find_datasets_to_snapshot([dataset])
 
             # Correct behavior: dataset must be scheduled for this label (creation is older than 1h)
@@ -1715,6 +1715,93 @@ class TestSnapshotCache(AbstractTestCase):
             atime, mtime = SnapshotCache(job).get_snapshots_changed2(label_path)
             self.assertEqual(creation, atime)
             self.assertEqual(snapshots_changed, mtime)
+
+    def test_scheduler_threshold_controls_cache_trust(self) -> None:
+        """Validates the scheduler's time-threshold gating for cache trust and clarifies the safety contract.
+
+        Purpose and context: Under ``--cache-snapshots``, the scheduler attempts a fast path that avoids
+        ``zfs list -t snapshot`` by reading two local cache files: the dataset-level "=" file
+        (mtime = ZFS ``snapshots_changed``) and a per-label file (atime = latest matching snapshot creation,
+        mtime = the same ``snapshots_changed`` observed at write time). To defend against equal-second races and clock
+        skew, the cache must be “mature” before it is trusted. Monitor and replication already enforce this via
+        ``TIME_THRESHOLD_SECS``; this test locks in the same guarantee for the scheduler.
+
+        Scenario and expectations: We construct a single-dataset scheduler job with an hourly plan. We pre-populate the
+        dataset-level "=" cache with a recent ``snapshots_changed`` time (``t0``) and the label cache with a creation
+        time older than the schedule window, paired with the same ``t0`` in mtime, modeling a fresh write. We then drive
+        two cases by patching ``time.time``: (1) “too recent”: now <= ``t0 + TIME_THRESHOLD_SECS``; (2) “mature”:
+        now > ``t0 + TIME_THRESHOLD_SECS``. In the first case, the scheduler must not trust caches and should fall back
+        to probing (we assert the fallback handler is invoked for the dataset). In the second case, with the same cache
+        and live state, the scheduler should trust caches and avoid probing (we assert the handler is not invoked).
+
+        Why this matters: The maturity gate prevents unsafe reuse of just-written caches when ZFS timestamps advance in
+        integer seconds. Without it, the scheduler could incorrectly skip probing immediately after writes, potentially
+        producing wrong “due” decisions and undermining both correctness and performance. With the gate, we retain the
+        intended performance benefits when it is safe, while guaranteeing a fallback when it is not.
+
+        Test methodology: This test is hermetic (no ZFS). It uses a temporary directory for caches, mocks the scheduler's
+        environment, and relies on real atime/mtime updates to mirror production observables. It patches
+        ``is_caching_snapshots`` to exercise the fast path and records fallback invocations by substituting a minimal
+        ``handle_minmax_snapshots`` stub. The assertions directly encode the scheduler's trust/fallback contract.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            args = self.argparser_parse_args(
+                [
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-plan",
+                    str({"bzfs": {"onsite": {"hourly": 1}}}),
+                    "pool/src",
+                    "pool/dst",
+                ]
+            )
+            job = Job()
+            lp = MagicMock()
+            lp.last_modified_cache_dir = tmpdir
+            job.params = self.make_params(args=args, log_params=lp)
+            job.params.src.root_dataset = "pool/src"
+
+            dataset = "pool/src"
+            label = job.params.create_src_snapshots_config.snapshot_labels()[0]
+            t0 = 2_000_000_000
+            creation_old = t0 - 120  # creation is older than schedule
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t0)
+
+            dataset_eq_file = job.cache.last_modified_cache_file(job.params.src, dataset)
+            set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=t0, if_more_recent=True)
+
+            label_file = job.cache.last_modified_cache_file(job.params.src, dataset, label)
+            set_last_modification_time_safe(label_file, unixtime_in_secs=(creation_old, t0), if_more_recent=True)
+
+            received: list[str] = []
+
+            def fake_handle_minmax_snapshots(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                received.extend(datasets)
+                return []
+
+            # Too recent -> fallback
+            received.clear()
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ), patch("time.time", return_value=t0 + (bzfs.TIME_THRESHOLD_SECS / 2)):
+                job.find_datasets_to_snapshot([dataset])
+            self.assertListEqual([dataset], received)
+
+            # Mature -> trust cache, no fallback
+            received.clear()
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ), patch("time.time", return_value=t0 + bzfs.TIME_THRESHOLD_SECS + 0.2):
+                job.find_datasets_to_snapshot([dataset])
+            self.assertListEqual([], received)
 
     def test_scheduler_label_cache_mtime_must_match_dataset_cache(self) -> None:
         """Validates the scheduler's staleness guard for per-label cache files: trust the label's atime (latest matching
