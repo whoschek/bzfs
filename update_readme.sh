@@ -7,12 +7,12 @@ cd "$(dirname "$(realpath "$0")")"
 tmp_venv=venv-argparse-manpage
 if [ -d venv ]; then
   # shellcheck disable=SC1091
-  source venv/bin/activate
+  . venv/bin/activate
 else
   rm -rf $tmp_venv
   python3 -m venv $tmp_venv
   # shellcheck disable=SC1091
-  source $tmp_venv/bin/activate
+  . $tmp_venv/bin/activate
   pip install -e '.[dev]'
 fi
 
