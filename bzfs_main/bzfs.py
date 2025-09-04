@@ -974,9 +974,10 @@ class Job:
             lambda: self.monitor_snapshots(src, sorted_src_datasets),
         )
         elapsed: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
-        if num_cache_hits != self.num_cache_hits or num_cache_misses != self.num_cache_misses:
-            total: int = self.num_cache_hits + self.num_cache_misses
-            msg = f", cache hits: {percent(self.num_cache_hits, total)}, misses: {percent(self.num_cache_misses, total)}"
+        num_cache_hits = self.num_cache_hits - num_cache_hits
+        num_cache_misses = self.num_cache_misses - num_cache_misses
+        if num_cache_hits > 0 or num_cache_misses > 0:
+            msg = self._cache_hits_msg(hits=num_cache_hits, misses=num_cache_misses)
         else:
             msg = ""
         log.info(
@@ -1192,8 +1193,7 @@ class Job:
             num_cache_hits = len(src_datasets) - len(stale_src_datasets)
             self.num_cache_misses += num_cache_misses
             self.num_cache_hits += num_cache_hits
-            total: int = self.num_cache_hits + self.num_cache_misses
-            cmsg = f", cache hits: {percent(self.num_cache_hits, total)}, misses: {percent(self.num_cache_misses, total)}"
+            cmsg = self._cache_hits_msg(hits=num_cache_hits, misses=num_cache_misses)
         else:
             stale_src_datasets = src_datasets
             cache_files = {}
@@ -1522,6 +1522,11 @@ class Job:
                 fn_on_finish_dataset(dataset)
         datasets_without_snapshots = [dataset for dataset in sorted_datasets if dataset not in datasets_with_snapshots]
         return datasets_without_snapshots
+
+    @staticmethod
+    def _cache_hits_msg(hits: int, misses: int) -> str:
+        total = hits + misses
+        return f", cache hits: {hits}={percent(hits, total)}, misses: {misses}={percent(misses, total)}"
 
 
 #############################################################################
