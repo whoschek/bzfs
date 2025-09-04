@@ -1402,11 +1402,15 @@ class Job:
                     continue
                 creation_unixtimes: list[int] = []
                 for label in labels:
-                    creation_unixtime: int = cache.get_snapshots_changed(cache.last_modified_cache_file(src, dataset, label))
-                    if creation_unixtime == 0:
+                    # For per-label files, atime stores the latest matching snapshot's creation time,
+                    # while mtime stores the dataset-level snapshots_changed observed when this label file was written.
+                    # Sanity check: trust the label cache only if its mtime matches the current dataset-level '=' cache,
+                    # otherwise fall back to probing to avoid stale creation times after newer changes.
+                    atime, mtime = cache.get_snapshots_changed2(cache.last_modified_cache_file(src, dataset, label))
+                    if atime == 0 or (mtime != 0 and mtime != cached_snapshots_changed):
                         sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                         break
-                    creation_unixtimes.append(creation_unixtime)
+                    creation_unixtimes.append(atime)
                 if len(creation_unixtimes) == len(labels):
                     for j, label in enumerate(labels):
                         create_snapshot_if_latest_is_too_old(

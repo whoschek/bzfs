@@ -212,7 +212,7 @@ class TestSnapshotCache(AbstractTestCase):
             cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(alert.label), h), "", "", "")
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, cache_label)
 
-            def fake_handle(
+            def fake_handle_minmax_snapshots(
                 self: Job,
                 remote: Remote,
                 datasets: list[str],
@@ -226,7 +226,7 @@ class TestSnapshotCache(AbstractTestCase):
 
             job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=changed)
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
             ):
                 job.monitor_snapshots(job.params.src, [dataset])
 
@@ -534,7 +534,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Stub: force fallback and inject creation times via handle_minmax_snapshots
             latest_times = [2_000_000_000, 1_900_000_000]  # decreasing creation times
 
-            def fake_handle(
+            def fake_handle_minmax_snapshots(
                 self: Job,
                 remote: Remote,
                 datasets: list[str],
@@ -548,14 +548,14 @@ class TestSnapshotCache(AbstractTestCase):
 
             # First run (newer)
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
             ):
                 job.monitor_snapshots(job.params.src, [src_dataset])
 
             # Second run (older)
             job.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=1_900_000_050)
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
             ):
                 job.monitor_snapshots(job.params.src, [src_dataset])
 
@@ -624,7 +624,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Helper to drive monitor and capture stale datasets
             received: list[str] = []
 
-            def fake_handle(
+            def fake_handle_minmax_snapshots(
                 self: Job,
                 remote: Remote,
                 datasets: list[str],
@@ -639,7 +639,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Case 1: too recent (no trust)
             job.num_cache_hits = job.num_cache_misses = 0
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
             ), patch("time.time", return_value=snapshots_changed + (bzfs.TIME_THRESHOLD_SECS / 2)):
                 job.monitor_snapshots(job.params.src, [dataset])
             self.assertListEqual([dataset], received)
@@ -650,7 +650,7 @@ class TestSnapshotCache(AbstractTestCase):
             received.clear()
             job.num_cache_hits = job.num_cache_misses = 0
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
             ), patch("time.time", return_value=snapshots_changed + bzfs.TIME_THRESHOLD_SECS + 0.2):
                 # keep current_datetime == creation to avoid alerts
                 job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(creation, tz=timezone.utc)
@@ -935,7 +935,7 @@ class TestSnapshotCache(AbstractTestCase):
             job_m.params.create_src_snapshots_config.current_datetime = datetime(2024, 1, 1, 0, 0, 12, tzinfo=timezone.utc)
             job_m.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=mon_snap_changed)
 
-            def fake_handle(
+            def fake_handle_minmax_snapshots(
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -966,7 +966,7 @@ class TestSnapshotCache(AbstractTestCase):
                 return {} if i == 0 else {dst_dataset: repl_dst_changed_a}
 
             def run_monitor() -> None:
-                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle):
+                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots):
                     job_m.monitor_snapshots(job_m.params.src, [src_dataset])
 
             def run_replicate() -> None:
@@ -1066,7 +1066,7 @@ class TestSnapshotCache(AbstractTestCase):
             job_r.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=repl_src_changed)
 
             # Patch handle_minmax to provide creation time; ensure caching path is taken
-            def fake_handle(
+            def fake_handle_minmax_snapshots(
                 remote: Remote,
                 datasets: list[str],
                 labels_list: list[SnapshotLabel],
@@ -1096,7 +1096,7 @@ class TestSnapshotCache(AbstractTestCase):
                 return {} if i == 0 else {dst_dataset: repl_dst_changed}
 
             def run_snapshot() -> None:
-                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle):
+                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots):
                     # Just compute plan; we don't need to create snapshots
                     job_s.find_datasets_to_snapshot([src_dataset])
 
@@ -1238,7 +1238,7 @@ class TestSnapshotCache(AbstractTestCase):
                 if path in (label_cache_file, src_cache_file):
                     ev_snap_written.set()
 
-            def fake_handle_mon(
+            def fake_handle_minmax_snapshots_mon(
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1249,7 +1249,7 @@ class TestSnapshotCache(AbstractTestCase):
                 fn_latest(0, m_cre, src_dataset, "")
                 return []
 
-            def fake_handle_snap(
+            def fake_handle_minmax_snapshots_snap(
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1271,12 +1271,12 @@ class TestSnapshotCache(AbstractTestCase):
 
             # First phase: Monitor -> Snapshot -> Replicate (older)
             def run_monitor() -> None:
-                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_mon):
+                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_mon):
                     job_m.monitor_snapshots(job_m.params.src, [src_dataset])
 
             def run_snapshot() -> None:
                 ev_mon_written.wait(timeout=5)
-                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_snap):
+                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_snap):
                     job_s.find_datasets_to_snapshot([src_dataset])
 
             def run_replicate() -> None:
@@ -1302,7 +1302,7 @@ class TestSnapshotCache(AbstractTestCase):
             job_s.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=s_sc)
             job_r.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=r_src_old)
 
-            def fake_handle_mon_old(
+            def fake_handle_minmax_snapshots_mon_old(
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1313,7 +1313,7 @@ class TestSnapshotCache(AbstractTestCase):
                 fn_latest(0, m_cre_old, src_dataset, "")
                 return []
 
-            def fake_handle_snap_old(
+            def fake_handle_minmax_snapshots_snap_old(
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
@@ -1335,12 +1335,12 @@ class TestSnapshotCache(AbstractTestCase):
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
             ):
-                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_mon_old), patch(
+                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_mon_old), patch(
                     "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm
                 ):
                     job_m.monitor_snapshots(job_m.params.src, [src_dataset])
 
-                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_snap_old), patch(
+                with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_snap_old), patch(
                     "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_lm
                 ):
                     job_s.find_datasets_to_snapshot([src_dataset])
@@ -1445,7 +1445,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(label_cache_file, unixtime_in_secs=1_700_000_000, if_more_recent=True)
 
             # Phase A: call find_datasets_to_snapshot but suppress fallback to observe invalidation effect
-            def fake_handle_noop(
+            def fake_handle_minmax_snapshots_noop(
                 self: Job,
                 remote: Remote,
                 datasets: list[str],
@@ -1457,7 +1457,7 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_noop
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_noop
             ):
                 job_s.find_datasets_to_snapshot([src_dataset])
 
@@ -1478,7 +1478,7 @@ class TestSnapshotCache(AbstractTestCase):
             mon_cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(lbl_mon), h_m2), "", "", "")
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, src_dataset, mon_cache_label)
 
-            def fake_handle_mon(
+            def fake_handle_minmax_snapshots_mon(
                 self: Job,
                 remote: Remote,
                 datasets: list[str],
@@ -1491,7 +1491,7 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_mon
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_mon
             ):
                 job_m.monitor_snapshots(job_m.params.src, [src_dataset])
 
@@ -1502,7 +1502,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Snapshot scheduling repopulates src '=' and per-label
             job_s.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=s_sc)
 
-            def fake_handle_snap(
+            def fake_handle_minmax_snapshots_snap(
                 self: Job,
                 remote: Remote,
                 datasets: list[str],
@@ -1517,7 +1517,7 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_snap
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_snap
             ):
                 job_s.find_datasets_to_snapshot([src_dataset])
 
@@ -1543,6 +1543,170 @@ class TestSnapshotCache(AbstractTestCase):
 
             self.assertEqual(2_000_000_130, SnapshotCache(job_r).get_snapshots_changed(last_repl_file))
             self.assertEqual(2_000_000_140, SnapshotCache(job_r).get_snapshots_changed(dst_cache_file))
+
+    def test_snapshot_scheduler_reads_creation_from_label_atime_not_mtime(self) -> None:
+        """find_datasets_to_snapshot must read creation time from the per-label cache file's atime, not its mtime.
+
+        Bug being demonstrated: When a prior monitor run writes (creation, snapshots_changed) into the per-label cache
+        (atime=creation, mtime=snapshots_changed), the current implementation incorrectly reads mtime via
+        get_snapshots_changed(), treating snapshots_changed as the latest creation time. This can cause the scheduler to
+        falsely conclude a label is up-to-date when another label updated snapshots_changed more recently.
+
+        This test populates the dataset-level '=' cache to match src_properties.snapshots_changed so the caching path is
+        taken, then writes a per-label file with (creation << snapshots_changed). The correct behavior is to schedule a
+        new snapshot because the label's latest creation is older than the hourly interval. The current code (using mtime)
+        would incorrectly skip. The fix is for find_datasets_to_snapshot to use get_snapshots_changed2()[0] for labels.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            # Configure a snapshot plan with hourly frequency
+            args = self.argparser_parse_args(
+                [
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-plan",
+                    str({"bzfs": {"onsite": {"hourly": 1}}}),
+                    "pool/src",
+                    "pool/dst",
+                ]
+            )
+            job = Job()
+            lp = MagicMock()
+            lp.last_modified_cache_dir = tmpdir
+            job.params = self.make_params(args=args, log_params=lp)
+            job.params.src.root_dataset = "pool/src"
+
+            # Times: creation much older than hourly interval; snapshots_changed is recent
+            creation_old = 2_000_000_000  # e.g., 03:33:20
+            snapshots_changed_new = 2_000_003_600  # 04:00:00 (crosses hour boundary)
+
+            # Use current_datetime after one hour has elapsed since creation
+            # Choose a current time that is after 04:00:00 but before 05:00:00; e.g., 04:30:00
+            job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(2_000_003_400, tz=timezone.utc)
+            job.params.create_src_snapshots_config.tz = timezone.utc
+
+            # Label under test
+            label = job.params.create_src_snapshots_config.snapshot_labels()[0]
+
+            dataset = "pool/src"
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed_new)
+
+            # Populate dataset-level '=' cache to match live property so the caching branch is taken
+            dataset_eq_file = job.cache.last_modified_cache_file(job.params.src, dataset)
+            set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=snapshots_changed_new, if_more_recent=True)
+
+            # Populate per-label cache file as monitor would: (atime=creation, mtime=snapshots_changed)
+            label_file = job.cache.last_modified_cache_file(job.params.src, dataset, label)
+            set_last_modification_time_safe(
+                label_file, unixtime_in_secs=(creation_old, snapshots_changed_new), if_more_recent=True
+            )
+
+            # Stub handle_minmax to prove we did not need fallback; it should not be called if cache is used correctly
+            called: list[str] = []
+
+            def fake_handle_minmax_snapshots(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                called.extend(datasets)
+                return []
+
+            # Run scheduler with caching enabled
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ):
+                result = job.find_datasets_to_snapshot([dataset])
+
+            # Correct behavior: dataset must be scheduled for this label (creation is older than 1h)
+            self.assertIn(dataset, result[label])
+            # And we should not have needed to fall back to handle_minmax
+            self.assertListEqual([], called)
+
+    def test_scheduler_label_cache_mtime_must_match_dataset_cache(self) -> None:
+        """Validates the scheduler's staleness guard for per-label cache files: trust the label's atime (latest matching
+        snapshot creation) only if the label file's mtime equals the dataset-level "=" file's ``snapshots_changed`` value at
+        the moment of scheduling. Otherwise, fall back to probing via ``handle_minmax_snapshots``.
+
+        Background: Our cache design intentionally separates two concepts. For each dataset, the "=" cache file stores
+        the ZFS ``snapshots_changed`` property in its mtime. For each label under a dataset, a per-label cache file
+        stores (creation, snapshots_changed) as (atime, mtime), where atime is the creation time of the latest snapshot
+        matching that label, and mtime is the dataset's ``snapshots_changed`` at the time of writing. This lets the
+        scheduler avoid expensive ``zfs list -t snapshot`` calls when both pieces of information are recent and
+        consistent.
+
+        Problem: If the dataset changes after the per-label file was written (i.e., the dataset "=" mtime moves forward
+        while the label file's mtime remains behind), then the label's atime may be stale. Trusting it unconditionally
+        can cause the scheduler to incorrectly conclude that a label is up-to-date, skipping a snapshot that is due.
+
+        Test setup and expectation: We simulate this staleness by (1) setting the dataset "=" cache mtime to T1, (2)
+        writing the per-label cache with atime=creation_old and mtime=T0, where T0 != T1, and (3) configuring
+        ``src_properties`` to reflect T1. The scheduler is then invoked with caching enabled. The correct behavior is to
+        detect the mismatch (label.mtime != dataset "=".mtime) and decline to trust the label's atime, forcing a
+        fallback probe. We verify this by stubbing ``handle_minmax_snapshots`` to record invocations and asserting that
+        it is called for the dataset.
+
+        Why this matters: This check hardens correctness for mixed workloads where monitor, replication, and snapshot
+        scheduling interleave. It ensures that cheap scheduling decisions are made only when cached state is internally
+        consistent, while still enabling fast paths when it is safe to do so. The test is hermetic (no ZFS), uses real
+        on-disk timestamps, and thus mirrors production observables faithfully.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+            args = self.argparser_parse_args(
+                [
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-plan",
+                    str({"bzfs": {"onsite": {"hourly": 1}}}),
+                    "pool/src",
+                    "pool/dst",
+                ]
+            )
+            job = Job()
+            lp = MagicMock()
+            lp.last_modified_cache_dir = tmpdir
+            job.params = self.make_params(args=args, log_params=lp)
+            job.params.src.root_dataset = "pool/src"
+
+            dataset = "pool/src"
+            label = job.params.create_src_snapshots_config.snapshot_labels()[0]
+            creation_old = 2_000_000_000
+            t0 = 2_000_000_050
+            t1 = 2_000_000_100
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t1)
+
+            # dataset '=' cache reflects t1
+            dataset_eq_file = job.cache.last_modified_cache_file(job.params.src, dataset)
+            set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=t1, if_more_recent=True)
+
+            # per-label cache has mtime=t0 (stale) and atime=creation_old
+            label_file = job.cache.last_modified_cache_file(job.params.src, dataset, label)
+            set_last_modification_time_safe(label_file, unixtime_in_secs=(creation_old, t0), if_more_recent=True)
+
+            received: list[str] = []
+
+            def fake_handle_minmax_snapshots(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                received.extend(datasets)
+                return []
+
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ):
+                job.find_datasets_to_snapshot([dataset])
+
+            # Must fall back to handler due to mtime mismatch
+            self.assertListEqual([dataset], received)
 
     @unittest.skip("benchmark; enable for performance comparison")
     def test_benchmark_set_last_modification_time(self) -> None:

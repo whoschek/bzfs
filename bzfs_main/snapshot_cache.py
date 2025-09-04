@@ -12,8 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Stores snapshot metadata in fast disk inodes to avoid repeated 'zfs list -t snapshot' calls, without adding external
-dependencies or complex databases."""
+"""Stores snapshot metadata in fast disk inodes to avoid repeated 'zfs list -t snapshot' calls.
+
+Purpose: Provide a lightweight, dependency-free cache for ZFS snapshot scheduling, monitoring and replication.
+
+Assumptions: OpenZFS timestamps are UTC integer seconds; file atime/mtime are reliable and atomically updateable with
+monotonic guards; multiple concurrent jobs may update cache files out of order.
+
+Design Rationale:
+- Dataset-level '=' file per dataset/location:
+    - mtime stores ZFS "snapshots_changed" (UTC unix seconds). Monotonic writes.
+- Replication-scoped '==' file per src dataset and dst+filters:
+    - mtime stores last replicated src snapshots_changed. Monotonic.
+- Monitor '===' per dataset and label:
+    - atime stores latest/oldest snapshot creation; mtime stores snapshots_changed.
+    - Monotonic writes with small time-threshold gating elsewhere before trusting fresh values.
+- Snapshot scheduler per-label cache (under src dataset):
+    - atime stores creation; mtime stores snapshots_changed at write time.
+    - The scheduler trusts atime only if the per-label mtime equals the current dataset-level '=' mtime to avoid staleness.
+"""
 
 from __future__ import annotations
 import errno
@@ -76,7 +93,7 @@ class SnapshotCache:
         p = self.job.params
         cache_file: str = self.last_modified_cache_file(p.src, dataset)
         if not p.dry_run:
-            try:
+            try:  # there's no need for locking on invalidating the cache
                 zero_times = (0, 0)
                 for entry in os.scandir(os.path.dirname(cache_file)):
                     os_utime(entry.path, times=zero_times)
@@ -180,8 +197,8 @@ def set_last_modification_time(
     """
     unixtimes = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
     perm: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
-    flags_base = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
-    created_by_other_process = True
+    flags_base: int = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+    created_by_other_process: bool = True
 
     try:
         fd = os.open(path, flags_base)
@@ -193,7 +210,10 @@ def set_last_modification_time(
             fd = os.open(path, flags_base)  # we lost the race, open existing file
 
     try:
+        # Acquire an exclusive lock; will block if lock is already held by another process.
+        # The (advisory) lock is auto-released when the process terminates or the fd is closed.
         fcntl.flock(fd, fcntl.LOCK_EX)
+
         stats = os.fstat(fd)
         st_uid: int = stats.st_uid
         if st_uid != os.geteuid():  # verify ownership is current effective UID; same as open_nofollow()
@@ -201,6 +221,6 @@ def set_last_modification_time(
 
         if created_by_other_process and if_more_recent and unixtimes[1] <= int(stats.st_mtime):
             return
-        os.utime(fd, times=unixtimes)
+        os.utime(fd, times=unixtimes)  # write timestamps
     finally:
         os.close(fd)
