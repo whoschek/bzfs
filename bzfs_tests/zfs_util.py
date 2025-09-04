@@ -25,7 +25,7 @@ from typing import (
     cast,
 )
 
-sudo_cmd = []
+sudo_cmd: list[str] = []
 
 
 def set_sudo_cmd(sudo: list[str]) -> None:
