@@ -125,8 +125,11 @@ Before committing any changes, you **must** follow this exact sequence:
   - **Types:** `build`, `bump`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `style`, `test`
   - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`
 
-8. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
-   to be installed, and thus run externally in GitHub Actions, which unfortunately you do not have access to.
+8. **Integration tests:** If the user explicitly requests to use the environment variable `bzfs_test_mode` with a value
+   other than `unit` (e.g. `smoke` to run the "smoke tests" or `functional` to run the "functional tests" or "" to run
+   all integration tests) then you must **always invoke tests** via `./test.sh` (and never directly via `python ...`) to
+   ensure that the corresponding integration tests are setup and executed correctly. Otherwise use `bzfs_test_mode=unit`
+   by default, as integration tests require that the `zfs` CLI is installed, and ZFS admin permissions are available.
 
 # Guidelines and Best Practices
 
@@ -142,7 +145,7 @@ Before committing any changes, you **must** follow this exact sequence:
 ## How to Write Tests
 
 - **Add High-Value Tests:** Focus on adding meaningful tests for critical logic, happy path, edge cases, error paths and
-  invariants. Tests should be specific, readable, robust, and deterministic.
+  invariants. Tests should be specific, readable, robust, thread-safe and deterministic.
 - **Fit In:** New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
   `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in
   the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
