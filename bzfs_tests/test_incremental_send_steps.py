@@ -79,6 +79,51 @@ class TestIncrementalSendSteps(unittest.TestCase):
     def test_send_step_to_str(self) -> None:
         send_step_to_str(("-I", "d@s1", "d@s3"))
 
+    def test_bookmark_base_skips_excluded_next_snapshot(self) -> None:
+        """Verify correct behavior when the latest common snapshot is actually a bookmark and the immediate next snapshot is
+        excluded by include/exclude policy.
+
+        Purpose: Ensure planning starts from the bookmark (ds#h0) and targets the first included snapshot (ds@d1)
+        even if the next snapshot (ds@h1) is excluded via included_guids. The test asserts the first step uses -i
+        from the bookmark to d1, and that to_snapshots include only daily snapshots ["d1", "d2"], never the
+        excluded hourly h1.
+
+        Assumptions: The latest common snapshot is a bookmark rather than a snapshot. included_guids is the set of
+        snapshots eligible for replication; bookmarks are denoted with # and ZFS supports zfs send -i <bookmark> <snapshot>.
+
+        Design rationale: Starting from a bookmark requires -i (not -I) because the base is not a snapshot.
+        Skipping the excluded next snapshot must not stall planning or pick an unsafe base; it should advance to the
+        first allowed snapshot while maintaining dependency order. We validate invariants across resume and
+        non-resume modes and with optional force_convert_I_to_i to ensure semantics remain stable.
+
+        This guards against regressions where the planner includes excluded snapshots, pairs a bookmark with -I, or
+        targets the wrong snapshot when the first candidate after the base is filtered out. Correctly.
+        """
+        src_snapshots = ["ds#h0", "ds@h1", "ds@d1", "ds@d2"]
+        src_guids = ["1", "2", "3", "4"]
+        included_guids = {"3", "4"}  # include only d1, d2
+        for is_resume in [False, True]:
+            for force_convert_I_to_i in [False, True]:  # noqa: N806
+                steps = bzfs_main.incremental_send_steps.incremental_send_steps(
+                    src_snapshots,
+                    src_guids,
+                    included_guids=included_guids,
+                    is_resume=is_resume,
+                    force_convert_I_to_i=force_convert_I_to_i,
+                )
+                # First step must originate from the bookmark and go to the first included snapshot
+                self.assertGreaterEqual(len(steps), 1)
+                first = steps[0]
+                self.assertEqual("-i", first[0])  # bookmark start requires -i
+                self.assertEqual("ds#h0", first[1])
+                self.assertEqual("ds@d1", first[2])
+                self.assertEqual(["ds@d1"], first[3])
+
+                # Validate that only d1 and d2 are replicated; h1 is never in any to_snapshots
+                to_names = [snap[snap.find("@") + 1 :] for _, _, _, to in steps for snap in to]
+                self.assertEqual(["d1", "d2"], to_names)
+                self.assertNotIn("h1", to_names)
+
     def permute_snapshot_series(self, max_length: int = 9) -> list[defaultdict[str | None, list[str]]]:
         """
         Simulates a series of hourly and daily snapshots. At the end, makes a backup while excluding hourly

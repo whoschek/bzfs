@@ -22,9 +22,10 @@ from __future__ import annotations
 
 
 def incremental_send_steps(
-    src_snapshots: list[str],
-    src_guids: list[str],
-    included_guids: set[str],
+    src_snapshots: list[str],  # the most recent common snapshot (which may be a bookmark) followed by all src snapshots
+    # (that are not a bookmark) that are more recent than that.
+    src_guids: list[str],  # the guid of each item in src_snapshots
+    included_guids: set[str],  # the guid of each snapshot (not bookmark!) that is included by --include/exclude-snapshot-*
     is_resume: bool,
     force_convert_I_to_i: bool,  # noqa: N803
 ) -> list[tuple[str, str, str, list[str]]]:
@@ -51,7 +52,6 @@ def incremental_send_steps(
 
     Example C where h0 is the latest common snapshot:
     src = [h0, m0] (d is daily, h is hourly) --> dst = [h0] via returning an empty list
-
 
     * The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
     * The 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
@@ -87,7 +87,7 @@ def incremental_send_steps(
     while i < n and guids[i] not in included_guids:  # skip hourlies
         i += 1
     if i < n and i != start:
-        # it's an hourly (that's also the latest common snapshot), followed by zero or more hourlies, followed by a daily
+        # the latest common snapshot is an hourly or a bookmark, followed by zero or more hourlies, followed by a daily
         step = ("-i", src_snapshots[start], src_snapshots[i], src_snapshots[i : i + 1])
         steps.append(step)
 
