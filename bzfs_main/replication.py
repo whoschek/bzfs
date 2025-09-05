@@ -239,8 +239,8 @@ def _list_and_filter_src_and_dst_snapshots(
     included_src_guids: set[str] = set()
     for line in src_snapshots_with_guids:
         guid, snapshot = line.split("\t", 1)
-        included_src_guids.add(guid)
         if "@" in snapshot:
+            included_src_guids.add(guid)
             latest_src_snapshot = snapshot
             if not oldest_src_snapshot:
                 oldest_src_snapshot = snapshot

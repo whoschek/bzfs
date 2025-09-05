@@ -15,15 +15,20 @@
 """Unit tests for replication.py utilities without requiring the zfs CLI."""
 
 from __future__ import annotations
+import re
 import shlex
 import subprocess
+import threading
 import unittest
 from collections import defaultdict
 from typing import (
+    TYPE_CHECKING,
     Callable,
 )
 from unittest.mock import MagicMock, call, patch
 
+from bzfs_main.argparse_actions import SnapshotFilter
+from bzfs_main.filter import SNAPSHOT_REGEX_FILTER_NAME
 from bzfs_main.replication import (
     _check_zfs_dataset_busy,
     _compress_cmd,
@@ -33,6 +38,7 @@ from bzfs_main.replication import (
     _dquote,
     _estimate_send_size,
     _format_size,
+    _incremental_send_steps_wrapper,
     _is_zfs_dataset_busy,
     _mbuffer_cmd,
     _prepare_zfs_send_receive,
@@ -41,10 +47,27 @@ from bzfs_main.replication import (
     _squote,
     _zfs_get,
     _zfs_set,
+    replicate_dataset,
 )
-from bzfs_main.retry import RetryableError
-from bzfs_main.utils import LOG_DEBUG, SynchronizedBool
+from bzfs_main.retry import (
+    Retry,
+    RetryableError,
+)
+from bzfs_main.utils import (
+    LOG_DEBUG,
+    SynchronizedBool,
+    compile_regexes,
+)
 from bzfs_tests.abstract_testcase import AbstractTestCase
+
+if TYPE_CHECKING:  # type-only imports for annotations
+    from bzfs_main.bzfs import (
+        Job,
+    )
+    from bzfs_main.configuration import (
+        Params,
+        Remote,
+    )
 
 
 ###############################################################################
@@ -525,6 +548,107 @@ class TestReplication(AbstractTestCase):
         self.assertEqual("", loc)
         self.assertEqual("zfs recv", dst)
         self.assertFalse(pv.call_args.kwargs.get("disable_progress_bar", False))
+
+    def test_replicate_dataset_e2e_skips_hourly_in_steps(self) -> None:
+        """End-to-end: incremental_send_steps must not include an excluded hourly in any to_snapshots.
+
+        This test spies on incremental_send_steps called via replicate_dataset() and inspects the planned steps.
+        """
+        src_dataset = "pool/src"
+        dst_dataset = "pool/dst"
+        p = _make_params(zfs_program="zfs")
+
+        def _split(*parts: object, **_kw: object) -> list[str]:
+            tokens: list[str] = []
+            for part in parts:
+                if not part:
+                    continue
+                if isinstance(part, (list, tuple)):
+                    tokens.extend(str(x) for x in part)
+                else:
+                    s = str(part)
+                    if s.startswith("[") and s.endswith("]") and "," in s:
+                        items = [t.strip().strip("'\"") for t in s[1:-1].split(",") if t.strip()]
+                        tokens.extend(items)
+                    else:
+                        tokens.extend(shlex.split(s))
+            return tokens
+
+        p.split_args = _split
+        p.src = MagicMock(root_dataset=src_dataset, location="src", sudo="")
+        p.dst = MagicMock(root_dataset=dst_dataset, location="dst", sudo="")
+        p.curr_zfs_send_program_opts = []
+        p.zfs_recv_program_opts = []
+        p.dry_run = True
+        p.dry_run_recv = "-n"
+        p.no_stream = False
+
+        p.two_or_more_spaces_regex = re.compile(r"  +")
+        p.use_bookmark = True
+
+        exclude_regexes = compile_regexes(["h.*"])  # exclude hourlies
+        include_regexes = compile_regexes([".*"])  # include everything else
+        p.snapshot_filters = [[SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, (exclude_regexes, include_regexes))]]
+        job = _make_job()
+        job.params = p
+        job.params.log = MagicMock()
+        job.stats_lock = threading.Lock()
+        job.num_snapshots_found = 0
+        job.dst_dataset_exists = defaultdict(bool)
+        job.maybe_inject_delete = lambda *_a, **_kw: None
+        job.maybe_inject_params = lambda *_a, **_kw: None
+
+        job.is_first_replication_task = SynchronizedBool(True)
+        job.isatty = False
+        job.progress_reporter = MagicMock()
+
+        src_list = "\n".join(
+            [
+                f"1\t{src_dataset}@d1",
+                f"2\t{src_dataset}#h1",  # bookmark for hourly
+                f"2\t{src_dataset}@h1",
+                f"3\t{src_dataset}@d2",
+            ]
+        )
+        dst_list = f"1\t{dst_dataset}@d1\n"
+
+        def try_ssh_side_effect(_job: Job, remote: Remote, _lvl: int, **kwargs: dict[str, list[str]]) -> str:
+            cmd: list[str] = kwargs.get("cmd", [])  # type: ignore[assignment]
+            text = " ".join(cmd)
+            if remote is p.src and " list -t " in text and "-o guid,name" in text:
+                return src_list
+            if remote is p.dst and " list -t snapshot" in text and "-o guid,name" in text:
+                return dst_list
+            return ""
+
+        captured_steps: list[list[tuple[str, str, str, list[str]]]] = []
+
+        def spy_wrapper(
+            pp: Params, src_snaps: list[str], src_guids: list[str], included: set[str], is_resume: bool
+        ) -> list[tuple]:
+            steps = _incremental_send_steps_wrapper(pp, src_snaps, src_guids, included, is_resume)
+            captured_steps.append(steps)
+            return steps
+
+        with patch("bzfs_main.replication.are_bookmarks_enabled", return_value=True), patch(
+            "bzfs_main.replication.try_ssh_command", side_effect=try_ssh_side_effect
+        ), patch("bzfs_main.replication._recv_resume_token", return_value=(None, [], [])), patch(
+            "bzfs_main.replication._estimate_send_size", return_value=0
+        ), patch(
+            "bzfs_main.replication._add_recv_property_options",
+            side_effect=lambda j, _full, recv_opts, _ds, _c: (recv_opts, []),
+        ), patch(
+            "bzfs_main.replication._check_zfs_dataset_busy", return_value=True
+        ), patch(
+            "bzfs_main.replication._incremental_send_steps_wrapper", side_effect=spy_wrapper
+        ), patch(
+            "bzfs_main.replication._run_zfs_send_receive", side_effect=lambda *_args, **_kw: None
+        ):
+            replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0))
+
+        self.assertTrue(captured_steps, "No steps captured")
+        to_snaps_all = [snap for step in captured_steps[0] for snap in step[3]]
+        self.assertNotIn(f"{src_dataset}@h1", to_snaps_all)
 
     def test_prepare_dst_local_pv(self) -> None:
         def avail(prog: str, loc: str) -> bool:
