@@ -132,7 +132,13 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
 
     if job.dst_dataset_exists[dst_dataset]:
         rollback_result: bool | tuple[str, str, bool] = _rollback_dst_dataset_if_necessary(
-            job, dst_dataset, latest_src_snapshot, src_snapshots_with_guids, dst_snapshots_with_guids, done_checking, tid
+            job,
+            dst_dataset,
+            latest_src_snapshot,
+            basis_src_snapshots_with_guids,
+            dst_snapshots_with_guids,
+            done_checking,
+            tid,
         )
         if isinstance(rollback_result, bool):
             return rollback_result

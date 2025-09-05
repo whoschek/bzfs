@@ -51,8 +51,9 @@ class TestIncrementalSendSteps(unittest.TestCase):
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic3(self) -> None:
+        """If latest common snapshot is an hourly, dst contains that hourly."""
         input_snapshots: list[str] = ["h0", "h1", "d1", "d2", "h2", "d3", "d4"]
-        expected_results: list[str] = ["d1", "d2", "d3", "d4"]
+        expected_results: list[str] = ["h0", "d1", "d2", "d3", "d4"]
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic4(self) -> None:
@@ -63,6 +64,11 @@ class TestIncrementalSendSteps(unittest.TestCase):
     def test_basic5(self) -> None:
         input_snapshots: list[str] = []
         expected_results: list[str] = []
+        self.validate_incremental_send_steps(input_snapshots, expected_results)
+
+    def test_basic6(self) -> None:
+        input_snapshots: list[str] = ["h1"]
+        expected_results: list[str] = ["h1"]
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_validate_snapshot_series_excluding_hourlies_with_permutations(self) -> None:
@@ -100,6 +106,10 @@ class TestIncrementalSendSteps(unittest.TestCase):
                         snapshot: str = f"{char}{char_count}"
                         snaps[None].append(snapshot)
                         snaps[char].append(snapshot)  # represents expected results for test verification, e.g. [d1,d2,d3,d4]
+                    h = permutation.index("h") if "h" in permutation else -1
+                    d = permutation.index("d") if "d" in permutation else -1
+                    if h >= 0 and (d < 0 or h < d):
+                        snaps["d"].insert(0, snaps["h"][0])  # if latest common snap is an hourly, dst contains that hourly
                     testcases.append(snaps)
         return testcases
 
@@ -117,11 +127,12 @@ class TestIncrementalSendSteps(unittest.TestCase):
                         is_resume=is_resume,
                         force_convert_I_to_i=force_convert_I_to_i,
                     )
-                    # print(f"input_snapshots:" + ",".join(input_snapshots))
+                    # print("====================================================")
+                    # print("input_snapshots: " + ",".join(input_snapshots))
                     # print("steps: " + ",".join([self.send_step_to_str(step) for step in steps]))
-                    output_snapshots: list[str] = [] if len(expected_results) == 0 else [expected_results[0]]
-                    output_snapshots += self.apply_incremental_send_steps(steps, input_snapshots)
-                    # print(f"output_snapshots:" + ','.join(output_snapshots))
+                    # print("expected_results:" + ",".join(expected_results))
+                    output_snapshots = self.apply_incremental_send_steps(steps, input_snapshots)
+                    # print("output_snapshots:" + ",".join(output_snapshots))
                     self.assertListEqual(expected_results, output_snapshots)
                     all_to_snapshots: list[str] = []
                     for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:  # noqa: B007
@@ -140,16 +151,20 @@ class TestIncrementalSendSteps(unittest.TestCase):
         Returns the subset of snapshots that have actually been replicated to the destination.
         """
         output_snapshots: list[str] = []
-        for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:  # noqa: B007
+        for i, (incr_flag, start_snapshot, end_snapshot, to_snapshots_) in enumerate(steps):  # noqa: B007
             start_snapshot = start_snapshot[start_snapshot.find("@") + 1 :]
             end_snapshot = end_snapshot[end_snapshot.find("@") + 1 :]
             start: int = input_snapshots.index(start_snapshot)
             end: int = input_snapshots.index(end_snapshot)
+            if i == 0:
+                output_snapshots.append(input_snapshots[start])
             if incr_flag == "-I":
                 for j in range(start + 1, end + 1):
                     output_snapshots.append(input_snapshots[j])
             else:
                 output_snapshots.append(input_snapshots[end])
+        if len(steps) == 0 and len(input_snapshots) > 0:
+            output_snapshots.append(input_snapshots[0])  # dst contains at least the latest common snapshot
         return output_snapshots
 
     def incremental_send_steps1(

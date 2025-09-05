@@ -855,7 +855,7 @@ class IncrementalSendStepsTestCase(IntegrationTestCase):
             "--exclude-snapshot-regex",
             ".*",
         )
-        self.assert_snapshot_names(dst_foo, [])
+        self.assert_snapshot_names(dst_foo, [expected_results[1]])
 
         self.tearDownAndSetup()
         src_foo = create_filesystem(src_root_dataset, "foo")
@@ -873,7 +873,7 @@ class IncrementalSendStepsTestCase(IntegrationTestCase):
             "--include-snapshot-regex",
             "!.*",
         )
-        self.assert_snapshot_names(dst_foo, [])
+        self.assert_snapshot_names(dst_foo, [expected_results[1]])
 
     def test_snapshot_series_excluding_hourlies_with_permutations(self) -> None:
         for testcase in TestIncrementalSendSteps().permute_snapshot_series(5):
@@ -883,6 +883,8 @@ class IncrementalSendStepsTestCase(IntegrationTestCase):
             for snapshot in testcase[None]:
                 take_snapshot(src_foo, snapshot)
             expected_results = testcase["d"]
+            if len(expected_results) > 0 and expected_results[0].startswith("h"):
+                expected_results = expected_results[1:]
             # logging.info(f"input   : {','.join(testcase[None])}")
             # logging.info(f"expected: {','.join(expected_results)}")
             self.run_bzfs(

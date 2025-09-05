@@ -1238,8 +1238,8 @@ usage: bzfs [-h] [--recursive]
 **--force-rollback-to-latest-common-snapshot**
 
 *  Before replication, delete destination ZFS snapshots that are more recent than the most recent
-    common snapshot selected on the source ('conflicting snapshots'), via 'zfs rollback'. Do
-    no rollback if no common snapshot is selected.
+    common snapshot ('conflicting snapshots'), via 'zfs rollback'. Do no rollback if no common
+    snapshot exists.
 
 <!-- -->
 
@@ -1248,11 +1248,10 @@ usage: bzfs [-h] [--recursive]
 **--force**
 
 *  Same as --force-rollback-to-latest-common-snapshot (see above), except that additionally, if
-    no common snapshot is selected, then delete all destination snapshots before starting
-    replication, and proceed without aborting. Without the --force* flags, the destination
-    dataset is treated as append-only, hence no destination snapshot that already exists is
-    deleted, and instead the operation is aborted with an error when encountering a conflicting
-    snapshot.
+    no common snapshot exists, then delete all destination snapshots before starting replication,
+    and proceed without aborting. Without the --force* flags, the destination dataset is treated
+    as append-only, hence no destination snapshot that already exists is deleted, and instead the
+    operation is aborted with an error when encountering a conflicting snapshot.
 
     Analogy: --force-rollback-to-latest-snapshot is a tiny hammer, whereas
     --force-rollback-to-latest-common-snapshot is a medium sized hammer, --force is a large
