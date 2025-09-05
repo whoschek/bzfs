@@ -738,12 +738,11 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--force-rollback-to-latest-common-snapshot", action="store_true",
         help="Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
-             "snapshot selected on the source ('conflicting snapshots'), via 'zfs rollback'. Do no rollback if no common "
-             "snapshot is selected.\n\n")
+             "snapshot ('conflicting snapshots'), via 'zfs rollback'. Do no rollback if no common snapshot exists.\n\n")
     parser.add_argument(
         "--force", action="store_true",
         help="Same as --force-rollback-to-latest-common-snapshot (see above), except that additionally, if no common "
-             "snapshot is selected, then delete all destination snapshots before starting replication, and proceed "
+             "snapshot exists, then delete all destination snapshots before starting replication, and proceed "
              "without aborting. Without the --force* flags, the destination dataset is treated as append-only, hence "
              "no destination snapshot that already exists is deleted, and instead the operation is aborted with an "
              "error when encountering a conflicting snapshot.\n\n"

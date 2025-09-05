@@ -22,30 +22,45 @@ from __future__ import annotations
 
 
 def incremental_send_steps(
-    src_snapshots: list[str],
-    src_guids: list[str],
-    included_guids: set[str],
+    src_snapshots: list[str],  # the most recent common snapshot (which may be a bookmark) followed by all src snapshots
+    # (that are not a bookmark) that are more recent than that.
+    src_guids: list[str],  # the guid of each item in src_snapshots
+    included_guids: set[str],  # the guid of each snapshot (not bookmark!) that is included by --include/exclude-snapshot-*
     is_resume: bool,
     force_convert_I_to_i: bool,  # noqa: N803
 ) -> list[tuple[str, str, str, list[str]]]:
-    """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
-    include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-*
-    (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
-    excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists. A step
-    corresponds to a single ZFS send/receive operation. Fewer steps translate to better performance, especially
-    when sending many small snapshots. For example, 1 step that sends 100 small snapshots in a single operation is
-    much faster than 100 steps that each send only 1 such snapshot per ZFS send/receive operation.
-    Example: skip hourly snapshots and only include daily snapshots for replication
-    Example: [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> [d1, d2, d3, d4] via
+    """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we include
+    intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-* (represented here by
+    included_guids), using an optimal series of -i/-I send/receive steps that skip excluded src snapshots. The steps are
+    optimal in the sense that no solution with fewer steps exists. A step corresponds to a single ZFS send/receive operation.
+    Fewer steps translate to better performance, especially when sending many small snapshots. For example, 1 step that sends
+    100 small snapshots in a single operation is much faster than 100 steps that each send only 1 such snapshot per ZFS
+    send/receive operation.
+
+    Examples that skip hourly snapshots and only include daily snapshots for replication:
+
+    Example A where d1 is the latest common snapshot:
+    src = [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> dst = [d1, d2, d3, d4] via
     -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
     -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')
+
+    Example B where h0 is the latest common snapshot:
+    src = [h0, m0, d1, h1, d2, d3, d4] (d is daily, h is hourly) --> dst = [h0, d1, d2, d3, d4] via
+    -i h0:d1 (i.e. exclude m0; '-i' and ':' indicate 'skip intermediate snapshots')
+    -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
+    -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')
+
+    Example C where h0 is the latest common snapshot:
+    src = [h0, m0] (d is daily, h is hourly) --> dst = [h0] via returning an empty list
+
     * The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
     * The 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
     src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
     is a bookmark we convert a -I step to a -i step followed by zero or more -i/-I steps.
     * The is_resume param is necessary as 'zfs send -t' does not support sending more than a single snapshot
     on resuming a previously interrupted 'zfs receive -s'. Thus, here too, we convert a -I step to a -i step
-    followed by zero or more -i/-I steps."""
+    followed by zero or more -i/-I steps.
+    """
 
     def append_run(i: int, label: str) -> int:
         """Appends a run of snapshots as one or more send steps."""
@@ -68,8 +83,13 @@ def incremental_send_steps(
     guids: list[str] = src_guids
     n = len(guids)
     i = 0
+    start = i
     while i < n and guids[i] not in included_guids:  # skip hourlies
         i += 1
+    if i < n and i != start:
+        # the latest common snapshot is an hourly or a bookmark, followed by zero or more hourlies, followed by a daily
+        step = ("-i", src_snapshots[start], src_snapshots[i], src_snapshots[i : i + 1])
+        steps.append(step)
 
     while i < n:
         assert guids[i] in included_guids  # it's a daily

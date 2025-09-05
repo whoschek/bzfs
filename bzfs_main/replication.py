@@ -132,7 +132,13 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
 
     if job.dst_dataset_exists[dst_dataset]:
         rollback_result: bool | tuple[str, str, bool] = _rollback_dst_dataset_if_necessary(
-            job, dst_dataset, latest_src_snapshot, src_snapshots_with_guids, dst_snapshots_with_guids, done_checking, tid
+            job,
+            dst_dataset,
+            latest_src_snapshot,
+            basis_src_snapshots_with_guids,
+            dst_snapshots_with_guids,
+            done_checking,
+            tid,
         )
         if isinstance(rollback_result, bool):
             return rollback_result
@@ -233,8 +239,8 @@ def _list_and_filter_src_and_dst_snapshots(
     included_src_guids: set[str] = set()
     for line in src_snapshots_with_guids:
         guid, snapshot = line.split("\t", 1)
-        included_src_guids.add(guid)
         if "@" in snapshot:
+            included_src_guids.add(guid)
             latest_src_snapshot = snapshot
             if not oldest_src_snapshot:
                 oldest_src_snapshot = snapshot
