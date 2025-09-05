@@ -15,10 +15,8 @@
 """Unit tests for replication.py utilities without requiring the zfs CLI."""
 
 from __future__ import annotations
-import re
 import shlex
 import subprocess
-import threading
 import unittest
 from collections import defaultdict
 from typing import (
@@ -550,57 +548,35 @@ class TestReplication(AbstractTestCase):
         self.assertFalse(pv.call_args.kwargs.get("disable_progress_bar", False))
 
     def test_replicate_dataset_e2e_skips_hourly_in_steps(self) -> None:
-        """End-to-end: incremental_send_steps must not include an excluded hourly in any to_snapshots.
+        """End-to-end verification that incremental replication planning never includes snapshots excluded by policy,
+        specifically hourlies, even when bookmarks are present and bookmark-aware planning is enabled.
 
-        This test spies on incremental_send_steps called via replicate_dataset() and inspects the planned steps.
+        Setup: The source dataset has a daily d1, an hourly h1 (both as a bookmark and a true snapshot), and a
+        newer daily d2. The destination already contains d1. We configure snapshot selection with an include-all
+        rule and an exclude-"h.*" rule, thereby allowing only dailies to be replicated. We build a real Params via
+        the parser with `--dryrun=send` so side effects are suppressed while exercising production splitting and
+        validation logic.
+
+        Isolation: We patch replication helpers to avoid unrelated behavior (I/O, threads, property propagation),
+        return canned src/dst snapshot lists, and force `are_bookmarks_enabled=True` to take the bookmark-aware
+        code path. We also stub `_create_zfs_bookmarks` and `_run_zfs_send_receive` because the test is concerned
+        only with planning, not execution.
+
+        Assertion: We spy on `_incremental_send_steps_wrapper` to capture the sequence of computed `-i/-I` steps
+        and flatten each step's `to_snapshots` payload. The final check asserts that `@h1` is absent from the union
+        of all `to_snapshots`, proving that snapshot filtering fully propagates into planning regardless of the
+        presence of a same-GUID bookmark. This validates correct interplay between filtering, GUID alignment, and
+        step construction, including the latest-common-snapshot logic.
         """
         src_dataset = "pool/src"
         dst_dataset = "pool/dst"
-        p = _make_params(zfs_program="zfs")
-
-        def _split(*parts: object, **_kw: object) -> list[str]:
-            tokens: list[str] = []
-            for part in parts:
-                if not part:
-                    continue
-                if isinstance(part, (list, tuple)):
-                    tokens.extend(str(x) for x in part)
-                else:
-                    s = str(part)
-                    if s.startswith("[") and s.endswith("]") and "," in s:
-                        items = [t.strip().strip("'\"") for t in s[1:-1].split(",") if t.strip()]
-                        tokens.extend(items)
-                    else:
-                        tokens.extend(shlex.split(s))
-            return tokens
-
-        p.split_args = _split
-        p.src = MagicMock(root_dataset=src_dataset, location="src", sudo="")
-        p.dst = MagicMock(root_dataset=dst_dataset, location="dst", sudo="")
-        p.curr_zfs_send_program_opts = []
-        p.zfs_recv_program_opts = []
-        p.dry_run = True
-        p.dry_run_recv = "-n"
-        p.no_stream = False
-
-        p.two_or_more_spaces_regex = re.compile(r"  +")
-        p.use_bookmark = True
+        p = self.make_params(args=self.argparser_parse_args([src_dataset, dst_dataset]))
 
         exclude_regexes = compile_regexes(["h.*"])  # exclude hourlies
         include_regexes = compile_regexes([".*"])  # include everything else
         p.snapshot_filters = [[SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, (exclude_regexes, include_regexes))]]
         job = _make_job()
         job.params = p
-        job.params.log = MagicMock()
-        job.stats_lock = threading.Lock()
-        job.num_snapshots_found = 0
-        job.dst_dataset_exists = defaultdict(bool)
-        job.maybe_inject_delete = lambda *_a, **_kw: None
-        job.maybe_inject_params = lambda *_a, **_kw: None
-
-        job.is_first_replication_task = SynchronizedBool(True)
-        job.isatty = False
-        job.progress_reporter = MagicMock()
 
         src_list = "\n".join(
             [
@@ -612,8 +588,9 @@ class TestReplication(AbstractTestCase):
         )
         dst_list = f"1\t{dst_dataset}@d1\n"
 
-        def try_ssh_side_effect(_job: Job, remote: Remote, _lvl: int, **kwargs: dict[str, list[str]]) -> str:
-            cmd: list[str] = kwargs.get("cmd", [])  # type: ignore[assignment]
+        def fake_try_ssh_command(_job: Job, remote: Remote, _lvl: int, **kwargs: dict[str, list[str]]) -> str:
+            cmd_opt = kwargs.get("cmd")
+            cmd: list[str] = cmd_opt if isinstance(cmd_opt, list) else []
             text = " ".join(cmd)
             if remote is p.src and " list -t " in text and "-o guid,name" in text:
                 return src_list
@@ -623,7 +600,7 @@ class TestReplication(AbstractTestCase):
 
         captured_steps: list[list[tuple[str, str, str, list[str]]]] = []
 
-        def spy_wrapper(
+        def observing_incremental_send_steps_wrapper(
             pp: Params, src_snaps: list[str], src_guids: list[str], included: set[str], is_resume: bool
         ) -> list[tuple]:
             steps = _incremental_send_steps_wrapper(pp, src_snaps, src_guids, included, is_resume)
@@ -631,7 +608,7 @@ class TestReplication(AbstractTestCase):
             return steps
 
         with patch("bzfs_main.replication.are_bookmarks_enabled", return_value=True), patch(
-            "bzfs_main.replication.try_ssh_command", side_effect=try_ssh_side_effect
+            "bzfs_main.replication.try_ssh_command", side_effect=fake_try_ssh_command
         ), patch("bzfs_main.replication._recv_resume_token", return_value=(None, [], [])), patch(
             "bzfs_main.replication._estimate_send_size", return_value=0
         ), patch(
@@ -640,7 +617,9 @@ class TestReplication(AbstractTestCase):
         ), patch(
             "bzfs_main.replication._check_zfs_dataset_busy", return_value=True
         ), patch(
-            "bzfs_main.replication._incremental_send_steps_wrapper", side_effect=spy_wrapper
+            "bzfs_main.replication._create_zfs_bookmarks", side_effect=lambda *_a, **_kw: None
+        ), patch(
+            "bzfs_main.replication._incremental_send_steps_wrapper", side_effect=observing_incremental_send_steps_wrapper
         ), patch(
             "bzfs_main.replication._run_zfs_send_receive", side_effect=lambda *_args, **_kw: None
         ):
