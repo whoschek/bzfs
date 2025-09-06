@@ -143,7 +143,7 @@ class TestSnapshotCache(AbstractTestCase):
         return job
 
     def cache_label(self, job: Job, dst_dataset: str) -> SnapshotLabel:
-        """Build the src→dst replication-scoped cache label ("==").
+        """Build the src-->dst replication-scoped cache label ("==").
 
         Purpose: Provide the canonical label used to key the "last replicated"
         cache entry. Assumptions: Label depends on dst user@host namespace,
@@ -198,7 +198,7 @@ class TestSnapshotCache(AbstractTestCase):
 
     @patch("bzfs_main.snapshot_cache.itr_ssh_cmd_parallel")
     def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
-        with self.job_context(["src", "dst"]) as (job, _tmpdir):
+        with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
             self.mock_remote = MagicMock(spec=Remote)  # spec helps catch calls to non-existent attrs
 
             mock_itr_parallel.return_value = [  # normal input
@@ -259,8 +259,7 @@ class TestSnapshotCache(AbstractTestCase):
             ]
         ) as (job, _tmpdir):
             job.params.create_src_snapshots_config.current_datetime = datetime(2024, 1, 1, 0, 0, 10, tzinfo=timezone.utc)
-            dataset = SRC_DATASET
-            job.params.src.root_dataset = dataset
+            job.params.src.root_dataset = SRC_DATASET
             creation = 1_700_000_000
             changed = int(time.time()) - 5
 
@@ -271,7 +270,7 @@ class TestSnapshotCache(AbstractTestCase):
             assert cfg is not None
             hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
             cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(alert.label), hash_code), "", "", "")
-            cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, cache_label)
+            cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, cache_label)
 
             def fake_handle_minmax_snapshots(
                 self: Job,
@@ -282,21 +281,21 @@ class TestSnapshotCache(AbstractTestCase):
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
-                fn_latest(0, creation, dataset, "s")
+                fn_latest(0, creation, SRC_DATASET, "s")
                 return []
 
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=changed)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=changed)
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
                 Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
             ):
-                job.monitor_snapshots(job.params.src, [dataset])
+                job.monitor_snapshots(job.params.src, [SRC_DATASET])
 
             at, mt = SnapshotCache(job).get_snapshots_changed2(cache_file)
             self.assertEqual(creation, at)
             self.assertEqual(changed, mt)
 
     def test_last_replicated_cache_must_be_monotonic(self) -> None:
-        """Purpose: Prove the src→dst "last replicated" cache (the src-side "==" marker keyed by user/host+dst+filters)
+        """Purpose: Prove the src-->dst "last replicated" cache (the src-side "==" marker keyed by user/host+dst+filters)
         never regresses even when an older job finishes after a newer job. This cache is a correctness accelerator for
         replicate_datasets() to cheap-skip work; a regression risks false "up-to-date" decisions.
 
@@ -424,27 +423,26 @@ class TestSnapshotCache(AbstractTestCase):
         the exact write behavior of update_last_modified_cache()."""
 
         with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
-            dataset = SRC_DATASET
             snapshots_changed = 2_000_000_000  # arbitrary recent unix time
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
 
             # Prepare a label representing, e.g., a daily snapshot naming scheme
             label = SnapshotLabel(prefix="org_", infix="target_", timestamp="", suffix="_daily")
             cache = SnapshotCache(job)
 
             # Create a per-label cache file that records the creation time of the latest label snapshot
-            label_cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+            label_cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, label)
             creation_time = 1_900_000_000  # older than snapshots_changed, simulating last daily snapshot time
             set_last_modification_time_safe(label_cache_file, unixtime_in_secs=creation_time, if_more_recent=True)
 
             # Also create the dataset-level cache file ("=") with the dataset's snapshots_changed value
-            dataset_cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
+            dataset_cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET)
             set_last_modification_time_safe(dataset_cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True)
 
             # Stub zfs_get_snapshots_changed to avoid calling ZFS; return snapshots_changed for our dataset
-            with patch.object(SnapshotCache, "zfs_get_snapshots_changed", return_value={dataset: snapshots_changed}):
+            with patch.object(SnapshotCache, "zfs_get_snapshots_changed", return_value={SRC_DATASET: snapshots_changed}):
                 # Act: Update cache after snapshot creation scheduling
-                cache.update_last_modified_cache({label: [dataset]})
+                cache.update_last_modified_cache({label: [SRC_DATASET]})
 
             # Assert: The per-label cache must still reflect the creation time, not snapshots_changed
             # i.e. it must NOT be clobbered by the dataset-level snapshots_changed value.
@@ -477,26 +475,25 @@ class TestSnapshotCache(AbstractTestCase):
         """
 
         with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
-            dataset = SRC_DATASET
             snapshots_changed = 0  # Simulate property unavailable
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
 
             # Prepare a label whose cache file encodes latest snapshot creation time
             label = SnapshotLabel(prefix="org_", infix="target_", timestamp="", suffix="_daily")
             cache = SnapshotCache(job)
 
             # Create a per-label cache file with a known creation time
-            label_cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+            label_cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, label)
             creation_time = 1_900_000_000
             set_last_modification_time_safe(label_cache_file, unixtime_in_secs=creation_time, if_more_recent=True)
 
             # Also create the dataset-level cache file ("=") with a non-zero prior value to observe invalidation
-            dataset_cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
+            dataset_cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET)
             set_last_modification_time_safe(dataset_cache_file, unixtime_in_secs=1_800_000_000, if_more_recent=True)
 
             # Stub zfs_get_snapshots_changed to return 0 for our dataset
-            with patch.object(SnapshotCache, "zfs_get_snapshots_changed", return_value={dataset: 0}):
-                cache.update_last_modified_cache({label: [dataset]})
+            with patch.object(SnapshotCache, "zfs_get_snapshots_changed", return_value={SRC_DATASET: 0}):
+                cache.update_last_modified_cache({label: [SRC_DATASET]})
 
             # Dataset-level cache must be invalidated to 0
             self.assertEqual(0, cache.get_snapshots_changed(dataset_cache_file))
@@ -918,7 +915,6 @@ class TestSnapshotCache(AbstractTestCase):
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, SRC_DATASET, mon_cache_label)
 
             # Identify replicate cache files
-            repl_cache_label = self.cache_label(job_r, DST_DATASET)
             cache_label = self.cache_label(job_r, DST_DATASET)
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, SRC_DATASET, cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, DST_DATASET)
@@ -1055,7 +1051,6 @@ class TestSnapshotCache(AbstractTestCase):
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET)
 
             # Replicate cache files
-            repl_cache_label = self.cache_label(job_r, DST_DATASET)
             cache_label = self.cache_label(job_r, DST_DATASET)
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, SRC_DATASET, cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, DST_DATASET)
@@ -1148,7 +1143,7 @@ class TestSnapshotCache(AbstractTestCase):
 
     def test_three_way_monitor_snapshot_replicate_interleaving_monotonic(self) -> None:
         """Purpose: Stress a three-way interleaving of monitor, snapshot scheduling, and replication. We first perform a
-        sequence (monitor → snapshot → replicate) writing newer values, then re-run each with older values to attempt
+        sequence (monitor --> snapshot --> replicate) writing newer values, then re-run each with older values to attempt
         regressions. All cache families must retain the newer values.
 
         Assumptions: Subsystems touch distinct files; writes are monotonic; ordering can be steered with events;
@@ -2227,7 +2222,7 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(creation, at)
             self.assertEqual(sc, mt)
 
-            # Second run: matured trust → all cache hits; ensure no fallback invocation
+            # Second run: matured trust --> all cache hits; ensure no fallback invocation
             received_count = {"n": 0}
 
             def fake_handle_minmax_snapshots2(
