@@ -10,7 +10,7 @@ __choices_bzfs() {
     --cache-snapshots) echo false true ;;
     --compare-snapshot-lists) echo all dst dst+all src src+all src+dst src+dst+all ;;
     --compression-program) echo - gzip lz4 pigz pzstd zstd ;;
-    --create-bookmarks) echo all many none ;;
+    --create-bookmarks) echo all hourly minutely none secondly ;;
     --delete-dst-snapshots) echo bookmarks snapshots ;;
     --delete-empty-dst-datasets) echo snapshots snapshots+bookmarks ;;
     --dryrun) echo recv send ;;
