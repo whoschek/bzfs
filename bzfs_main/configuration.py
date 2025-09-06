@@ -448,6 +448,7 @@ class Remote:
         if self.ssh_config_file:
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
+        self.ssh_cipher: str = p.validate_arg_str(args.ssh_cipher)
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
             ["-v"] if args.verbose >= 3 else []
@@ -487,6 +488,8 @@ class Remote:
         ssh_cmd: list[str] = [p.ssh_program] + self.ssh_extra_opts
         if self.ssh_config_file:
             ssh_cmd += ["-F", self.ssh_config_file]
+        if self.ssh_cipher:
+            ssh_cmd += ["-c", self.ssh_cipher]
         if self.ssh_port:
             ssh_cmd += ["-p", str(self.ssh_port)]
         if self.reuse_ssh_connection:
