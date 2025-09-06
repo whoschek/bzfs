@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import itertools
+import platform
 
 from bzfs_main.argparse_actions import (
     CheckPercentRange,
@@ -1165,10 +1166,17 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"any way you like, as {PROG_NAME} (without --no-use-bookmark) will happily work with whatever "
              "bookmarks currently exist, if any.\n\n")
 
+    ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
     # ^aes256-gcm@openssh.com cipher: for speed with confidentiality and integrity
     # measure cipher perf like so: count=5000; for i in $(seq 1 3); do echo "iteration $i:"; for cipher in $(ssh -Q cipher); do dd if=/dev/zero bs=1M count=$count 2> /dev/null | ssh -c $cipher -p 40999 127.0.0.1 "(time -p cat) > /dev/null" 2>&1 | grep real | awk -v count=$count -v cipher=$cipher '{print cipher ": " count / $2 " MB/s"}'; done; done
     # see https://gbe0.com/posts/linux/server/benchmark-ssh-ciphers/
     # and https://crypto.stackexchange.com/questions/43287/what-are-the-differences-between-these-aes-ciphers
+    parser.add_argument(
+        "--ssh-cipher", type=str, default=ssh_cipher_default, metavar="STRING",
+        help="SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
+             "--ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
+             "keyword in ssh_config(5) for more information: "
+             "https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `%(default)s`\n\n")
 
     locations = ["src", "dst"]
     for loc in locations:

@@ -628,11 +628,12 @@ usage: bzfs [-h] [--recursive]
             [--no-privilege-elevation] [--no-stream]
             [--no-resume-recv]
             [--create-bookmarks {all,hourly,minutely,secondly,none}]
-            [--no-use-bookmark] [--ssh-src-user STRING]
-            [--ssh-dst-user STRING] [--ssh-src-host STRING]
-            [--ssh-dst-host STRING] [--ssh-src-port INT]
-            [--ssh-dst-port INT] [--ssh-src-config-file FILE]
-            [--ssh-dst-config-file FILE] [--threads INT[%]]
+            [--no-use-bookmark] [--ssh-cipher STRING]
+            [--ssh-src-user STRING] [--ssh-dst-user STRING]
+            [--ssh-src-host STRING] [--ssh-dst-host STRING]
+            [--ssh-src-port INT] [--ssh-dst-port INT]
+            [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
+            [--threads INT[%]]
             [--max-concurrent-ssh-sessions-per-tcp-connection INT]
             [--bwlimit STRING]
             [--compression-program {zstd,lz4,pzstd,pigz,gzip,-}]
@@ -1872,6 +1873,18 @@ usage: bzfs [-h] [--recursive]
     transaction group number and creation time as the snapshot. Also note that you can create,
     delete and prune bookmarks any way you like, as bzfs (without --no-use-bookmark) will happily
     work with whatever bookmarks currently exist, if any.
+
+<!-- -->
+
+<div id="--ssh-cipher"></div>
+
+**--ssh-cipher** *STRING*
+
+*  SSH cipher specification for encrypting the session (optional); will be passed into ssh
+    -c CLI. --ssh-cipher is a comma-separated list of ciphers listed in order of preference. See
+    the 'Ciphers' keyword in ssh_config(5) for more information:
+    https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default:
+    `^aes256-gcm@openssh.com`
 
 <!-- -->
 
