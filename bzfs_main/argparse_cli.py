@@ -1414,7 +1414,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             return argparse.SUPPRESS if option_name not in (ZFS_RECV_O, ZFS_RECV_X) else text
 
         argument_group = parser.add_argument_group(
-            grup + " (Experimental)",
+            grup,
             description=h(f"The following group of parameters specifies additional zfs receive {flag} options that "
                           "can be used to configure copying of ZFS dataset properties from the source dataset to "
                           "its corresponding destination dataset. The 'zfs-recv-o' group of parameters is applied "
