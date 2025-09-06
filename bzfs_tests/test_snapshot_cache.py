@@ -1972,13 +1972,13 @@ class TestSnapshotCache(AbstractTestCase):
 
         with self.job_context([SRC_DATASET, DST_DATASET]) as (job_a, tmpdir):
             # Same user@host, different ports
-            for port in (1111,):
-                job_a.params.dst.basis_ssh_user = "u"
-                job_a.params.dst.basis_ssh_host = "h"
-                job_a.params.dst.ssh_port = port
-                job_a.params.dst.ssh_user = "u"
-                job_a.params.dst.ssh_host = "h"
-                job_a.params.dst.ssh_user_host = "u@h"
+            job_a.params.dst.basis_ssh_user = "u"
+            job_a.params.dst.basis_ssh_host = "h"
+            job_a.params.dst.ssh_port = 1111
+            job_a.params.dst.ssh_user = "u"
+            job_a.params.dst.ssh_host = "h"
+            job_a.params.dst.ssh_user_host = "u@h"
+
             job_b = self.make_job_for_tmp(tmpdir, [SRC_DATASET, DST_DATASET])
             job_b.params.dst.basis_ssh_user = "u"
             job_b.params.dst.basis_ssh_host = "h"
@@ -1987,12 +1987,10 @@ class TestSnapshotCache(AbstractTestCase):
             job_b.params.dst.ssh_host = "h"
             job_b.params.dst.ssh_user_host = "u@h"
 
-            src_ds = job_a.params.src.root_dataset
-            dst_ds = job_a.params.dst.root_dataset
-            label_a = self.replication_cache_label(job_a, dst_ds)
-            path_a = SnapshotCache(job_a).last_modified_cache_file(job_a.params.src, src_ds, label_a)
-            label_b = self.replication_cache_label(job_b, dst_ds)
-            path_b = SnapshotCache(job_b).last_modified_cache_file(job_b.params.src, src_ds, label_b)
+            label_a = self.replication_cache_label(job_a, DST_DATASET)
+            path_a = SnapshotCache(job_a).last_modified_cache_file(job_a.params.src, SRC_DATASET, label_a)
+            label_b = self.replication_cache_label(job_b, DST_DATASET)
+            path_b = SnapshotCache(job_b).last_modified_cache_file(job_b.params.src, SRC_DATASET, label_b)
 
             self.assertNotEqual(
                 path_a, path_b, msg=f"Replication cache path must include port to avoid collisions: {path_a}"
@@ -2091,7 +2089,7 @@ class TestSnapshotCache(AbstractTestCase):
             job.params.dst.root_dataset = DST_DATASET
 
             # Build a large, flat tree of src datasets and corresponding dst datasets
-            src_datasets = [f"pool/src/d{i:04d}" for i in range(n)]
+            src_datasets = [f"{SRC_DATASET}/d{i:04d}" for i in range(n)]
             dst_datasets = [ds.replace(SRC_DATASET, DST_DATASET, 1) for ds in src_datasets]
 
             # Mark dst existence to avoid error-based skipping
@@ -2183,7 +2181,7 @@ class TestSnapshotCache(AbstractTestCase):
             # prevent alerts by aligning current time with creation
             job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(creation, tz=timezone.utc)
 
-            src_datasets = [f"pool/src/d{i:04d}" for i in range(n)]
+            src_datasets = [f"{SRC_DATASET}/d{i:04d}" for i in range(n)]
             for ds in src_datasets:
                 job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc)
 
@@ -2284,7 +2282,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Ensure scheduler uses timezone-aware datetimes for cache trust and next_event comparisons
             job.params.create_src_snapshots_config.tz = timezone.utc
 
-            src_datasets = [f"pool/src/d{i:04d}" for i in range(n)]
+            src_datasets = [f"{SRC_DATASET}/d{i:04d}" for i in range(n)]
             src_datasets.sort()
             for ds in src_datasets:
                 job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc)
