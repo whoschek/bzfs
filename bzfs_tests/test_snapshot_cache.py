@@ -79,6 +79,8 @@ from bzfs_main.configuration import (
     SnapshotLabel,
 )
 from bzfs_main.snapshot_cache import (
+    MONITOR_CACHE_FILE_PREFIX,
+    REPLICATION_CACHE_FILE_PREFIX,
     SnapshotCache,
     set_last_modification_time,
     set_last_modification_time_safe,
@@ -141,7 +143,7 @@ class TestSnapshotCache(AbstractTestCase):
         hash_key = tuple(tuple(f) for f in job.params.snapshot_filters)
         hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
         userhost_dir = job.params.dst.cache_namespace()
-        return SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
+        return SnapshotLabel(os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset, hash_code), "", "", "")
 
     def test_set_last_modification_time(self) -> None:
         for func in [set_last_modification_time, set_last_modification_time_old]:
@@ -254,7 +256,9 @@ class TestSnapshotCache(AbstractTestCase):
             cfg = alert.latest
             assert cfg is not None
             hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-            cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(alert.label), hash_code), "", "", "")
+            cache_label = SnapshotLabel(
+                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(alert.label), hash_code), "", "", ""
+            )
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, cache_label)
 
             def fake_handle_minmax_snapshots(
@@ -528,7 +532,7 @@ class TestSnapshotCache(AbstractTestCase):
             assert cfg is not None
             hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
 
-            cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(label), hash_code), "", "", "")
+            cache_label = SnapshotLabel(os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(label), hash_code), "", "", "")
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, cache_label)
 
             # Stub: force fallback and inject creation times via handle_minmax_snapshots
@@ -611,7 +615,7 @@ class TestSnapshotCache(AbstractTestCase):
             job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
 
             hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-            cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(label), hash_code), "", "", "")
+            cache_label = SnapshotLabel(os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(label), hash_code), "", "", "")
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, cache_label)
             set_last_modification_time_safe(cache_file, unixtime_in_secs=(creation, snapshots_changed), if_more_recent=True)
 
@@ -896,7 +900,9 @@ class TestSnapshotCache(AbstractTestCase):
             cfg = alert.latest
             assert cfg is not None
             hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-            mon_cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(lbl), hash_code), "", "", "")
+            mon_cache_label = SnapshotLabel(
+                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(lbl), hash_code), "", "", ""
+            )
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, SRC_DATASET, mon_cache_label)
 
             # Identify replicate cache files
@@ -1191,7 +1197,9 @@ class TestSnapshotCache(AbstractTestCase):
             cfg = alert.latest
             assert cfg is not None
             hashcode_m = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-            mon_cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(lbl_mon), hashcode_m), "", "", "")
+            mon_cache_label = SnapshotLabel(
+                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(lbl_mon), hashcode_m), "", "", ""
+            )
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, SRC_DATASET, mon_cache_label)
 
             lbl_s = job_s.params.create_src_snapshots_config.snapshot_labels()[0]
@@ -1472,7 +1480,9 @@ class TestSnapshotCache(AbstractTestCase):
             cfg = alert.latest
             assert cfg is not None
             hashcode_m2 = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-            mon_cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(lbl_mon), hashcode_m2), "", "", "")
+            mon_cache_label = SnapshotLabel(
+                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(lbl_mon), hashcode_m2), "", "", ""
+            )
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, SRC_DATASET, mon_cache_label)
 
             def fake_handle_minmax_snapshots_monitor(
@@ -2198,7 +2208,9 @@ class TestSnapshotCache(AbstractTestCase):
             cfg = alert.latest
             assert cfg is not None
             hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-            cache_label = SnapshotLabel(os.path.join("===", cfg.kind, str(alert.label), hash_code), "", "", "")
+            cache_label = SnapshotLabel(
+                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(alert.label), hash_code), "", "", ""
+            )
             sample = src_datasets[0]
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, sample, cache_label)
             at, mt = SnapshotCache(job).get_snapshots_changed2(cache_file)
