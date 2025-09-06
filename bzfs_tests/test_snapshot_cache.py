@@ -142,7 +142,7 @@ class TestSnapshotCache(AbstractTestCase):
         job.params = self.make_params(args=ns, log_params=log_params)
         return job
 
-    def cache_label(self, job: Job, dst_dataset: str) -> SnapshotLabel:
+    def replication_cache_label(self, job: Job, dst_dataset: str) -> SnapshotLabel:
         """Build the src-->dst replication-scoped cache label ("==").
 
         Purpose: Provide the canonical label used to key the "last replicated"
@@ -150,6 +150,7 @@ class TestSnapshotCache(AbstractTestCase):
         dst dataset and snapshot filter hash. Design Rationale: Prevent drift
         and code duplication across tests computing this label.
         """
+        assert dst_dataset
         hash_key = tuple(tuple(f) for f in job.params.snapshot_filters)
         hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
         userhost_dir = self.dst_namespace(job)
@@ -322,7 +323,7 @@ class TestSnapshotCache(AbstractTestCase):
             job.dst_dataset_exists[DST_DATASET] = True  # avoid skip in scheduler
 
             # Compute the replication-scoped cache file path used by replicate_datasets()
-            cache_label = self.cache_label(job, DST_DATASET)
+            cache_label = self.replication_cache_label(job, DST_DATASET)
             last_repl_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, cache_label)
 
             # Patch caching detection and network interactions to keep it unit-level
@@ -696,7 +697,7 @@ class TestSnapshotCache(AbstractTestCase):
             job.dst_dataset_exists[DST_DATASET] = True
 
             # Build replication-scoped cache file path for src '==' and dst '=' path
-            repl_cache_label = self.cache_label(job, DST_DATASET)
+            repl_cache_label = self.replication_cache_label(job, DST_DATASET)
             src_repl_file = job.cache.last_modified_cache_file(job.params.src, SRC_DATASET, repl_cache_label)
             dst_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.dst, DST_DATASET)
 
@@ -773,8 +774,8 @@ class TestSnapshotCache(AbstractTestCase):
             job_b.dst_dataset_exists[DST_DATASET] = True
 
             # Compute file paths to assert at end (same for both jobs)
-            cache_label = self.cache_label(job_a, DST_DATASET)
-            cache_label = self.cache_label(job_a, DST_DATASET)
+            cache_label = self.replication_cache_label(job_a, DST_DATASET)
+            cache_label = self.replication_cache_label(job_a, DST_DATASET)
             last_repl_file = SnapshotCache(job_a).last_modified_cache_file(job_a.params.src, SRC_DATASET, cache_label)
             dst_cache_file = SnapshotCache(job_a).last_modified_cache_file(job_a.params.dst, DST_DATASET)
 
@@ -915,7 +916,7 @@ class TestSnapshotCache(AbstractTestCase):
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, SRC_DATASET, mon_cache_label)
 
             # Identify replicate cache files
-            cache_label = self.cache_label(job_r, DST_DATASET)
+            cache_label = self.replication_cache_label(job_r, DST_DATASET)
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, SRC_DATASET, cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, DST_DATASET)
 
@@ -1051,7 +1052,7 @@ class TestSnapshotCache(AbstractTestCase):
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET)
 
             # Replicate cache files
-            cache_label = self.cache_label(job_r, DST_DATASET)
+            cache_label = self.replication_cache_label(job_r, DST_DATASET)
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, SRC_DATASET, cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, DST_DATASET)
 
@@ -1213,7 +1214,7 @@ class TestSnapshotCache(AbstractTestCase):
             label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl_s)
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET)
 
-            repl_cache_label = self.cache_label(job_r, DST_DATASET)
+            repl_cache_label = self.replication_cache_label(job_r, DST_DATASET)
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, SRC_DATASET, repl_cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, DST_DATASET)
 
@@ -1446,7 +1447,7 @@ class TestSnapshotCache(AbstractTestCase):
             label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl)
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET)
 
-            repl_cache_label = self.cache_label(job_r, DST_DATASET)
+            repl_cache_label = self.replication_cache_label(job_r, DST_DATASET)
             last_repl_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.src, SRC_DATASET, repl_cache_label)
             dst_cache_file = SnapshotCache(job_r).last_modified_cache_file(job_r.params.dst, DST_DATASET)
 
@@ -1988,9 +1989,9 @@ class TestSnapshotCache(AbstractTestCase):
 
             src_ds = job_a.params.src.root_dataset
             dst_ds = job_a.params.dst.root_dataset
-            label_a = self.cache_label(job_a, dst_ds)
+            label_a = self.replication_cache_label(job_a, dst_ds)
             path_a = SnapshotCache(job_a).last_modified_cache_file(job_a.params.src, src_ds, label_a)
-            label_b = self.cache_label(job_b, dst_ds)
+            label_b = self.replication_cache_label(job_b, dst_ds)
             path_b = SnapshotCache(job_b).last_modified_cache_file(job_b.params.src, src_ds, label_b)
 
             self.assertNotEqual(
@@ -2032,7 +2033,7 @@ class TestSnapshotCache(AbstractTestCase):
             job_b.dst_dataset_exists[job_b.params.dst.root_dataset] = True
 
             # Shared hash but distinct cache file paths due to port segregation
-            label = self.cache_label(job_a, DST_DATASET)
+            label = self.replication_cache_label(job_a, DST_DATASET)
             src_repl_file = SnapshotCache(job_a).last_modified_cache_file(job_a.params.src, SRC_DATASET, label)
             dst_eq_file = SnapshotCache(job_a).last_modified_cache_file(job_a.params.dst, DST_DATASET)
 
@@ -2127,7 +2128,7 @@ class TestSnapshotCache(AbstractTestCase):
             sample_src = src_datasets[0]
             sample_dst = dst_datasets[0]
             # Replication-scoped src "==" and dst "=" cache paths
-            cache_label = self.cache_label(job, sample_dst)
+            cache_label = self.replication_cache_label(job, sample_dst)
             src_repl_file = SnapshotCache(job).last_modified_cache_file(job.params.src, sample_src, cache_label)
             dst_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.dst, sample_dst)
             # Read back (ensure actual disk timestamps match expected values)
