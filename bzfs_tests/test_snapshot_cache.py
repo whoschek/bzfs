@@ -969,13 +969,9 @@ class TestSnapshotCache(AbstractTestCase):
                 if path == mon_cache_file:
                     event_monitoring_written.set()
 
-            fake_zfs_get_snapshots_changed_r_state = {"i": 0}
-
             def fake_zfs_get_snapshots_changed_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                # find-stale then refresh
-                i = fake_zfs_get_snapshots_changed_r_state["i"]
-                fake_zfs_get_snapshots_changed_r_state["i"] = i + 1
-                return {} if i == 0 else {dst_dataset: repl_dst_changed_a}
+                # Deterministic: always return the intended dst snapshots_changed for replicate
+                return {dst_dataset: repl_dst_changed_a}
 
             def run_monitor_snapshots() -> None:
                 with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots):
@@ -1100,12 +1096,9 @@ class TestSnapshotCache(AbstractTestCase):
                 if path in (label_cache_file, src_cache_file):
                     event_snapshot_written.set()
 
-            fake_zfs_get_snapshots_changed_r_state2 = {"i": 0}
-
             def fake_zfs_get_snapshots_changed_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                i = fake_zfs_get_snapshots_changed_r_state2["i"]
-                fake_zfs_get_snapshots_changed_r_state2["i"] = i + 1
-                return {} if i == 0 else {dst_dataset: repl_dst_changed}
+                # Deterministic: always return the intended dst snapshots_changed for replicate
+                return {dst_dataset: repl_dst_changed}
 
             def run_find_datasets_to_snapshot() -> None:
                 with patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots):
@@ -1277,12 +1270,9 @@ class TestSnapshotCache(AbstractTestCase):
                     fn_on_finish_dataset(src_dataset)
                 return []
 
-            fake_zfs_get_snapshots_changed_r_state3 = {"i": 0}
-
             def fake_zfs_get_snapshots_changed_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                i = fake_zfs_get_snapshots_changed_r_state3["i"]
-                fake_zfs_get_snapshots_changed_r_state3["i"] = i + 1
-                return {} if i == 0 else {dst_dataset: r_dst_sc}
+                # Deterministic: always return the intended dst snapshots_changed for replicate
+                return {dst_dataset: r_dst_sc}
 
             # First phase: Monitor -> Snapshot -> Replicate (older)
             def run_monitor_snapshots() -> None:
@@ -1340,12 +1330,9 @@ class TestSnapshotCache(AbstractTestCase):
                     fn_on_finish_dataset(src_dataset)
                 return []
 
-            fake_zfs_get_snapshots_changed_r_old_state = {"i": 0}
-
             def fake_zfs_get_snapshots_changed_r_old(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                i = fake_zfs_get_snapshots_changed_r_old_state["i"]
-                fake_zfs_get_snapshots_changed_r_old_state["i"] = i + 1
-                return {} if i == 0 else {dst_dataset: r_dst_old}
+                # Deterministic: always return the intended dst snapshots_changed for replicate
+                return {dst_dataset: r_dst_old}
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
                 "bzfs_main.bzfs.replicate_dataset", return_value=True
