@@ -2910,7 +2910,7 @@ class LocalTestCase(IntegrationTestCase):
                     self.run_bzfs(
                         src_root_dataset,
                         dst_root_dataset,
-                        "--create-bookmarks=" + ["none", "many", "all"][i],
+                        "--create-bookmarks=" + ["none", "hourly", "all"][i],
                         dry_run=(i == 0),
                     )
                     if i == 0:

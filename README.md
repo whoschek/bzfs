@@ -626,7 +626,8 @@ usage: bzfs [-h] [--recursive]
             [--cache-snapshots [{true,false}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
             [--no-privilege-elevation] [--no-stream]
-            [--no-resume-recv] [--create-bookmarks {all,many,none}]
+            [--no-resume-recv]
+            [--create-bookmarks {all,hourly,minutely,secondly,none}]
             [--no-use-bookmark] [--ssh-src-user STRING]
             [--ssh-dst-user STRING] [--ssh-src-host STRING]
             [--ssh-dst-host STRING] [--ssh-src-port INT]
@@ -1791,12 +1792,12 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--create-bookmarks"></div>
 
-**--create-bookmarks** *{all,many,none}*
+**--create-bookmarks** *{all,hourly,minutely,secondly,none}*
 
 *  For increased safety, bzfs replication behaves as follows wrt. ZFS bookmark creation, if it is
     autodetected that the source ZFS pool support bookmarks:
 
-    * `many` (default): Whenever it has successfully completed replication of the most recent
+    * `hourly` (default): Whenever it has successfully completed replication of the most recent
     source snapshot, bzfs creates a ZFS bookmark of that snapshot, and attaches it to the source
     dataset. In addition, whenever it has successfully completed a 'zfs send' operation, bzfs
     creates a ZFS bookmark of each hourly, daily, weekly, monthly and yearly source snapshot that

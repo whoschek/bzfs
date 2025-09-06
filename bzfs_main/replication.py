@@ -530,10 +530,12 @@ def _replicate_dataset_incrementally(
         recv_resume_token = None
         with job.stats_lock:
             job.num_snapshots_replicated += curr_num_snapshots
+        assert p.create_bookmarks
         if p.create_bookmarks == "all":
             _create_zfs_bookmarks(job, src, src_dataset, to_snapshots)
-        elif p.create_bookmarks == "many":
-            to_snapshots = [snap for snap in to_snapshots if p.xperiods.label_milliseconds(snap) >= 60 * 60 * 1000]
+        elif p.create_bookmarks != "none":
+            threshold_millis: int = p.xperiods.label_milliseconds("_" + p.create_bookmarks)
+            to_snapshots = [snap for snap in to_snapshots if p.xperiods.label_milliseconds(snap) >= threshold_millis]
             if i == len(steps_todo) - 1 and (len(to_snapshots) == 0 or to_snapshots[-1] != to_snap):
                 to_snapshots.append(to_snap)
             _create_zfs_bookmarks(job, src, src_dataset, to_snapshots)

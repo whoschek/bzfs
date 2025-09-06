@@ -1098,10 +1098,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "need not be retransmitted regardless of the --no-resume-recv flag, as these snapshots have already "
              "been successfully received at the destination either way.\n\n")
     parser.add_argument(
-        "--create-bookmarks", choices=["all", "many", "none"], default="many",
+        "--create-bookmarks", choices=["all", "hourly", "minutely", "secondly", "none"], default="hourly",
         help=f"For increased safety, {PROG_NAME} replication behaves as follows wrt. ZFS bookmark creation, if it is "
              "autodetected that the source ZFS pool support bookmarks:\n\n"
-             "* `many` (default): Whenever it has successfully completed replication of the most recent source snapshot, "
+             "* `hourly` (default): Whenever it has successfully completed replication of the most recent source snapshot, "
              f"{PROG_NAME} creates a ZFS bookmark of that snapshot, and attaches it to the source dataset. In addition, "
              f"whenever it has successfully completed a 'zfs send' operation, {PROG_NAME} creates a ZFS bookmark of each "
              f"hourly, daily, weekly, monthly and yearly source snapshot that was sent during that 'zfs send' operation, "
