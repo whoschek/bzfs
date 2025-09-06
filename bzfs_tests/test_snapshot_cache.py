@@ -860,7 +860,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Use time patch to ensure maturity for equality/skip decisions
             mature_now = max(a_src_changed, a_dst_changed) + bzfs.TIME_THRESHOLD_SECS + 5.0
 
-            def repl_wrapper(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
                 # Simple phase markers for test determinism
                 if job is job_a:
                     a_repl_started.set()
@@ -870,7 +870,7 @@ class TestSnapshotCache(AbstractTestCase):
                 return True
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", side_effect=repl_wrapper
+                "bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset
             ), patch(
                 "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe
             ), patch(
@@ -1021,13 +1021,13 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_111_111_111, if_more_recent=True)
             mature_now = max(repl_src_changed_a, repl_dst_changed_a) + bzfs.TIME_THRESHOLD_SECS + 5.0
 
-            def repl_wrapper(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
                 if job is job_r:
                     r_repl_done.set()
                 return True
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", side_effect=repl_wrapper
+                "bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset
             ), patch(
                 "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe
             ), patch(
@@ -1170,13 +1170,13 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_222_222_222, if_more_recent=True)
             mature_now2 = max(repl_src_changed, repl_dst_changed) + bzfs.TIME_THRESHOLD_SECS + 5.0
 
-            def repl_wrapper2(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
                 if job is job_r:
                     r_repl_done2.set()
                 return True
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", side_effect=repl_wrapper2
+                "bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset
             ), patch(
                 "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time
             ), patch(
@@ -1371,13 +1371,13 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_333_333_333, if_more_recent=True)
             mature_now3 = max(r_src_sc, r_dst_sc) + bzfs.TIME_THRESHOLD_SECS + 5.0
 
-            def repl_wrapper3(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
                 if job is job_r:
                     r3_repl_done.set()
                 return True
 
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", side_effect=repl_wrapper3
+                "bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset
             ), patch(
                 "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time
             ), patch(
