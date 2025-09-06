@@ -1770,8 +1770,8 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
 
         job.cache = cast(SnapshotCache, FakeCache())
         job.src_properties = {
-            "tank/a": bzfs.DatasetProperties(700, 0, 123),
-            "tank/b": bzfs.DatasetProperties(701, 0, 456),
+            "tank/a": bzfs.DatasetProperties(0, 123),
+            "tank/b": bzfs.DatasetProperties(0, 456),
         }
 
         received: list[str] = []

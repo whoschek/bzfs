@@ -55,7 +55,7 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import DatasetProperties, Job
+    from bzfs_main.bzfs import Job
     from bzfs_main.configuration import Remote, SnapshotLabel
 
 
@@ -83,11 +83,7 @@ class SnapshotCache:
         """Returns the path of the cache file that is tracking last snapshot modification."""
         cache_file: str = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
         userhost_dir: str = remote.cache_namespace()
-        job = self.job
-        props: dict[str, DatasetProperties] = job.dst_properties if remote is remote.params.dst else job.src_properties
-        guid: int = props[dataset].guid  # ZFS GUID of dataset is a random 64 bit integer > 0, and is stable across renames
-        subdir = f"{guid:03d}"  # perf: zero-padded subdir partitions flat namespace into 1000 subdirs
-        return os.path.join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, subdir, str(guid), cache_file)
+        return os.path.join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
