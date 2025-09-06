@@ -116,24 +116,11 @@ class TestSnapshotCache(AbstractTestCase):
         pattern of creating a temp dir, patching get_home_directory, building
         args, log_params and a Job.
         """
-        assert args
         with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
-            ns = self.argparser_parse_args(args)
-            log_params = MagicMock()
-            log_params.last_modified_cache_dir = tmpdir
-            job = Job()
-            job.params = self.make_params(args=ns, log_params=log_params)
+            job = self.make_job_for_tmp(tmpdir, args)
             yield job, tmpdir
 
     def make_job_for_tmp(self, tmpdir: str, args: list[str]) -> Job:
-        """Create a new Job bound to an existing temp cache directory.
-
-        Purpose: Many tests need multiple Jobs sharing the same cache dir to
-        model concurrency. Assumptions: Caller already patches
-        get_home_directory to the same tmpdir when needed. Design Rationale:
-        Ensure consistent job construction without repeating arg parsing and
-        log params wiring.
-        """
         assert args
         ns = self.argparser_parse_args(args)
         log_params = MagicMock()
@@ -153,11 +140,8 @@ class TestSnapshotCache(AbstractTestCase):
         assert dst_dataset
         hash_key = tuple(tuple(f) for f in job.params.snapshot_filters)
         hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
-        userhost_dir = self.dst_namespace(job)
+        userhost_dir = job.params.dst.cache_namespace()
         return SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
-
-    def dst_namespace(self, job: Job) -> str:
-        return job.params.dst.cache_namespace()
 
     def test_set_last_modification_time(self) -> None:
         for func in [set_last_modification_time, set_last_modification_time_old]:
