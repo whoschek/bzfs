@@ -85,7 +85,7 @@ from bzfs_main.snapshot_cache import (
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
 if TYPE_CHECKING:  # type-only imports for annotations
-    from bzfs_main.retry import RetryPolicy
+    from bzfs_main.retry import Retry, RetryPolicy
 
 
 #############################################################################
@@ -812,20 +812,29 @@ class TestSnapshotCache(AbstractTestCase):
             job_a.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=a_src_changed)
             job_b.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=b_src_changed)
 
-            # Per-job zfs_get_snapshots_changed: return the intended dst snapshots_changed deterministically.
-            #
-            # Rationale: replicate_datasets() may or may not invoke an early dst property fetch in find_stale_datasets()
-            # depending on cache maturity and equality checks. Relying on call counts here introduces a race and can
-            # cause one of the jobs to write a "0" (empty result) to the dst cache. Instead, make the side effect
-            # unconditional so the final dst cache value reflects each job's intended snapshots_changed.
+            # Prepopulate to deterministically exercise find-stale (src '==' equality, matured) and force refresh
+            # (dst '=' mismatch):
+            set_last_modification_time_safe(last_repl_file, unixtime_in_secs=a_src_changed, if_more_recent=True)
+            set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_234_567_890, if_more_recent=True)
+
+            # Instrumentation for A's phases and counts
+            a_findstale_seen = threading.Event()
+            a_repl_started = threading.Event()
+            a_repl_done = threading.Event()
+            a_dst_written = threading.Event()
+            a_counts = {"find": 0, "refresh": 0}
+
+            # Phase-aware zfs_get_snapshots_changed for A/B (deterministic payloads)
             def fake_zfs_get_snapshots_changed_a(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
+                if not a_repl_done.is_set():
+                    a_counts["find"] += 1
+                    a_findstale_seen.set()
+                else:
+                    a_counts["refresh"] += 1
                 return {dst_dataset: a_dst_changed}
 
             def fake_zfs_get_snapshots_changed_b(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
                 return {dst_dataset: b_dst_changed}
-
-            # Synchronize start so that A writes its dst cache first, then B writes after
-            event_a_written = threading.Event()
 
             orig_set_last_modification_time_safe = snapshot_cache.set_last_modification_time_safe
 
@@ -836,7 +845,7 @@ class TestSnapshotCache(AbstractTestCase):
                 orig_set_last_modification_time_safe(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
                 # Signal only after A has written the destination dataset cache, ensuring A's value lands first.
                 if path == dst_cache_file:
-                    event_a_written.set()
+                    a_dst_written.set()
 
             def run_job_a() -> None:
                 with patch.object(job_a.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_a):
@@ -844,13 +853,29 @@ class TestSnapshotCache(AbstractTestCase):
 
             def run_job_b() -> None:
                 # Wait until A has written the dst '=' cache, then run B so it attempts to write older
-                event_a_written.wait(timeout=5)
+                a_dst_written.wait(timeout=5)
                 with patch.object(job_b.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_b):
                     job_b.replicate_datasets([src_dataset], task_description="B", max_workers=1)
 
+            # Use time patch to ensure maturity for equality/skip decisions
+            mature_now = max(a_src_changed, a_dst_changed) + bzfs.TIME_THRESHOLD_SECS + 5.0
+
+            def repl_wrapper(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+                # Simple phase markers for test determinism
+                if job is job_a:
+                    a_repl_started.set()
+                # No real work; replicate successfully
+                if job is job_a:
+                    a_repl_done.set()
+                return True
+
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe):
+                "bzfs_main.bzfs.replicate_dataset", side_effect=repl_wrapper
+            ), patch(
+                "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe
+            ), patch(
+                "time.time", return_value=mature_now
+            ):
                 t_a = threading.Thread(target=run_job_a)
                 t_b = threading.Thread(target=run_job_b)
                 t_a.start()
@@ -861,6 +886,9 @@ class TestSnapshotCache(AbstractTestCase):
             # Assert: both files reflect A's newer timestamps
             self.assertEqual(a_src_changed, SnapshotCache(job_a).get_snapshots_changed(last_repl_file))
             self.assertEqual(a_dst_changed, SnapshotCache(job_a).get_snapshots_changed(dst_cache_file))
+            # And both find-stale and refresh were exercised deterministically for A
+            self.assertGreaterEqual(a_counts["find"], 1)
+            self.assertGreaterEqual(a_counts["refresh"], 1)
 
     def test_concurrent_monitor_and_replicate_monotonic(self) -> None:
         """Purpose: Demonstrate that monitor (=== caches) and replicate (== and dst "=") can run concurrently without
@@ -959,6 +987,8 @@ class TestSnapshotCache(AbstractTestCase):
             # Setup replicate job behavior
             job_r.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=repl_src_changed_a)
             event_monitoring_written = threading.Event()
+            r_repl_done = threading.Event()
+            r_counts = {"find": 0, "refresh": 0}
 
             orig_set_last_modification_time_safe = snapshot_cache.set_last_modification_time_safe
 
@@ -970,7 +1000,11 @@ class TestSnapshotCache(AbstractTestCase):
                     event_monitoring_written.set()
 
             def fake_zfs_get_snapshots_changed_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                # Deterministic: always return the intended dst snapshots_changed for replicate
+                # Phase-aware counts for replicate job
+                if not r_repl_done.is_set():
+                    r_counts["find"] += 1
+                else:
+                    r_counts["refresh"] += 1
                 return {dst_dataset: repl_dst_changed_a}
 
             def run_monitor_snapshots() -> None:
@@ -982,9 +1016,23 @@ class TestSnapshotCache(AbstractTestCase):
                 with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_r):
                     job_r.replicate_datasets([src_dataset], task_description="R", max_workers=1)
 
+            # Prepopulate to force find-stale and refresh for replicate: src '==' equality (mature), dst '=' mismatch
+            set_last_modification_time_safe(last_repl_file, unixtime_in_secs=repl_src_changed_a, if_more_recent=True)
+            set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_111_111_111, if_more_recent=True)
+            mature_now = max(repl_src_changed_a, repl_dst_changed_a) + bzfs.TIME_THRESHOLD_SECS + 5.0
+
+            def repl_wrapper(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+                if job is job_r:
+                    r_repl_done.set()
+                return True
+
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe):
+                "bzfs_main.bzfs.replicate_dataset", side_effect=repl_wrapper
+            ), patch(
+                "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe
+            ), patch(
+                "time.time", return_value=mature_now
+            ):
                 t_m = threading.Thread(target=run_monitor_snapshots)
                 t_r = threading.Thread(target=run_replicate_datasets)
                 t_m.start()
@@ -998,6 +1046,8 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(mon_snap_changed, mtime)
             self.assertEqual(repl_src_changed_a, SnapshotCache(job_r).get_snapshots_changed(last_repl_file))
             self.assertEqual(repl_dst_changed_a, SnapshotCache(job_r).get_snapshots_changed(dst_cache_file))
+            self.assertGreaterEqual(r_counts["find"], 1)
+            self.assertGreaterEqual(r_counts["refresh"], 1)
 
     def test_concurrent_snapshot_and_replicate_monotonic(self) -> None:
         """Purpose: Validate that snapshot scheduling updates (per-label creation cache and src "=") and replication
@@ -1088,6 +1138,8 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             event_snapshot_written = threading.Event()
+            r_repl_done2 = threading.Event()
+            r_counts2 = {"find": 0, "refresh": 0}
 
             orig_set_last_modification_time = snapshot_cache.set_last_modification_time_safe
 
@@ -1097,7 +1149,10 @@ class TestSnapshotCache(AbstractTestCase):
                     event_snapshot_written.set()
 
             def fake_zfs_get_snapshots_changed_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                # Deterministic: always return the intended dst snapshots_changed for replicate
+                if not r_repl_done2.is_set():
+                    r_counts2["find"] += 1
+                else:
+                    r_counts2["refresh"] += 1
                 return {dst_dataset: repl_dst_changed}
 
             def run_find_datasets_to_snapshot() -> None:
@@ -1110,9 +1165,23 @@ class TestSnapshotCache(AbstractTestCase):
                 with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_r):
                     job_r.replicate_datasets([src_dataset], task_description="R", max_workers=1)
 
+            # Prepopulate replicate caches to force find-stale and refresh
+            set_last_modification_time_safe(last_repl_file, unixtime_in_secs=repl_src_changed, if_more_recent=True)
+            set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_222_222_222, if_more_recent=True)
+            mature_now2 = max(repl_src_changed, repl_dst_changed) + bzfs.TIME_THRESHOLD_SECS + 5.0
+
+            def repl_wrapper2(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+                if job is job_r:
+                    r_repl_done2.set()
+                return True
+
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time):
+                "bzfs_main.bzfs.replicate_dataset", side_effect=repl_wrapper2
+            ), patch(
+                "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time
+            ), patch(
+                "time.time", return_value=mature_now2
+            ):
                 t_s = threading.Thread(target=run_find_datasets_to_snapshot)
                 t_r = threading.Thread(target=run_replicate_datasets)
                 t_s.start()
@@ -1128,6 +1197,8 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(snap_src_changed, SnapshotCache(job_s).get_snapshots_changed(src_cache_file))
             self.assertEqual(repl_src_changed, SnapshotCache(job_r).get_snapshots_changed(last_repl_file))
             self.assertEqual(repl_dst_changed, SnapshotCache(job_r).get_snapshots_changed(dst_cache_file))
+            self.assertGreaterEqual(r_counts2["find"], 1)
+            self.assertGreaterEqual(r_counts2["refresh"], 1)
 
     def test_three_way_monitor_snapshot_replicate_interleaving_monotonic(self) -> None:
         """Purpose: Stress a three-way interleaving of monitor, snapshot scheduling, and replication. We first perform a
@@ -1270,8 +1341,14 @@ class TestSnapshotCache(AbstractTestCase):
                     fn_on_finish_dataset(src_dataset)
                 return []
 
+            r3_repl_done = threading.Event()
+            r3_counts = {"find": 0, "refresh": 0}
+
             def fake_zfs_get_snapshots_changed_r(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                # Deterministic: always return the intended dst snapshots_changed for replicate
+                if not r3_repl_done.is_set():
+                    r3_counts["find"] += 1
+                else:
+                    r3_counts["refresh"] += 1
                 return {dst_dataset: r_dst_sc}
 
             # First phase: Monitor -> Snapshot -> Replicate (older)
@@ -1289,9 +1366,23 @@ class TestSnapshotCache(AbstractTestCase):
                 with patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_r):
                     job_r.replicate_datasets([src_dataset], task_description="R", max_workers=1)
 
+            # Prepopulate replicate caches to force find-stale and refresh in phase 1
+            set_last_modification_time_safe(last_repl_file, unixtime_in_secs=r_src_sc, if_more_recent=True)
+            set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_333_333_333, if_more_recent=True)
+            mature_now3 = max(r_src_sc, r_dst_sc) + bzfs.TIME_THRESHOLD_SECS + 5.0
+
+            def repl_wrapper3(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+                if job is job_r:
+                    r3_repl_done.set()
+                return True
+
             with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time):
+                "bzfs_main.bzfs.replicate_dataset", side_effect=repl_wrapper3
+            ), patch(
+                "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time
+            ), patch(
+                "time.time", return_value=mature_now3
+            ):
                 t_m = threading.Thread(target=run_monitor_snapshots)
                 t_s = threading.Thread(target=run_find_datasets_to_snapshot)
                 t_r = threading.Thread(target=run_replicate_datasets)
@@ -1363,6 +1454,8 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(s_sc, SnapshotCache(job_s).get_snapshots_changed(src_cache_file))
             self.assertEqual(r_src_sc, SnapshotCache(job_r).get_snapshots_changed(last_repl_file))
             self.assertEqual(r_dst_sc, SnapshotCache(job_r).get_snapshots_changed(dst_cache_file))
+            self.assertGreaterEqual(r3_counts["find"], 1)
+            self.assertGreaterEqual(r3_counts["refresh"], 1)
 
     def test_three_way_invalidation_and_repopulate(self) -> None:
         """Purpose: Demonstrate safe dataset-level invalidation and subsequent repopulation across all cache families.
