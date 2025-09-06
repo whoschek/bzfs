@@ -679,16 +679,15 @@ class Job:
         src = p.src
         basis_src_datasets: list[str] = []
         is_caching: bool = is_caching_snapshots(p, src)
-        props: str = "volblocksize,recordsize,guid,name"
+        props: str = "volblocksize,recordsize,name"
         props = "snapshots_changed," + props if is_caching else props
         cmd: list[str] = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
         )
         for line in (try_ssh_command(self, src, LOG_DEBUG, cmd=cmd) or "").splitlines():
             cols: list[str] = line.split("\t")
-            snapshots_changed, volblocksize, recordsize, guid, src_dataset = cols if is_caching else ["-"] + cols
+            snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
             self.src_properties[src_dataset] = DatasetProperties(
-                guid=int(guid),
                 recordsize=int(recordsize) if recordsize != "-" else -int(volblocksize),
                 snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
             )
@@ -701,7 +700,7 @@ class Job:
         p, log = self.params, self.params.log
         dst = p.dst
         is_caching: bool = is_caching_snapshots(p, dst) and p.monitor_snapshots_config.enable_monitor_snapshots
-        props: str = "guid,name"
+        props: str = "name"
         props = "snapshots_changed," + props if is_caching else props
         cmd: list[str] = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", dst.root_dataset
@@ -713,9 +712,8 @@ class Job:
         else:
             for line in basis_dst_datasets_str.splitlines():
                 cols: list[str] = line.split("\t")
-                snapshots_changed, guid, dst_dataset = cols if is_caching else ["-"] + cols
+                snapshots_changed, dst_dataset = cols if is_caching else ["-"] + cols
                 self.dst_properties[dst_dataset] = DatasetProperties(
-                    guid=int(guid),
                     recordsize=0,
                     snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                 )
@@ -1535,27 +1533,14 @@ class Job:
 class DatasetProperties:
     """Properties of a ZFS dataset."""
 
-    __slots__ = ("_snapshots_changed", "guid", "recordsize")  # uses more compact memory layout than __dict__
+    __slots__ = ("recordsize", "snapshots_changed")  # uses more compact memory layout than __dict__
 
-    def __init__(self, guid: int, recordsize: int, snapshots_changed: int) -> None:
+    def __init__(self, recordsize: int, snapshots_changed: int) -> None:
         # immutable variables:
-        self.guid: int = guid
         self.recordsize: int = recordsize
 
         # mutable variables:
-        self._snapshots_changed: int = snapshots_changed
-
-    @property
-    def snapshots_changed(self) -> int:
-        """Returns the current value."""
-        assert self._snapshots_changed >= 0
-        return self._snapshots_changed
-
-    @snapshots_changed.setter
-    def snapshots_changed(self, new_value: int) -> None:
-        """Atomically assign ``new_value``."""
-        assert new_value >= 0
-        self._snapshots_changed = new_value
+        self.snapshots_changed: int = snapshots_changed
 
 
 #############################################################################
