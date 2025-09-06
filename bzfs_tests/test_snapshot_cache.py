@@ -812,19 +812,17 @@ class TestSnapshotCache(AbstractTestCase):
             job_a.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=a_src_changed)
             job_b.src_properties[src_dataset] = DatasetProperties(recordsize=0, snapshots_changed=b_src_changed)
 
-            # Per-job side effects for zfs_get_snapshots_changed: find-stale={}, refresh={dst: changed}
-            a_call = {"i": 0}
-            b_call = {"i": 0}
-
+            # Per-job zfs_get_snapshots_changed: return the intended dst snapshots_changed deterministically.
+            #
+            # Rationale: replicate_datasets() may or may not invoke an early dst property fetch in find_stale_datasets()
+            # depending on cache maturity and equality checks. Relying on call counts here introduces a race and can
+            # cause one of the jobs to write a "0" (empty result) to the dst cache. Instead, make the side effect
+            # unconditional so the final dst cache value reflects each job's intended snapshots_changed.
             def fake_zfs_get_snapshots_changed_a(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                i = a_call["i"]
-                a_call["i"] = i + 1
-                return {} if i == 0 else {dst_dataset: a_dst_changed}
+                return {dst_dataset: a_dst_changed}
 
             def fake_zfs_get_snapshots_changed_b(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
-                i = b_call["i"]
-                b_call["i"] = i + 1
-                return {} if i == 0 else {dst_dataset: b_dst_changed}
+                return {dst_dataset: b_dst_changed}
 
             # Synchronize start so that A writes first, then B writes after
             event_a_written = threading.Event()
