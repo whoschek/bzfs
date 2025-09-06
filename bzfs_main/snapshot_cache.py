@@ -58,7 +58,13 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import Job
     from bzfs_main.configuration import Remote, SnapshotLabel
 
+# constants:
+DATASET_CACHE_FILE_PREFIX: str = "="
+REPLICATION_CACHE_FILE_PREFIX: str = "=="
+MONITOR_CACHE_FILE_PREFIX: str = "==="
 
+
+#############################################################################
 class SnapshotCache:
     """Handles last-modified cache operations for snapshot management."""
 
@@ -81,7 +87,7 @@ class SnapshotCache:
 
     def last_modified_cache_file(self, remote: Remote, dataset: str, label: SnapshotLabel | None = None) -> str:
         """Returns the path of the cache file that is tracking last snapshot modification."""
-        cache_file: str = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
+        cache_file: str = DATASET_CACHE_FILE_PREFIX if label is None else f"{label.prefix}{label.infix}{label.suffix}"
         userhost_dir: str = remote.cache_namespace()
         return os.path.join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 

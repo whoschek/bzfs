@@ -144,6 +144,8 @@ from bzfs_main.retry import (
     RetryableError,
 )
 from bzfs_main.snapshot_cache import (
+    MONITOR_CACHE_FILE_PREFIX,
+    REPLICATION_CACHE_FILE_PREFIX,
     SnapshotCache,
     set_last_modification_time_safe,
 )
@@ -1008,7 +1010,9 @@ class Job:
         is_caching: bool = False
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
-            cache_label = SnapshotLabel(os.path.join("===", alert_cfg.kind, str(label), hash_code), "", "", "")
+            cache_label = SnapshotLabel(
+                os.path.join(MONITOR_CACHE_FILE_PREFIX, alert_cfg.kind, str(label), hash_code), "", "", ""
+            )
             return self.cache.last_modified_cache_file(r, dataset, cache_label)
 
         def alert_msg(
@@ -1154,7 +1158,9 @@ class Job:
             hash_code: str = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
             for src_dataset in src_datasets:
                 dst_dataset: str = src2dst(src_dataset)  # cache is only valid for identical destination dataset
-                cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
+                cache_label = SnapshotLabel(
+                    os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset, hash_code), "", "", ""
+                )
                 cache_file: str = self.cache.last_modified_cache_file(src, src_dataset, cache_label)
                 cache_files[src_dataset] = cache_file
                 snapshots_changed: int = self.src_properties[src_dataset].snapshots_changed  # get prop "for free"
