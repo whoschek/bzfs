@@ -2495,7 +2495,7 @@ created on the source by the --create-src-snapshots option.
 
 *  The microsecond within a millisecond (0 ≤ x ≤ 999, default: 0).
 
-# ZFS-RECV-O (EXPERIMENTAL)
+# ZFS-RECV-O
 
 The following group of parameters specifies additional zfs receive '-o' options that can be used
 to configure copying of ZFS dataset properties from the source dataset to its corresponding
@@ -2564,7 +2564,7 @@ group.
     properties. Example: --zfs-recv-o-exclude-regex encryptionroot keystatus origin volblocksize
     volsize
 
-# ZFS-RECV-X (EXPERIMENTAL)
+# ZFS-RECV-X
 
 The following group of parameters specifies additional zfs receive '-x' options that can be used
 to configure copying of ZFS dataset properties from the source dataset to its corresponding
