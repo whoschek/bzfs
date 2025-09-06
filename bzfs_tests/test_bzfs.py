@@ -1285,12 +1285,7 @@ class TestJobMethods(AbstractTestCase):
     @patch("bzfs_main.bzfs.detect_available_programs")
     @patch("bzfs_main.bzfs.is_solaris_zfs", return_value=False)
     @patch("bzfs_main.bzfs.is_zpool_feature_enabled_or_active", return_value=False)
-    def test_validate_task_errors_on_same_dataset(
-        self,
-        _feature: MagicMock,
-        _solaris: MagicMock,
-        detect: MagicMock,
-    ) -> None:
+    def test_validate_task_errors_on_same_dataset(self, _feature: MagicMock, _solaris: MagicMock, detect: MagicMock) -> None:
         """validate_task aborts when source and destination are identical."""
         detect.side_effect = lambda job: None
         job = self.make_job(
@@ -1311,10 +1306,7 @@ class TestJobMethods(AbstractTestCase):
     @patch("bzfs_main.bzfs.is_solaris_zfs", return_value=False)
     @patch("bzfs_main.bzfs.is_zpool_feature_enabled_or_active", return_value=False)
     def test_validate_task_errors_on_src_descendant_of_dst(
-        self,
-        _feature: MagicMock,
-        _solaris: MagicMock,
-        detect: MagicMock,
+        self, _feature: MagicMock, _solaris: MagicMock, detect: MagicMock
     ) -> None:
         """Recursive replication fails when src is under dst."""
         detect.side_effect = lambda job: job.params.available_programs.update({"src": {}, "dst": {}, "local": {}})
@@ -1327,10 +1319,7 @@ class TestJobMethods(AbstractTestCase):
     @patch("bzfs_main.bzfs.is_solaris_zfs", return_value=False)
     @patch("bzfs_main.bzfs.is_zpool_feature_enabled_or_active", return_value=False)
     def test_validate_task_errors_on_dst_descendant_of_src(
-        self,
-        _feature: MagicMock,
-        _solaris: MagicMock,
-        detect: MagicMock,
+        self, _feature: MagicMock, _solaris: MagicMock, detect: MagicMock
     ) -> None:
         """Recursive replication fails when dst is under src."""
         detect.side_effect = lambda job: job.params.available_programs.update({"src": {}, "dst": {}, "local": {}})
@@ -1343,10 +1332,7 @@ class TestJobMethods(AbstractTestCase):
     @patch("bzfs_main.bzfs.is_solaris_zfs", return_value=False)
     @patch("bzfs_main.bzfs.is_zpool_feature_enabled_or_active", return_value=False)
     def test_validate_task_allows_overlap_when_not_recursive(
-        self,
-        _feature: MagicMock,
-        _solaris: MagicMock,
-        detect: MagicMock,
+        self, _feature: MagicMock, _solaris: MagicMock, detect: MagicMock
     ) -> None:
         """Non-recursive replication permits overlapping datasets."""
         detect.side_effect = lambda job: job.params.available_programs.update({"src": {}, "dst": {}, "local": {}})
@@ -1357,12 +1343,7 @@ class TestJobMethods(AbstractTestCase):
     @patch("bzfs_main.bzfs.detect_available_programs")
     @patch("bzfs_main.bzfs.is_solaris_zfs", return_value=False)
     @patch("bzfs_main.bzfs.is_zpool_feature_enabled_or_active", return_value=False)
-    def test_validate_task_sets_remote_fields(
-        self,
-        _feature: MagicMock,
-        _solaris: MagicMock,
-        detect: MagicMock,
-    ) -> None:
+    def test_validate_task_sets_remote_fields(self, _feature: MagicMock, _solaris: MagicMock, detect: MagicMock) -> None:
         """validate_task populates sudo prefix and nonlocal flag."""
         detect.side_effect = lambda job: job.params.available_programs.update({"src": {}, "dst": {}, "local": {}})
         job = self.make_job(

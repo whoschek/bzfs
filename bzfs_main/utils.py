@@ -73,8 +73,8 @@ YEAR_WITH_FOUR_DIGITS_REGEX: re.Pattern[str] = re.compile(r"[1-9][0-9][0-9][0-9]
 UNIX_TIME_INFINITY_SECS: int = 2**64  # billions of years and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET: str = ""
 SHELL_CHARS: str = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
-FILE_PERMISSIONS: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
-DIR_PERMISSIONS: int = stat.S_IRWXU  # rwx------ (owner read + write + execute)
+FILE_PERMISSIONS: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
+DIR_PERMISSIONS: int = stat.S_IRWXU  # rwx------ (user read + write + execute)
 
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 
@@ -249,7 +249,7 @@ def open_nofollow(
     errors: str | None = None,
     newline: str | None = None,
     *,
-    perm: int = stat.S_IRUSR | stat.S_IWUSR,  # rw------- (owner read + write)
+    perm: int = stat.S_IRUSR | stat.S_IWUSR,  # rw------- (user read + write)
     check_owner: bool = True,
     **kwargs: Any,
 ) -> IO[Any]:

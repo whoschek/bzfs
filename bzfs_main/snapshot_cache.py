@@ -200,7 +200,7 @@ def set_last_modification_time(
     timestamp write unconditionally. This preserves concurrency safety and prevents silent skips on first write.
     """
     unixtimes = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
-    perm: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
+    perm: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
     flags_base: int = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
     created_by_other_process: bool = True
 
