@@ -824,7 +824,7 @@ class TestSnapshotCache(AbstractTestCase):
             def fake_zfs_get_snapshots_changed_b(_remote: Remote, _datasets: list[str]) -> dict[str, int]:
                 return {dst_dataset: b_dst_changed}
 
-            # Synchronize start so that A writes first, then B writes after
+            # Synchronize start so that A writes its dst cache first, then B writes after
             event_a_written = threading.Event()
 
             orig_set_last_modification_time_safe = snapshot_cache.set_last_modification_time_safe
@@ -834,8 +834,8 @@ class TestSnapshotCache(AbstractTestCase):
             ) -> None:
                 # Call through to real function
                 orig_set_last_modification_time_safe(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
-                # Mark when A wrote to the replication-scoped marker; use existence check to avoid flakiness
-                if path == last_repl_file:
+                # Signal only after A has written the destination dataset cache, ensuring A's value lands first.
+                if path == dst_cache_file:
                     event_a_written.set()
 
             def run_job_a() -> None:
@@ -843,7 +843,7 @@ class TestSnapshotCache(AbstractTestCase):
                     job_a.replicate_datasets([src_dataset], task_description="A", max_workers=1)
 
             def run_job_b() -> None:
-                # Wait until A has written to last_repl_file, then run B so it attempts to write older
+                # Wait until A has written the dst '=' cache, then run B so it attempts to write older
                 event_a_written.wait(timeout=5)
                 with patch.object(job_b.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_b):
                     job_b.replicate_datasets([src_dataset], task_description="B", max_workers=1)
