@@ -145,11 +145,12 @@ Before committing any changes, you **must** follow this exact sequence:
 
 ## How to Find and Fix Bugs
 
-- **Analyze:** If you are tasked to identify or fix a bug, collect and analyze related issues and bug reports, explore
-  multiple possible approaches along with deep tracing, and perform a thorough root cause analysis. Think harder to
-  understand *why* the bug occurs, not just *what* it does. Before claiming a bug, meticulously cross-check it against
-  the existing unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug"
-  covered by a passing test indicates a flawed analysis.
+- **Analyze:** If you are tasked to identify or fix a bug, collect, combine and analyze related issues, bug reports and
+  external data. Think harder to understand *why* the bug occurs, not just *what* it does. Before claiming a bug,
+  meticulously cross-check it against the existing unit tests (`test_*.py`) and integration tests
+  (`test_integrations.py`), which are known to pass. A "bug" covered by a passing test indicates a flawed analysis.
+  Simultaneously explore three possible approaches along with deep tracing. Explain and evaluate the pros/cons of each
+  approach. Select the most promising one to deliver success, and perform a thorough root cause analysis.
 - **Test First, Then Fix:** Use TDD: You **must** follow the sequence of steps described above in
   [Core Software Development Workflow](#core-software-development-workflow).
 
@@ -175,8 +176,9 @@ Before committing any changes, you **must** follow this exact sequence:
 
 Your goal is to improve quality with zero functional regressions.
 
-- **Plan First:** Think harder, explore multiple possible approaches, and write a plan (≤ 200 words) summarizing the
-  intended changes, chosen tool, and validation steps.
+- **Plan First:** Think harder. Write a step-by-step plan (≤ 300 words) summarizing the intended actions and changes,
+  chosen tool, and validation steps. Simultaneously explore three possible approaches. Explain and evaluate the
+  pros/cons of each approach. Select the most promising one to deliver success. Then execute the plan.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
