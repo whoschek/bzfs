@@ -512,7 +512,7 @@ class Remote:
         ssh_cmd += [self.ssh_user_host]
         return ssh_cmd
 
-    def cache_key(self) -> tuple:
+    def cache_key(self) -> tuple[str, str, str, int, str | None]:
         """Returns tuple uniquely identifying this Remote for caching."""
         return self.location, self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file
 
@@ -825,7 +825,7 @@ def _delete_stale_files(
                 elif match := SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
                     pid: int = int(match.group(0))
                     if pid_exists(pid) is False or now - entry.stat().st_mtime >= 31 * 24 * 60 * 60:
-                        os.remove(entry.path)  # bzfs process is nomore alive hence its ssh master process isn't alive either
+                        os.remove(entry.path)  # bzfs process is no longer alive; its ssh master process isn't either
         except FileNotFoundError:
             pass  # harmless
 

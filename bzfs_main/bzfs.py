@@ -1095,7 +1095,7 @@ class Job:
                         ):  # cached state is still valid; emit an alert if the latest/oldest snapshot is too old
                             lbl = alert.label
                             check_alert(lbl, cfg, creation_unixtime_secs=cached_unix_times[0], dataset=dataset, snapshot="")
-                        else:  # cached state is nomore valid; fallback to 'zfs list -t snapshot'
+                        else:  # cached state is no longer valid; fallback to 'zfs list -t snapshot'
                             is_stale_dataset = True
                 if is_stale_dataset:
                     stale_datasets.append(dataset)
@@ -1323,7 +1323,7 @@ class Job:
                     return None  # detected filter pruning that is incompatible with 'zfs snapshot -r'
                 j += 1  # move to next basis_datasets[j]
             else:
-                i += 1  # move to next root_dataset[i]; no need to check root_datasets that are nomore (or not yet) reachable
+                i += 1  # move to next root_dataset[i]; no need to check root_datasets that are no longer (or not yet) reachable
         return root_datasets
 
     @staticmethod

@@ -16,12 +16,12 @@
 
 Purpose: Provide a lightweight, dependency-free cache for ZFS snapshot scheduling, monitoring and replication.
 
-Assumptions: OpenZFS timestamps are UTC integer seconds; file atime/mtime are reliable and atomically updateable with
+Assumptions: OpenZFS timestamps are UTC integer seconds; file atime/mtime are reliable and atomically updatable with
 monotonic guards; multiple concurrent jobs may update cache files out of order.
 
 Design Rationale:
 - Dataset-level '=' file per dataset/location:
-    - mtime stores ZFS "snapshots_changed" (UTC unix seconds). Monotonic writes.
+    - mtime stores ZFS "snapshots_changed" (UTC Unix seconds). Monotonic writes.
 - Replication-scoped '==' file per src dataset and dst+filters:
     - mtime stores last replicated src snapshots_changed. Monotonic.
 - Monitor '===' per dataset and label:
@@ -107,7 +107,7 @@ class SnapshotCache:
                 pass  # harmless
 
     def update_last_modified_cache(self, datasets_to_snapshot: dict[SnapshotLabel, list[str]]) -> None:
-        """perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls."""
+        """Perf: copy last-modified time of the source dataset into the local cache to reduce future 'zfs list -t snapshot' calls."""
         p = self.job.params
         src = p.src
         src_datasets_set: set[str] = set()
@@ -203,14 +203,14 @@ def set_last_modification_time(
     unixtimes = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
     perm: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
     flags_base: int = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
-    created_by_other_process: bool = True
+    preexisted: bool = True
 
     try:
         fd = os.open(path, flags_base)
     except FileNotFoundError:
         try:
             fd = os.open(path, flags_base | os.O_CREAT | os.O_EXCL, mode=perm)
-            created_by_other_process = False
+            preexisted = False
         except FileExistsError:
             fd = os.open(path, flags_base)  # we lost the race, open existing file
 
@@ -224,7 +224,8 @@ def set_last_modification_time(
         if st_uid != os.geteuid():  # verify ownership is current effective UID; same as open_nofollow()
             raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
 
-        if created_by_other_process and if_more_recent and unixtimes[1] <= int(stats.st_mtime):
+        # Monotonic guard: only skip when the file pre-existed, to not skip the very first write.
+        if preexisted and if_more_recent and unixtimes[1] <= int(stats.st_mtime):
             return
         os.utime(fd, times=unixtimes)  # write timestamps
     finally:

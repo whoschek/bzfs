@@ -598,7 +598,7 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
     """'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc."""
     # Also see https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
     # and https://github.com/openzfs/zfs/issues/8798
-    # and (by now nomore accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
+    # and (by now no longer accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
     if (
         dataset in ("", ".", "..")
         or any(dataset.startswith(prefix) for prefix in ("/", "./", "../"))
@@ -1004,14 +1004,14 @@ class InterruptibleSleep:
         return True
 
     def interrupt(self) -> None:
-        """Wakes up currently sleeping threads and makes any future sleep()s a noop."""
+        """Wakes sleeping threads and makes any future sleep()s a no-op."""
         with self._lock:
             if not self._is_stopping:
                 self._is_stopping = True
                 self._condition.notify_all()
 
     def reset(self) -> None:
-        """Makes any future sleep()s nomore a noop."""
+        """Makes any future sleep()s no longer a no-op."""
         with self._lock:
             self._is_stopping = False
 

@@ -212,13 +212,13 @@ class Connection:
     """Represents the ability to multiplex N=capacity concurrent SSH sessions over the same TCP connection."""
 
     free: int  # sort order evens out the number of concurrent sessions among the TCP connections
-    last_modified: int  # LIFO: tiebreaker favors latest returned conn as that's most alive and hot
+    last_modified: int  # LIFO: tiebreaker favors latest returned conn as that's most alive and hot; also ensures no dupes
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
         self.free: int = max_concurrent_ssh_sessions_per_tcp_connection
-        self.last_modified: int = 0
+        self.last_modified: int = 0  # monotonically increasing
         self.cid: int = cid
         self.ssh_cmd: list[str] = remote.local_ssh_command()
         self.ssh_cmd_quoted: list[str] = [shlex.quote(item) for item in self.ssh_cmd]
