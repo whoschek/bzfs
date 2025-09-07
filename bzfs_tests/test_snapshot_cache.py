@@ -2387,6 +2387,309 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertTrue(all(len(v) == 0 for v in mapping.values()))
             self.assertEqual(0, received_count["n"])  # everything answered from caches
 
+    def test_clock_skew_snapshotting_when_initiator_vs_src_clocks_disagree(self) -> None:
+        """Demonstrates the snapshoting scheduler's skew-resilient fast path when using --cache-snapshots.
+
+        The scheduler may avoid `zfs list -t snapshot` by consulting two caches per dataset: the dataset-level “=” file,
+        whose mtime is the ZFS snapshots_changed property, and per-label files whose atime is the latest creation time
+        for that label and whose mtime records the snapshots_changed observed at write time. The fast path is trusted
+        only if the dataset-level value equals the live property and is mature, and each label's mtime equals that same
+        value, providing a precise provenance witness. We simulate initiator time behind the src host (src value in the
+        "future") and pre-populate both caches to reflect the same future-valued snapshots_changed with a plausible
+        creation time.
+
+        In Phase 1, because initiator now is ≤ src snapshots_changed + threshold, the cache entries are not mature; the
+        scheduler must fall back to probing, which we detect by our handler being invoked for the dataset.
+        In Phase 2, we advance initiator time beyond the threshold so the same cache becomes mature and equal;
+        the scheduler can then trust the caches, and no probing occurs (handler not invoked). This test preserves the
+        safety contract: cached decisions are used only when maturity and equality validate them despite skew.
+
+        - Cache model:
+          - Dataset-level "=" file:
+            - mtime: current ZFS snapshots_changed value.
+          - Per-label file (under src dataset):
+            - atime: latest matching snapshot creation time for the label.
+            - mtime: snapshots_changed observed when the label file was written.
+
+        - Trust conditions:
+          - "=" equals live snapshots_changed and is mature.
+          - Per-label mtime equals the dataset-level "=" value (provenance).
+          - Only then may the scheduler safely reuse the label atime without probing.
+
+        - Scenario and phases:
+          - Initiator behind src (src value in the "future").
+          - Phase 1: now <= src snapshots_changed + threshold -> not mature -> fallback (handler invoked).
+          - Phase 2: advance time beyond threshold -> mature + equal -> trust caches -> no probing.
+
+        - Outcome:
+          - Preserves safety under skew and retains performance once caches are trustworthy.
+        """
+
+        with self.job_context(
+            [
+                "--create-src-snapshots",
+                "--create-src-snapshots-plan",
+                str({"bzfs": {"onsite": {"hourly": 1}}}),
+                SRC_DATASET,
+                DST_DATASET,
+            ]
+        ) as (job, _tmpdir):
+            job.params.src.root_dataset = SRC_DATASET
+            dataset = SRC_DATASET
+
+            now_i = 2_000_000_000
+            t_src_future = now_i + 5_000
+            creation_old = now_i - 3_600
+
+            # Live property and caches
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t_src_future)
+            dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
+            set_last_modification_time_safe(dataset_eq_file, t_src_future, if_more_recent=True)
+            label = job.params.create_src_snapshots_config.snapshot_labels()[0]
+            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+            set_last_modification_time_safe(label_file, (creation_old, t_src_future), if_more_recent=True)
+
+            received: list[str] = []
+
+            def fake_handle_minmax_snapshots(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                received.extend(datasets)
+                return []
+
+            # Phase 1: initiator behind -> fallback
+            received.clear()
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ), patch("time.time", return_value=now_i):
+                job.find_datasets_to_snapshot([dataset])
+            self.assertListEqual([dataset], received)
+
+            # Phase 2: initiator catches up -> trust cache (no fallback)
+            received.clear()
+            now_i2 = t_src_future + bzfs.TIME_THRESHOLD_SECS + 0.2
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ), patch("time.time", return_value=now_i2):
+                job.find_datasets_to_snapshot([dataset])
+            self.assertListEqual([], received)
+
+    def test_clock_skew_replicate_when_src_dst_initiator_clocks_disagree(self) -> None:
+        """Validates replication's cache-skip logic when the initiator observes skew relative to src and dst.
+
+        The fast skip path in replicate_datasets() requires two independent cache validations:
+        (A) the src "==" (last replicated) cache must equal the live src snapshots_changed and be older than the
+        maturity threshold; and
+        (B) the dst "=" (dataset-level) cache must equal the live dst snapshots_changed and also be mature.
+
+        If either side is not mature or unequal, replication must process the dataset (no cheap skip), ensuring
+        correctness despite clock skew. We construct a concrete skew: src's snapshots_changed is in the future
+        relative to the initiator, while dst's is in the past. We then seed caches to equal these values.
+
+        In Phase 1, initiator time is before the src value, so the src side fails the maturity test; we assert a
+        cache miss and confirm that replicate_dataset is invoked.
+        In Phase 2, we advance initiator time beyond the src maturity threshold while leaving dst unchanged and equal;
+        now both sides are mature and equal, so a cheap skip is valid. We assert a cache hit and that replicate_dataset
+        is not called. These checks lock in skew-robust semantics: equality is insufficient without maturity, and both
+        src and dst must pass to safely skip work, preventing silent divergence or wasted replication.
+
+        - Cheap-skip prerequisites in replicate_datasets():
+          - Src "==" (last replicated) cache equals live src snapshots_changed and is mature.
+          - Dst "=" (dataset) cache equals live dst snapshots_changed and is mature.
+          - If either side fails, the dataset must be processed (no skip).
+
+        - Scenario:
+          - Src snapshots_changed is in the future vs. initiator; dst snapshots_changed is in the past.
+          - Caches are seeded to equal the respective live values.
+
+        - Phases:
+          - Phase 1: Initiator before src value -> src not mature -> miss -> replicate_dataset runs.
+          - Phase 2: Initiator beyond maturity -> both mature + equal -> hit -> replicate_dataset not called.
+
+        - Outcome:
+          - Locks in skew-robust semantics: equality alone is insufficient; both sides must also be mature.
+          - Prevents silent divergence and avoids wasted work once maturity is established.
+        """
+
+        with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
+            job.params.src.root_dataset = SRC_DATASET
+            job.params.dst.root_dataset = DST_DATASET
+            job.dst_dataset_exists[DST_DATASET] = True
+
+            # Disagreeing clocks
+            now_i = 2_000_000_000
+            t_src_future = now_i + 20_000
+            t_dst_past = now_i - 30_000
+
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_src_future)
+
+            # Prepare replication-scoped caches
+            repl_cache_label = self.replication_cache_label(job, DST_DATASET)
+            src_repl_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, repl_cache_label)
+            dst_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.dst, DST_DATASET)
+            set_last_modification_time_safe(src_repl_file, t_src_future, if_more_recent=True)  # equality on src
+            set_last_modification_time_safe(dst_eq_file, t_dst_past, if_more_recent=True)  # equality on dst
+
+            # Phase 1: src is in the future -> miss; no cheap skip
+            called: list[str] = []
+
+            def fake_replicate_dataset(job_: Job, ds: str, tid: str, retry: Retry) -> bool:
+                called.append(ds)
+                return True
+
+            job.num_cache_hits = job.num_cache_misses = 0
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
+                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
+            ), patch.object(job.cache, "zfs_get_snapshots_changed", return_value={DST_DATASET: t_dst_past}), patch(
+                "time.time", return_value=now_i
+            ):
+                job.replicate_datasets([SRC_DATASET], task_description="skew", max_workers=1)
+            self.assertListEqual([SRC_DATASET], called)
+            self.assertEqual(0, job.num_cache_hits)
+            self.assertEqual(1, job.num_cache_misses)
+
+            # Phase 2: initiator catches up beyond maturity; equality on src and dst -> cheap skip
+            now_i2 = t_src_future + bzfs.TIME_THRESHOLD_SECS + 1.0
+            called.clear()
+            job.num_cache_hits = job.num_cache_misses = 0
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
+                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
+            ), patch.object(job.cache, "zfs_get_snapshots_changed", return_value={DST_DATASET: t_dst_past}), patch(
+                "time.time", return_value=now_i2
+            ):
+                job.replicate_datasets([SRC_DATASET], task_description="skew2", max_workers=1)
+            self.assertListEqual([], called)
+            self.assertEqual(1, job.num_cache_hits)
+            self.assertEqual(0, job.num_cache_misses)
+
+    def test_clock_skew_monitor_when_src_dst_initiator_clocks_disagree(self) -> None:
+        """Comprehensively exercises monitor behavior when src, dst, and the initiator disagree about the current time,
+        modeling both sudden and creeping clock skew. We simulate a scenario where the source host's ZFS property
+        snapshots_changed lies in the future relative to the initiator's wall clock, while the destination host's
+        snapshots_changed lies in the past. Under --cache-snapshots, monitor attempts a fast path, trusting the local monitor
+        caches (per-dataset/label "===" files) if and only if three conditions hold simultaneously:
+
+        (1) the remote's snapshots_changed is non-zero;
+        (2) it is "mature," i.e., strictly older than now - TIME_THRESHOLD_SECS to avoid equal-second races and skew; and
+        (3) the cached tuple (creation_atime, snapshots_changed_mtime) equals the live state (specifically, mtime equals
+        the current snapshots_changed and atime is not later than it).
+
+        This test writes monitor caches for both src and dst with realistic values and then runs two phases.
+        Phase 1 models a sudden skew: initiator now is before the src's snapshots_changed and after the dst's. We assert
+        a cache miss for src (maturity not satisfied) and a cache hit for dst (mature and equal).
+        Phase 2 models creeping catch-up: we advance initiator time beyond the maturity threshold, at which point both
+        sides are eligible for cache hits. Throughout, we verify the cache hit/miss counters to ensure the monitor path
+        makes correct trust vs. fallback decisions under skew without requiring any snapshot probing. This protects alert
+        correctness while preserving the intended performance characteristics.
+
+        - Scenario:
+          - Source snapshots_changed is in the future relative to the initiator's clock.
+          - Destination snapshots_changed is in the past relative to the initiator's clock.
+
+        - Trust conditions with --cache-snapshots:
+          - Non-zero: remote snapshots_changed is non-zero.
+          - Mature: snapshots_changed < (now - TIME_THRESHOLD_SECS) to avoid equal-second races and skew hazards.
+          - Equal tuple: cached (creation_atime, snapshots_changed_mtime) equals live:
+            - mtime equals current snapshots_changed.
+            - atime is not later than snapshots_changed.
+
+        - Phases:
+          - Phase 1 (sudden skew): initiator now < src snapshots_changed and > dst snapshots_changed.
+            - src: miss (not mature) -> would fallback.
+            - dst: hit (mature + equal).
+          - Phase 2 (creeping catch-up): advance initiator beyond src maturity threshold.
+            - src: now hit (mature + equal).
+            - dst: still hit.
+
+        - Verification:
+          - Assert num_cache_hits/num_cache_misses across phases.
+          - Probing handler is stubbed so the test is hermetic.
+
+        - Outcome:
+          - Confirms monitor preserves correctness under skew and regains performance once entries mature.
+        """
+
+        plan = {"org": {"onsite": {"daily": {"latest": {"warning": "1 hours", "critical": "2 hours"}}}}}
+        with self.job_context(
+            [
+                "--monitor-snapshots",
+                str(plan),
+                "--monitor-snapshots-dont-warn",
+                "--monitor-snapshots-dont-crit",
+                SRC_DATASET,
+                DST_DATASET,
+            ]
+        ) as (job, _tmpdir):
+            job.params.src.root_dataset = SRC_DATASET
+            job.params.dst.root_dataset = DST_DATASET
+
+            # Times: initiator behind src (src in the "future"), ahead of dst (dst in the "past").
+            now_i = 2_000_000_000
+            t_src_future = now_i + 10_000
+            t_dst_past = now_i - 10_000
+            creation_src = now_i - 100  # any plausible creation <= snapshots_changed
+            creation_dst = t_dst_past - 100  # ensure creation <= snapshots_changed for dst
+
+            # Seed live properties and caches for equality checks
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_src_future)
+            job.dst_properties[DST_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_dst_past)
+
+            alerts = job.params.monitor_snapshots_config.alerts
+            self.assertGreaterEqual(len(alerts), 1)
+            alert = alerts[0]
+            cfg = alert.latest
+            assert cfg is not None
+            hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+
+            mon_cache_label_src = SnapshotLabel(
+                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(alert.label), hash_code), "", "", ""
+            )
+            mon_cache_label_dst = mon_cache_label_src  # same label space; different remote namespace ensures separation
+            cache_file_src = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, mon_cache_label_src)
+            cache_file_dst = SnapshotCache(job).last_modified_cache_file(job.params.dst, DST_DATASET, mon_cache_label_dst)
+            set_last_modification_time_safe(cache_file_src, (creation_src, t_src_future), if_more_recent=True)
+            set_last_modification_time_safe(cache_file_dst, (creation_dst, t_dst_past), if_more_recent=True)
+
+            # Phase 1: initiator behind src (future) and ahead of dst (past)
+            job.num_cache_hits = job.num_cache_misses = 0
+
+            def fake_handle_minmax_snapshots(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                # Do not probe anything; just return empty list (no datasets without snapshots)
+                return []
+
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ), patch("time.time", return_value=now_i):
+                job.monitor_snapshots(job.params.src, [SRC_DATASET])  # src -> miss
+                job.monitor_snapshots(job.params.dst, [DST_DATASET])  # dst -> hit
+            self.assertEqual(1, job.num_cache_hits)
+            self.assertEqual(1, job.num_cache_misses)
+
+            # Phase 2: creeping catch-up beyond maturity for src; both become hits
+            now_i2 = t_src_future + bzfs.TIME_THRESHOLD_SECS + 5.0
+            job.num_cache_hits = job.num_cache_misses = 0
+            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
+                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            ), patch("time.time", return_value=now_i2):
+                job.monitor_snapshots(job.params.src, [SRC_DATASET])  # src -> hit now that it's matured
+                job.monitor_snapshots(job.params.dst, [DST_DATASET])  # dst -> still hit
+            self.assertEqual(2, job.num_cache_hits)
+            self.assertEqual(0, job.num_cache_misses)
+
     @unittest.skip("benchmark; enable for performance comparison")
     def test_benchmark_set_last_modification_time(self) -> None:
 
