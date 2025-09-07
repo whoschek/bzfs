@@ -48,6 +48,7 @@ observables that production code relies on.
 """
 
 from __future__ import annotations
+import errno
 import hashlib
 import os
 import tempfile
@@ -182,6 +183,67 @@ class TestSnapshotCache(AbstractTestCase):
                     set_last_modification_time(file + "nonexisting", unixtime_in_secs=1001, if_more_recent=False)
                 file = os.path.join(file, "x", "nonexisting2")
                 set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=False)
+
+    def test_open_existing_file_after_create_race(self) -> None:
+        """Covers the race where the file appears between open() attempts.
+
+        First os.open() raises FileNotFoundError; the exclusive create raises FileExistsError; finally we open the now-
+        existing file and write timestamps.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "racefile")
+
+            # Keep original open for creating the file inside the mocked function
+            orig_open = os.open
+
+            call_state = {"i": 0}
+
+            def fake_open(p: str, flags: int, mode: int | None = None) -> int:
+                self.assertEqual(path, p)
+                i = call_state["i"]
+                call_state["i"] = i + 1
+                if i == 0:
+                    # Initial open without O_CREAT fails with FileNotFoundError
+                    raise FileNotFoundError
+                if i == 1:
+                    # Simulate losing the O_CREAT|O_EXCL race: ensure file exists, then raise FileExistsError
+                    fd_tmp = orig_open(path, os.O_WRONLY | os.O_CREAT | os.O_CLOEXEC, 0o600)
+                    os.close(fd_tmp)
+                    raise FileExistsError
+                # Third call: open existing file normally
+                return orig_open(path, flags, mode) if mode is not None else orig_open(path, flags)
+
+            with patch("os.open", side_effect=fake_open):
+                # Use if_more_recent=False to avoid early-return monotonic guard
+                set_last_modification_time(path, unixtime_in_secs=1_234_567_890, if_more_recent=False)
+
+            st = os.stat(path)
+            self.assertEqual(1_234_567_890, round(st.st_mtime))
+            # Ensure our fake_open was exercised exactly three times
+            self.assertEqual(3, call_state["i"])
+
+    def test_permission_error_when_cache_owned_by_different_uid(self) -> None:
+        """Covers the ownership check raising PermissionError when st_uid != geteuid()."""
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "permfile")
+            # Create the file so the first open() succeeds without O_CREAT
+            with open(path, "wb") as _:
+                pass
+
+            # Return a minimal object with st_uid != os.geteuid(); st_mtime unused due to early raise
+            class FakeStat:
+                st_uid = (os.geteuid() + 1) % 65536
+                st_mtime = 0
+
+            with patch("os.fstat", return_value=FakeStat()):
+                with self.assertRaises(PermissionError) as cm:
+                    set_last_modification_time(path, unixtime_in_secs=1_000_000_000, if_more_recent=False)
+
+            err = cm.exception
+            self.assertEqual(errno.EPERM, err.errno)
+            self.assertIn(repr(path), str(err))
 
     @patch("bzfs_main.snapshot_cache.itr_ssh_cmd_parallel")
     def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
