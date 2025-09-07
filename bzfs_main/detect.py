@@ -306,11 +306,7 @@ def are_bookmarks_enabled(p: Params, remote: Remote) -> bool:
 
 def is_caching_snapshots(p: Params, remote: Remote) -> bool:
     """Returns True if snapshot caching is supported and enabled on ``remote``."""
-    return (
-        p.is_caching_snapshots
-        and p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, remote.location)
-        and is_zpool_feature_enabled_or_active(p, remote, "feature@extensible_dataset")
-    )
+    return p.is_caching_snapshots and p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, remote.location)
 
 
 def is_version_at_least(version_str: str, min_version_str: str) -> bool:

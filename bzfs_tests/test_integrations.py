@@ -5763,7 +5763,7 @@ def is_zpool_recv_resume_feature_enabled_or_active() -> bool:
 
 
 def is_cache_snapshots_enabled() -> bool:
-    return is_zpool_feature_enabled_or_active("src", "feature@extensible_dataset") and is_zfs_at_least_2_2_0()
+    return is_zfs_at_least_2_2_0()
 
 
 def fix(s: str) -> str:

@@ -50,6 +50,7 @@ from bzfs_main.parallel_batch_cmd import (
     itr_ssh_cmd_parallel,
 )
 from bzfs_main.utils import (
+    LOG_TRACE,
     SortedInterner,
     stderr_to_str,
 )
@@ -141,7 +142,7 @@ class SnapshotCache:
 
         def try_zfs_list_command(_cmd: list[str], batch: list[str]) -> list[str]:
             try:
-                return run_ssh_command(self.job, remote, print_stderr=False, cmd=_cmd + batch).splitlines()
+                return run_ssh_command(self.job, remote, LOG_TRACE, print_stderr=False, cmd=_cmd + batch).splitlines()
             except CalledProcessError as e:
                 return stderr_to_str(e.stdout).splitlines()
             except UnicodeDecodeError:
@@ -157,10 +158,10 @@ class SnapshotCache:
         ):
             for line in lines:
                 if "\t" not in line:
-                    break  # partial output from failing 'zfs list' command
+                    break  # partial output from failing 'zfs list' command; subsequent lines in curr batch cannot be trusted
                 snapshots_changed, dataset = line.split("\t", 1)
                 if not dataset:
-                    break  # partial output from failing 'zfs list' command
+                    break  # partial output from failing 'zfs list' command; subsequent lines in curr batch cannot be trusted
                 dataset = interner.interned(dataset)
                 if snapshots_changed == "-" or not snapshots_changed:
                     snapshots_changed = "0"
