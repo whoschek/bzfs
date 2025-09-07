@@ -17,6 +17,7 @@
 from __future__ import annotations
 import os
 import socket
+import stat
 import tempfile
 import time
 import unittest
@@ -28,10 +29,16 @@ from unittest.mock import (
     patch,
 )
 
-import bzfs_main.detect
 import bzfs_main.utils
-from bzfs_main import bzfs, configuration
-from bzfs_main.configuration import Remote, SnapshotLabel
+from bzfs_main import (
+    bzfs,
+    configuration,
+)
+from bzfs_main.configuration import (
+    LogParams,
+    Remote,
+    SnapshotLabel,
+)
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
@@ -249,6 +256,27 @@ class TestHelperFunctions(AbstractTestCase):
             Path(regular_file).touch()
             configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
             self.assertFalse(os.path.exists(regular_file))
+
+    def test_lock_file_name_secure_directory(self) -> None:
+        """Lock file path should live in a private, non-world-writable directory, not in the system temp dir."""
+        args = self.argparser_parse_args(args=["src", "dst"])  # ensure a concrete log dir is configured
+        log_params = LogParams(args)
+        params = self.make_params(args=args, log_params=log_params)
+
+        lock_file = params.lock_file_name()
+
+        # The lock should not be created under a world-writable temp directory
+        self.assertNotEqual(os.path.dirname(lock_file), tempfile.gettempdir())
+        self.assertFalse(os.path.commonpath([lock_file, tempfile.gettempdir()]) == tempfile.gettempdir())
+
+        # The lock should be placed under a dedicated per-user locks directory next to the log parent dir
+        log_parent_dir = os.path.dirname(log_params.log_dir)
+        expected_locks_dir = os.path.join(log_parent_dir, ".locks")
+        self.assertTrue(lock_file.startswith(expected_locks_dir + os.sep))
+
+        # The locks directory should exist and be private to the current user (rwx------)
+        st_mode = os.stat(expected_locks_dir).st_mode
+        self.assertEqual(stat.S_IMODE(st_mode), stat.S_IRWXU)
 
     def test_custom_ssh_config_file_must_match_file_name_pattern(self) -> None:
         args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bzfs_ssh_config.cfg"])

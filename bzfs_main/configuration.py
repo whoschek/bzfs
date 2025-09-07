@@ -420,7 +420,11 @@ class Params:
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
         # fmt: on
         hash_code: str = hashlib.sha256(str(key).encode("utf-8")).hexdigest()
-        return os.path.join(tempfile.gettempdir(), f"{PROG_NAME}-lockfile-{hash_code}.lock")
+        log_parent_dir: str = os.path.dirname(self.log_params.log_dir)
+        locks_dir: str = os.path.join(log_parent_dir, ".locks")
+        os.makedirs(locks_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        validate_is_not_a_symlink("--locks-dir ", locks_dir)
+        return os.path.join(locks_dir, f"{PROG_NAME}-lockfile-{hash_code}.lock")
 
     def dry(self, msg: str) -> str:
         """Prefix ``msg`` with 'Dry' when running in dry-run mode."""
@@ -811,10 +815,12 @@ def _delete_stale_files(
         if entry.name == exclude or not entry.name.startswith(prefix):
             continue
         try:
-            if ((dirs and entry.is_dir()) or (not dirs and not entry.is_dir())) and now - entry.stat().st_mtime >= seconds:
+            stats = entry.stat(follow_symlinks=False)
+            is_dir = entry.is_dir(follow_symlinks=False)
+            if ((dirs and is_dir) or (not dirs and not is_dir)) and now - stats.st_mtime >= seconds:
                 if dirs:
                     shutil.rmtree(entry.path, ignore_errors=True)
-                elif not (ssh and stat.S_ISSOCK(entry.stat().st_mode)):
+                elif not (ssh and stat.S_ISSOCK(stats.st_mode)):
                     os.remove(entry.path)
                 elif match := SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
                     pid: int = int(match.group(0))
