@@ -657,7 +657,7 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5  # see https://github.com/actions/configure-pages
       - name: Upload website to GitHub Pages
-        uses: actions/upload-pages-artifact@v3  # see https://github.com/actions/upload-pages-artifact
+        uses: actions/upload-pages-artifact@v4  # see https://github.com/actions/upload-pages-artifact
         with:
           path: generate_website
       - name: Deploy website to GitHub Pages
