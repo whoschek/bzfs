@@ -339,22 +339,30 @@ def _validate_log_config_variable_name(name: str) -> str | None:
 
 
 def _validate_log_config_dict(config: dict) -> None:
-    """Recursively scans the logging configuration dictionary to ensure that any instantiated objects via the '()' key are on
-    an approved whitelist; This prevents arbitrary code execution from a malicious config file."""
-    whitelist: set[str] = {
-        "logging.StreamHandler",
-        "logging.FileHandler",
-        "logging.handlers.SysLogHandler",
+    """Recursively scans the logging configuration dictionary to ensure that any instantiated objects via the '()' key and
+    'class' key are on an approved whitelist; This prevents arbitrary code execution from a malicious config file."""
+    callable_whitelist: set[str] = {
+        # Safe factories/callables
+        __name__ + ".get_default_log_formatter",
+        # Constants resolved via ext:// resolution
         "socket.SOCK_DGRAM",
         "socket.SOCK_STREAM",
         "sys.stdout",
         "sys.stderr",
-        __name__ + ".get_default_log_formatter",
+    }
+    class_whitelist: set[str] = {
+        # Safe handler/formatter classes
+        "logging.StreamHandler",
+        "logging.FileHandler",
+        "logging.handlers.SysLogHandler",
+        "logging.Formatter",
     }
     if isinstance(config, dict):
         for key, value in config.items():
-            if key == "()" and value not in whitelist:
+            if key == "()" and value not in callable_whitelist:
                 die(f"--log-config-file: Disallowed callable '{value}'. For security, only specific classes are permitted.")
+            if key == "class" and value not in class_whitelist:
+                die(f"--log-config-file: Disallowed class '{value}'. For security, only specific classes are permitted.")
             _validate_log_config_dict(value)
     elif isinstance(config, list):
         for item in config:

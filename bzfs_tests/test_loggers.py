@@ -412,6 +412,22 @@ class TestLogging(AbstractTestCase):
 
         _validate_log_config_dict(None)  # type: ignore[arg-type]
 
+    def test_log_config_file_disallows_untrusted_class_imports(self) -> None:
+        """Ensure we also restrict 'class' entries to a safe whitelist to prevent import-time code execution."""
+        malicious_config = {
+            "version": 1,
+            # Attempt to instantiate an arbitrary class via 'class' field (should be blocked)
+            "handlers": {"evil": {"class": "http.server.SimpleHTTPRequestHandler"}},
+            "root": {"level": "INFO", "handlers": ["evil"]},
+        }
+        malicious_config_str = json.dumps(malicious_config)
+        args = self.argparser_parse_args(["src", "dst", "--log-config-file", malicious_config_str])
+        lp = LogParams(args)
+        with self.assertRaises(SystemExit) as cm:
+            _get_dict_config_logger(lp, args)
+        self.assertEqual(cm.exception.code, DIE_STATUS)
+        self.assertIn("Disallowed class 'http.server.SimpleHTTPRequestHandler'", str(cm.exception))
+
 
 #############################################################################
 class TestTee(AbstractTestCase):
