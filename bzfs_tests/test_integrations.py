@@ -2674,7 +2674,9 @@ class LocalTestCase(IntegrationTestCase):
                 "correctly in any mode though)"
             )
         self.setup_basic()
-        params = self.make_params(args=bzfs.argument_parser().parse_args(args=[src_root_dataset, dst_root_dataset]))
+        args = bzfs.argument_parser().parse_args(args=[src_root_dataset, dst_root_dataset])
+        log_params = LogParams(args)
+        params = self.make_params(args=args, log_params=log_params)
         lock_file = params.lock_file_name()
         with open(lock_file, "w", encoding="utf-8") as lock_file_fd:
             # Acquire an exclusive lock; will raise an error if the lock is already held by another process.
@@ -2682,8 +2684,11 @@ class LocalTestCase(IntegrationTestCase):
             self.assertTrue(os.path.exists(lock_file))
             fcntl.flock(lock_file_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
             try:
-                # job will fail because the lock is already held
-                self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=bzfs.STILL_RUNNING_STATUS)
+                # Run bzfs in a separate process so advisory flock conflicts across processes,
+                # matching real-world cron/daemon behavior. Use minimal args to match the lock hash.
+                cmd = [sys.executable, "-m", "bzfs_main.bzfs", src_root_dataset, dst_root_dataset]
+                result = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+                self.assertEqual(bzfs.STILL_RUNNING_STATUS, result.returncode, f"{result.stdout}\n{result.stderr}")
                 self.assertTrue(os.path.exists(lock_file))
             finally:
                 Path(lock_file).unlink(missing_ok=True)  # avoid accumulation of stale lock files
