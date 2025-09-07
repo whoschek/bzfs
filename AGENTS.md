@@ -133,14 +133,25 @@ Before committing any changes, you **must** follow this exact sequence:
 
 # Guidelines and Best Practices
 
+## How to Report Bugs
+
+- **Report:** If you encounter a bug, formulate a clear and concise description of what the bug is, and the symptoms and
+  conditions under which it manifests. State the expected vs the actual behavior. Include steps that reproduce the
+  actual behavior reliably, with minimal complexity, ideally with a script. Explain the real-world consequences to
+  users, and associated impact severity (`High`, `Medium`, `Low`). Describe known work-arounds and potential solutions.
+  Finally, estimate the priority aka urgency of producing a fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
+- **Collect Context:** Also collect other information that assists a successful bug diagnosis, for example usage
+  pattern, config files, log files, version of software components, etc.
+
 ## How to Find and Fix Bugs
 
-- **Analyze:** If you are tasked to identify a bug, explore multiple possible approaches, and perform a thorough root
-  cause analysis. Think harder to understand *why* the bug occurs, not just *what* it does. Before claiming a bug,
-  meticulously cross-check it against the existing unit tests (`test_*.py`) and integration tests
-  (`test_integrations.py`), which are known to pass. A "bug" covered by a passing test indicates a flawed analysis.
-- **Test First, Then Fix:** For any real bug, explain its root cause, write a new test case that fails with the current
-  code, and then implement the fix that makes the new test pass.
+- **Analyze:** If you are tasked to identify or fix a bug, collect and analyze related issues and bug reports, explore
+  multiple possible approaches along with deep tracing, and perform a thorough root cause analysis. Think harder to
+  understand *why* the bug occurs, not just *what* it does. Before claiming a bug, meticulously cross-check it against
+  the existing unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug"
+  covered by a passing test indicates a flawed analysis.
+- **Test First, Then Fix:** Use TDD: You **must** follow the sequence of steps described above in
+  [Core Software Development Workflow](#core-software-development-workflow).
 
 ## How to Write Tests
 
