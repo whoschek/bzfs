@@ -60,7 +60,7 @@ dev = [  # for development only
   "argparse-manpage==4.7",          # see https://github.com/praiskup/argparse-manpage
   # "pandoc", # instead use this for pandoc >= 3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
   "genbadge[coverage]==1.1.2",      # see https://smarie.github.io/python-genbadge/
-  "commitizen==4.8.3",              # see https://github.com/commitizen-tools/commitizen
+  "commitizen==4.8.4",              # see https://github.com/commitizen-tools/commitizen
   "pre-commit==4.3.0",              # see https://github.com/pre-commit/pre-commit
   "black==25.1",                    # see https://github.com/psf/black
   "ruff==0.12.12",                  # see https://github.com/astral-sh/ruff
@@ -70,9 +70,9 @@ dev = [  # for development only
   "mdformat==0.7.22",               # see https://github.com/hukkin/mdformat
   "codespell==2.4.1",               # see https://github.com/codespell-project/codespell
   "pylint==3.3.8",                  # see https://github.com/pylint-dev/pylint
-  "pyrefly==0.31.1",                # see https://github.com/facebook/pyrefly
-  "ast-grep-cli==0.39.4",           # see https://github.com/ast-grep/ast-grep
-  "rope==1.14.0",                   # see https://github.com/python-rope/rope
+  "pyrefly==0.32.0",                # see https://github.com/facebook/pyrefly
+  # "ast-grep-cli==0.39.5",           # see https://github.com/ast-grep/ast-grep
+  # "rope==1.14.0",                   # see https://github.com/python-rope/rope
 ]
 # Example that installs the optional python development dependencies (see above) into a venv:
 # cd ~/devel/bzfs

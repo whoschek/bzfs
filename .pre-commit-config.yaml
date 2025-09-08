@@ -93,7 +93,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.31.1']
+        additional_dependencies: ['pyrefly==0.32.0']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.16.1
@@ -159,7 +159,7 @@ repos:
       - id: black                  # Run `black` Python code formatter
       # style options like `line_length` live in pyproject.toml
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.8.3
+    rev: v4.8.4
     hooks:
       - id: commitizen  # Check commit msg has the form `type(scope): description` per https://www.conventionalcommits.org
         stages: [commit-msg]
