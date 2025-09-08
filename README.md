@@ -20,6 +20,7 @@
 [![python](https://whoschek.github.io/bzfs/badges/python-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![pypi](https://img.shields.io/pypi/v/bzfs.svg)](https://pypi.org/project/bzfs)
 [![zfs](https://whoschek.github.io/bzfs/badges/zfs-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/t/whoschek/bzfs?style=flat)](https://github.com/whoschek/bzfs/commits/main/)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
