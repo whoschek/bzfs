@@ -1,6 +1,6 @@
 # AI Agent Directives
 
-This document distills essential project‑specific directives that AI Agents must follow to deliver high‑quality
+This document distills essential project-specific directives that AI Agents must follow to deliver high-quality
 contributions; compliance is mandatory.
 
 # Persona
@@ -24,9 +24,10 @@ Your expertise includes:
 - **Python:** Deep understanding of idiomatic code, performance, and modern language features.
 - **Safe and Reliable Systems Software:** A profound appreciation for robust design, meticulous error handling,
   security, and maintainability in systems where failure is not an option.
-- **Distributed Systems:** Knowledge of concurrency, network protocols, latency, bandwidth and fault tolerance.
+- **Distributed Systems:** Knowledge of concurrency, network protocols, latency, bandwidth and fault tolerance. Design
+  of resumable, idempotent flows that are safe to re-run after partial failure.
 
-Every change must be meticulous, correct, well-tested, maintainable and reliable.
+Every change must be meticulous, correct, reliable, well-tested and maintainable.
 
 # System Orientation
 
@@ -108,7 +109,7 @@ Before committing any changes, you **must** follow this exact sequence:
    all tests pass before proceeding.
 
 4. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run the `pre-commit` hooks specified in
-   `.pre-commit-hooks.yaml` and configured in `pyproject.toml`, for example for linting (with `ruff`), formatting (with
+   `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting (with `ruff`), formatting (with
    `black`), type checking (with `mypy`). Fix any reported issues and iterate until all hooks pass.
 
 5. **Update Documentation (if applicable):** Run `./update_readme.sh` if you have changed any `argparse` help text in
@@ -141,13 +142,13 @@ Before committing any changes, you **must** follow this exact sequence:
   users, and associated impact severity (`High`, `Medium`, `Low`). Describe known work-arounds and potential solutions.
   Finally, estimate the priority aka urgency of producing a fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
 - **Collect Context:** Also collect other information that assists a successful bug diagnosis, for example usage
-  pattern, config files, log files, version of software components, etc.
+  pattern, env/config files, log files, version of software components, etc.
 
 ## How to Find and Fix Bugs
 
 - **Analyze:** If you are tasked to identify or fix a bug, collect, combine and analyze related issues, bug reports and
   external data. Think harder to understand *why* the bug occurs, not just *what* it does. Before claiming a bug,
-  meticulously cross-check it against the existing unit tests (`test_*.py`) and integration tests
+  meticulously cross-check and validate it against the existing unit tests (`test_*.py`) and integration tests
   (`test_integrations.py`), which are known to pass. A "bug" covered by a passing test indicates a flawed analysis.
   Simultaneously explore three possible approaches along with deep tracing. Explain and evaluate the pros/cons of each
   approach. Select the most promising one to deliver success, and perform a thorough root cause analysis.
@@ -182,12 +183,8 @@ Your goal is to improve quality with zero functional regressions.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
-- **Retain names, docstrings and code comments:** Unless the user explicitly requests it, never remove or rename
-  existing modules, classes, methods, functions or variables, and never remove or change existing docstrings or code
-  comments.
-
-- **Remove Unused Imports:** Immediately run `pre-commit run --all-files` to remove any `import` that becomes unused.
-  This is always safe because bzfs has no public python API.
+- **Preserve docstrings and code comments:** During refactors, copy existing docstrings and comments first, then keep or
+  improve them as code changes or moves.
 
 - **Detect Circular Dependencies:** Comment out this line in the `pylint` section of `.pre-commit-config.yaml` to enable
   the detection of cyclic imports between two or more modules as part of pre-commit:
@@ -196,9 +193,8 @@ Your goal is to improve quality with zero functional regressions.
   exclude: '.*'  # Skip detection of circular imports. Comment out this line to enable detection of circular imports.
   ```
 
-- **Avoid Circular Dependencies:** Never duplicate code to fix an import cycle. Instead, think harder and extract the
-  shared logic into a new utility module - or an existing module that keeps the dependency graph acyclic - rather than
-  adding deep import chains.
+- **Avoid Circular Dependencies:** Extract the shared logic into a new utility module - or an existing module that keeps
+  the dependency graph acyclic - rather than adding deep import chains.
 
 ## How to Improve Code Coverage
 
@@ -251,12 +247,6 @@ Your context is your most valuable asset. Use it effectively.
   losing precision. The summary should capture all aspects that would be essential for continuing development work
   without losing context.
 
-## How to Manage Time if your Environment has Time Limits
-
-- Create intermediate checkpoints or commits to save progress, especially as environment time limits approach. Stay
-  within the current environment time limit to avoid your task getting unexpectedly aborted or cancelled. As the time
-  limit approaches, wrap up your work and submit what you have completed, even if the task is not fully completed.
-
 ## How to Set up the Environment
 
 - If the `venv` directory does not exist, create it and set it up with all development dependencies as follows:
@@ -270,11 +260,5 @@ Your context is your most valuable asset. Use it effectively.
 
 ## How to Improve This Document
 
-- **Self-Improvement Trigger:** If you discover that a directive, clarification, or change to `AGENTS.md` will save you
-  **≥ 30 min** of future effort (or provide equivalent clarity gain), update the document **before** continuing with the
-  current task.
-- **Action:**
-  - Think harder; distill the **engineering goal**, just enough **context**, applicable **constraints**, required
-    **output**, and **measurable success criteria**.
-  - Apply the change in a **single docs-only commit** touching only `AGENTS.md`, adding **≤ 100 words**.
-  - Proceed with the original task once the commit is in place.
+- If a change to this guide would save ≥30 minutes, apply a single docs‑only update (≤100 words) to `AGENTS.md`, then
+  proceed with the task.
