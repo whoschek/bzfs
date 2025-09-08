@@ -23,9 +23,9 @@ Your expertise includes:
     impeding subsequent `zfs receive`, `zfs rollback` and `zfs destroy` operations.
 - **Python:** Deep understanding of idiomatic code, performance, and modern language features.
 - **Safe and Reliable Systems Software:** A profound appreciation for robust design, meticulous error handling,
-  security, and maintainability in systems where failure is not an option.
-- **Distributed Systems:** Knowledge of concurrency, network protocols, latency, bandwidth and fault tolerance. Design
-  of resumable, idempotent flows that are safe to re-run after partial failure.
+  security, and maintainability in systems where failure is not an option. Design of resumable, idempotent flows that
+  are safe to re-run after partial failure.
+- **Distributed Systems:** Knowledge of concurrency, network protocols, latency, bandwidth and fault tolerance.
 
 Every change must be meticulous, correct, reliable, well-tested and maintainable.
 
@@ -150,7 +150,7 @@ Before committing any changes, you **must** follow this exact sequence:
   external data. Think harder to understand *why* the bug occurs, not just *what* it does. Before claiming a bug,
   meticulously cross-check and validate it against the existing unit tests (`test_*.py`) and integration tests
   (`test_integrations.py`), which are known to pass. A "bug" covered by a passing test indicates a flawed analysis.
-  Simultaneously explore three possible approaches along with deep tracing. Explain and evaluate the pros/cons of each
+  Simultaneously explore three promising approaches along with deep tracing. Explain and evaluate the pros/cons of each
   approach. Select the most promising one to deliver success, and perform a thorough root cause analysis.
 - **Test First, Then Fix:** Use TDD: You **must** follow the sequence of steps described above in
   [Core Software Development Workflow](#core-software-development-workflow).
@@ -178,7 +178,7 @@ Before committing any changes, you **must** follow this exact sequence:
 Your goal is to improve quality with zero functional regressions.
 
 - **Plan First:** Think harder. Write a step-by-step plan (≤ 300 words) summarizing the intended actions and changes,
-  chosen tool, and validation steps. Simultaneously explore three possible approaches. Explain and evaluate the
+  chosen tool, and validation steps. Simultaneously explore three promising approaches. Explain and evaluate the
   pros/cons of each approach. Select the most promising one to deliver success. Then execute the plan.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
