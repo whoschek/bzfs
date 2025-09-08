@@ -81,7 +81,7 @@ class SnapshotCache:
     def get_snapshots_changed2(path: str) -> tuple[int, int]:
         """Like zfs_get_snapshots_changed() but reads from local cache."""
         try:  # perf: inode metadata reads and writes are fast - ballpark O(200k) ops/sec.
-            s = os.stat(path)
+            s = os.stat(path, follow_symlinks=False)
             return round(s.st_atime), round(s.st_mtime)
         except FileNotFoundError:
             return 0, 0  # harmless

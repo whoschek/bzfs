@@ -308,7 +308,7 @@ class ProgressReporter:
     @staticmethod
     def _format_duration(duration_nanos: int) -> str:
         """Formats ``duration_nanos`` as HH:MM:SS string."""
-        total_seconds: int = round(duration_nanos / 1_000_000_000)
+        total_seconds: int = duration_nanos // 1_000_000_000
         hours, remainder = divmod(total_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{hours}:{minutes:02d}:{seconds:02d}"

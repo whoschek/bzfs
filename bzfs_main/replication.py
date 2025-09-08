@@ -1077,6 +1077,9 @@ def _zfs_get(
     props_cache: dict[tuple[str, str, str], dict[str, str | None]],
 ) -> dict[str, str | None]:
     """Returns the results of 'zfs get' CLI on the given dataset on the given remote."""
+    assert dataset
+    assert sources
+    assert output_columns
     if not propnames:
         return {}
     p = job.params

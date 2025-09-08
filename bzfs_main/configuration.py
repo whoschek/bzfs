@@ -568,7 +568,7 @@ class SnapshotLabel(NamedTuple):
         name: str = str(self)
         validate_dataset_name(name, input_text)
         if "/" in name:
-            die(f"Invalid ZFS snapshot name: '{name}' for: '{input_text}*'")
+            die(f"Invalid ZFS snapshot name: '{name}' for: '{input_text}'")
         for key, value in {"prefix": self.prefix, "infix": self.infix, "suffix": self.suffix}.items():
             if key == "prefix":
                 if not value.endswith("_"):
@@ -824,7 +824,7 @@ def _delete_stale_files(
                     os.remove(entry.path)
                 elif match := SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
                     pid: int = int(match.group(0))
-                    if pid_exists(pid) is False or now - entry.stat().st_mtime >= 31 * 24 * 60 * 60:
+                    if pid_exists(pid) is False or now - stats.st_mtime >= 31 * 24 * 60 * 60:
                         os.remove(entry.path)  # bzfs process is no longer alive; its ssh master process isn't either
         except FileNotFoundError:
             pass  # harmless
