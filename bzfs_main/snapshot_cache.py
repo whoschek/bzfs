@@ -125,13 +125,11 @@ class SnapshotCache:
             dataset_cache_file: str = self.last_modified_cache_file(src, src_dataset)
             if not p.dry_run:
                 if snapshots_changed == 0:
-                    # selective invalidation: only zero the dataset-level '=' cache entry
-                    try:
+                    try:  # selective invalidation: only zero the dataset-level '=' cache entry
                         os.utime(dataset_cache_file, times=(0, 0))
                     except FileNotFoundError:
                         pass  # harmless
-                else:
-                    # update dataset-level '=' cache monotonically; do NOT touch per-label creation caches here
+                else:  # update dataset-level '=' cache monotonically; do NOT touch per-label creation caches here
                     set_last_modification_time_safe(
                         dataset_cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True
                     )
