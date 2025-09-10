@@ -83,9 +83,10 @@ For software development, you **must** follow this exact sequence:
    Then specify tests, without writing code in this phase.
 
 3. **Split complex jobs into doable assignments:** Before starting to implement code, estimate the size of the effort
-   including the time you'll need to get the job done, to avoid biting off too much in any given iteration. Choose the
-   scope of each iteration such that it is challenging but doable in about 5 minutes. For quality, show deep, artisanal
-   attention to detail.
+   including the time you'll need to get the job done, to avoid biting off too much in any given iteration. Break down
+   the job into subtasks if necessary. Choose the scope of the first subtask such that it is challenging but doable in
+   about 5 minutes. Pick the first subtask and defer the remaining tasks to the next iteration. For quality, show deep,
+   artisanal attention to detail.
 
 4. **Write documentation:** Translate the specified documentation changes to file updates.
 
@@ -147,11 +148,13 @@ Before committing any changes, you **must** follow this exact sequence:
 ## How to Find and Fix Bugs
 
 - **Analyze:** If you are tasked to identify or fix a bug, collect, combine and analyze related issues, bug reports and
-  external data. Think harder to understand *why* the bug occurs, not just *what* it does. Before claiming a bug,
-  meticulously cross-check and validate it against the existing unit tests (`test_*.py`) and integration tests
-  (`test_integrations.py`), which are known to pass. A "bug" covered by a passing test indicates a flawed analysis.
-  Simultaneously explore three promising approaches along with deep tracing. Explain and evaluate the pros/cons of each
-  approach. Select the most promising one to deliver success, and perform a thorough root cause analysis.
+  external data. Think harder to understand *why* the bug occurs, not just *what* it does.
+- **Analyze Non-trivial Bugs:** Before claiming a non-trivial bug, meticulously cross-check and validate it against the
+  existing unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug"
+  covered by a passing test indicates a flawed analysis. Simultaneously explore three completely distinct promising
+  approaches, using different perspectives, methodologies, and techniques. Explain and evaluate the pros/cons of each
+  approach. Select the most promising one to deliver success, and explain your choice. Perform a thorough root cause
+  analysis.
 - **Test First, Then Fix:** Use TDD: You **must** follow the sequence of steps described above in
   [Core Software Development Workflow](#core-software-development-workflow).
 
@@ -177,9 +180,11 @@ Before committing any changes, you **must** follow this exact sequence:
 
 Your goal is to improve quality with zero functional regressions.
 
-- **Plan First:** Think harder. Write a step-by-step plan (≤ 300 words) summarizing the intended actions and changes,
-  chosen tool, and validation steps. Simultaneously explore three promising approaches. Explain and evaluate the
-  pros/cons of each approach. Select the most promising one to deliver success. Then execute the plan.
+- **Plan First:** Think harder. Write a structured step-by-step plan (≤ 300 words) summarizing the intended actions and
+  changes, chosen tool, and validation steps. Simultaneously explore three completely distinct promising approaches,
+  using different perspectives, methodologies, and techniques. Explain and evaluate the pros/cons of each approach.
+  Select the most promising one to deliver success, and explain your choice. Then methodically execute each step of your
+  plan.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
@@ -234,19 +239,6 @@ If asked to improve coverage:
 - **Reference Issue**: If an issue URL (e.g. https://github.com/user/project/issues/93) is mentioned in the user's
   prompt, add this issue reference to the PR summary in the form "closes #93".
 
-## Context Engineering
-
-Your context is your most valuable asset. Use it effectively.
-
-- **Active Recall:** Keep this document's rules, the user's explicit requests and the current coding goal in your active
-  context.
-- **Compact Context:** Whenever your context window exceeds 75% capacity *or* when a single impending response would
-  overflow it, immediately save the complete current context as-is, along with structured annotations, to external
-  memory (e.g. the filesystem) for future recall and search. Then use the `/compact` or `/compress` command to create a
-  detailed, structured summary of the work so far, paying close attention to the user's explicit requests, without
-  losing precision. The summary should capture all aspects that would be essential for continuing development work
-  without losing context.
-
 ## How to Set up the Environment
 
 - If the `venv` directory does not exist, create it and set it up with all development dependencies as follows:
@@ -257,8 +249,3 @@ Your context is your most valuable asset. Use it effectively.
   pip install -e '.[dev]'                   # Install all development dependencies
   pre-commit install --install-hooks        # Ensure Linters and Formatters run on every commit
   ```
-
-## How to Improve This Document
-
-- If a change to this guide would save ≥30 minutes, apply a single docs‑only update (≤100 words) to `AGENTS.md`, then
-  proceed with the task.
