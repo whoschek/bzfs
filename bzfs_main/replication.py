@@ -493,7 +493,7 @@ def _replicate_dataset_incrementally(
     log.log(LOG_TRACE, "steps_todo: %s", list_formatter(steps_todo, "; "))
     estimate_send_sizes: list[int] = [
         _estimate_send_size(job, src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap)
-        for i, (incr_flag, from_snap, to_snap, to_snapshots) in enumerate(steps_todo)
+        for i, (incr_flag, from_snap, to_snap, _to_snapshots) in enumerate(steps_todo)
     ]
     total_size: int = sum(estimate_send_sizes)
     total_num: int = sum(len(to_snapshots) for incr_flag, from_snap, to_snap, to_snapshots in steps_todo)
