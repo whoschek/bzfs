@@ -641,7 +641,7 @@ class TestParseDatasetLocator(AbstractTestCase):
         passed = False
 
         # Run without validation
-        user, host, user_host, pool, dataset = bzfs.parse_dataset_locator(input_value, validate=False)
+        user, host, user_host, _pool, dataset = bzfs.parse_dataset_locator(input_value, validate=False)
 
         if (
             user == expected_user

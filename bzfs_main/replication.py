@@ -119,7 +119,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
         return list_result
     (
         basis_src_snapshots_with_guids,
-        src_snapshots_with_guids,
+        _src_snapshots_with_guids,
         dst_snapshots_with_guids,
         included_src_guids,
         latest_src_snapshot,

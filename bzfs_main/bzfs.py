@@ -1385,7 +1385,7 @@ class Job:
         labels: list[SnapshotLabel] = []
         config_labels: list[SnapshotLabel] = config.snapshot_labels()
         for label in config_labels:
-            duration_amount_, duration_unit_ = config.suffix_durations[label.suffix]
+            duration_amount_, _duration_unit = config.suffix_durations[label.suffix]
             if duration_amount_ == 0 or config.create_src_snapshots_even_if_not_due:
                 datasets_to_snapshot[label] = sorted_datasets  # take snapshot regardless of creation time of existing snaps
             else:
