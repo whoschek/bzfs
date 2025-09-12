@@ -146,11 +146,11 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
                       [--worker-timeout-seconds FLOAT]
                       [--jobrunner-dryrun]
                       [--jobrunner-log-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
-                      [--version] [--help, -h]
                       [--daemon-replication-frequency STRING]
                       [--daemon-prune-src-frequency STRING]
                       [--daemon-prune-dst-frequency STRING]
                       [--daemon-monitor-snapshots-frequency STRING]
+                      [--version] [--help, -h]
                       --root-dataset-pairs SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
 <!-- END HELP OVERVIEW SECTION -->
@@ -518,22 +518,6 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
 
 <!-- -->
 
-<div id="--version"></div>
-
-**--version**
-
-*  Display version information and exit.
-
-<!-- -->
-
-<div id="--help,_-h"></div>
-
-**--help, -h**
-
-*  Show this help message and exit.
-
-<!-- -->
-
 <div id="--daemon-replication-frequency"></div>
 
 **--daemon-replication-frequency** *STRING*
@@ -565,6 +549,22 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
 
 *  Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is
     nonzero.
+
+<!-- -->
+
+<div id="--version"></div>
+
+**--version**
+
+*  Display version information and exit.
+
+<!-- -->
+
+<div id="--help,_-h"></div>
+
+**--help, -h**
+
+*  Show this help message and exit.
 
 <!-- -->
 

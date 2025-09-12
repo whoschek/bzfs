@@ -394,12 +394,6 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--jobrunner-log-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"], default="INFO",
         help="Only emit jobrunner messages with equal or higher priority than this log level. Default is '%(default)s'.\n\n")
     parser.add_argument(
-        "--version", action="version", version=f"{PROG_NAME}-{bzfs_main.argparse_cli.__version__}, by {PROG_AUTHOR}",
-        help="Display version information and exit.\n\n")
-    parser.add_argument(
-        "--help, -h", action="help",
-        help="Show this help message and exit.\n\n")
-    parser.add_argument(
         "--daemon-replication-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall replicate from src to dst if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument(
@@ -420,6 +414,12 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         bad_opts += [f"--ssh-{loc}-host"]  # reject this arg as jobrunner will auto-generate it
     for bad_opt in bad_opts:
         parser.add_argument(bad_opt, action=RejectArgumentAction, nargs=0, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--version", action="version", version=f"{PROG_NAME}-{bzfs_main.argparse_cli.__version__}, by {PROG_AUTHOR}",
+        help="Display version information and exit.\n\n")
+    parser.add_argument(
+        "--help, -h", action="help",  # trick to ensure both --help and -h are shown in the help msg
+        help="Show this help message and exit.\n\n")
     parser.add_argument(
         "--root-dataset-pairs", required=True, nargs="+", action=bzfs_main.argparse_actions.DatasetPairsAction,
         metavar="SRC_DATASET DST_DATASET",

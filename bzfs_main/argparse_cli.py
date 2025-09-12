@@ -1480,7 +1480,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--version", action="version", version=f"{PROG_NAME}-{__version__}, by {PROG_AUTHOR}",
         help="Display version information and exit.\n\n")
     parser.add_argument(
-        "--help, -h", action="help",
+        "--help, -h", action="help",  # trick to ensure both --help and -h are shown in the help msg
         help="Show this help message and exit.\n\n")
     return parser
     # fmt: on
