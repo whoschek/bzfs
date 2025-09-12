@@ -99,7 +99,7 @@ def detect_available_programs(job: Job) -> None:
 
     lock: threading.Lock = threading.Lock()
 
-    def run_detect(r: Remote) -> None:
+    def run_detect(r: Remote) -> None:  # thread-safe
         loc: str = r.location
         remote_conf_cache_key = r.cache_key()
         available_programs: dict[str, str] = _detect_available_programs_remote(job, r, r.ssh_user_host)
@@ -110,15 +110,14 @@ def detect_available_programs(job: Job) -> None:
             job.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
                 p.connection_pools[loc], available_programs, zpool_features
             )
-            if r.use_zfs_delegation and zpool_features.get("delegation") == "off":
-                die(
-                    f"Permission denied as ZFS delegation is disabled for {r.location} "
-                    f"dataset: {r.basis_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
-                )
+        if r.use_zfs_delegation and zpool_features.get("delegation") == "off":
+            die(
+                f"Permission denied as ZFS delegation is disabled for {r.location} "
+                f"dataset: {r.basis_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
+            )
 
-    if len(todo) > 0:
-        with ThreadPoolExecutor(max_workers=len(todo)) as executor:
-            drain(executor.map(run_detect, todo))  # detect ZFS features + system capabilities on src+dst in parallel
+    with ThreadPoolExecutor(max_workers=max(1, len(todo))) as executor:
+        drain(executor.map(run_detect, todo))  # detect ZFS features + system capabilities on src+dst in parallel
 
     locations = ["src", "dst", "local"]
     if params.compression_program == DISABLE_PRG:

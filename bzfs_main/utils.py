@@ -190,9 +190,9 @@ def human_readable_duration(duration: float, unit: str = "ns", separator: str = 
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")
-    nanos = (1, 1_000, 1_000_000, 1_000_000_000, 60 * 1_000_000_000, 60 * 60 * 1_000_000_000, 60 * 60 * 24 * 1_000_000_000)
     i = units.index(unit)
     if t < 1 and t != 0:
+        nanos = (1, 1_000, 1_000_000, 1_000_000_000, 60 * 1_000_000_000, 60 * 60 * 1_000_000_000, 3600 * 24 * 1_000_000_000)
         t *= nanos[i]
         i = 0
     while t >= 1000 and i < 3:

@@ -525,8 +525,8 @@ class Job:
         if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
             random.shuffle(src_hosts)
             dst_hosts = shuffle_dict(dst_hosts)
-        ssh_src_user: str = args.ssh_src_user if args.ssh_src_user is not None else args.src_user  # --src-user is deprecated
-        ssh_dst_user: str = args.ssh_dst_user if args.ssh_dst_user is not None else args.dst_user  # --dst-user is deprecated
+        ssh_src_user: str = args.ssh_src_user or args.src_user  # --src-user is deprecated
+        ssh_dst_user: str = args.ssh_dst_user or args.dst_user  # --dst-user is deprecated
         ssh_src_port: int | None = args.ssh_src_port
         ssh_dst_port: int | None = args.ssh_dst_port
         ssh_src_config_file: str | None = args.ssh_src_config_file
@@ -586,7 +586,7 @@ class Job:
             assert root_dataset is not None, dst_hostname  # f"Hostname '{dst_hostname}' missing in --dst-root-datasets"
             root_dataset = root_dataset.replace(SRC_MAGIC_SUBSTITUTION_TOKEN, src_host)
             root_dataset = root_dataset.replace(DST_MAGIC_SUBSTITUTION_TOKEN, dst_hostname)
-            resolved_dst_dataset: str = root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
+            resolved_dst_dataset: str = f"{root_dataset}/{dst_dataset}" if root_dataset else dst_dataset
             bzfs_main.utils.validate_dataset_name(resolved_dst_dataset, dst_dataset)
             return resolve_dataset(dst_hostname, resolved_dst_dataset, is_src=False)
 
@@ -1011,7 +1011,7 @@ class Job:
             return DIE_STATUS
 
     def _bzfs_run_main(self, cmd: list[str]) -> None:
-        """Delegate execution to :mod:`bzfs` using parsed arguments."""
+        """Delegates execution to :mod:`bzfs` using parsed arguments."""
         bzfs_job = bzfs.Job()
         bzfs_job.is_test_mode = self.is_test_mode
         bzfs_job.run_main(self.bzfs_argument_parser.parse_args(cmd[1:]), cmd)

@@ -69,6 +69,7 @@ from bzfs_main.utils import (
     DIE_STATUS,
     ENV_VAR_PREFIX,
     find_match,
+    get_home_directory,
     getenv_any,
     getenv_bool,
     human_readable_duration,
@@ -127,7 +128,7 @@ os.write(zfs_encryption_key_fd, "mypasswd".encode("utf-8"))
 os.close(zfs_encryption_key_fd)
 KEYLOCATION = f"file://{zfs_encryption_key}"
 
-SSH_CONFIG_FILE: str = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".ssh", "test_bzfs_ssh_config")
+SSH_CONFIG_FILE: str = os.path.join(get_home_directory(), ".ssh", "test_bzfs_ssh_config")
 RNG = random.Random(12345)
 HAS_NETCAT_PROG: bool = shutil.which("nc") is not None
 
@@ -341,7 +342,7 @@ class IntegrationTestCase(ParametrizedTestCase):
 
     @staticmethod
     def log_dir_opt() -> list[str]:
-        return ["--log-dir", os.path.join(bzfs_main.utils.get_home_directory(), argparse_cli.LOG_DIR_DEFAULT + "-test")]
+        return ["--log-dir", os.path.join(get_home_directory(), argparse_cli.LOG_DIR_DEFAULT + "-test")]
 
     def run_bzfs_internal(
         self,
@@ -922,9 +923,9 @@ class TestSSHLatency(IntegrationTestCase):
         ssh_opts_list += ["-S", os.path.join(p.src.ssh_socket_dir, "bzfs_test_ssh_socket")]
         ssh_opts_list += ["-p", cast(str, getenv_any("test_ssh_port", "22"))]
 
-        private_key_file2 = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/testid_rsa"
+        private_key_file2 = os.path.join(get_home_directory(), ".ssh", "testid_rsa")
         src_private_key2 = ["-i", private_key_file2]
-        private_key_file = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"
+        private_key_file = os.path.join(get_home_directory(), ".ssh", "id_rsa")
         src_private_key = ["-i", private_key_file]
         if platform.system() == "Linux":
             ssh_opts_list += src_private_key
