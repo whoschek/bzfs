@@ -32,6 +32,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   release.
 - [bzfs_jobrunner] Promoted `bzfs_jobrunner` from work-in-progress to stable status.
 - [bzfs] Fixed: Error "zfs CLI is not available on dst host: localhost" if using pull-push mode with dummy dataset.
+- [bzfs] Fixed: Use uid instead of euid in line with ssh convention.
 - [bzfs] Promoted `--zfs-recv-o-*` and `--zfs-recv-x-*` options to stable state.
 - [bzfs] Find latest common snapshot now even among non-selected snapshots.
 - [bzfs] Also support `--delete-dst-snapshots-except` if source is not a dummy.
@@ -123,7 +124,7 @@ This release contains some fixes and a lot of new features, including ...
   delete.
 - Added `--include-snapshot-plan` CLI option to specify which periods to replicate.
 - Added `--new-snapshot-filter-group` CLI option, which starts a new snapshot filter group containing separate
-  `-- {include|exclude}-snapshot-*` filter options, which are UNIONized.
+  `-- {include|exclude}-snapshot-*` filter options, which are UNION-ized.
 - Added `anytime` and `notime` keywords to `--include-snapshot-times-and-ranks`.
 - Added `all except` keyword to `--include-snapshot-times-and-ranks`, as a more user-friendly filter syntax to say
   "include all snapshots except the oldest N (or latest N) snapshots".

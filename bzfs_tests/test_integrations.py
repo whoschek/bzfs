@@ -134,7 +134,7 @@ HAS_NETCAT_PROG: bool = shutil.which("nc") is not None
 
 ssh_program: str = cast(str, getenv_any("test_ssh_program", "ssh"))  # also works with "hpnssh"
 sudo_cmd = []
-if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.system() == "SunOS"):
+if getenv_bool("test_enable_sudo", True) and (os.getuid() != 0 or platform.system() == "SunOS"):
     sudo_cmd = ["sudo", "-n"]
     set_sudo_cmd(["sudo", "-n"])
 
@@ -154,7 +154,7 @@ def suite() -> unittest.TestSuite:
             for affix in [""]:
                 # no_privilege_elevation_modes = []
                 no_privilege_elevation_modes = [False]
-                if not (os.geteuid() == 0 or ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
+                if not (os.getuid() == 0 or ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
                     no_privilege_elevation_modes.append(True)
                 for no_privilege_elevation in no_privilege_elevation_modes:
                     encrypted_datasets = [False]
@@ -206,7 +206,7 @@ def suite() -> unittest.TestSuite:
                         }
                         suite.addTest(ParametrizedTestCase.parametrize(FullRemoteTestCase, params))
 
-    if os.geteuid() != 0 and not ttype.is_functional_test:
+    if os.getuid() != 0 and not ttype.is_functional_test:
         for ssh_mode in ["pull-push", "pull", "push"]:
             for min_pipe_transfer_size in [0]:
                 for affix in [""]:
@@ -5557,15 +5557,15 @@ class MinimalRemoteTestCase(IntegrationTestCase):
         LocalTestCase(param=self.param).test_basic_replication_recursive_parallel()
 
     def test_inject_unavailable_sudo(self) -> None:
-        expected_error = DIE_STATUS if os.geteuid() != 0 and not self.is_no_privilege_elevation() else 0
+        expected_error = DIE_STATUS if os.getuid() != 0 and not self.is_no_privilege_elevation() else 0
         self.inject_unavailable_program("inject_unavailable_sudo", expected_error=expected_error)
         self.tearDownAndSetup()
-        expected_error = 1 if os.geteuid() != 0 and not self.is_no_privilege_elevation() else 0
+        expected_error = 1 if os.getuid() != 0 and not self.is_no_privilege_elevation() else 0
         self.inject_unavailable_program("inject_failing_sudo", expected_error=expected_error)
 
     def test_disabled_sudo(self) -> None:
         expected_status = 0
-        if os.geteuid() != 0 and not self.is_no_privilege_elevation():
+        if os.getuid() != 0 and not self.is_no_privilege_elevation():
             expected_status = DIE_STATUS
         self.inject_disabled_program("sudo", expected_error=expected_status)
 

@@ -302,7 +302,7 @@ class Job:
                 log.error("%s%s", f"Exiting {PROG_NAME} with status code {status_code}. Cause: ", error, exc_info=exc_info)
 
             try:
-                log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
+                log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[uid: {os.getuid()}, euid: {os.geteuid()}]")
                 if self.is_test_mode:
                     log.log(LOG_TRACE, "Parsed CLI arguments: %s", args)
                 self.params = p = Params(args, sys_argv or [], log_params, log, self.inject_params)
@@ -582,11 +582,11 @@ class Job:
         is_root: bool = True
         if ssh_user_host != "":
             if ssh_user == "":
-                if os.geteuid() != 0:
+                if os.getuid() != 0:
                     is_root = False
             elif ssh_user != "root":
                 is_root = False
-        elif os.geteuid() != 0:
+        elif os.getuid() != 0:
             is_root = False
 
         if is_root:

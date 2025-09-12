@@ -299,6 +299,7 @@ class Params:
         )
 
         self.os_cpu_count: int | None = os.cpu_count()
+        self.os_getuid: int = os.getuid()
         self.os_geteuid: int = os.geteuid()
         self.prog_version: str = __version__
         self.python_version: str = sys.version

@@ -538,7 +538,7 @@ class Job:
         max_workers: int = max(1, round((os.cpu_count() or 1) * workers / 100.0) if workers_is_percent else round(workers))
         worker_timeout_seconds: int = args.worker_timeout_seconds
         self.spawn_process_per_job = args.spawn_process_per_job
-        username: str = pwd.getpwuid(os.geteuid()).pw_name
+        username: str = pwd.getpwuid(os.getuid()).pw_name
         assert username
         localhost_ids: set[str] = {"localhost", "127.0.0.1", "::1", socket.gethostname()}  # ::1 is IPv6 loopback address
         localhost_ids.update(self.get_localhost_ips())  # union

@@ -1003,7 +1003,7 @@ class TestJobMethods(AbstractTestCase):
     def test_sudo_cmd_root_user(self) -> None:
         """Root user needs no sudo prefix nor delegation."""
         job = self.make_job(["src", "dst"])
-        with patch("os.geteuid", return_value=0):
+        with patch("os.getuid", return_value=0):
             sudo, deleg = job.sudo_cmd("", "")
         self.assertEqual("", sudo)
         self.assertFalse(deleg)
@@ -1011,7 +1011,7 @@ class TestJobMethods(AbstractTestCase):
     def test_sudo_cmd_nonroot_with_privilege_elevation(self) -> None:
         """Non-root user with elevation returns 'sudo -n'."""
         job = self.make_job(["src", "dst"])
-        with patch("os.geteuid", return_value=1):
+        with patch("os.getuid", return_value=1):
             sudo, deleg = job.sudo_cmd("user@host", "user")
         self.assertEqual("sudo -n", sudo)
         self.assertFalse(deleg)
@@ -1020,7 +1020,7 @@ class TestJobMethods(AbstractTestCase):
         """Non-root without elevation requests delegation instead."""
         job = self.make_job(["src", "dst"])
         job.params.enable_privilege_elevation = False
-        with patch("os.geteuid", return_value=1):
+        with patch("os.getuid", return_value=1):
             sudo, deleg = job.sudo_cmd("user@host", "user")
         self.assertEqual("", sudo)
         self.assertTrue(deleg)
@@ -1029,7 +1029,7 @@ class TestJobMethods(AbstractTestCase):
         """Disabled sudo program exits when elevation is required."""
         job = self.make_job(["src", "dst"])
         job.params.sudo_program = bzfs_main.detect.DISABLE_PRG
-        with patch("os.geteuid", return_value=1):
+        with patch("os.getuid", return_value=1):
             with self.assertRaises(SystemExit) as cm:
                 job.sudo_cmd("user@host", "user")
         self.assertIn("sudo CLI is not available on host: user@host", str(cm.exception))
