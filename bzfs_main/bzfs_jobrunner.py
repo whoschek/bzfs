@@ -50,6 +50,7 @@ from subprocess import DEVNULL, PIPE
 from typing import (
     Any,
     Iterable,
+    NoReturn,
     TypeVar,
     Union,
 )
@@ -70,6 +71,7 @@ from bzfs_main.utils import (
     DIE_STATUS,
     LOG_TRACE,
     format_dict,
+    format_obj,
     human_readable_duration,
     percent,
     shuffle_dict,
@@ -474,9 +476,7 @@ class Job:
         localhostname: str = args.localhost if args.localhost else socket.gethostname()
         self.validate_host_name(localhostname, "--localhost")
         log.debug("localhostname: %s", localhostname)
-        src_hosts: list[str] = self.validate_src_hosts(
-            literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read())
-        )
+        src_hosts: list[str] = self.validate_src_hosts(self.parse_src_hosts_from_cli_or_stdin(args.src_hosts))
         basis_src_hosts: list[str] = src_hosts
         nb_src_hosts: int = len(basis_src_hosts)
         log.debug("src_hosts before subsetting: %s", src_hosts)
@@ -1142,7 +1142,30 @@ class Job:
         elif not isinstance(value, expected_type):
             self.die(f"{name} must be of type {expected_type.__name__} but got {type(value).__name__}: {value}")
 
-    def die(self, msg: str) -> None:
+    def parse_src_hosts_from_cli_or_stdin(self, raw_src_hosts: str | None) -> list:
+        """Resolve --src-hosts from CLI or stdin with robust TTY/empty handling."""
+        if raw_src_hosts is None:
+            # If stdin is an interactive TTY, don't block waiting for input; fail clearly instead
+            try:
+                is_tty: bool = bool(getattr(sys.stdin, "isatty", lambda: False)())
+            except Exception:
+                is_tty = False
+            if is_tty:
+                self.die("Missing --src-hosts and stdin is a TTY. Provide --src-hosts or pipe the list on stdin.")
+            stdin_text: str = sys.stdin.read()
+            if not stdin_text.strip():  # avoid literal_eval("") SyntaxError and provide a clear message
+                self.die("Missing --src-hosts and stdin is empty. Provide --src-hosts or pipe a list on stdin.")
+            raw_src_hosts = stdin_text
+        try:
+            value = literal_eval(raw_src_hosts)
+        except Exception as e:
+            self.die(f"Invalid --src-hosts format: {e} for input: {raw_src_hosts}")
+        if not isinstance(value, list):
+            example: str = format_obj(["hostname1", "hostname2"])
+            self.die(f"Invalid --src-hosts: expected a Python list literal, e.g. {example} but got: {format_obj(value)}")
+        return value
+
+    def die(self, msg: str) -> NoReturn:
         """Log ``msg`` and exit the program."""
         self.log.error("%s", msg)
         bzfs_main.utils.die(msg)
