@@ -277,7 +277,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         p.shell_program = bzfs_main.detect.DISABLE_PRG
         with patch.object(bzfs_main.detect, "run_ssh_command", return_value="zfs-2.1.0\n"):
             bzfs_main.detect._detect_available_programs_remote(job, remote, p.available_programs, "host")
-        self.assertIn("zpool", p.available_programs[remote.location])
+        self.assertNotIn("zpool", p.available_programs[remote.location])
         self.assertNotIn("sh", p.available_programs[remote.location])
 
     def test_errors_raise_die(self) -> None:

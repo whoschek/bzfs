@@ -91,8 +91,8 @@ def detect_available_programs(job: Job) -> None:
             p.connection_pools[loc] = ConnectionPools(
                 r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
             )
-        _detect_zpool_features(job, r)
         _detect_available_programs_remote(job, r, available_programs, r.ssh_user_host)
+        _detect_zpool_features(job, r)
         job.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
             p.connection_pools[loc], available_programs[loc], p.zpool_features[loc]
         )
@@ -148,6 +148,8 @@ def detect_available_programs(job: Job) -> None:
         log.debug(f"available_programs[{key}]: %s", list_formatter(programs, separator=", "))
 
     for r in [p.dst, p.src]:
+        if is_dummy(r):
+            continue
         if r.sudo and not p.is_program_available("sudo", r.location):
             die(f"{p.sudo_program} CLI is not available on {r.location} host: {r.ssh_user_host or 'localhost'}")
 
@@ -197,8 +199,11 @@ def _detect_available_programs_remote(job: Job, remote: Remote, available_progra
     """Detects CLI tools available on ``remote`` and updates mapping correspondingly."""
     p, log = job.params, job.params.log
     location = remote.location
-    available_programs_minimum = {"zpool": None, "sudo": None}
+    available_programs_minimum = {"sudo": None}
     available_programs[location] = {}
+    if is_dummy(remote):
+        available_programs[location] = available_programs_minimum
+        return
     lines: str | None = None
     try:
         # on Linux, 'zfs --version' returns with zero status and prints the correct info
@@ -274,7 +279,9 @@ def _detect_zpool_features(job: Job, remote: Remote) -> None:
     if is_dummy(r):
         params.zpool_features[loc] = {}
         return
-    if params.zpool_program != DISABLE_PRG:
+    if params.zpool_program != DISABLE_PRG and (
+        params.shell_program == DISABLE_PRG or "zpool" in p.available_programs.get(loc, {})
+    ):
         cmd: list[str] = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
         try:
             lines = run_ssh_command(job, remote, LOG_TRACE, check=False, cmd=cmd).splitlines()
