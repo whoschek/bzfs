@@ -40,6 +40,7 @@ from bzfs_tests.tools import suppress_output
 def suite() -> unittest.TestSuite:
     test_cases = [
         TestHelperFunctions,
+        TestParseSrcHosts,
         TestValidation,
         TestFiltering,
         TestSkipDatasetsWithNonExistingDstPool,
@@ -206,6 +207,92 @@ class TestHelperFunctions(AbstractTestCase):
         fmt, exc = mock_warn.call_args.args
         self.assertEqual("Cannot run 'hostname -I' on localhost: %s", fmt)
         self.assertIsInstance(exc, RuntimeError)
+
+
+#############################################################################
+class TestParseSrcHosts(AbstractTestCase):
+
+    def setUp(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+
+    # ---- raw_src_hosts provided (no stdin) ----
+    def test_cli_value_valid_list(self) -> None:
+        result = self.job.parse_src_hosts_from_cli_or_stdin(str(["h1", "h2"]))
+        self.assertEqual(["h1", "h2"], result)
+
+    def test_cli_value_invalid_literal(self) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            self.job.parse_src_hosts_from_cli_or_stdin("[not_a_name]")
+        self.assertEqual(DIE_STATUS, cm.exception.code)
+        self.assertIn("Invalid --src-hosts format:", str(cm.exception))
+
+    def test_cli_value_not_a_list(self) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            self.job.parse_src_hosts_from_cli_or_stdin("'single'")
+        self.assertEqual(DIE_STATUS, cm.exception.code)
+        self.assertIn("expected a Python list literal", str(cm.exception))
+
+    # ---- raw_src_hosts missing -> read from stdin ----
+    class _FakeStdin:
+        def __init__(self, data: str, isatty: object | None = None) -> None:
+            self._data = data
+            # isatty can be: True/False function, raising function, None (no attribute)
+            if isatty is True:
+                self.isatty = lambda: True  # set dynamically for test
+            elif isatty is False:
+                self.isatty = lambda: False  # set dynamically for test
+            elif callable(isatty):
+                self.isatty = isatty  # set dynamically for test
+
+        def read(self) -> str:
+            return self._data
+
+    def test_stdin_tty_raises(self) -> None:
+        fake = self._FakeStdin(data="", isatty=True)
+        with patch.object(sys, "stdin", fake):
+            with self.assertRaises(SystemExit) as cm:
+                self.job.parse_src_hosts_from_cli_or_stdin(None)
+            self.assertEqual(DIE_STATUS, cm.exception.code)
+            self.assertIn("stdin is a TTY", str(cm.exception))
+
+    def test_stdin_empty_raises(self) -> None:
+        fake = self._FakeStdin(data="   \n\t  ", isatty=False)
+        with patch.object(sys, "stdin", fake):
+            with self.assertRaises(SystemExit) as cm:
+                self.job.parse_src_hosts_from_cli_or_stdin(None)
+            self.assertEqual(DIE_STATUS, cm.exception.code)
+            self.assertIn("stdin is empty", str(cm.exception))
+
+    def test_stdin_invalid_literal_raises(self) -> None:
+        fake = self._FakeStdin(data="nonsense", isatty=False)
+        with patch.object(sys, "stdin", fake):
+            with self.assertRaises(SystemExit) as cm:
+                self.job.parse_src_hosts_from_cli_or_stdin(None)
+            self.assertEqual(DIE_STATUS, cm.exception.code)
+            self.assertIn("Invalid --src-hosts format:", str(cm.exception))
+
+    def test_stdin_not_a_list_raises(self) -> None:
+        fake = self._FakeStdin(data="'abc'", isatty=False)
+        with patch.object(sys, "stdin", fake):
+            with self.assertRaises(SystemExit) as cm:
+                self.job.parse_src_hosts_from_cli_or_stdin(None)
+            self.assertEqual(DIE_STATUS, cm.exception.code)
+            self.assertIn("expected a Python list literal", str(cm.exception))
+
+    def test_stdin_valid_list(self) -> None:
+        fake = self._FakeStdin(data=str(["x", "y"]), isatty=False)
+        with patch.object(sys, "stdin", fake):
+            result = self.job.parse_src_hosts_from_cli_or_stdin(None)
+        self.assertEqual(["x", "y"], result)
+
+    def test_stdin_isatty_raises_exception_then_reads(self) -> None:
+        def raising_isatty() -> bool:
+            raise RuntimeError("isatty failure")
+
+        fake = self._FakeStdin(data=str(["z1"]), isatty=raising_isatty)
+        with patch.object(sys, "stdin", fake):
+            result = self.job.parse_src_hosts_from_cli_or_stdin(None)
+        self.assertEqual(["z1"], result)
 
 
 #############################################################################

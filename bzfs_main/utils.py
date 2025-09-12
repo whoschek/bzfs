@@ -611,6 +611,11 @@ def format_dict(dictionary: dict[Any, Any]) -> str:
     return f'"{dictionary}"'
 
 
+def format_obj(obj: object) -> str:
+    """Returns a formatted str using repr for consistent output."""
+    return f'"{obj}"'
+
+
 def validate_dataset_name(dataset: str, input_text: str) -> None:
     """'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc."""
     # Also see https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
