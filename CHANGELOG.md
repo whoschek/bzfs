@@ -31,6 +31,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   continue to work as-is for now, in deprecated status, but the old names will be completely removed in a future
   release.
 - [bzfs_jobrunner] Promoted `bzfs_jobrunner` from work-in-progress to stable status.
+- [bzfs] Fixed: Error "zfs CLI is not available on dst host: localhost" if using pull-push mode with dummy dataset.
 - [bzfs] Promoted `--zfs-recv-o-*` and `--zfs-recv-x-*` options to stable state.
 - [bzfs] Find latest common snapshot now even among non-selected snapshots.
 - [bzfs] Also support `--delete-dst-snapshots-except` if source is not a dummy.
@@ -48,6 +49,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Added a bash completion script such that typing bzfs SPACE TAB or bzfs_jobrunner TAB will auto-complete all
   flags.
 - [bzfs] [perf] Auto-disable mbuffer and compression-on-the-wire if replicating over the loopback address.
+- [bzfs] [perf] Detect ZFS features and system capabilities on src+dst in parallel.
 - [bzfs] [perf] Create bookmarks in parallel.
 - [bzfs] Fixed progress reporting when using 'pv' with French locale and other international locales.
 - [bzfs] On SIGTERM, send signal also to descendant processes to also terminate descendants.
