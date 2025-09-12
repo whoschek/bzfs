@@ -647,8 +647,6 @@ def _prepare_zfs_send_receive(
         src_pipe = send_cmd_str
     if not p.is_program_available("sh", "dst"):
         dst_pipe = recv_cmd_str
-    if not p.is_program_available("sh", "local"):
-        local_pipe = ""
 
     src_pipe = _squote(p.src, src_pipe)
     dst_pipe = _squote(p.dst, dst_pipe)

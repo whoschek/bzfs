@@ -864,27 +864,6 @@ class TestReplication(AbstractTestCase):
             _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("zfs recv", dst)
 
-    def test_prepare_no_shell_local(self) -> None:
-        def avail(prog: str, loc: str) -> bool:
-            return prog != "sh" or loc != "local"
-
-        job = _prepare_job(src_host="src", dst_host="dst", is_program_available=avail)
-
-        def mbuf(_p: MagicMock, loc: str, *_a: object) -> str:
-            return "BUF" if loc == "local" else "cat"
-
-        with patch("bzfs_main.replication._pv_cmd", return_value="PV"), patch(
-            "bzfs_main.replication._mbuffer_cmd", side_effect=mbuf
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
-        ):
-            _src, loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("", loc)
-
     def test_prepare_src_remote_quoted(self) -> None:
         job = _prepare_job(src_host="host", is_program_available=lambda prog, loc: prog == "sh")
         with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(

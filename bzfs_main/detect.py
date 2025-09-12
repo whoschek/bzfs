@@ -19,7 +19,9 @@ import platform
 import re
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from subprocess import DEVNULL, PIPE
 from typing import (
@@ -37,6 +39,7 @@ from bzfs_main.utils import (
     LOG_TRACE,
     PROG_NAME,
     die,
+    drain,
     list_formatter,
 )
 
@@ -76,6 +79,7 @@ def detect_available_programs(job: Job) -> None:
         if subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
             _disable_program(p, "sh", ["local"])
 
+    todo: list[Remote] = []
     for r in [p.dst, p.src]:
         loc: str = r.location
         remote_conf_cache_key = r.cache_key()
@@ -91,16 +95,30 @@ def detect_available_programs(job: Job) -> None:
             p.connection_pools[loc] = ConnectionPools(
                 r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
             )
-        _detect_available_programs_remote(job, r, available_programs, r.ssh_user_host)
-        _detect_zpool_features(job, r)
-        job.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
-            p.connection_pools[loc], available_programs[loc], p.zpool_features[loc]
-        )
-        if r.use_zfs_delegation and p.zpool_features[loc].get("delegation") == "off":
-            die(
-                f"Permission denied as ZFS delegation is disabled for {r.location} "
-                f"dataset: {r.basis_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
+        todo.append(r)
+
+    lock: threading.Lock = threading.Lock()
+
+    def run_detect(r: Remote) -> None:
+        loc: str = r.location
+        remote_conf_cache_key = r.cache_key()
+        available_programs: dict[str, str] = _detect_available_programs_remote(job, r, r.ssh_user_host)
+        zpool_features: dict[str, str] = _detect_zpool_features(job, r, available_programs)
+        with lock:
+            r.params.available_programs[loc] = available_programs
+            r.params.zpool_features[loc] = zpool_features
+            job.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
+                p.connection_pools[loc], available_programs, zpool_features
             )
+            if r.use_zfs_delegation and zpool_features.get("delegation") == "off":
+                die(
+                    f"Permission denied as ZFS delegation is disabled for {r.location} "
+                    f"dataset: {r.basis_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
+                )
+
+    if len(todo) > 0:
+        with ThreadPoolExecutor(max_workers=len(todo)) as executor:
+            drain(executor.map(run_detect, todo))  # detect ZFS features + system capabilities on src+dst in parallel
 
     locations = ["src", "dst", "local"]
     if params.compression_program == DISABLE_PRG:
@@ -137,7 +155,8 @@ def detect_available_programs(job: Job) -> None:
                 default_shell: str = program[len("default_shell-") :]
                 programs["default_shell"] = default_shell
                 log.log(LOG_TRACE, f"available_programs[{key}][default_shell]: %s", default_shell)
-                _validate_default_shell(default_shell, r)
+                ssh_user_host = p.src.ssh_user_host if key == "src" else p.dst.ssh_user_host if key == "dst" else ""
+                _validate_default_shell(default_shell, key, ssh_user_host)
             elif program.startswith("getconf_cpu_count-"):
                 programs.pop(program)
                 getconf_cpu_count: str = program[len("getconf_cpu_count-") :]
@@ -195,15 +214,14 @@ def _find_available_programs(p: Params) -> str:
     return "; ".join(cmds)
 
 
-def _detect_available_programs_remote(job: Job, remote: Remote, available_programs: dict, ssh_user_host: str) -> None:
+def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: str) -> dict[str, str]:
     """Detects CLI tools available on ``remote`` and updates mapping correspondingly."""
     p, log = job.params, job.params.log
     location = remote.location
-    available_programs_minimum = {"sudo": None}
-    available_programs[location] = {}
+    available_programs_minimum = {"sudo": ""}
+    available_programs: dict[str, str] = {}
     if is_dummy(remote):
-        available_programs[location] = available_programs_minimum
-        return
+        return available_programs
     lines: str | None = None
     try:
         # on Linux, 'zfs --version' returns with zero status and prints the correct info
@@ -217,7 +235,7 @@ def _detect_available_programs_remote(job: Job, remote: Remote, available_progra
         die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
     except subprocess.CalledProcessError as e:
         if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
-            available_programs[location]["zfs"] = "notOpenZFS"  # solaris-11.4 zfs does not know --version flag
+            available_programs["zfs"] = "notOpenZFS"  # solaris-11.4 zfs does not know --version flag
         elif not e.stdout.startswith("zfs"):
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         else:
@@ -231,25 +249,26 @@ def _detect_available_programs_remote(job: Job, remote: Remote, available_progra
         match = re.fullmatch(r"(\d+\.\d+\.\d+).*", version)
         assert match, "Unparsable zfs version string: " + version
         version = match.group(1)
-        available_programs[location]["zfs"] = version
+        available_programs["zfs"] = version
         if is_version_at_least(version, "2.1.0"):
-            available_programs[location][ZFS_VERSION_IS_AT_LEAST_2_1_0] = True
+            available_programs[ZFS_VERSION_IS_AT_LEAST_2_1_0] = ""
         if is_version_at_least(version, "2.2.0"):
-            available_programs[location][ZFS_VERSION_IS_AT_LEAST_2_2_0] = True
-    log.log(LOG_TRACE, f"available_programs[{location}][zfs]: %s", available_programs[location]["zfs"])
+            available_programs[ZFS_VERSION_IS_AT_LEAST_2_2_0] = ""
+    log.log(LOG_TRACE, f"available_programs[{location}][zfs]: %s", available_programs["zfs"])
 
     if p.shell_program != DISABLE_PRG:
         try:
             cmd: list[str] = [p.shell_program, "-c", _find_available_programs(p)]
-            available_programs[location].update(dict.fromkeys(run_ssh_command(job, remote, LOG_TRACE, cmd=cmd).splitlines()))
-            return
+            available_programs.update(dict.fromkeys(run_ssh_command(job, remote, LOG_TRACE, cmd=cmd).splitlines(), ""))
+            return available_programs
         except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
             if e.filename != p.shell_program:
                 raise
         except subprocess.CalledProcessError:
             pass
         log.warning("%s", f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions...")
-    available_programs[location].update(available_programs_minimum)
+    available_programs.update(available_programs_minimum)
+    return available_programs
 
 
 def is_solaris_zfs(p: Params, remote: Remote) -> bool:
@@ -269,19 +288,15 @@ def is_dummy(r: Remote) -> bool:
     return r.root_dataset == DUMMY_DATASET
 
 
-def _detect_zpool_features(job: Job, remote: Remote) -> None:
+def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict) -> dict[str, str]:
     """Fills ``job.params.zpool_features`` with detected zpool capabilities."""
     p = params = job.params
     r, loc, log = remote, remote.location, p.log
     lines: list[str] = []
     features: dict[str, str] = {}
-    params.zpool_features.pop(loc, None)
     if is_dummy(r):
-        params.zpool_features[loc] = {}
-        return
-    if params.zpool_program != DISABLE_PRG and (
-        params.shell_program == DISABLE_PRG or "zpool" in p.available_programs.get(loc, {})
-    ):
+        return {}
+    if params.zpool_program != DISABLE_PRG and (params.shell_program == DISABLE_PRG or "zpool" in available_programs):
         cmd: list[str] = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
         try:
             lines = run_ssh_command(job, remote, LOG_TRACE, check=False, cmd=cmd).splitlines()
@@ -296,7 +311,7 @@ def _detect_zpool_features(job: Job, remote: Remote) -> None:
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
         if try_ssh_command(job, remote, LOG_TRACE, cmd=cmd) is None:
             die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
-    params.zpool_features[loc] = features
+    return features
 
 
 def is_zpool_feature_enabled_or_active(p: Params, remote: Remote, feature: str) -> bool:
@@ -321,13 +336,13 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
-def _validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
+def _validate_default_shell(path_to_default_shell: str, location: str, ssh_user_host: str) -> None:
     """Fails if the remote user uses csh or tcsh as the default shell."""
     if path_to_default_shell.endswith(("/csh", "/tcsh")):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
         die(
             f"Cowardly refusing to proceed because {PROG_NAME} is not compatible with csh-style quoting of special "
             f"characters. The safe workaround is to first manually set 'sh' instead of '{path_to_default_shell}' as "
-            f"the default shell of the Unix user on {r.location} host: {r.ssh_user_host or 'localhost'}, like so: "
+            f"the default shell of the Unix user on {location} host: {ssh_user_host or 'localhost'}, like so: "
             "chsh -s /bin/sh YOURUSERNAME"
         )
