@@ -274,6 +274,74 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         self.assertIn("sh", p.available_programs[remote.location])
         self.assertIn(bzfs_main.detect.ZFS_VERSION_IS_AT_LEAST_2_2_0, p.available_programs[remote.location])
 
+    def test_zfs_version_parsing_space_variant(self) -> None:
+        """Accept version strings like 'zfs 2.2.4' without a hyphen."""
+        job, remote = self._setup()
+        p = job.params
+
+        def run(*args: str, cmd: list[str] | None = None, **kw: str) -> str:
+            command = cmd if cmd is not None else args[0]
+            if "--version" in command:
+                return "zfs 2.2.4\n"
+            return "sh\n"
+
+        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run):
+            avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
+            p.available_programs[remote.location] = avail
+        self.assertEqual("2.2.4", p.available_programs[remote.location]["zfs"])
+        self.assertIn("sh", p.available_programs[remote.location])
+        self.assertIn(bzfs_main.detect.ZFS_VERSION_IS_AT_LEAST_2_2_0, p.available_programs[remote.location])
+
+    def test_zfs_version_parsing_unexpected_format_dies(self) -> None:
+        """Die cleanly on unparseable 'zfs --version' output."""
+        job, remote = self._setup()
+
+        def run(*args: str, cmd: list[str] | None = None, **kw: str) -> str:
+            command = cmd if cmd is not None else args[0]
+            if "--version" in command:
+                return "zfs-version unknown build\n"
+            return "sh\n"
+
+        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run), self.assertRaises(SystemExit) as cm:
+            bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
+        self.assertIn("Unparsable zfs version string", str(cm.exception))
+
+    def test_zfs_version_parsing_variants(self) -> None:
+        job, remote = self._setup()
+        p = job.params
+        cases = [
+            ("zfs-2.2.4\n", "2.2.4", False),
+            ("zfs 2.2.4\n", "2.2.4", False),
+            ("zfs 2.2.4~ubuntu5\n", "2.2.4", False),
+            ("zfs 2.24~ubuntu5\n", None, True),  # only two components -> should die
+            ("zfs-2.2.4rc5\n", "2.2.4", False),
+        ]
+
+        for output, expect_version, expect_die in cases:
+            with self.subTest(output=output.strip()):
+                out = output  # bind loop var for closure
+
+                def run(*args: str, cmd: list[str] | None = None, out: str = out, **kw: str) -> str:
+                    command = cmd if cmd is not None else args[0]
+                    if "--version" in command:
+                        return out
+                    return "sh\n"
+
+                if expect_die:
+                    with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run), self.assertRaises(
+                        SystemExit
+                    ) as cm:
+                        bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
+                    self.assertIn("Unparsable zfs version string", str(cm.exception))
+                else:
+                    with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run):
+                        avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
+                        p.available_programs[remote.location] = avail
+                    self.assertEqual(expect_version, p.available_programs[remote.location]["zfs"])
+                    self.assertIn("sh", p.available_programs[remote.location])
+                    # 2.2.4 >= 2.2.0
+                    self.assertIn(bzfs_main.detect.ZFS_VERSION_IS_AT_LEAST_2_2_0, p.available_programs[remote.location])
+
     def test_shell_program_disabled(self) -> None:
         job, remote = self._setup()
         p = job.params

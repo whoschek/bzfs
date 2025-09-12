@@ -242,13 +242,12 @@ def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: s
             lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
             assert lines
     if lines:
-        line: str = lines.splitlines()[0]
-        assert line.startswith("zfs")
-        # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5, zfswin-2.2.3rc5 -> 2.2.3
-        version: str = line.split("-")[1].strip()
-        match = re.fullmatch(r"(\d+\.\d+\.\d+).*", version)
-        assert match, "Unparsable zfs version string: " + version
-        version = match.group(1)
+        # Examples that should parse: "zfs-2.1.5~rc5-ubuntu3", "zfswin-2.2.3rc5", "zfs 2.2.4", "OpenZFS 2.2.5-1".
+        first_line: str = lines.splitlines()[0] if lines.splitlines() else ""
+        match = re.search(r"(\d+)\.(\d+)\.(\d+)", first_line)
+        if not match:
+            die("Unparsable zfs version string: '" + first_line + "'")
+        version = ".".join(match.groups())
         available_programs["zfs"] = version
         if is_version_at_least(version, "2.1.0"):
             available_programs[ZFS_VERSION_IS_AT_LEAST_2_1_0] = ""
