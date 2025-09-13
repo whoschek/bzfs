@@ -56,7 +56,10 @@ import threading
 import time
 import unittest
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import (
+    datetime,
+    timezone,
+)
 from typing import (
     TYPE_CHECKING,
     Callable,

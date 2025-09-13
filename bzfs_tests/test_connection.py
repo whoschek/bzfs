@@ -30,10 +30,15 @@ from typing import (
     Iterator,
     cast,
 )
-from unittest import mock
-from unittest.mock import MagicMock
+from unittest.mock import (
+    MagicMock,
+    patch,
+)
 
-from bzfs_main import bzfs, connection
+from bzfs_main import (
+    bzfs,
+    connection,
+)
 from bzfs_main.configuration import (
     Params,
     Remote,
@@ -45,9 +50,15 @@ from bzfs_main.connection import (
     ConnectionPool,
     ConnectionPools,
 )
-from bzfs_main.retry import RetryableError
-from bzfs_main.utils import LOG_TRACE
-from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_main.retry import (
+    RetryableError,
+)
+from bzfs_main.utils import (
+    LOG_TRACE,
+)
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
 
 
 #############################################################################
@@ -364,12 +375,12 @@ class TestRunSshCommand(AbstractTestCase):
         self.remote = cast(
             Remote, _FakeRemote(location="dst", ssh_user_host="", reuse_ssh_connection=True, ssh_extra_opts=[])
         )
-        self.conn = mock.Mock()
+        self.conn = MagicMock()
         self.conn.ssh_cmd = ["ssh"]
         self.conn.ssh_cmd_quoted = ["ssh"]
-        self.conn_pool = mock.Mock()
+        self.conn_pool = MagicMock()
         self.conn_pool.get_connection.return_value = self.conn
-        self.conn_pool.return_connection = mock.Mock()
+        self.conn_pool.return_connection = MagicMock()
 
         @contextlib.contextmanager
         def _connection_cm() -> Iterator[Connection]:
@@ -377,57 +388,57 @@ class TestRunSshCommand(AbstractTestCase):
             self.conn_pool.return_connection(self.conn)
 
         self.conn_pool.connection.side_effect = lambda: _connection_cm()
-        pool_wrapper = mock.Mock(pool=mock.Mock(return_value=self.conn_pool))
+        pool_wrapper = MagicMock(pool=MagicMock(return_value=self.conn_pool))
         self.job.params.connection_pools = {"dst": pool_wrapper}
 
-    @mock.patch("bzfs_main.connection.subprocess_run")
-    def test_dry_run_skips_execution(self, mock_run: mock.Mock) -> None:
+    @patch("bzfs_main.connection.subprocess_run")
+    def test_dry_run_skips_execution(self, mock_run: MagicMock) -> None:
         result = connection.run_ssh_command(self.job, self.remote, cmd=["ls"], is_dry=True)
         self.assertEqual("", result)
         mock_run.assert_not_called()
         self.conn_pool.connection.assert_called_once()
 
-    @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
-    @mock.patch("bzfs_main.connection.subprocess_run")
-    def test_remote_calls_refresh_and_executes(self, mock_run: mock.Mock, mock_refresh: mock.Mock) -> None:
+    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @patch("bzfs_main.connection.subprocess_run")
+    def test_remote_calls_refresh_and_executes(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "host"
-        mock_run.return_value = mock.Mock(stdout="out", stderr="err")
+        mock_run.return_value = MagicMock(stdout="out", stderr="err")
         result = connection.run_ssh_command(self.job, self.remote, cmd=["echo"], print_stdout=True, print_stderr=True)
         self.assertEqual("out", result)
         mock_refresh.assert_called_once_with(self.job, self.remote, self.conn)
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
-    @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
-    @mock.patch(
+    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @patch(
         "bzfs_main.connection.subprocess_run",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", output="o", stderr="e"),
     )
-    def test_calledprocesserror_propagates(self, mock_run: mock.Mock, mock_refresh: mock.Mock) -> None:
+    def test_calledprocesserror_propagates(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
         with self.assertRaises(subprocess.CalledProcessError):
             connection.run_ssh_command(self.job, self.remote, cmd=["boom"], print_stdout=True)
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
-    @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
-    @mock.patch(
+    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @patch(
         "bzfs_main.connection.subprocess_run",
         side_effect=subprocess.TimeoutExpired(cmd="cmd", timeout=1),
     )
-    def test_timeout_expired_propagates(self, mock_run: mock.Mock, mock_refresh: mock.Mock) -> None:
+    def test_timeout_expired_propagates(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
         with self.assertRaises(subprocess.TimeoutExpired):
             connection.run_ssh_command(self.job, self.remote, cmd=["sleep"], print_stdout=True)
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
-    @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
-    @mock.patch(
+    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @patch(
         "bzfs_main.connection.subprocess_run",
         side_effect=UnicodeDecodeError("utf-8", b"x", 0, 1, "boom"),
     )
-    def test_unicode_error_propagates_without_logging(self, mock_run: mock.Mock, mock_refresh: mock.Mock) -> None:
+    def test_unicode_error_propagates_without_logging(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
         with self.assertRaises(UnicodeDecodeError):
             connection.run_ssh_command(self.job, self.remote, cmd=["foo"])
@@ -445,43 +456,43 @@ class TestTrySshCommand(AbstractTestCase):
             Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
         )
 
-    @mock.patch("bzfs_main.connection.run_ssh_command", return_value="ok")
-    @mock.patch("bzfs_main.connection.maybe_inject_error")
-    def test_success(self, mock_inject: mock.Mock, mock_run: mock.Mock) -> None:
+    @patch("bzfs_main.connection.run_ssh_command", return_value="ok")
+    @patch("bzfs_main.connection.maybe_inject_error")
+    def test_success(self, mock_inject: MagicMock, mock_run: MagicMock) -> None:
         result = connection.try_ssh_command(self.job, self.remote, level=0, cmd=["ls"])
         self.assertEqual("ok", result)
         mock_inject.assert_called_once()
         mock_run.assert_called_once()
 
-    @mock.patch(
+    @patch(
         "bzfs_main.connection.run_ssh_command",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", stderr="zfs: dataset does not exist"),
     )
-    def test_dataset_missing_returns_none(self, mock_run: mock.Mock) -> None:
+    def test_dataset_missing_returns_none(self, mock_run: MagicMock) -> None:
         result = connection.try_ssh_command(self.job, self.remote, level=0, cmd=["zfs"], exists=True)
         self.assertIsNone(result)
         mock_run.assert_called_once()
 
-    @mock.patch(
+    @patch(
         "bzfs_main.connection.run_ssh_command",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", stderr="boom"),
     )
-    def test_other_error_raises_retryable(self, mock_run: mock.Mock) -> None:
+    def test_other_error_raises_retryable(self, mock_run: MagicMock) -> None:
         with self.assertRaises(RetryableError):
             connection.try_ssh_command(self.job, self.remote, level=0, cmd=["zfs"], exists=False)
         mock_run.assert_called_once()
 
-    @mock.patch(
+    @patch(
         "bzfs_main.connection.run_ssh_command",
         side_effect=UnicodeDecodeError("utf-8", b"x", 0, 1, "boom"),
     )
-    def test_unicode_error_wrapped(self, mock_run: mock.Mock) -> None:
+    def test_unicode_error_wrapped(self, mock_run: MagicMock) -> None:
         with self.assertRaises(RetryableError):
             connection.try_ssh_command(self.job, self.remote, level=0, cmd=["x"])
         mock_run.assert_called_once()
 
-    @mock.patch("bzfs_main.connection.maybe_inject_error", side_effect=RetryableError("Subprocess failed"))
-    def test_injected_retryable_error_propagates(self, mock_inject: mock.Mock) -> None:
+    @patch("bzfs_main.connection.maybe_inject_error", side_effect=RetryableError("Subprocess failed"))
+    def test_injected_retryable_error_propagates(self, mock_inject: MagicMock) -> None:
         with self.assertRaises(RetryableError):
             connection.try_ssh_command(self.job, self.remote, level=0, cmd=["x"])
         mock_inject.assert_called_once()
@@ -501,51 +512,51 @@ class TestRefreshSshConnection(AbstractTestCase):
         self.conn = connection.Connection(self.remote, 1, 0)
         self.conn.last_refresh_time = 0
 
-    @mock.patch("bzfs_main.connection.subprocess_run")
-    def test_local_mode_returns_immediately(self, mock_run: mock.Mock) -> None:
+    @patch("bzfs_main.connection.subprocess_run")
+    def test_local_mode_returns_immediately(self, mock_run: MagicMock) -> None:
         self.remote.ssh_user_host = ""
         connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
         mock_run.assert_not_called()
 
-    @mock.patch("bzfs_main.connection.die", side_effect=SystemExit)
-    def test_ssh_unavailable_dies(self, mock_die: mock.Mock) -> None:
-        self.job.params.is_program_available = mock.Mock(return_value=False)  # type: ignore[method-assign]
+    @patch("bzfs_main.connection.die", side_effect=SystemExit)
+    def test_ssh_unavailable_dies(self, mock_die: MagicMock) -> None:
+        self.job.params.is_program_available = MagicMock(return_value=False)  # type: ignore[method-assign]
         with self.assertRaises(SystemExit):
             connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
         mock_die.assert_called_once()
 
-    @mock.patch("bzfs_main.connection.subprocess_run")
-    def test_reuse_disabled_no_action(self, mock_run: mock.Mock) -> None:
+    @patch("bzfs_main.connection.subprocess_run")
+    def test_reuse_disabled_no_action(self, mock_run: MagicMock) -> None:
         self.remote.reuse_ssh_connection = False
         connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
         mock_run.assert_not_called()
 
-    @mock.patch("bzfs_main.connection.subprocess_run")
-    def test_connection_alive_fast_path(self, mock_run: mock.Mock) -> None:
+    @patch("bzfs_main.connection.subprocess_run")
+    def test_connection_alive_fast_path(self, mock_run: MagicMock) -> None:
         self.conn.last_refresh_time = time.monotonic_ns()
         connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
         mock_run.assert_not_called()
 
-    @mock.patch("bzfs_main.connection.subprocess_run")
-    def test_master_alive_refreshes_timestamp(self, mock_run: mock.Mock) -> None:
-        mock_run.return_value = mock.Mock(returncode=0)
+    @patch("bzfs_main.connection.subprocess_run")
+    def test_master_alive_refreshes_timestamp(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = MagicMock(returncode=0)
         connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
         mock_run.assert_called_once()
         self.assertGreater(self.conn.last_refresh_time, 0)
 
-    @mock.patch("bzfs_main.connection.die", side_effect=SystemExit)
-    @mock.patch("bzfs_main.connection.subprocess_run")
-    def test_master_start_failure_dies(self, mock_run: mock.Mock, mock_die: mock.Mock) -> None:
-        mock_run.side_effect = [mock.Mock(returncode=1), mock.Mock(returncode=1, stderr="bad")]
+    @patch("bzfs_main.connection.die", side_effect=SystemExit)
+    @patch("bzfs_main.connection.subprocess_run")
+    def test_master_start_failure_dies(self, mock_run: MagicMock, mock_die: MagicMock) -> None:
+        mock_run.side_effect = [MagicMock(returncode=1), MagicMock(returncode=1, stderr="bad")]
         with self.assertRaises(SystemExit):
             connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
         self.assertEqual(2, mock_run.call_count)
         mock_die.assert_called_once()
 
-    @mock.patch("bzfs_main.connection.subprocess_run")
-    def test_verbose_option_limits_persist_time(self, mock_run: mock.Mock) -> None:
+    @patch("bzfs_main.connection.subprocess_run")
+    def test_verbose_option_limits_persist_time(self, mock_run: MagicMock) -> None:
         self.remote.ssh_extra_opts = ["-v"]
-        mock_run.side_effect = [mock.Mock(returncode=1), mock.Mock(returncode=0)]
+        mock_run.side_effect = [MagicMock(returncode=1), MagicMock(returncode=0)]
         connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
         args = mock_run.call_args_list[1][0][0]
         self.assertIn("-oControlPersist=1s", args)

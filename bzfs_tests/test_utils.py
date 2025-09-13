@@ -50,9 +50,6 @@ from typing import (
     Union,
     cast,
 )
-from unittest import (
-    mock,
-)
 from unittest.mock import (
     MagicMock,
     patch,
@@ -646,7 +643,7 @@ class TestOpenNoFollow(unittest.TestCase):
     def test_fdopen_failure_closes_fd(self) -> None:
         err = RuntimeError("fdopen boom")
         orig_close = os.close
-        with mock.patch("os.fdopen", side_effect=err) as m_fdopen, mock.patch("os.close", side_effect=orig_close) as m_close:
+        with patch("os.fdopen", side_effect=err) as m_fdopen, patch("os.close", side_effect=orig_close) as m_close:
             with self.assertRaises(RuntimeError):
                 open_nofollow(self.real_path, "r")
         m_fdopen.assert_called_once()
@@ -654,7 +651,7 @@ class TestOpenNoFollow(unittest.TestCase):
 
     def test_check_owner_skipped(self) -> None:
         """check_owner=False should skip ownership verification."""
-        with mock.patch("os.fstat", side_effect=AssertionError("should not call")) as m_fstat:
+        with patch("os.fstat", side_effect=AssertionError("should not call")) as m_fstat:
             with open_nofollow(self.real_path, "r", check_owner=False, encoding="utf-8") as f:
                 self.assertEqual("hello", f.read())
         m_fstat.assert_not_called()
@@ -664,7 +661,7 @@ class TestOpenNoFollow(unittest.TestCase):
             st_uid = os.geteuid() + 1
 
         orig_close = os.close
-        with mock.patch("os.fstat", return_value=Stat()), mock.patch("os.close", side_effect=orig_close) as m_close:
+        with patch("os.fstat", return_value=Stat()), patch("os.close", side_effect=orig_close) as m_close:
             with self.assertRaises(PermissionError):
                 open_nofollow(self.real_path, "r")
         m_close.assert_called_once()
@@ -677,7 +674,7 @@ class TestOpenNoFollow(unittest.TestCase):
             orig_close(fd)
             raise OSError("close fail")
 
-        with mock.patch("os.fdopen", side_effect=err), mock.patch("os.close", side_effect=failing_close) as m_close:
+        with patch("os.fdopen", side_effect=err), patch("os.close", side_effect=failing_close) as m_close:
             with self.assertRaises(RuntimeError):
                 open_nofollow(self.real_path, "r")
         m_close.assert_called_once()
