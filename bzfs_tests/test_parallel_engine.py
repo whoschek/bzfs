@@ -230,7 +230,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                     datasets=src_datasets,
                     process_dataset=submit_no_skiptree,  # lambda
                     skip_tree_on_error=lambda dataset: False,
-                    max_workers=8,
+                    max_workers=1 if i > 0 else 8,
                     interval_nanos=lambda dataset: time.monotonic_ns() + 10_000_000,
                     task_name="mytask",
                     enable_barriers=i > 0,

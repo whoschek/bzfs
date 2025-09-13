@@ -23,7 +23,7 @@ import subprocess
 import sys
 import unittest
 from logging import Logger
-from subprocess import DEVNULL, PIPE
+from subprocess import DEVNULL, PIPE, CalledProcessError
 from typing import (
     Union,
     cast,
@@ -45,6 +45,7 @@ def suite() -> unittest.TestSuite:
         TestRunSubJobSpawnProcessPerJob,
         TestRunSubJobInCurrentThread,
         TestRunSubJob,
+        TestErrorPropagation,
         TestValidateSnapshotPlan,
         TestValidateMonitorSnapshotPlan,
     ]
@@ -781,6 +782,33 @@ class TestRunSubJob(AbstractTestCase):
         """Ensure missing commands raise FileNotFoundError without noisy logs."""
         with self.assertRaises(FileNotFoundError), suppress_output():
             self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+
+
+#############################################################################
+class TestErrorPropagation(AbstractTestCase):
+
+    def setUp(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+        self.job.log = MagicMock()
+        self.job.is_test_mode = True
+
+    def test_parallel_worker_exception_sets_first_exception_via_exception_mode(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+        self.job.log = MagicMock()
+        self.job.is_test_mode = True
+        with patch.object(self.job, "run_worker_job_in_current_thread", side_effect=CalledProcessError(1, "boom")):
+            self.job.run_subjobs(
+                subjobs={"000000src-host/replicate": ["bzfs", "--no-argument-file"]},
+                max_workers=1,
+                timeout_secs=None,
+                work_period_seconds=0,
+                jitter=False,
+            )
+        self.assertIsInstance(self.job.first_exception, int)
+        self.assertEqual(DIE_STATUS, self.job.first_exception)
+        self.assertEqual(1, self.job.stats.jobs_started)
+        self.assertEqual(1, self.job.stats.jobs_completed)
+        self.assertEqual(1, self.job.stats.jobs_failed)
 
 
 #############################################################################

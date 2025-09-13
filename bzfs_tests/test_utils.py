@@ -49,6 +49,7 @@ from bzfs_main.utils import (
     DESCENDANTS_RE_SUFFIX,
     SmallPriorityQueue,
     SnapshotPeriods,
+    SyncExecutor,
     SynchronizedBool,
     SynchronizedDict,
     _get_descendant_processes,
@@ -109,6 +110,7 @@ def suite() -> unittest.TestSuite:
         TestSmallPriorityQueue,
         TestSynchronizedBool,
         TestSynchronizedDict,
+        TestSyncExecutor,
         TestSnapshotPeriods,
         TestXFinally,
         TestCurrentDateTime,
@@ -1259,6 +1261,84 @@ class TestSynchronizedDict(unittest.TestCase):
     def test_loop(self) -> None:
         self.sync_dict["key"] = 1
         self.assertIn("key", self.sync_dict)
+
+
+#############################################################################
+class TestSyncExecutor(unittest.TestCase):
+
+    def test_submit_runs_inline_on_current_thread(self) -> None:
+        main_ident: int = threading.get_ident()
+        with SyncExecutor() as ex:
+            fut = ex.submit(lambda: threading.get_ident())
+            self.assertTrue(fut.done())
+            self.assertEqual(main_ident, fut.result())
+
+    def test_result_propagates_exception(self) -> None:
+        def boom() -> None:
+            raise ValueError("boom")
+
+        with SyncExecutor() as ex:
+            fut = ex.submit(boom)
+            self.assertTrue(fut.done())
+            with self.assertRaises(ValueError):
+                _ = fut.result()
+
+    def test_map_preserves_order_and_multiple_iterables(self) -> None:
+        with SyncExecutor() as ex:
+            res = list(ex.map(lambda x, y: x + y, [1, 2, 3], [10, 20, 30]))
+            self.assertEqual([11, 22, 33], res)
+
+    def test_shutdown_blocks_new_submissions(self) -> None:
+        ex = SyncExecutor()
+        try:
+            self.assertEqual(42, ex.submit(lambda: 42).result())
+            ex.shutdown()
+            with self.assertRaises(RuntimeError):
+                _ = ex.submit(lambda: 0)
+        finally:
+            ex.shutdown()
+
+    def test_shutdown_cancel_futures_argument_accepted(self) -> None:
+        ex = SyncExecutor()
+        ex.shutdown(wait=False, cancel_futures=True)
+        with self.assertRaises(RuntimeError):
+            _ = ex.submit(lambda: 1)
+
+    def test_future_cancel_on_completed_future(self) -> None:
+        with SyncExecutor() as ex:
+            fut = ex.submit(lambda: 123)
+            self.assertTrue(fut.done())
+            self.assertFalse(fut.cancel())
+            self.assertEqual(123, fut.result())
+
+    def test_nested_submit(self) -> None:
+        with SyncExecutor() as ex:
+
+            def outer() -> int:
+                from concurrent.futures import Future
+
+                inner_fut: Future[int] = ex.submit(lambda: 5)
+                return 2 * inner_fut.result()
+
+            fut = ex.submit(outer)
+            self.assertEqual(10, fut.result())
+
+    def test_factory_for_max_workers_one_returns_sync(self) -> None:
+        with SyncExecutor.executor_for(1) as ex:
+            self.assertIsInstance(ex, SyncExecutor)
+            self.assertEqual(7, ex.submit(lambda: 7).result())
+
+    def test_factory_for_max_workers_many_returns_threadpool(self) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with SyncExecutor.executor_for(3) as ex:
+            self.assertIsInstance(ex, ThreadPoolExecutor)
+            fut = ex.submit(lambda: 9)
+            self.assertEqual(9, fut.result())
+
+    def test_factory_invalid_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            _ = SyncExecutor.executor_for(0)
 
 
 #############################################################################

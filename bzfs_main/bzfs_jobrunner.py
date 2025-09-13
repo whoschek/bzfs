@@ -839,7 +839,7 @@ class Job:
             sp = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout_secs)
             if sp.returncode not in (0, 1):  # 1 means dataset not found
                 self.die(f"Unexpected error {sp.returncode} on checking for existing local dst pools: {sp.stderr.strip()}")
-            existing_pools = {"-:" + pool for pool in sp.stdout.splitlines()}
+            existing_pools = {"-:" + pool for pool in sp.stdout.splitlines() if pool}
             self.cache_existing_dst_pools.update(existing_pools)  # union
         unknown_remote_dst_pools = unknown_dst_pools.difference(unknown_local_dst_pools)
         self.cache_existing_dst_pools.update(unknown_remote_dst_pools)  # union
@@ -898,34 +898,26 @@ class Job:
             log.info("Jitter: Delaying job start time by sleeping for %s ...", human_readable_duration(sleep_nanos))
             time.sleep(sleep_nanos / 1_000_000_000)  # seconds
             next_update_nanos += sleep_nanos
-        sorted_subjobs = sorted(subjobs.keys())
-        has_barrier = any(BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
-        if self.spawn_process_per_job or has_barrier or has_siblings(sorted_subjobs, self.is_test_mode):  # run in parallel
-            log.log(LOG_TRACE, "%s", "spawn_process_per_job: True")
-            process_datasets_in_parallel_and_fault_tolerant(
-                log=log,
-                datasets=sorted_subjobs,
-                process_dataset=lambda subjob, tid, retry: self.run_subjob(
-                    subjobs[subjob], name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=True
-                )
-                == 0,
-                skip_tree_on_error=lambda subjob: True,
-                skip_on_error=SKIP_ON_ERROR_DEFAULT,
-                max_workers=max_workers,
-                interval_nanos=interval_nanos_fn,
-                task_name="Subjob",
-                retry_policy=None,  # no retries
-                dry_run=False,
-                is_test_mode=self.is_test_mode,
+        sorted_subjobs: list[str] = sorted(subjobs.keys())
+        spawn_process_per_job: bool = self.spawn_process_per_job or has_siblings(sorted_subjobs, self.is_test_mode)
+        log.log(LOG_TRACE, "%s: %s", "spawn_process_per_job", spawn_process_per_job)
+        if process_datasets_in_parallel_and_fault_tolerant(
+            log=log,
+            datasets=sorted_subjobs,
+            process_dataset=lambda subjob, tid, retry: self.run_subjob(
+                subjobs[subjob], name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=spawn_process_per_job
             )
-        else:  # run sequentially
-            log.log(LOG_TRACE, "%s", "spawn_process_per_job: False")
-            for subjob in sorted_subjobs:
-                time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)  # seconds
-                interval_nanos_fn(subjob)
-                s = subjob
-                if not self.run_subjob(subjobs[subjob], name=s, timeout_secs=timeout_secs, spawn_process_per_job=False) == 0:
-                    break
+            == 0,
+            skip_tree_on_error=lambda subjob: True,
+            skip_on_error=SKIP_ON_ERROR_DEFAULT,
+            max_workers=max_workers if spawn_process_per_job else 1,
+            interval_nanos=interval_nanos_fn,
+            task_name="Subjob",
+            retry_policy=None,  # no retries
+            dry_run=False,
+            is_test_mode=self.is_test_mode,
+        ):
+            self.first_exception = DIE_STATUS if self.first_exception is None else self.first_exception
         stats = self.stats
         jobs_skipped = stats.jobs_all - stats.jobs_started
         msg = f"{stats}, skipped:" + percent(jobs_skipped, total=stats.jobs_all)
