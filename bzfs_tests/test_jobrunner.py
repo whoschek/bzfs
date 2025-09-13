@@ -210,43 +210,67 @@ class TestHelperFunctions(AbstractTestCase):
 #############################################################################
 class TestValidation(AbstractTestCase):
 
-    def test_multisource_substitution_token_validation_with_empty_target(self) -> None:
+    def _new_job(self) -> bzfs_jobrunner.Job:
         job = bzfs_jobrunner.Job()
         job.log = MagicMock()
         job.is_test_mode = True
+        return job
 
-        # Config: 2 source hosts, 1 dest host, dst_root_datasets WITHOUT ^SRC_HOST
-        base_argv = [
+    def _build_argv(
+        self,
+        *,
+        src_hosts: list[str],
+        dst_hosts: dict[str, list[str]],
+        dst_root_datasets: dict[str, str],
+        retain_dst_targets: dict[str, list[str]],
+        src_host_filter: str | None = None,
+        command: str = "--create-src-snapshots",
+    ) -> list[str]:
+        argv: list[str] = [
             bzfs_jobrunner.PROG_NAME,
             "--job-id=test",
             "--root-dataset-pairs",
             "tank/data",
             "backup/data",
-            "--src-hosts=" + str(["src1", "src2"]),
-            "--dst-hosts=" + str({"dstX": ["target", ""]}),
-            "--dst-root-datasets=" + str({"dstX": ""}),
-            "--retain-dst-targets=" + str({"dstX": ["target", ""]}),
-            "--create-src-snapshots",  # Dummy command to make arg parsing happy
+            f"--src-hosts={src_hosts!s}",
+            f"--dst-hosts={dst_hosts!s}",
+            f"--dst-root-datasets={dst_root_datasets!s}",
+            f"--retain-dst-targets={retain_dst_targets!s}",
+            command,
         ]
+        if src_host_filter:
+            argv += ["--src-host", src_host_filter]
+        return argv
+
+    def _expect_pass(self, job: bzfs_jobrunner.Job, argv: list[str]) -> None:
+        with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
+            with patch("sys.argv", argv):
+                job.run_main(argv)
+                mock_run_subjobs.assert_called_once()
+
+    def test_multisource_substitution_token_validation_with_empty_target(self) -> None:
+        job = self._new_job()
+
+        # Config: 2 source hosts, 1 dest host, dst_root_datasets WITHOUT ^SRC_HOST
+        base_argv = self._build_argv(
+            src_hosts=["src1", "src2"],
+            dst_hosts={"dstX": ["target", ""]},
+            dst_root_datasets={"dstX": ""},
+            retain_dst_targets={"dstX": ["target", ""]},
+        )
         expect_msg = "source hosts must not be configured to write to the same destination dataset"
 
         # Scenario 1: Run for srcA only, should pass.
         argv_src1 = base_argv + ["--src-host", "src1"]
-        with patch("sys.argv", argv_src1):
-            with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
-                job.run_main(argv_src1)  # Should not raise SystemExit
-                mock_run_subjobs.assert_called_once()
+        self._expect_pass(job, argv_src1)
 
         # Scenario 1: Run for srcB only, should pass.
         argv_src2 = base_argv + ["--src-host", "src2"]
-        with patch("sys.argv", argv_src1):
-            with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
-                job.run_main(argv_src2)  # Should not raise SystemExit
-                mock_run_subjobs.assert_called_once()
+        job = self._new_job()
+        self._expect_pass(job, argv_src2)
 
         # Scenario 3: Run for both (no --src-host filter), should fail.
-        job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
+        job = self._new_job()
         with patch("sys.argv", base_argv):  # No --src-host filter
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(base_argv)
@@ -254,60 +278,34 @@ class TestValidation(AbstractTestCase):
             self.assertIn(expect_msg, str(cm.exception))
 
     def test_multisource_substitution_token_validation_passes_safe_config(self) -> None:
-        job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
-        job.is_test_mode = True
+        job = self._new_job()
 
         # Config: 2 source hosts, 1 dest host, dst_root_datasets WITH ^SRC_HOST
-        base_argv_safe = [
-            bzfs_jobrunner.PROG_NAME,
-            "--job-id=test",
-            "--root-dataset-pairs",
-            "tank/data",
-            "backup/data",
-            "--src-hosts=" + str(["src1", "src2"]),
-            "--dst-hosts=" + str({"dstX": ["target"]}),
-            "--dst-root-datasets=" + str({"dstX": "pool/backup_^SRC_HOST", "dstY": ""}),  # Correctly uses ^SRC_HOST
-            "--retain-dst-targets=" + str({"dstX": ["target"], "dstY": ["target"]}),
-            "--create-src-snapshots",  # Dummy command to make arg parsing happy
-        ]
+        base_argv_safe = self._build_argv(
+            src_hosts=["src1", "src2"],
+            dst_hosts={"dstX": ["target"]},
+            dst_root_datasets={"dstX": "pool/backup_^SRC_HOST", "dstY": ""},  # Correctly uses ^SRC_HOST
+            retain_dst_targets={"dstX": ["target"], "dstY": ["target"]},
+        )
 
         # Mock the actual subjob execution to prevent it from running fully
-        with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
-            # Scenario 1: Run for srcA only. Should pass validation.
-            argv_src1_safe = base_argv_safe + ["--src-host", "src1"]
-            with patch("sys.argv", argv_src1_safe):
-                job.run_main(argv_src1_safe)  # Should not raise SystemExit due to validation
-                mock_run_subjobs.assert_called_once()  # Ensure it proceeded past validation
+        argv_src1_safe = base_argv_safe + ["--src-host", "src1"]
+        self._expect_pass(job, argv_src1_safe)  # Should not raise SystemExit due to validation
 
-            mock_run_subjobs.reset_mock()
-            job = bzfs_jobrunner.Job()
-            job.log = MagicMock()
-            job.is_test_mode = True
-            with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs_2:
-                # Scenario 2: Run for both. Should pass validation.
-                with patch("sys.argv", base_argv_safe):
-                    job.run_main(base_argv_safe)  # Should not raise SystemExit
-                    mock_run_subjobs_2.assert_called_once()
+        # Scenario 2: Run for both. Should pass validation.
+        job = self._new_job()
+        self._expect_pass(job, base_argv_safe)
 
     def test_multisource_substitution_token_validation_rejects_unsafe_config(self) -> None:
-        job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
-        job.is_test_mode = True
+        job = self._new_job()
 
         # Config: 2 source hosts, 1 dest host, dst_root_datasets WITHOUT ^SRC_HOST
-        base_argv = [
-            bzfs_jobrunner.PROG_NAME,
-            "--job-id=test",
-            "--root-dataset-pairs",
-            "tank/data",
-            "backup/data",
-            "--src-hosts=" + str(["src1", "src2"]),
-            "--dst-hosts=" + str({"dstX": ["target"]}),
-            "--dst-root-datasets=" + str({"dstX": "pool/^SRC_HOST", "dstZ": "pool/fixed"}),  # incorrectly uses ^SRC_HOST
-            "--retain-dst-targets=" + str({"dstX": ["target"], "dstZ": ["target"]}),
-            "--create-src-snapshots",  # Dummy command to make arg parsing happy
-        ]
+        base_argv = self._build_argv(
+            src_hosts=["src1", "src2"],
+            dst_hosts={"dstX": ["target"]},
+            dst_root_datasets={"dstX": "pool/^SRC_HOST", "dstZ": "pool/fixed"},  # incorrectly uses ^SRC_HOST
+            retain_dst_targets={"dstX": ["target"], "dstZ": ["target"]},
+        )
         expect_msg = "but not all non-empty root datasets in --dst-root-datasets contain the '^SRC_HOST' substitution token"
 
         # Scenario 1: Run for srcA only, should fail.
@@ -327,8 +325,7 @@ class TestValidation(AbstractTestCase):
             self.assertIn(expect_msg, str(cm.exception))
 
         # Scenario 3: Run for both (no --src-host filter), should fail.
-        job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
+        job = self._new_job()
         with patch("sys.argv", base_argv):  # No --src-host filter
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(base_argv)
