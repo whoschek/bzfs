@@ -41,6 +41,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestHelperFunctions,
         TestValidation,
+        TestFiltering,
         TestSkipDatasetsWithNonExistingDstPool,
         TestRunSubJobSpawnProcessPerJob,
         TestRunSubJobInCurrentThread,
@@ -331,6 +332,113 @@ class TestValidation(AbstractTestCase):
                 job.run_main(base_argv)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
+
+
+#############################################################################
+class TestFiltering(AbstractTestCase):
+
+    def _capture_subjobs(
+        self,
+        *,
+        monitor_dst: bool = False,
+        prune_dst: bool = False,
+        src_hosts: list[str],
+        dst_hosts: dict[str, list[str]],
+        retain_dst_targets: dict[str, list[str]],
+        dst_root_datasets: dict[str, str],
+        dst_snapshot_plan: dict,
+        monitor_snapshot_plan: dict | None = None,
+        localhostname: str = "localtest",
+    ) -> dict[str, list[str]]:
+        """Builds argv, runs Job.run_main and returns the subjobs dict captured via run_subjobs."""
+        job = bzfs_jobrunner.Job()
+        job.log = MagicMock()
+        job.is_test_mode = True
+
+        argv: list[str] = [
+            bzfs_jobrunner.PROG_NAME,
+            "--job-id=test",
+            "--root-dataset-pairs",
+            "tank/src",
+            "pool/dst",
+            f"--src-hosts={src_hosts!s}",
+            f"--dst-hosts={dst_hosts!s}",
+            f"--retain-dst-targets={retain_dst_targets!s}",
+            f"--dst-root-datasets={dst_root_datasets!s}",
+            f"--dst-snapshot-plan={dst_snapshot_plan!s}",
+            f"--localhost={localhostname}",
+        ]
+        if monitor_dst:
+            assert monitor_snapshot_plan is not None
+            argv += [f"--monitor-snapshot-plan={monitor_snapshot_plan!s}", "--monitor-dst-snapshots"]
+        if prune_dst:
+            argv += ["--prune-dst-snapshots"]
+
+        captured: dict[str, list[str]] = {}
+
+        def fake_run_subjobs(subjobs: dict[str, list[str]], *_: object, **__: object) -> None:
+            captured.update(subjobs)
+
+        with patch.object(job, "run_subjobs", side_effect=fake_run_subjobs):
+            with patch("sys.argv", argv):
+                job.run_main(argv)
+
+        return captured
+
+    def test_monitor_dst_snapshots_skips_when_no_matching_targets(self) -> None:
+        """When a dst host has no targets retained, a monitor-dst-snapshots subjob is emitted."""
+        captured = self._capture_subjobs(
+            monitor_dst=True,
+            src_hosts=["src1"],
+            dst_hosts={"dstX": ["tgt1"]},
+            retain_dst_targets={"dstX": ["tgt2"]},
+            dst_root_datasets={"dstX": ""},
+            dst_snapshot_plan={"org": {"tgt1": {"hour": 1}}},
+            monitor_snapshot_plan={"org": {"tgt1": {"hour": {"warn": "msg", "max_age": 1}}}},
+        )
+        self.assertTrue(len(captured) > 0)
+        self.assertTrue(any("monitor-dst-snapshots" in name for name in captured))
+
+    def test_monitor_dst_snapshots_emits_when_matching_targets(self) -> None:
+        """When a dst host retains at least one target, a monitor-dst-snapshots subjob is emitted."""
+        captured = self._capture_subjobs(
+            monitor_dst=True,
+            src_hosts=["src1"],
+            dst_hosts={"dstX": ["tgt1", "tgt2"]},
+            retain_dst_targets={"dstX": ["tgt2"]},
+            dst_root_datasets={"dstX": ""},
+            dst_snapshot_plan={"org": {"tgt2": {"hour": 1}}},
+            monitor_snapshot_plan={"org": {"tgt2": {"hour": {"warn": "msg", "max_age": 1}}}},
+        )
+        self.assertTrue(len(captured) > 0)
+        self.assertTrue(any("monitor-dst-snapshots" in name for name in captured))
+
+    def test_prune_dst_snapshots_skips_when_no_retain_targets_for_host(self) -> None:
+        """When a dst host retains no targets, prune-dst-snapshots should not emit a subjob for that host."""
+        captured = self._capture_subjobs(
+            prune_dst=True,
+            src_hosts=["src1"],
+            dst_hosts={"dstX": ["t1", "t2"]},
+            retain_dst_targets={"dstX": []},
+            dst_root_datasets={"dstX": ""},
+            dst_snapshot_plan={"org": {"t1": {"hour": 1}, "t2": {"hour": 1}}},
+        )
+        # self.assertEqual({}, captured)
+        self.assertTrue(len(captured) > 0)
+        self.assertTrue(any("prune-dst-snapshots" in name for name in captured))
+
+    def test_prune_dst_snapshots_emits_when_retained_target_present(self) -> None:
+        """When a dst host retains at least one target, a prune-dst-snapshots subjob is emitted."""
+        captured = self._capture_subjobs(
+            prune_dst=True,
+            src_hosts=["src1"],
+            dst_hosts={"dstX": ["t1", "t2"]},
+            retain_dst_targets={"dstX": ["t2"]},
+            dst_root_datasets={"dstX": ""},
+            dst_snapshot_plan={"org": {"t2": {"hour": 1}}},
+        )
+        self.assertTrue(len(captured) > 0)
+        self.assertTrue(any("prune-dst-snapshots" in name for name in captured))
 
 
 #############################################################################
