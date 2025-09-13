@@ -78,7 +78,7 @@ class TestRemoteConfCache(AbstractTestCase):
             d2.assert_not_called()
 
     def test_remote_conf_cache_miss_runs_detection(self) -> None:
-        args = self.argparser_parse_args(["src", "dst", "--daemon-remote-conf-cache-ttl", "10 milliseconds"])
+        args = self.argparser_parse_args(["src", "dst", "--daemon-remote-conf-cache-ttl", "1000 milliseconds"])
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p

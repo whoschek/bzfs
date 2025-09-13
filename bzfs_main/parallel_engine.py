@@ -24,7 +24,12 @@ import logging
 import os
 import subprocess
 import time
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Executor,
+    Future,
+    ThreadPoolExecutor,
+)
 from logging import Logger
 from typing import (
     Any,
@@ -42,6 +47,7 @@ from bzfs_main.utils import (
     DONT_SKIP_DATASET,
     Interner,
     SortedInterner,
+    SynchronousExecutor,
     dry,
     has_duplicates,
     human_readable_duration,
@@ -251,7 +257,8 @@ def process_datasets_in_parallel_and_fault_tolerant(
     datasets_set: SortedInterner[str] = SortedInterner(datasets)  # reduces memory footprint
     priority_queue: list[TreeNode] = _build_dataset_tree_and_find_roots(datasets)
     heapq.heapify(priority_queue)  # same order as sorted()
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    executor: Executor = ThreadPoolExecutor(max_workers=max_workers) if max_workers != 1 else SynchronousExecutor()
+    with executor:
         todo_futures: set[Future[bool]] = set()
         future_to_node: dict[Future[bool], TreeNode] = {}
         submitted: int = 0

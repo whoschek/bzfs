@@ -37,9 +37,25 @@ import sys
 import threading
 import time
 import types
-from collections import defaultdict, deque
-from datetime import datetime, timedelta, timezone, tzinfo
-from subprocess import DEVNULL, PIPE
+from collections import (
+    defaultdict,
+    deque,
+)
+from concurrent.futures import (
+    Executor,
+    Future,
+    ThreadPoolExecutor,
+)
+from datetime import (
+    datetime,
+    timedelta,
+    timezone,
+    tzinfo,
+)
+from subprocess import (
+    DEVNULL,
+    PIPE,
+)
 from typing import (
     IO,
     Any,
@@ -115,6 +131,7 @@ def drain(iterable: Iterable[Any]) -> None:
 
 K_ = TypeVar("K_")
 V_ = TypeVar("V_")
+R_ = TypeVar("R_")
 
 
 def shuffle_dict(dictionary: dict[K_, V_]) -> dict[K_, V_]:
@@ -1014,6 +1031,36 @@ class InterruptibleSleep:
         """Makes any future sleep()s no longer a no-op."""
         with self._lock:
             self._is_stopping = False
+
+
+#############################################################################
+class SynchronousExecutor(Executor):
+    """Executor that runs tasks inline in the calling thread, sequentially."""
+
+    def __init__(self) -> None:
+        self._shutdown: bool = False
+
+    def submit(self, fn: Callable[..., R_], /, *args: Any, **kwargs: Any) -> Future[R_]:  # type: ignore[override]
+        """Executes `fn(*args, **kwargs)` immediately and returns its Future."""
+        future: Future[R_] = Future()
+        if self._shutdown:
+            raise RuntimeError("cannot schedule new futures after shutdown")
+        try:
+            result: R_ = fn(*args, **kwargs)
+        except BaseException as exc:
+            future.set_exception(exc)
+        else:
+            future.set_result(result)
+        return future
+
+    def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+        """Prevents new submissions; no worker resources to join/cleanup."""
+        self._shutdown = True
+
+    @classmethod
+    def executor_for(cls, max_workers: int) -> Executor:
+        """Factory returning a SyncExecutor if max_workers == 1; else a ThreadPoolExecutor."""
+        return cls() if max_workers == 1 else ThreadPoolExecutor(max_workers=max_workers)
 
 
 #############################################################################
