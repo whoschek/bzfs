@@ -23,8 +23,15 @@ import shlex
 import subprocess
 import threading
 import time
-from dataclasses import dataclass
-from subprocess import DEVNULL, PIPE, CalledProcessError, CompletedProcess
+from dataclasses import (
+    dataclass,
+)
+from subprocess import (
+    DEVNULL,
+    PIPE,
+    CalledProcessError,
+    CompletedProcess,
+)
 from typing import (
     TYPE_CHECKING,
     Counter,

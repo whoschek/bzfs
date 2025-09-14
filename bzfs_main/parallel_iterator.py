@@ -19,8 +19,14 @@ import concurrent
 import itertools
 import os
 import sys
-from collections import deque
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
+from collections import (
+    deque,
+)
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Future,
+    ThreadPoolExecutor,
+)
 from typing import (
     Callable,
     Iterable,

@@ -27,9 +27,16 @@ import stat
 import sys
 import tempfile
 import time
-from dataclasses import dataclass
-from datetime import datetime, tzinfo
-from logging import Logger
+from dataclasses import (
+    dataclass,
+)
+from datetime import (
+    datetime,
+    tzinfo,
+)
+from logging import (
+    Logger,
+)
 from typing import (
     TYPE_CHECKING,
     Iterable,

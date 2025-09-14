@@ -25,7 +25,9 @@ import subprocess
 import threading
 import time
 import unittest
-from logging import Logger
+from logging import (
+    Logger,
+)
 from typing import (
     Any,
 )

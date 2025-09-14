@@ -30,7 +30,9 @@ from concurrent.futures import (
     Future,
     ThreadPoolExecutor,
 )
-from logging import Logger
+from logging import (
+    Logger,
+)
 from typing import (
     Any,
     Callable,

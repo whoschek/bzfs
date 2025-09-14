@@ -23,8 +23,12 @@ import subprocess
 import threading
 import time
 import unittest
-from collections import Counter
-from types import SimpleNamespace
+from collections import (
+    Counter,
+)
+from types import (
+    SimpleNamespace,
+)
 from typing import (
     Any,
     Iterator,

@@ -29,7 +29,6 @@ from unittest.mock import (
     patch,
 )
 
-import bzfs_main.utils
 from bzfs_main import (
     bzfs,
     configuration,
@@ -38,6 +37,9 @@ from bzfs_main.configuration import (
     LogParams,
     Remote,
     SnapshotLabel,
+)
+from bzfs_main.utils import (
+    UNIX_TIME_INFINITY_SECS,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
@@ -568,7 +570,7 @@ class TestHelperFunctions(AbstractTestCase):
         config = configuration.MonitorSnapshotsConfig(args, params)
         self.assertTrue(str(config))
         self.assertListEqual(
-            [(100 + 2, bzfs_main.utils.UNIX_TIME_INFINITY_SECS)],
+            [(100 + 2, UNIX_TIME_INFINITY_SECS)],
             [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
@@ -579,7 +581,7 @@ class TestHelperFunctions(AbstractTestCase):
         config = configuration.MonitorSnapshotsConfig(args, params)
         self.assertTrue(str(config))
         self.assertListEqual(
-            [(bzfs_main.utils.UNIX_TIME_INFINITY_SECS, 100 + 2)],
+            [(UNIX_TIME_INFINITY_SECS, 100 + 2)],
             [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])

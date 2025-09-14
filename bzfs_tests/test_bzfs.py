@@ -19,8 +19,13 @@ import re
 import subprocess
 import time
 import unittest
-from datetime import datetime, timezone
-from itertools import combinations
+from datetime import (
+    datetime,
+    timezone,
+)
+from itertools import (
+    combinations,
+)
 from typing import (
     TYPE_CHECKING,
     Callable,
