@@ -201,6 +201,8 @@ Your goal is to improve quality with zero functional regressions.
 - **Avoid Circular Dependencies:** Extract the shared logic into a new utility module - or an existing module that keeps
   the dependency graph acyclic - rather than adding deep import chains.
 
+- **ast-grep (sg) Tool:** Consider running `./venv/bin/sg` for refactor-safe searches.
+
 ## How to Improve Code Coverage
 
 If asked to improve coverage:
