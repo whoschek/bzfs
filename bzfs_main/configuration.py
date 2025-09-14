@@ -455,7 +455,7 @@ class Remote:
         self.params: Params = p
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
-        self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
+        self.ssh_port: int | None = getattr(args, f"ssh_{loc}_port")
         self.ssh_config_file: str | None = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
         if self.ssh_config_file:
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
@@ -520,7 +520,7 @@ class Remote:
         ssh_cmd += [self.ssh_user_host]
         return ssh_cmd
 
-    def cache_key(self) -> tuple[str, str, str, int, str | None]:
+    def cache_key(self) -> tuple[str, str, str, int | None, str | None]:
         """Returns tuple uniquely identifying this Remote for caching."""
         return self.location, self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file
 
@@ -528,7 +528,9 @@ class Remote:
         """Returns cache namespace string which is a stable, unique directory component for snapshot caches that
         distinguishes endpoints by username+host+port where applicable, and uses '-' when no user/host is present (local
         mode)."""
-        return f"{self.ssh_user_host}:{self.ssh_port}" if self.ssh_user_host else "-"
+        if not self.ssh_user_host:
+            return "-"  # local mode
+        return self.ssh_user_host if self.ssh_port is None else f"{self.ssh_user_host}#{self.ssh_port}"
 
     def __repr__(self) -> str:
         return str(self.__dict__)

@@ -141,7 +141,7 @@ def zfs_list_snapshots_in_parallel(
     """Runs 'zfs list -t snapshot' on multiple datasets at the same time; Implemented with a time and space efficient
     streaming algorithm; easily scales to millions of datasets and any number of snapshots."""
     max_workers: int = job.max_workers[r.location]
-    max_batch_items = min(
+    max_batch_items: int = min(
         job.max_datasets_per_minibatch_on_list_snaps[r.location],
         max(
             len(datasets) // (max_workers if r.ssh_user_host else max_workers * 8),

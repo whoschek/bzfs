@@ -1085,7 +1085,7 @@ class Job:
                         if (
                             snapshots_changed != 0
                             and snapshots_changed < time_threshold
-                            and (
+                            and (  # always True
                                 cached_unix_times := self.cache.get_snapshots_changed2(
                                     monitor_last_modified_cache_file(remote, dataset, alert.label, cfg)
                                 )
@@ -1642,7 +1642,7 @@ def validate_host_name(host: str, input_text: str, extra_invalid_chars: str = ""
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 
-def validate_port(port: str | int, message: str) -> None:
+def validate_port(port: str | int | None, message: str) -> None:
     """Checks that port specification is a valid integer."""
     if isinstance(port, int):
         port = str(port)

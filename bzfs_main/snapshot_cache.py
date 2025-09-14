@@ -18,9 +18,9 @@ Purpose
 =======
 The ``--cache-snapshots`` mode speeds up snapshot scheduling, replication, and monitoring by storing just enough
 metadata in fast local inodes (no external DB, no daemon). Instead of repeatedly invoking costly
-``zfs list -t snapshot ...`` across potentially thousands or even millions of datasets, we keep tiny per-dataset files
-whose inode times encode what we need to know. This reduces latency, load on ZFS, and network chatter, while remaining
-dependency free and robust under crashes or concurrent runs.
+``zfs list -t snapshot ...`` across potentially thousands or even millions of datasets, we keep tiny (i.e. empty)
+per-dataset files whose inode times encode what we need to know. This reduces latency, load on ZFS, and network
+chatter, while remaining dependency free and robust under crashes or concurrent runs.
 
 Assumptions
 ===========
@@ -43,18 +43,18 @@ tiny and allows safe, atomic low-latency updates via a single ``utime`` call und
 cache consists of four families:
 
 1) Dataset-level ("=") per dataset and location (src or dst); for --create-src-snapshots, --replicate, --monitor-snapshots
-   - Path: ``<cache_root>/<user@host:port>/<dataset>/=``
+   - Path: ``<cache_root>/<user@host[#port]>/<dataset>/=``
    - mtime: the ZFS ``snapshots_changed`` time observed for that dataset. Monotonic writes only.
    - Used by: snapshot scheduler, replicate, monitor - as the anchor for cache equality checks.
 
 2) Replication-scoped ("==") per source dataset and destination dataset+filters; for --replicate
-   - Path: ``<cache_root>/<src_user@host:port>/<src_dataset>/==/<dst_user@host:port>/<dst_dataset>/<filters_hash>``
+   - Path: ``<cache_root>/<src_user@host[#port]>/<src_dataset>/==/<dst_user@host[#port]>/<dst_dataset>/<filters_hash>``
    - Path label encodes destination user@host, destination dataset and the snapshot-filter hash.
    - mtime: last replicated source ``snapshots_changed`` for that destination and filter set. Monotonic.
    - Used by: replicate - to cheaply decide "src unchanged since last successful run to this dst+filters".
 
 3) Monitor ("===") per dataset and label (Latest/Oldest); for --monitor-snapshots
-   - Path: ``<cache_root>/<user@host:port>/<dataset>/===/<kind>/<label>/<hash>``
+   - Path: ``<cache_root>/<user@host[#port]>/<dataset>/===/<kind>/<label>/<hash>``
      - ``kind``: alert check mode; either "Latest" or "Oldest".
      - ``hash``: stable SHA-256 over the monitor alert plan to scope caches per plan.
    - atime: creation time of the relevant latest/oldest snapshot.
