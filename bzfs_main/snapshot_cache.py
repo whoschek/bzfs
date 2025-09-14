@@ -12,24 +12,106 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Stores snapshot metadata in fast disk inodes to avoid repeated 'zfs list -t snapshot' calls.
+"""Caching snapshot metadata to minimize 'zfs list -t snapshot' calls.
 
-Purpose: Provide a lightweight, dependency-free cache for ZFS snapshot scheduling, monitoring and replication.
+Purpose
+=======
+The ``--cache-snapshots`` mode speeds up snapshot scheduling, replication, and monitoring by storing just enough
+metadata in fast local inodes (no external DB, no daemon). Instead of repeatedly invoking costly
+``zfs list -t snapshot ...`` across potentially thousands or even millions of datasets, we keep tiny per-dataset files
+whose inode times encode what we need to know. This reduces latency, load on ZFS, and network chatter, while remaining
+dependency free and robust under crashes or concurrent runs.
 
-Assumptions: OpenZFS timestamps are UTC integer seconds; file atime/mtime are reliable and atomically updatable with
-monotonic guards; multiple concurrent jobs may update cache files out of order.
+Assumptions
+===========
+- OpenZFS >= 2.2 provides two key UTC times with integer-second resolution: ``snapshots_changed`` (dataset level)
+  and snapshot ``creation`` (snapshot level).
+  - ``snapshots_changed``: Specifies the UTC time at which a snapshot for a dataset was last created or deleted.
+    See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
+  - ``creation`` specifies the UTC time the snapshot was created.
+    See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#creation
+- Unix atime/mtime are reliable to read and atomically updatable;
+- Multiple jobs may touch the same cache files concurrently and out of order. Correctness must rely on per-file locking
+  plus monotonicity guards rather than global serialization or a single writer model.
+- System clocks may differ by small skews across hosts; equal-second races can happen. We gate "freshness" with a small
+  maturity time threshold (``MATURITY_TIME_THRESHOLD_SECS``) before trusting a value as authoritative.
 
-Design Rationale:
-- Dataset-level '=' file per dataset/location:
-    - mtime stores ZFS "snapshots_changed" (UTC Unix seconds). Monotonic writes.
-- Replication-scoped '==' file per src dataset and dst+filters:
-    - mtime stores last replicated src snapshots_changed. Monotonic.
-- Monitor '===' per dataset and label:
-    - atime stores latest/oldest snapshot creation; mtime stores snapshots_changed.
-    - Monotonic writes with small time-threshold gating elsewhere before trusting fresh values.
-- Snapshot scheduler per-label cache (under src dataset):
-    - atime stores creation; mtime stores snapshots_changed at write time.
-    - The scheduler trusts atime only if the per-label mtime equals the current dataset-level '=' mtime to avoid staleness.
+Design Rationale
+================
+We intentionally encode only minimal invariants into inode timestamps and not arbitrary text payloads. This keeps I/O
+tiny and allows safe, atomic low-latency updates via a single ``utime`` call under an advisory filesystem lock. The
+cache consists of four families:
+
+1) Dataset-level ("=") per dataset and location (src or dst); for --create-src-snapshots, --replicate, --monitor-snapshots
+   - Path: ``<cache_root>/<user@host:port>/<dataset>/=``
+   - mtime: the ZFS ``snapshots_changed`` time observed for that dataset. Monotonic writes only.
+   - Used by: snapshot scheduler, replicate, monitor - as the anchor for cache equality checks.
+
+2) Replication-scoped ("==") per source dataset and destination dataset+filters; for --replicate
+   - Path: ``<cache_root>/<src_user@host:port>/<src_dataset>/==/<dst_user@host:port>/<dst_dataset>/<filters_hash>``
+   - Path label encodes destination user@host, destination dataset and the snapshot-filter hash.
+   - mtime: last replicated source ``snapshots_changed`` for that destination and filter set. Monotonic.
+   - Used by: replicate - to cheaply decide "src unchanged since last successful run to this dst+filters".
+
+3) Monitor ("===") per dataset and label (Latest/Oldest); for --monitor-snapshots
+   - Path: ``<cache_root>/<user@host:port>/<dataset>/===/<kind>/<label>/<hash>``
+     - ``kind``: alert check mode; either "Latest" or "Oldest".
+     - ``hash``: stable SHA-256 over the monitor alert plan to scope caches per plan.
+   - atime: creation time of the relevant latest/oldest snapshot.
+   - mtime: dataset ``snapshots_changed`` observed when that creation was recorded. Monotonic.
+   - Used by: monitor - to alert on stale snapshots without listing them every time.
+
+4) Snapshot scheduler per-label files (under the source dataset); for --create-src-snapshots
+   - Path: ``<cache_root>/<src_user@host:port>/<src_dataset>/<label>``
+   - atime: creation time of the latest snapshot matching that label.
+   - mtime: the dataset-level "=" value at the time of the write (i.e., the then-current ``snapshots_changed``).
+   - Used by: ``--create-src-snapshots`` - to cheaply decide whether a label is due without probing.
+
+How trust in a cache entry is established
+========================================
+For a cache entry to be trusted and used as a fast path, three conditions must hold:
+1) Equality: the dataset-level "=" mtime must equal the live ZFS ``snapshots_changed`` of the corresponding dataset.
+   This ensures the filesystem state that the cache describes is the same as the live state.
+2) Maturity: that live ``snapshots_changed`` is strictly older than ``now - MATURITY_TIME_THRESHOLD_SECS`` to avoid
+   equal-second races and tame small clock skew between initiator and ZFS hosts.
+3) Internal consistency for per-label/monitor files: their mtime must equal the current dataset-level "=" value, and
+   their atime must be a plausible creation time (e.g., non-zero for the scheduler; for monitor, atime <= mtime).
+
+If any condition fails, the code falls back to listing snapshots for just those datasets; upon completion it rewrites
+the relevant cache entries, monotonically.
+
+Concurrency and correctness mechanics
+=====================================
+All writes go through ``set_last_modification_time_safe()`` which:
+- Creates parent directories if necessary, opens the file with ``O_NOFOLLOW|O_CLOEXEC`` and takes an exclusive ``flock``.
+- Updates times atomically via ``os.utime(fd, times=(atime, mtime))``.
+- Applies a monotonic guard: with ``if_more_recent=True``, older timestamps never clobber newer ones. This is what
+  makes concurrent runs safe and idempotent.
+
+Cache invalidation - what and why
+=================================
+Two forms exist:
+1) Dataset-level invalidation by directory (non-recursive): when a mismatch is detected, top-level files for the
+   dataset ("=" and flat per-label files) are zeroed to force subsequent ``zfs list -t snapshot ...``. Monitor caches
+   live in subdirectories and are
+   refreshed by monitor runs; they are trusted only under the equality+maturity criteria above.
+2) Selective invalidation on property unavailability: when ZFS reports ``snapshots_changed=0`` (unavailable), the
+   dataset-level "=" file is reset to 0, while per-label creation caches are preserved.
+
+What could be removed without losing correctness - and why we keep it
+=====================================================================
+Because all consumers already require equality + maturity before trusting cache state, explicit invalidation is not
+strictly necessary for correctness; stale entries would simply be ignored and later overwritten. However, we keep the
+invalidation steps to improve operational observability and clarity:
+
+The equality+maturity gates already prevent incorrect cache hits, but invalidation improves operational clarity.
+Zeroing the top-level "=" is an explicit "do not trust" signal. All processes then deterministically skip cache and
+probe via ``zfs list -t snapshot`` once, after which monotonic rewrites restore a consistent, trusted state. This
+simplifies observability for operators inspecting (or debugging) cache trees, and immediately establishes a stable
+cache snapshot of reality. The cost is tiny (a metadata write) while the benefit is more operational simplicity.
+
+The result is a design that favors simplicity and safety: tiny inode-based payloads, conservative guardrails before any
+cache is trusted, and minimal, well-scoped invalidation to keep the system observable under change and concurrency.
 """
 
 from __future__ import annotations
@@ -93,11 +175,18 @@ class SnapshotCache:
         return os.path.join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
-        """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
+        """Resets the timestamps of top-level cache files of the given dataset to zero.
+
+        Purpose: Best-effort invalidation to force probing when the dataset-level '=' cache is stale.
+        Assumptions: Only top-level files (the '=' file and flat per-label files) are reset; nested monitor caches
+        (e.g., '===/...') are not recursively traversed.
+        Design Rationale: Monitor caches are refreshed by monitor runs and guarded by snapshots_changed equality and
+        maturity checks, preserving correctness without recursive work.
+        """
         p = self.job.params
         cache_file: str = self.last_modified_cache_file(p.src, dataset)
         if not p.dry_run:
-            try:  # there's no need for locking on invalidating the cache
+            try:  # Best-effort: no locking needed. Not recursive on purpose.
                 zero_times = (0, 0)
                 os_utime = os.utime
                 for entry in os.scandir(os.path.dirname(cache_file)):
@@ -135,8 +224,8 @@ class SnapshotCache:
                     )
 
     def zfs_get_snapshots_changed(self, remote: Remote, sorted_datasets: list[str]) -> dict[str, int]:
-        """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds;
-        See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
+        """For each given dataset, returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer
+        seconds; See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
 
         def try_zfs_list_command(_cmd: list[str], batch: list[str]) -> list[str]:
             try:

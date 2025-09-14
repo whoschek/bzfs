@@ -5121,7 +5121,7 @@ class LocalTestCase(IntegrationTestCase):
                 self.tearDownAndSetup()
                 self.assert_snapshots(src_root_dataset, 0)
                 loopback = "127.0.0.2" if platform.system() == "Linux" else "127.0.0.1"
-                delay_secs = bzfs.TIME_THRESHOLD_SECS
+                delay_secs = bzfs.MATURITY_TIME_THRESHOLD_SECS
                 localhostname = socket.gethostname()
                 src_hosts = [localhostname]  # for local mode (no ssh, no network)
                 dst_hosts_pull = {localhostname: ["", "onsite"]}

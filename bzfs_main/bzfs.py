@@ -194,7 +194,7 @@ if sys.version_info < MIN_PYTHON_VERSION:
     sys.exit(DIE_STATUS)
 CREATE_SRC_SNAPSHOTS_PREFIX_DFLT: str = PROG_NAME + "_"
 CREATE_SRC_SNAPSHOTS_SUFFIX_DFLT: str = "_adhoc"
-TIME_THRESHOLD_SECS: float = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
+MATURITY_TIME_THRESHOLD_SECS: float = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
 
 
 #############################################################################
@@ -1074,7 +1074,7 @@ class Job:
             https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
             """
             stale_datasets: list[str] = []
-            time_threshold: float = time.time() - TIME_THRESHOLD_SECS
+            time_threshold: float = time.time() - MATURITY_TIME_THRESHOLD_SECS
             for dataset in sorted_datasets:
                 is_stale_dataset: bool = False
                 snapshots_changed: int = snapshots_changed_dict.get(dataset, 0)
@@ -1166,7 +1166,7 @@ class Job:
                 snapshots_changed: int = self.src_properties[src_dataset].snapshots_changed  # get prop "for free"
                 if (
                     snapshots_changed != 0
-                    and time.time() > snapshots_changed + TIME_THRESHOLD_SECS
+                    and time.time() > snapshots_changed + MATURITY_TIME_THRESHOLD_SECS
                     and snapshots_changed == self.cache.get_snapshots_changed(cache_file)
                 ):
                     maybe_stale_dst_datasets.append(dst_dataset)
@@ -1181,7 +1181,7 @@ class Job:
                 cache_file = self.cache.last_modified_cache_file(dst, dst_dataset)
                 if (
                     snapshots_changed != 0
-                    and time.time() > snapshots_changed + TIME_THRESHOLD_SECS
+                    and time.time() > snapshots_changed + MATURITY_TIME_THRESHOLD_SECS
                     and snapshots_changed == self.cache.get_snapshots_changed(cache_file)
                 ):
                     log.info("Already up-to-date [cached]: %s", dst_dataset)
@@ -1397,7 +1397,7 @@ class Job:
         cached_datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         if is_caching_snapshots(p, src):
             sorted_datasets_todo: list[str] = []
-            time_threshold: float = time.time() - TIME_THRESHOLD_SECS
+            time_threshold: float = time.time() - MATURITY_TIME_THRESHOLD_SECS
             for dataset in sorted_datasets:
                 cache: SnapshotCache = self.cache
                 cached_snapshots_changed: int = cache.get_snapshots_changed(cache.last_modified_cache_file(src, dataset))
