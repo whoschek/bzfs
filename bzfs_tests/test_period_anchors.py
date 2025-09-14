@@ -756,3 +756,113 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = datetime(2026, 1, 1, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=anchors)
         self.assertEqual(expected, result)
+
+    def test_monthly_anchor_invalid_day_with_custom_anchor_month(self) -> None:
+        """Verifies clamping to the last valid day of the anchor month.
+
+        When the requested anchor day exceeds the anchor month length (e.g., 31 in February), the day is clamped to that
+        month's last valid day. If the computed anchor is after dt, subtracting one period can yield the corresponding
+        clamped day in the previous month.
+        """
+        tz = self.tz
+        anchors = PeriodAnchors(
+            monthly_month=2,  # February
+            monthly_monthday=31,
+            monthly_hour=12,
+            monthly_minute=0,
+            monthly_second=0,
+        )
+        dt = datetime(2025, 1, 15, 10, 0, 0, tzinfo=tz)
+        # With anchor phase February and day=31 -> base anchor is Feb 28; subtracting one period yields Jan 28.
+        expected = datetime(2025, 1, 28, 12, 0, 0, tzinfo=tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    # --- Additional Monthly Tests ---
+
+    def test_monthly_feb29_anchor_in_leap_year(self) -> None:
+        """Anchoring on Feb 29: in a leap year, day-of-month 29 is used — next boundary is Jan 29 for Jan dt."""
+        anchors = PeriodAnchors(monthly_month=2, monthly_monthday=29, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        dt = datetime(2024, 1, 15, 10, 0, tzinfo=self.tz)  # leap year
+        expected = datetime(2024, 1, 29, 12, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_feb29_anchor_in_non_leap_year(self) -> None:
+        """Anchoring on Feb 29: in a non-leap year, clamps to 28 — next boundary is Jan 28 for Jan dt."""
+        anchors = PeriodAnchors(monthly_month=2, monthly_monthday=29, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        dt = datetime(2025, 1, 15, 10, 0, tzinfo=self.tz)  # non-leap year
+        expected = datetime(2025, 1, 28, 12, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_multi_month_quarterly_with_day31(self) -> None:
+        """Quarterly schedule with day=31 clamps correctly in 30-day months."""
+        anchors = PeriodAnchors(monthly_month=1, monthly_monthday=31)
+        # For quarterly schedule (Jan, Apr, Jul, Oct), April boundary is Apr 30.
+        dt = datetime(2025, 4, 10, 9, 0, tzinfo=self.tz)
+        expected = datetime(2025, 4, 30, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 3, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_multi_month_quarterly_boundary_exact(self) -> None:
+        """Quarterly schedule with day=31: exactly on an Apr 30 boundary stays unchanged."""
+        anchors = PeriodAnchors(monthly_month=1, monthly_monthday=31)
+        dt = datetime(2025, 4, 30, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 3, "monthly", anchors=anchors)
+        self.assertEqual(dt, result)
+
+    def test_monthly_multi_month_before_anchor_day_in_month(self) -> None:
+        """For duration=3 and day=15, a date before the 15th snaps to the 15th of the next valid cycle month."""
+        anchors = PeriodAnchors(monthly_monthday=15)
+        dt = datetime(2025, 3, 10, 10, 0, tzinfo=self.tz)
+        expected = datetime(2025, 4, 15, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 3, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_future_anchor_month_still_snap_in_current_month(self) -> None:
+        """Anchor month after current month: still snaps within current month if due before anchor time."""
+        anchors = PeriodAnchors(monthly_month=9, monthly_monthday=10)  # September phase
+        dt = datetime(2025, 3, 3, 12, 0, tzinfo=self.tz)
+        expected = datetime(2025, 3, 10, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_custom_anchor_month_31_from_leap_feb(self) -> None:
+        """If anchor month is February with day=31, in a leap year base anchor is Feb 29; next is Mar 29."""
+        anchors = PeriodAnchors(monthly_month=2, monthly_monthday=31)
+        dt = datetime(2024, 3, 1, 10, 0, tzinfo=self.tz)  # leap year; past Feb anchor
+        expected = datetime(2024, 3, 29, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_large_duration_over_year(self) -> None:
+        """Duration > 12 months: 14-month schedule jumps into next year at the correct month/day."""
+        anchors = PeriodAnchors()  # default Jan 1
+        dt = datetime(2025, 5, 15, 10, 0, tzinfo=self.tz)
+        expected = datetime(2026, 3, 1, 0, 0, tzinfo=self.tz)  # Jan 1 + 14 months = Mar 1 next year
+        result = round_datetime_up_to_duration_multiple(dt, 14, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_exact_boundary_with_custom_time(self) -> None:
+        """Exactly on boundary with custom time-of-day returns dt unchanged."""
+        anchors = PeriodAnchors(monthly_month=10, monthly_monthday=5, monthly_hour=6, monthly_minute=7, monthly_second=8)
+        dt = datetime(2025, 10, 5, 6, 7, 8, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(dt, result)
+
+    def test_monthly_just_before_boundary_with_custom_time(self) -> None:
+        """Just before boundary should snap up to the boundary on the same day and time-of-day."""
+        anchors = PeriodAnchors(monthly_month=10, monthly_monthday=5, monthly_hour=6, monthly_minute=7, monthly_second=8)
+        dt = datetime(2025, 10, 5, 6, 7, 7, tzinfo=self.tz)
+        expected = datetime(2025, 10, 5, 6, 7, 8, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_multi_month_just_after_boundary_with_phase(self) -> None:
+        """Multi-month with custom phase: just after boundary advances by full duration months with time preserved."""
+        anchors = PeriodAnchors(monthly_month=11, monthly_monthday=30, monthly_hour=2)
+        dt = datetime(2025, 11, 30, 2, 0, 0, 1, tzinfo=self.tz)  # just after boundary
+        expected = datetime(2026, 1, 30, 2, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)

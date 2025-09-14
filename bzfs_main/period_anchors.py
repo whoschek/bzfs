@@ -50,7 +50,7 @@ class PeriodAnchors:
     yearly_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
     yearly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
-    # monthly: Anchor(dt) = latest T where T <= dt && T == Start of first day of month of dt + anchor.monthly_* vars
+    # monthly: Anchor(dt) = latest T <= dt at phase month (monthly_month) + anchor.monthly_* vars (day clamped; multi-month)
     monthly_month: int = field(default=1, metadata={"min": 1, "max": 12, "help": "The anchor month of multi-month periods"})
     monthly_monthday: int = field(default=1, metadata=METADATA_DAY)  # 1 <= x <= 31
     monthly_hour: int = field(default=0, metadata=METADATA_HOUR)  # 0 <= x <= 23
@@ -58,7 +58,7 @@ class PeriodAnchors:
     monthly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
     # weekly: Anchor(dt) = latest T where T <= dt && T == Latest midnight from Sunday to Monday of dt + anchor.weekly_* vars
-    weekly_weekday: int = field(default=0, metadata=METADATA_WEEKDAY)  # 0 <= x <= 7
+    weekly_weekday: int = field(default=0, metadata=METADATA_WEEKDAY)  # 0 <= x <= 6 (0=Sunday, ..., 6=Saturday)
     weekly_hour: int = field(default=0, metadata=METADATA_HOUR)  # 0 <= x <= 23
     weekly_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
     weekly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
@@ -182,8 +182,8 @@ def round_datetime_up_to_duration_multiple(
         return dt + timedelta(microseconds=period_micros - remainder)
 
     elif duration_unit == "monthly":
-        last_day = calendar.monthrange(dt.year, dt.month)[1]  # last valid day of the current month
-        anchor = dt.replace(  # Compute the base anchor for the month ensuring the day is valid
+        last_day = calendar.monthrange(dt.year, anchors.monthly_month)[1]  # last valid day of the anchor month
+        anchor = dt.replace(  # Compute the base anchor for the anchor month ensuring the day is valid
             month=anchors.monthly_month,
             day=min(anchors.monthly_monthday, last_day),
             hour=anchors.monthly_hour,
