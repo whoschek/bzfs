@@ -327,7 +327,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # Custom hourly: snapshots occur at :15:30 each hour.
         dt = datetime(2025, 2, 11, 14, 20, 0, tzinfo=self.tz)
         # Global base (daily) is 00:00:00, so effective hourly base = 00:15:30.
-        # dt is 14:20:00; offset = 14h04m30s → next multiple with 1-hour step: 15:15:30.
+        # dt is 14:20:00; offset = 14h04m30s -> next multiple with 1-hour step: 15:15:30.
         expected = datetime(2025, 2, 11, 15, 15, 30, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(
             dt, 1, "hourly", anchors=PeriodAnchors(hourly_minute=15, hourly_second=30)
@@ -338,7 +338,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # Custom hourly: snapshots occur at :15:30 every other hour.
         dt = datetime(2025, 2, 11, 14, 20, 0, tzinfo=self.tz)
         # Global base (daily) is 00:00:00, so effective hourly base = 00:15:30.
-        # dt is 14:20:00; offset = 14h04m30s → next multiple with 1-hour step: 15:15:30.
+        # dt is 14:20:00; offset = 14h04m30s -> next multiple with 1-hour step: 15:15:30.
         expected = datetime(2025, 2, 11, 16, 15, 30, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(
             dt, 2, "hourly", anchors=PeriodAnchors(hourly_minute=15, hourly_second=30)
@@ -349,7 +349,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # Custom hourly: snapshots occur at :15:30 every other hour.
         dt = datetime(2025, 2, 11, 15, 20, 0, tzinfo=self.tz)
         # Global base (daily) is 00:00:00, so effective hourly base = 00:15:30.
-        # dt is 14:20:00; offset = 14h04m30s → next multiple with 1-hour step: 15:15:30.
+        # dt is 14:20:00; offset = 14h04m30s -> next multiple with 1-hour step: 15:15:30.
         expected = datetime(2025, 2, 11, 16, 15, 30, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(
             dt, 2, "hourly", anchors=PeriodAnchors(hourly_minute=15, hourly_second=30)

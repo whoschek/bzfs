@@ -2393,7 +2393,7 @@ class TestSnapshotCache(AbstractTestCase):
     def test_clock_skew_snapshotting_when_initiator_vs_src_clocks_disagree(self) -> None:
         """Demonstrates the snapshoting scheduler's skew-resilient fast path when using --cache-snapshots.
 
-        The scheduler may avoid `zfs list -t snapshot` by consulting two caches per dataset: the dataset-level “=” file,
+        The scheduler may avoid `zfs list -t snapshot` by consulting two caches per dataset: the dataset-level "=" file,
         whose mtime is the ZFS snapshots_changed property, and per-label files whose atime is the latest creation time
         for that label and whose mtime records the snapshots_changed observed at write time. The fast path is trusted
         only if the dataset-level value equals the live property and is mature, and each label's mtime equals that same

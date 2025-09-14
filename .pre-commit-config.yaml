@@ -134,6 +134,11 @@ repos:
         args: [--multiline]
         entry: '^\s*from\s+bzfs_\w+(\.\w+)*\s+import\s+(\(\n\s*)?(?!PROG_NAME)\w+(\.\w+)*\s+as\s+\w+\s*'
         types: [python]
+      - id: forbid-ambiguous-characters
+        name: "forbid ambiguous characters"
+        language: pygrep
+        entry: '…|–|“|”|‘|’|→'               # replace ambiguous with unambiguous characters (en dash, curly quotes, etc)
+        types: [python]
   - repo: https://github.com/hukkin/mdformat
     rev: 0.7.22
     hooks:
