@@ -696,8 +696,10 @@ usage: bzfs [-h] [--recursive]
     `user@||1:tank1/foo/bar:baz:boo`. The first component of the ZFS dataset name is the ZFS
     pool name, here `tank1`. If the option starts with a `+` prefix then dataset names are
     read from the UTF-8 text file given after the `+` prefix, with each line in the file
-    containing a SRC_DATASET and a DST_DATASET, separated by a tab character. Example:
-    `+root_dataset_names.txt`, `+/path/to/root_dataset_names.txt`
+    containing a SRC_DATASET and a DST_DATASET, separated by a tab character. The basename must
+    contain the substring 'bzfs_argument_file'. Example:
+    `+root_dataset_names_bzfs_argument_file.txt`,
+    `+/path/to/root_dataset_names_bzfs_argument_file.txt`
 
     DST_DATASET: Destination ZFS dataset for replication and deletion. Has same naming format as
     SRC_DATASET. During replication, destination datasets that do not yet exist are created as
@@ -744,10 +746,10 @@ usage: bzfs [-h] [--recursive]
 
     If the option starts with a `+` prefix then dataset names are read from the
     newline-separated UTF-8 text file given after the `+` prefix, one dataset per line inside of
-    the text file.
+    the text file. The basename must contain the substring 'bzfs_argument_file'.
 
-    Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative), `+dataset_names.txt`,
-    `+/path/to/dataset_names.txt`
+    Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative),
+    `+dataset_names_bzfs_argument_file.txt`, `+/path/to/dataset_names_bzfs_argument_file.txt`
 
 <!-- -->
 
@@ -777,12 +779,14 @@ usage: bzfs [-h] [--recursive]
     not match.
 
     If the option starts with a `+` prefix then regex names are read from the newline-separated
-    UTF-8 text file given after the `+` prefix, one regex per line inside of the text file.
+    UTF-8 text file given after the `+` prefix, one regex per line inside of the text file. The
+    basename must contain the substring 'bzfs_argument_file'.
 
     Default: `.*` (include all datasets).
 
     Examples: `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`, `!public`,
-    `+dataset_regexes.txt`, `+/path/to/dataset_regexes.txt`
+    `+dataset_regexes_bzfs_argument_file.txt`,
+    `+/path/to/dataset_regexes_bzfs_argument_file.txt`
 
 <!-- -->
 
@@ -2560,13 +2564,15 @@ group.
     A leading `!` character indicates logical negation, i.e. the regex matches if the regex with
     the leading `!` character removed does not match. If the option starts with a `+` prefix
     then regexes are read from the newline-separated UTF-8 text file given after the `+` prefix,
-    one regex per line inside of the text file.
+    one regex per line inside of the text file. The basename must contain the substring
+    'bzfs_argument_file'.
 
     The default regex is
     'aclinherit|aclmode|acltype|atime|checksum|compression|copies|logbias|primarycache|recordsize|redundant_metadata|relatime|secondarycache|snapdir|sync|xattr'.
     Example: `--zfs-recv-o-include-regex compression recordsize`. More examples: `.*`
     (include all properties), `foo bar myapp:.*` (include three regexes)
-    `+zfs-recv-o_regexes.txt`, `+/path/to/zfs-recv-o_regexes.txt`
+    `+zfs-recv-o_regexes_bzfs_argument_file.txt`,
+    `+/path/to/zfs-recv-o_regexes_bzfs_argument_file.txt`
 
     See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
 
@@ -2630,12 +2636,14 @@ group.
     A leading `!` character indicates logical negation, i.e. the regex matches if the regex with
     the leading `!` character removed does not match. If the option starts with a `+` prefix
     then regexes are read from the newline-separated UTF-8 text file given after the `+` prefix,
-    one regex per line inside of the text file.
+    one regex per line inside of the text file. The basename must contain the substring
+    'bzfs_argument_file'.
 
     The default is to include no properties, thus by default no extra '-x' option is appended.
     Example: `--zfs-recv-x-include-regex compression recordsize`. More examples: `.*`
     (include all properties), `foo bar myapp:.*` (include three regexes)
-    `+zfs-recv-x_regexes.txt`, `+/path/to/zfs-recv-x_regexes.txt`
+    `+zfs-recv-x_regexes_bzfs_argument_file.txt`,
+    `+/path/to/zfs-recv-x_regexes_bzfs_argument_file.txt`
 
     See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
 

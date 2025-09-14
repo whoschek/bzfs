@@ -389,7 +389,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "The first component of the ZFS dataset name is the ZFS pool name, here `tank1`. "
              "If the option starts with a `+` prefix then dataset names are read from the UTF-8 text file given "
              "after the `+` prefix, with each line in the file containing a SRC_DATASET and a DST_DATASET, "
-             "separated by a tab character. Example: `+root_dataset_names.txt`, `+/path/to/root_dataset_names.txt`\n\n"
+             "separated by a tab character. The basename must contain the substring 'bzfs_argument_file'. "
+             "Example: `+root_dataset_names_bzfs_argument_file.txt`, "
+             "`+/path/to/root_dataset_names_bzfs_argument_file.txt`\n\n"
              "DST_DATASET: "
              "Destination ZFS dataset for replication and deletion. Has same naming format as SRC_DATASET. During "
              "replication, destination datasets that do not yet exist are created as necessary, along with their "
@@ -419,9 +421,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "This option is automatically translated to an --include-dataset-regex (see below) and can be "
              "specified multiple times.\n\n"
              "If the option starts with a `+` prefix then dataset names are read from the newline-separated "
-             "UTF-8 text file given after the `+` prefix, one dataset per line inside of the text file.\n\n"
+             "UTF-8 text file given after the `+` prefix, one dataset per line inside of the text file. The basename "
+             "must contain the substring 'bzfs_argument_file'.\n\n"
              "Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative), "
-             "`+dataset_names.txt`, `+/path/to/dataset_names.txt`\n\n")
+             "`+dataset_names_bzfs_argument_file.txt`, `+/path/to/dataset_names_bzfs_argument_file.txt`\n\n")
     parser.add_argument(
         "--exclude-dataset", action=FileOrLiteralAction, nargs="+", default=[], metavar="DATASET",
         help="Same syntax as --include-dataset (see above) except that the option is automatically translated to an "
@@ -438,10 +441,11 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
              "leading `!` character removed does not match.\n\n"
              "If the option starts with a `+` prefix then regex names are read from the newline-separated "
-             "UTF-8 text file given after the `+` prefix, one regex per line inside of the text file.\n\n"
+             "UTF-8 text file given after the `+` prefix, one regex per line inside of the text file. The basename "
+             "must contain the substring 'bzfs_argument_file'.\n\n"
              "Default: `.*` (include all datasets).\n\n"
              "Examples: `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`, `!public`, "
-             "`+dataset_regexes.txt`, `+/path/to/dataset_regexes.txt`\n\n")
+             "`+dataset_regexes_bzfs_argument_file.txt`, `+/path/to/dataset_regexes_bzfs_argument_file.txt`\n\n")
     parser.add_argument(
         "--exclude-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-dataset-regex (see above) except that the default is "
@@ -1466,11 +1470,12 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
                    "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
                    "leading `!` character removed does not match. "
                    "If the option starts with a `+` prefix then regexes are read from the newline-separated "
-                   "UTF-8 text file given after the `+` prefix, one regex per line inside of the text file.\n\n"
+                   "UTF-8 text file given after the `+` prefix, one regex per line inside of the text file. The basename "
+                   "must contain the substring 'bzfs_argument_file'.\n\n"
                    f"{group_include_regex_default_help} "
                    f"Example: `--{grup}-include-regex compression recordsize`. "
                    "More examples: `.*` (include all properties), `foo bar myapp:.*` (include three regexes) "
-                   f"`+{grup}_regexes.txt`, `+/path/to/{grup}_regexes.txt`\n\n"
+                   f"`+{grup}_regexes_bzfs_argument_file.txt`, `+/path/to/{grup}_regexes_bzfs_argument_file.txt`\n\n"
                    "See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
         argument_group.add_argument(
             f"--{grup}-exclude-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
