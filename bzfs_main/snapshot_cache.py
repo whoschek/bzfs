@@ -65,20 +65,20 @@ cache consists of four families:
    - Path: ``<cache_root>/<src_user@host:port>/<src_dataset>/<label>``
    - atime: creation time of the latest snapshot matching that label.
    - mtime: the dataset-level "=" value at the time of the write (i.e., the then-current ``snapshots_changed``).
-   - Used by: ``--create-src-snapshots`` - to cheaply decide whether a label is due without probing.
+   - Used by: ``--create-src-snapshots`` - to cheaply decide whether a label is due without ``zfs list -t snapshot``.
 
-How trust in a cache entry is established
+How trust in a cache file is established
 ========================================
-For a cache entry to be trusted and used as a fast path, three conditions must hold:
+For a cache file to be trusted and used as a fast path, three conditions must hold:
 1) Equality: the dataset-level "=" mtime must equal the live ZFS ``snapshots_changed`` of the corresponding dataset.
    This ensures the filesystem state that the cache describes is the same as the live state.
 2) Maturity: that live ``snapshots_changed`` is strictly older than ``now - MATURITY_TIME_THRESHOLD_SECS`` to avoid
    equal-second races and tame small clock skew between initiator and ZFS hosts.
-3) Internal consistency for per-label/monitor files: their mtime must equal the current dataset-level "=" value, and
-   their atime must be a plausible creation time (e.g., non-zero for the scheduler; for monitor, atime <= mtime).
+3) Internal consistency for per-label/monitor cache files: their mtime must equal the current dataset-level "=" value,
+   and their atime must be a plausible creation time (e.g., non-zero for the scheduler; for monitor, atime <= mtime).
 
-If any condition fails, the code falls back to listing snapshots for just those datasets; upon completion it rewrites
-the relevant cache entries, monotonically.
+If any condition fails, the code falls back to ``zfs list -t snapshot`` for just those datasets; upon completion it
+rewrites the relevant cache files, monotonically.
 
 Concurrency and correctness mechanics
 =====================================
@@ -92,23 +92,23 @@ Cache invalidation - what and why
 =================================
 Two forms exist:
 1) Dataset-level invalidation by directory (non-recursive): when a mismatch is detected, top-level files for the
-   dataset ("=" and flat per-label files) are zeroed to force subsequent ``zfs list -t snapshot ...``. Monitor caches
-   live in subdirectories and are
-   refreshed by monitor runs; they are trusted only under the equality+maturity criteria above.
+   dataset ("=" and flat per-label files) are zeroed to force subsequent ``zfs list -t snapshot``. Monitor caches
+   live in subdirectories and are refreshed by monitor runs; they are trusted only under the equality+maturity criteria
+   above.
 2) Selective invalidation on property unavailability: when ZFS reports ``snapshots_changed=0`` (unavailable), the
    dataset-level "=" file is reset to 0, while per-label creation caches are preserved.
 
 What could be removed without losing correctness - and why we keep it
 =====================================================================
 Because all consumers already require equality + maturity before trusting cache state, explicit invalidation is not
-strictly necessary for correctness; stale entries would simply be ignored and later overwritten. However, we keep the
-invalidation steps to improve operational observability and clarity:
+strictly necessary for correctness; stale cache files would simply be ignored and later overwritten. However, we keep
+the invalidation steps to improve operational observability and clarity:
 
 The equality+maturity gates already prevent incorrect cache hits, but invalidation improves operational clarity.
 Zeroing the top-level "=" is an explicit "do not trust" signal. All processes then deterministically skip cache and
 probe via ``zfs list -t snapshot`` once, after which monotonic rewrites restore a consistent, trusted state. This
 simplifies observability for operators inspecting (or debugging) cache trees, and immediately establishes a stable
-cache snapshot of reality. The cost is tiny (a metadata write) while the benefit is more operational simplicity.
+cache snapshot of reality. The cost is tiny (an inode metadata write) while the benefit is more operational simplicity.
 
 The result is a design that favors simplicity and safety: tiny inode-based payloads, conservative guardrails before any
 cache is trusted, and minimal, well-scoped invalidation to keep the system observable under change and concurrency.
@@ -177,7 +177,7 @@ class SnapshotCache:
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the timestamps of top-level cache files of the given dataset to zero.
 
-        Purpose: Best-effort invalidation to force probing when the dataset-level '=' cache is stale.
+        Purpose: Best-effort invalidation to force ``zfs list -t snapshot`` when the dataset-level '=' cache is stale.
         Assumptions: Only top-level files (the '=' file and flat per-label files) are reset; nested monitor caches
         (e.g., '===/...') are not recursively traversed.
         Design Rationale: Monitor caches are refreshed by monitor runs and guarded by snapshots_changed equality and
@@ -214,7 +214,7 @@ class SnapshotCache:
             dataset_cache_file: str = self.last_modified_cache_file(src, src_dataset)
             if not p.dry_run:
                 if snapshots_changed == 0:
-                    try:  # selective invalidation: only zero the dataset-level '=' cache entry
+                    try:  # selective invalidation: only zero the dataset-level '=' cache file
                         os.utime(dataset_cache_file, times=(0, 0))
                     except FileNotFoundError:
                         pass  # harmless
