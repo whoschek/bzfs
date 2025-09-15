@@ -183,6 +183,12 @@ class TestHelperFunctions(AbstractTestCase):
         with self.assertRaises(SystemExit):
             _get_dict_config_logger(log_params, args)
 
+    def test_no_argument_file_blocks_plus_file_log_config(self) -> None:
+        """+file expansion for --log-config-file must be rejected under --no-argument-file."""
+        args = self.argparser_parse_args(["src", "dst", "--no-argument-file", "--log-config-file", "+some_file.json"])
+        with self.assertRaises(SystemExit):
+            LogParams(args)
+
 
 #############################################################################
 class TestLogging(AbstractTestCase):

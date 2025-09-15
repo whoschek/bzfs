@@ -116,7 +116,7 @@ class LogParams:
         else:
             self.log_level = "INFO"
         self.log_config_file: str = args.log_config_file
-        if self.log_config_file:
+        if self.log_config_file and self.log_config_file.startswith("+"):
             validate_no_argument_file(self.log_config_file, args, err_prefix="--log-config-file: ")
         self.log_config_vars: dict[str, str] = dict(var.split(":", 1) for var in args.log_config_var)
         self.timestamp: str = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
