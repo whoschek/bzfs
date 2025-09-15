@@ -45,8 +45,13 @@ import threading
 import time
 import uuid
 from ast import literal_eval
-from logging import Logger
-from subprocess import DEVNULL, PIPE
+from logging import (
+    Logger,
+)
+from subprocess import (
+    DEVNULL,
+    PIPE,
+)
 from typing import (
     Any,
     Iterable,

@@ -24,7 +24,10 @@ from typing import (
     Iterable,
     Iterator,
 )
-from unittest.mock import MagicMock, patch
+from unittest.mock import (
+    MagicMock,
+    patch,
+)
 
 import bzfs_main.compare_snapshot_lists
 from bzfs_main import configuration

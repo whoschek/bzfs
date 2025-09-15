@@ -38,16 +38,25 @@ import tempfile
 import time
 import traceback
 import unittest
-from collections import Counter
-from pathlib import Path
-from subprocess import DEVNULL, PIPE
+from collections import (
+    Counter,
+)
+from pathlib import (
+    Path,
+)
+from subprocess import (
+    DEVNULL,
+    PIPE,
+)
 from typing import (
     Any,
     Callable,
     Iterable,
     cast,
 )
-from unittest.mock import patch
+from unittest.mock import (
+    patch,
+)
 
 import bzfs_main.replication
 import bzfs_main.utils
@@ -57,14 +66,22 @@ from bzfs_main import (
     bzfs_jobrunner,
     utils,
 )
-from bzfs_main.configuration import LogParams
+from bzfs_main.configuration import (
+    LogParams,
+)
 from bzfs_main.detect import (
     DUMMY_DATASET,
     is_version_at_least,
 )
-from bzfs_main.loggers import get_simple_logger
-from bzfs_main.parallel_batch_cmd import _get_max_command_line_bytes
-from bzfs_main.replication import INJECT_DST_PIPE_FAIL_KBYTES
+from bzfs_main.loggers import (
+    get_simple_logger,
+)
+from bzfs_main.parallel_batch_cmd import (
+    _get_max_command_line_bytes,
+)
+from bzfs_main.replication import (
+    INJECT_DST_PIPE_FAIL_KBYTES,
+)
 from bzfs_main.utils import (
     DIE_STATUS,
     ENV_VAR_PREFIX,

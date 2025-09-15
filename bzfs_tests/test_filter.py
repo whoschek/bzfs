@@ -21,7 +21,10 @@ import logging
 import sys
 import time
 import unittest
-from datetime import datetime, timedelta
+from datetime import (
+    datetime,
+    timedelta,
+)
 from typing import (
     Any,
     Tuple,

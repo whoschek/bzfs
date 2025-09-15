@@ -25,7 +25,9 @@ from unittest.mock import (
 
 import bzfs_main.detect
 from bzfs_main import bzfs
-from bzfs_main.configuration import Remote
+from bzfs_main.configuration import (
+    Remote,
+)
 from bzfs_main.connection import (
     DEDICATED,
     SHARED,

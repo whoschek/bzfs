@@ -19,7 +19,9 @@ import math
 import os
 import re
 import socket
-from datetime import timedelta
+from datetime import (
+    timedelta,
+)
 from typing import (
     TYPE_CHECKING,
     Iterable,

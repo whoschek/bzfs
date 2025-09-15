@@ -26,7 +26,10 @@ import subprocess
 import sys
 import threading
 import time
-from subprocess import DEVNULL, PIPE
+from subprocess import (
+    DEVNULL,
+    PIPE,
+)
 from typing import (
     TYPE_CHECKING,
     Iterable,

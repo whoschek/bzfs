@@ -119,8 +119,12 @@ import errno
 import fcntl
 import os
 import stat
-from collections import defaultdict
-from subprocess import CalledProcessError
+from collections import (
+    defaultdict,
+)
+from subprocess import (
+    CalledProcessError,
+)
 from typing import (
     TYPE_CHECKING,
 )
