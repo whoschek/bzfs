@@ -1312,6 +1312,33 @@ class LocalTestCase(IntegrationTestCase):
             self.assert_snapshot_name_regexes(src_root_dataset, expected)
             self.assert_snapshot_name_regexes(dst_root_dataset, expected)
 
+    def test_snapshots_changed_does_not_update_on_bookmark_creation(self) -> None:
+        """Verify ZFS property 'snapshots_changed' does not update when a bookmark is created."""
+        if not is_zfs_at_least_2_2_0():
+            self.skipTest("snapshots_changed requires ZFS >= 2.2")
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("Bookmarks not enabled on source pool")
+
+        ds = create_filesystem(src_root_dataset, fix("foo"))
+        snap_tag = fix("s1")
+        take_snapshot(ds, snap_tag)
+
+        # First read: 'snapshots_changed' after snapshot creation
+        v1 = dataset_property(ds, "snapshots_changed")
+        self.assertTrue(v1 and v1 != "-")
+
+        # Ensure we land in a different integer second
+        time.sleep(2.1)
+
+        # Change snapshots/bookmarks state: create a bookmark for the snapshot
+        bm_tag = fix("b1")
+        create_bookmark(ds, snap_tag, bm_tag)
+
+        # Second read should not differ
+        v2 = dataset_property(ds, "snapshots_changed")
+        self.assertTrue(v2 and v2 != "-")
+        self.assertEqual(v1, v2)
+
     def test_daemon_frequency(self) -> None:
         self.setup_basic()
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--daemon-frequency=1secondly")
