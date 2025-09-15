@@ -629,8 +629,8 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
     # and (by now no longer accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
     if (
         dataset in ("", ".", "..")
-        or any(dataset.startswith(prefix) for prefix in ("/", "./", "../"))
-        or any(dataset.endswith(suffix) for suffix in ("/", "/.", "/.."))
+        or dataset.startswith(("/", "./", "../"))
+        or dataset.endswith(("/", "/.", "/.."))
         or any(substring in dataset for substring in ("//", "/./", "/../"))
         or any(char in SHELL_CHARS or (char.isspace() and char != " ") for char in dataset)
         or not dataset[0].isalpha()
@@ -641,7 +641,7 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
 def validate_property_name(propname: str, input_text: str) -> str:
     """Checks that the ZFS property name contains no spaces or shell chars."""
     invalid_chars: str = SHELL_CHARS
-    if not propname or any(c.isspace() or c in invalid_chars for c in propname):
+    if not propname or any(char.isspace() or char in invalid_chars for char in propname):
         die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
     return propname
 

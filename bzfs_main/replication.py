@@ -146,7 +146,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
 
     log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
     log.log(LOG_TRACE, "latest_dst_snapshot: %s", latest_dst_snapshot)
-    props_cache: dict[tuple[str, str, str], dict[str, str | None]] = {}
+    props_cache: dict[tuple[str, str, str], dict[str, str | None]] = {}  # fresh empty ZFS props cache for each dataset
     dry_run_no_send: bool = False
     if not latest_common_src_snapshot:
         # no common snapshot exists; delete all dst snapshots and perform a full send of the oldest selected src snapshot
@@ -537,7 +537,7 @@ def _replicate_dataset_incrementally(
             threshold_millis: int = p.xperiods.label_milliseconds("_" + p.create_bookmarks)
             to_snapshots = [snap for snap in to_snapshots if p.xperiods.label_milliseconds(snap) >= threshold_millis]
             if i == len(steps_todo) - 1 and (len(to_snapshots) == 0 or to_snapshots[-1] != to_snap):
-                to_snapshots.append(to_snap)
+                to_snapshots.append(to_snap)  # ensure latest common snapshot is bookmarked
             _create_zfs_bookmarks(job, src, src_dataset, to_snapshots)
     _zfs_set(job, set_opts, dst, dst_dataset)
 
