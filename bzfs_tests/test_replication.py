@@ -830,6 +830,29 @@ class TestReplication(AbstractTestCase):
         comp.assert_not_called()
         decomp.assert_not_called()
 
+    def test_prepare_enables_compression_only_if_both_hosts_have_shell(self) -> None:
+        """Scenario: src host has sh, but the dst host has no sh on the PATH. This should disable zstd."""
+
+        def avail(prog: str, loc: str) -> bool:
+            if prog == "sh" and loc == "dst":
+                return False
+            return prog in {"sh", "zstd"}
+
+        job = _prepare_job(src_host="src", dst_host="dst", is_program_available=avail)
+
+        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
+            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
+        ), patch("bzfs_main.replication._compress_cmd", return_value="COMP"), patch(
+            "bzfs_main.replication._decompress_cmd", return_value="DECOMP"
+        ), patch(
+            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
+        ), patch(
+            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        ):
+            src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
+        self.assertEqual("zfs send", src)
+        self.assertEqual("zfs recv", dst)
+
     def test_prepare_no_shell_src(self) -> None:
         def avail(prog: str, loc: str) -> bool:
             return prog != "sh" or loc != "src"

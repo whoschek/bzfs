@@ -555,7 +555,12 @@ def _prepare_zfs_send_receive(
     send_cmd_str: str = shlex.join(send_cmd)
     recv_cmd_str: str = shlex.join(recv_cmd)
 
-    if p.is_program_available("zstd", "src") and p.is_program_available("zstd", "dst"):
+    if (
+        p.is_program_available("zstd", "src")
+        and p.is_program_available("zstd", "dst")
+        and p.is_program_available("sh", "src")
+        and p.is_program_available("sh", "dst")
+    ):
         compress_cmd_: str = _compress_cmd(p, "src", size_estimate_bytes)
         decompress_cmd_: str = _decompress_cmd(p, "dst", size_estimate_bytes)
     else:  # no compression is used if source and destination do not both support compression
