@@ -380,7 +380,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Randomize job start time and host order to avoid potential thundering herd problems in large distributed "
              "systems (optional). Randomizing job start time is only relevant if --work-period-seconds > 0.\n\n")
     parser.add_argument(
-        "--worker-timeout-seconds", type=float, min=0, default=None, action=bzfs_main.check_range.CheckRange,
+        "--worker-timeout-seconds", type=float, min=0.001, default=None, action=bzfs_main.check_range.CheckRange,
         metavar="FLOAT",
         help="If this much time has passed after a worker process has started executing, kill the straggling worker "
              "(optional). Other workers remain unaffected. Examples: 60, 3600\n\n")
