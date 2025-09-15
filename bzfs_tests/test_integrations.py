@@ -367,7 +367,6 @@ class IntegrationTestCase(ParametrizedTestCase):
         use_select: bool | None = None,
         use_jobrunner: bool = False,
         spawn_process_per_job: bool | None = None,
-        include_snapshot_plan_excludes_outdated_snapshots: bool | None = None,
         cache_snapshots: bool = False,
     ) -> bzfs.Job | bzfs_jobrunner.Job:
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
@@ -520,14 +519,6 @@ class IntegrationTestCase(ParametrizedTestCase):
             # via https://github.com/openzfs/zfs/issues/16731#issuecomment-2561987688
             os.environ[ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send"] = "false"
 
-        if include_snapshot_plan_excludes_outdated_snapshots is not None:
-            old_include_snapshot_plan_excludes_outdated_snapshots = os.environ.get(
-                ENV_VAR_PREFIX + "include_snapshot_plan_excludes_outdated_snapshots"
-            )
-            os.environ[ENV_VAR_PREFIX + "include_snapshot_plan_excludes_outdated_snapshots"] = str(
-                include_snapshot_plan_excludes_outdated_snapshots
-            )
-
         returncode = 0
         try:
             if use_jobrunner:
@@ -575,14 +566,6 @@ class IntegrationTestCase(ParametrizedTestCase):
                 os.environ[ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send"] = (
                     old_dedicated_tcp_connection_per_zfs_send
                 )
-
-            if include_snapshot_plan_excludes_outdated_snapshots is not None:
-                if old_include_snapshot_plan_excludes_outdated_snapshots is None:
-                    os.environ.pop(ENV_VAR_PREFIX + "include_snapshot_plan_excludes_outdated_snapshots", None)
-                else:
-                    os.environ[ENV_VAR_PREFIX + "include_snapshot_plan_excludes_outdated_snapshots"] = (
-                        old_include_snapshot_plan_excludes_outdated_snapshots
-                    )
 
         if isinstance(expected_status, list):
             self.assertIn(returncode, expected_status)
@@ -712,9 +695,6 @@ class AdhocTestCase(IntegrationTestCase):
 
     def test_include_snapshots_plan(self) -> None:
         LocalTestCase(param=self.param).test_include_snapshots_plan()
-
-    def test_include_snapshots_plan_without_excludes_outdated_snapshots(self) -> None:
-        LocalTestCase(param=self.param).test_include_snapshots_plan_without_excludes_outdated_snapshots()
 
     def test_delete_dst_snapshots_except_plan(self) -> None:
         LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
@@ -1381,22 +1361,6 @@ class LocalTestCase(IntegrationTestCase):
             str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
         )
         self.assert_snapshot_names(dst_root_dataset, ["s1_onsite_2024-01-01_00:00:01_secondly"])
-
-    def test_include_snapshots_plan_without_excludes_outdated_snapshots(self) -> None:
-        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
-        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:01_secondly")
-        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_daily")
-
-        self.run_bzfs(
-            src_root_dataset,
-            dst_root_dataset,
-            "--include-snapshot-plan",
-            str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
-            include_snapshot_plan_excludes_outdated_snapshots=False,
-        )
-        self.assert_snapshot_names(
-            dst_root_dataset, ["s1_onsite_2024-01-01_00:00:00_secondly", "s1_onsite_2024-01-01_00:00:01_secondly"]
-        )
 
     def test_delete_dst_snapshots_except_plan(self) -> None:
         if self.is_no_privilege_elevation():

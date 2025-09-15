@@ -43,7 +43,6 @@ from bzfs_main.utils import (
     YEAR_WITH_FOUR_DIGITS_REGEX,
     SnapshotPeriods,
     die,
-    getenv_bool,
     ninfix,
     nprefix,
     nsuffix,
@@ -349,15 +348,13 @@ class IncludeSnapshotPlanAction(argparse.Action):
         """Builds a list of snapshot filters from a serialized plan."""
         opts: list[str] | None = getattr(namespace, self.dest, None)
         opts = [] if opts is None else opts
-        include_snapshot_times_and_ranks: bool = getenv_bool("include_snapshot_plan_excludes_outdated_snapshots", True)
-        if not self._add_opts(opts, include_snapshot_times_and_ranks, parser, values, option_string=option_string):
+        if not self._add_opts(opts, parser, values, option_string=option_string):
             opts += ["--new-snapshot-filter-group", "--include-snapshot-regex=!.*"]
         setattr(namespace, self.dest, opts)
 
     def _add_opts(
         self,
         opts: list[str],
-        include_snapshot_times_and_ranks: bool,
         parser: argparse.ArgumentParser,
         values: str,
         option_string: str | None = None,
@@ -374,18 +371,17 @@ class IncludeSnapshotPlanAction(argparse.Action):
                     suffix: str = re.escape(nsuffix(period_unit))
                     regex: str = f"{prefix}{infix}.*{suffix}"
                     opts += ["--new-snapshot-filter-group", f"--include-snapshot-regex={regex}"]
-                    if include_snapshot_times_and_ranks:
-                        duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)
-                        duration_unit_label: str | None = xperiods.period_labels.get(duration_unit)
-                        opts += [
-                            "--include-snapshot-times-and-ranks",
-                            (
-                                "notime"
-                                if duration_unit_label is None or duration_amount * period_amount == 0
-                                else f"{duration_amount * period_amount}{duration_unit_label}ago..anytime"
-                            ),
-                            f"latest{period_amount}",
-                        ]
+                    duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)
+                    duration_unit_label: str | None = xperiods.period_labels.get(duration_unit)
+                    opts += [
+                        "--include-snapshot-times-and-ranks",
+                        (
+                            "notime"
+                            if duration_unit_label is None or duration_amount * period_amount == 0
+                            else f"{duration_amount * period_amount}{duration_unit_label}ago..anytime"
+                        ),
+                        f"latest{period_amount}",
+                    ]
                     has_at_least_one_filter_clause = True
         return has_at_least_one_filter_clause
 
@@ -401,7 +397,7 @@ class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
         opts: list[str] | None = getattr(namespace, self.dest, None)
         opts = [] if opts is None else opts
         opts += ["--delete-dst-snapshots-except"]
-        if not self._add_opts(opts, True, parser, values, option_string=option_string):
+        if not self._add_opts(opts, parser, values, option_string=option_string):
             parser.error(
                 f"{option_string}: Cowardly refusing to delete all snapshots on"
                 f"--delete-dst-snapshots-except-plan='{values}' (which means 'retain no snapshots' aka "
