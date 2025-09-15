@@ -574,9 +574,9 @@ def _prepare_zfs_send_receive(
     pv_src_cmd: str = ""
     pv_dst_cmd: str = ""
     pv_loc_cmd: str = ""
-    if p.src.ssh_user_host == "":
+    if not p.src.ssh_user_host:
         pv_src_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)
-    elif p.dst.ssh_user_host == "":
+    elif not p.dst.ssh_user_host:
         pv_dst_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)
     elif compress_cmd_ == "cat":
         pv_loc_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)  # compression disabled
@@ -592,7 +592,7 @@ def _prepare_zfs_send_receive(
         src_pipe = f"{src_pipe} | dd bs=64 count=1 2>/dev/null && false"
     if job.inject_params.get("inject_src_pipe_garble", False):
         src_pipe = f"{src_pipe} | base64"  # for testing; forward garbled bytes
-    if pv_src_cmd != "" and pv_src_cmd != "cat":
+    if pv_src_cmd and pv_src_cmd != "cat":
         src_pipe = f"{src_pipe} | {pv_src_cmd}"
     if compress_cmd_ != "cat":
         src_pipe = f"{src_pipe} | {compress_cmd_}"
@@ -602,9 +602,9 @@ def _prepare_zfs_send_receive(
         src_pipe = src_pipe[2:]  # strip leading ' |' part
     if job.inject_params.get("inject_src_send_error", False):
         send_cmd_str = f"{send_cmd_str} --injectedGarbageParameter"  # for testing; induce CLI parse error
-    if src_pipe != "":
+    if src_pipe:
         src_pipe = f"{send_cmd_str} | {src_pipe}"
-        if p.src.ssh_user_host != "":
+        if p.src.ssh_user_host:
             src_pipe = p.shell_program + " -c " + _dquote(src_pipe)
     else:
         src_pipe = send_cmd_str
@@ -613,13 +613,13 @@ def _prepare_zfs_send_receive(
     local_pipe: str = ""
     if local_buffer != "cat":
         local_pipe = f"{local_buffer}"
-    if pv_loc_cmd != "" and pv_loc_cmd != "cat":
+    if pv_loc_cmd and pv_loc_cmd != "cat":
         local_pipe = f"{local_pipe} | {pv_loc_cmd}"
         if local_buffer != "cat":
             local_pipe = f"{local_pipe} | {local_buffer}"
     if local_pipe.startswith(" |"):
         local_pipe = local_pipe[2:]  # strip leading ' |' part
-    if local_pipe != "":
+    if local_pipe:
         local_pipe = f"| {local_pipe}"
 
     # assemble pipeline running on destination leg
@@ -628,7 +628,7 @@ def _prepare_zfs_send_receive(
         dst_pipe = f"{dst_buffer}"
     if decompress_cmd_ != "cat":
         dst_pipe = f"{dst_pipe} | {decompress_cmd_}"
-    if pv_dst_cmd != "" and pv_dst_cmd != "cat":
+    if pv_dst_cmd and pv_dst_cmd != "cat":
         dst_pipe = f"{dst_pipe} | {pv_dst_cmd}"
     if job.inject_params.get("inject_dst_pipe_fail", False):
         # interrupt zfs receive for testing retry/resume; initially forward some bytes and then stop forwarding
@@ -639,9 +639,9 @@ def _prepare_zfs_send_receive(
         dst_pipe = dst_pipe[2:]  # strip leading ' |' part
     if job.inject_params.get("inject_dst_receive_error", False):
         recv_cmd_str = f"{recv_cmd_str} --injectedGarbageParameter"  # for testing; induce CLI parse error
-    if dst_pipe != "":
+    if dst_pipe:
         dst_pipe = f"{dst_pipe} | {recv_cmd_str}"
-        if p.dst.ssh_user_host != "":
+        if p.dst.ssh_user_host:
             dst_pipe = p.shell_program + " -c " + _dquote(dst_pipe)
     else:
         dst_pipe = recv_cmd_str
@@ -880,7 +880,8 @@ def _pv_cmd(
 
 def _squote(remote: Remote, arg: str) -> str:
     """Quotes an argument only when running remotely over ssh."""
-    return arg if remote.ssh_user_host == "" else shlex.quote(arg)
+    assert arg is not None
+    return shlex.quote(arg) if remote.ssh_user_host else arg
 
 
 def _dquote(arg: str) -> str:
