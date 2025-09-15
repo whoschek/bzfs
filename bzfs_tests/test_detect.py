@@ -149,6 +149,10 @@ class TestDisableAndHelpers(AbstractTestCase):
             _validate_default_shell("/bin/csh", remote.location, remote.ssh_user_host)
         with self.assertRaises(SystemExit):
             _validate_default_shell("/bin/tcsh", remote.location, remote.ssh_user_host)
+        with self.assertRaises(SystemExit):
+            _validate_default_shell("csh", remote.location, remote.ssh_user_host)
+        with self.assertRaises(SystemExit):
+            _validate_default_shell("tcsh", remote.location, remote.ssh_user_host)
 
 
 #############################################################################

@@ -241,7 +241,7 @@ def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: s
             lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
             assert lines
     if lines:
-        # Examples that should parse: "zfs-2.1.5~rc5-ubuntu3", "zfswin-2.2.3rc5", "zfs 2.2.4", "OpenZFS 2.2.5-1".
+        # Examples that should parse: "zfs-2.1.5~rc5-ubuntu3", "zfswin-2.2.3rc5"
         first_line: str = lines.splitlines()[0] if lines.splitlines() else ""
         match = re.search(r"(\d+)\.(\d+)\.(\d+)", first_line)
         if not match:
@@ -336,7 +336,7 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
 
 def _validate_default_shell(path_to_default_shell: str, location: str, ssh_user_host: str) -> None:
     """Fails if the remote user uses csh or tcsh as the default shell."""
-    if path_to_default_shell.endswith(("/csh", "/tcsh")):
+    if path_to_default_shell in ["csh", "tcsh"] or path_to_default_shell.endswith(("/csh", "/tcsh")):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
         die(
             f"Cowardly refusing to proceed because {PROG_NAME} is not compatible with csh-style quoting of special "
