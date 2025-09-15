@@ -615,8 +615,8 @@ def _prepare_zfs_send_receive(
         local_pipe = f"{local_buffer}"
     if pv_loc_cmd != "" and pv_loc_cmd != "cat":
         local_pipe = f"{local_pipe} | {pv_loc_cmd}"
-    if local_buffer != "cat":
-        local_pipe = f"{local_pipe} | {local_buffer}"
+        if local_buffer != "cat":
+            local_pipe = f"{local_pipe} | {local_buffer}"
     if local_pipe.startswith(" |"):
         local_pipe = local_pipe[2:]  # strip leading ' |' part
     if local_pipe != "":
