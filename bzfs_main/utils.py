@@ -25,6 +25,7 @@ import bisect
 import collections
 import contextlib
 import errno
+import hashlib
 import logging
 import os
 import pwd
@@ -497,6 +498,11 @@ def xprint(log: logging.Logger, value: Any, run: bool = True, end: str = "\n", f
         value = value if end else str(value).rstrip()
         level = LOG_STDOUT if file is sys.stdout else LOG_STDERR
         log.log(level, "%s", value)
+
+
+def sha256_hex(text: str) -> str:
+    """Returns the sha256 hex string for the given text."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def die(msg: str, exit_code: int = DIE_STATUS, parser: argparse.ArgumentParser | None = None) -> NoReturn:

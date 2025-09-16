@@ -49,7 +49,6 @@ observables that production code relies on.
 
 from __future__ import annotations
 import errno
-import hashlib
 import os
 import tempfile
 import threading
@@ -88,6 +87,9 @@ from bzfs_main.snapshot_cache import (
     SnapshotCache,
     set_last_modification_time,
     set_last_modification_time_safe,
+)
+from bzfs_main.utils import (
+    sha256_hex,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
@@ -145,7 +147,7 @@ class TestSnapshotCache(AbstractTestCase):
         """
         assert dst_dataset
         hash_key = tuple(tuple(f) for f in job.params.snapshot_filters)
-        hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
+        hash_code = sha256_hex(str(hash_key))
         userhost_dir = job.params.dst.cache_namespace()
         return SnapshotLabel(os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset, hash_code), "", "", "")
 
@@ -320,7 +322,7 @@ class TestSnapshotCache(AbstractTestCase):
             alert = alerts[0]
             cfg = alert.latest
             assert cfg is not None
-            hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            hash_code = sha256_hex(str(tuple(alerts)))
             cache_label = SnapshotLabel(
                 os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(alert.label), hash_code), "", "", ""
             )
@@ -595,7 +597,7 @@ class TestSnapshotCache(AbstractTestCase):
             label = alert.label
             cfg = alert.latest
             assert cfg is not None
-            hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            hash_code = sha256_hex(str(tuple(alerts)))
 
             cache_label = SnapshotLabel(os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(label), hash_code), "", "", "")
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, cache_label)
@@ -679,7 +681,7 @@ class TestSnapshotCache(AbstractTestCase):
             snapshots_changed = 2_000_000_050
             job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
 
-            hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            hash_code = sha256_hex(str(tuple(alerts)))
             cache_label = SnapshotLabel(os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(label), hash_code), "", "", "")
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, cache_label)
             set_last_modification_time_safe(cache_file, unixtime_in_secs=(creation, snapshots_changed), if_more_recent=True)
@@ -964,7 +966,7 @@ class TestSnapshotCache(AbstractTestCase):
             lbl = alert.label
             cfg = alert.latest
             assert cfg is not None
-            hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            hash_code = sha256_hex(str(tuple(alerts)))
             mon_cache_label = SnapshotLabel(
                 os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(lbl), hash_code), "", "", ""
             )
@@ -1261,7 +1263,7 @@ class TestSnapshotCache(AbstractTestCase):
             lbl_mon = alert.label
             cfg = alert.latest
             assert cfg is not None
-            hashcode_m = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            hashcode_m = sha256_hex(str(tuple(alerts)))
             mon_cache_label = SnapshotLabel(
                 os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(lbl_mon), hashcode_m), "", "", ""
             )
@@ -1544,7 +1546,7 @@ class TestSnapshotCache(AbstractTestCase):
             lbl_mon = alert.label
             cfg = alert.latest
             assert cfg is not None
-            hashcode_m2 = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            hashcode_m2 = sha256_hex(str(tuple(alerts)))
             mon_cache_label = SnapshotLabel(
                 os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(lbl_mon), hashcode_m2), "", "", ""
             )
@@ -2272,7 +2274,7 @@ class TestSnapshotCache(AbstractTestCase):
             alert = alerts[0]
             cfg = alert.latest
             assert cfg is not None
-            hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            hash_code = sha256_hex(str(tuple(alerts)))
             cache_label = SnapshotLabel(
                 os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(alert.label), hash_code), "", "", ""
             )
@@ -2648,7 +2650,7 @@ class TestSnapshotCache(AbstractTestCase):
             alert = alerts[0]
             cfg = alert.latest
             assert cfg is not None
-            hash_code = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            hash_code = sha256_hex(str(tuple(alerts)))
 
             mon_cache_label_src = SnapshotLabel(
                 os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(alert.label), hash_code), "", "", ""

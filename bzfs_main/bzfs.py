@@ -43,7 +43,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
-import hashlib
 import heapq
 import itertools
 import os
@@ -176,6 +175,7 @@ from bzfs_main.utils import (
     pretty_print_formatter,
     replace_in_lines,
     replace_prefix,
+    sha256_hex,
     terminate_process_subtree,
     validate_dataset_name,
     validate_property_name,
@@ -1006,7 +1006,7 @@ class Job:
         if is_caching_snapshots(p, remote):
             props: dict[str, DatasetProperties] = self.dst_properties if remote is p.dst else self.src_properties
             snapshots_changed_dict: dict[str, int] = {dataset: vals.snapshots_changed for dataset, vals in props.items()}
-            hash_code: str = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+            hash_code: str = sha256_hex(str(tuple(alerts)))
         is_caching: bool = False
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
@@ -1155,7 +1155,7 @@ class Job:
             maybe_stale_dst_datasets: list[str] = []
             userhost_dir: str = p.dst.cache_namespace()
             hash_key = tuple(tuple(f) for f in p.snapshot_filters)  # cache is only valid for same --include/excl-snapshot*
-            hash_code: str = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
+            hash_code: str = sha256_hex(str(hash_key))
             for src_dataset in src_datasets:
                 dst_dataset: str = src2dst(src_dataset)  # cache is only valid for identical destination dataset
                 cache_label = SnapshotLabel(

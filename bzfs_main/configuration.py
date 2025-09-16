@@ -17,7 +17,6 @@
 from __future__ import annotations
 import argparse
 import ast
-import hashlib
 import os
 import platform
 import random
@@ -90,6 +89,7 @@ from bzfs_main.utils import (
     nsuffix,
     parse_duration_to_milliseconds,
     pid_exists,
+    sha256_hex,
     validate_dataset_name,
     validate_is_not_a_symlink,
     validate_property_name,
@@ -427,7 +427,7 @@ class Params:
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
         # fmt: on
-        hash_code: str = hashlib.sha256(str(key).encode("utf-8")).hexdigest()
+        hash_code: str = sha256_hex(str(key))
         log_parent_dir: str = os.path.dirname(self.log_params.log_dir)
         locks_dir: str = os.path.join(log_parent_dir, ".locks")
         os.makedirs(locks_dir, mode=DIR_PERMISSIONS, exist_ok=True)
@@ -460,6 +460,7 @@ class Remote:
         if self.ssh_config_file:
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
+        self.ssh_config_file_hash: str = sha256_hex(self.ssh_config_file) if self.ssh_config_file else ""
         self.ssh_cipher: str = p.validate_arg_str(args.ssh_cipher)
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
@@ -526,11 +527,11 @@ class Remote:
 
     def cache_namespace(self) -> str:
         """Returns cache namespace string which is a stable, unique directory component for snapshot caches that
-        distinguishes endpoints by username+host+port where applicable, and uses '-' when no user/host is present (local
-        mode)."""
+        distinguishes endpoints by username+host+port+ssh_config_file where applicable, and uses '-' when no user/host is
+        present (local mode)."""
         if not self.ssh_user_host:
             return "-"  # local mode
-        return self.ssh_user_host if self.ssh_port is None else f"{self.ssh_user_host}#{self.ssh_port}"
+        return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"
 
     def __repr__(self) -> str:
         return str(self.__dict__)
