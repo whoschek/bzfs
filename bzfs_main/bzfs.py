@@ -1505,7 +1505,7 @@ class Job:
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
                     (int(createtxg), int(creation_unixtime_secs), name.split("@", 1)[1])
                     for createtxg, creation_unixtime_secs, name in (line.split("\t", 2) for line in group)
-                )  # perf: sorted() is fast b/c Timsort is close to O(N) for nearly sorted input, which is our case
+                )  # perf: sorted() is fast because Timsort is close to O(N) for nearly sorted input, which is our case
                 assert len(snapshots) > 0
                 datasets_with_snapshots.add(dataset)
                 snapshot_names: list[str] = [snapshot[-1] for snapshot in snapshots]

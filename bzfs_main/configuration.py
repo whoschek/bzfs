@@ -491,7 +491,7 @@ class Remote:
     def local_ssh_command(self) -> list[str]:
         """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
         command to run on the remote host, which will be appended later."""
-        if self.ssh_user_host == "":
+        if not self.ssh_user_host:
             return []  # dataset is on local host - don't use ssh
 
         # dataset is on remote host

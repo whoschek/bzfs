@@ -388,7 +388,7 @@ def _replicate_dataset_fully(
             if not job.dst_dataset_exists[dst_dataset_parent]:
                 if p.dry_run:
                     dry_run_no_send = True
-                if dst_dataset_parent != "":
+                if dst_dataset_parent:
                     _create_zfs_filesystem(job, dst_dataset_parent)
 
         recv_resume_token_result: tuple[str | None, list[str], list[str]] = _recv_resume_token(job, dst_dataset, retry_count)

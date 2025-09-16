@@ -83,7 +83,7 @@ def run_ssh_command(
     conn_pool: ConnectionPool = p.connection_pools[remote.location].pool(SHARED)
     with conn_pool.connection() as conn:
         ssh_cmd: list[str] = conn.ssh_cmd
-        if remote.ssh_user_host != "":
+        if remote.ssh_user_host:
             refresh_ssh_connection_if_necessary(job, remote, conn)
             cmd = quoted_cmd
         msg: str = "Would execute: %s" if is_dry else "Executing: %s"
@@ -138,7 +138,7 @@ def try_ssh_command(
 def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connection) -> None:
     """Maintain or create an ssh master connection for low latency reuse."""
     p, log = job.params, job.params.log
-    if remote.ssh_user_host == "":
+    if not remote.ssh_user_host:
         return  # we're in local mode; no ssh required
     if not p.is_program_available("ssh", "local"):
         die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
