@@ -18,7 +18,9 @@ This helper derives a minimal sequence of 'zfs send' commands from a list of sna
 send steps for performance and works around resume and bookmark limitations.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 
 
 def incremental_send_steps(

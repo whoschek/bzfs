@@ -32,7 +32,9 @@
 update_readme.sh. Simply run that script whenever you change or add ArgumentParser help text.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import contextlib
 import os
@@ -44,7 +46,9 @@ import sys
 import threading
 import time
 import uuid
-from ast import literal_eval
+from ast import (
+    literal_eval,
+)
 from logging import (
     Logger,
 )
@@ -63,11 +67,22 @@ from typing import (
 import bzfs_main.argparse_actions
 import bzfs_main.check_range
 import bzfs_main.utils
-from bzfs_main import bzfs
-from bzfs_main.argparse_cli import PROG_AUTHOR, SKIP_ON_ERROR_DEFAULT
-from bzfs_main.bzfs import has_siblings
-from bzfs_main.detect import DUMMY_DATASET
-from bzfs_main.loggers import get_simple_logger
+from bzfs_main import (
+    bzfs,
+)
+from bzfs_main.argparse_cli import (
+    PROG_AUTHOR,
+    SKIP_ON_ERROR_DEFAULT,
+)
+from bzfs_main.bzfs import (
+    has_siblings,
+)
+from bzfs_main.detect import (
+    DUMMY_DATASET,
+)
+from bzfs_main.loggers import (
+    get_simple_logger,
+)
 from bzfs_main.parallel_engine import (
     BARRIER_CHAR,
     process_datasets_in_parallel_and_fault_tolerant,

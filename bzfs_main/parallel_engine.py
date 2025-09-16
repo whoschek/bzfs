@@ -16,7 +16,9 @@
 before descendants start; The design maximizes throughput while preventing inconsistent dataset states during replication or
 snapshot deletion."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import concurrent
 import heapq

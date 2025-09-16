@@ -19,7 +19,9 @@ and configuration files. Requires local 'zfs' and 'zpool' CLI. Ensures that indi
 run as a whole.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import fcntl
 import glob
 import itertools
@@ -92,7 +94,9 @@ from bzfs_main.utils import (
     human_readable_duration,
     unixtime_fromisoformat,
 )
-from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
 from bzfs_tests.test_incremental_send_steps import (
     TestIncrementalSendSteps,
 )

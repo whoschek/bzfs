@@ -19,7 +19,9 @@ aggregated throughput, ETA, etc. The reporter runs in a separate daemon thread t
 are designed for minimal synchronization overhead.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import glob
 import os
@@ -28,12 +30,26 @@ import selectors
 import sys
 import threading
 import time
-from collections import deque
-from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum, auto
-from logging import Logger
-from pathlib import Path
+from collections import (
+    deque,
+)
+from dataclasses import (
+    dataclass,
+    field,
+)
+from datetime import (
+    datetime,
+)
+from enum import (
+    Enum,
+    auto,
+)
+from logging import (
+    Logger,
+)
+from pathlib import (
+    Path,
+)
 from typing import (
     IO,
     Any,

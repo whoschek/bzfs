@@ -18,19 +18,27 @@ This module retries failing operations according to a configurable policy. It as
 and centralizes retry logic for consistency across callers.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import random
 import time
-from dataclasses import dataclass
-from logging import Logger
+from dataclasses import (
+    dataclass,
+)
+from logging import (
+    Logger,
+)
 from typing import (
     Any,
     Callable,
     TypeVar,
 )
 
-from bzfs_main.utils import human_readable_duration
+from bzfs_main.utils import (
+    human_readable_duration,
+)
 
 
 #############################################################################

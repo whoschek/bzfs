@@ -114,7 +114,9 @@ The result is a design that favors simplicity and safety: tiny inode-based paylo
 cache is trusted, and minimal, well-scoped invalidation to keep the system observable under change and concurrency.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import errno
 import fcntl
 import os
@@ -142,8 +144,13 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import Job
-    from bzfs_main.configuration import Remote, SnapshotLabel
+    from bzfs_main.bzfs import (
+        Job,
+    )
+    from bzfs_main.configuration import (
+        Remote,
+        SnapshotLabel,
+    )
 
 # constants:
 DATASET_CACHE_FILE_PREFIX: str = "="

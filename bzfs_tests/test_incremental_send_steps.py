@@ -15,10 +15,14 @@
 """Unit tests for computing incremental send steps via incremental_send_steps(); Verifies that snapshot replication uses
 minimal sends while respecting dependency order."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import itertools
 import unittest
-from collections import defaultdict
+from collections import (
+    defaultdict,
+)
 
 import bzfs_main.incremental_send_steps
 from bzfs_main.incremental_send_steps import (

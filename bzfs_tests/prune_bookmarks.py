@@ -16,12 +16,16 @@
 #
 """Example utility script for pruning old ZFS bookmarks."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import subprocess
 import sys
 import time
-from collections import defaultdict
+from collections import (
+    defaultdict,
+)
 
 
 def main() -> None:

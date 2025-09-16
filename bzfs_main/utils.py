@@ -19,7 +19,9 @@ Everything in this module relies only on the standard library so other modules r
 simple, predictable behavior on all supported platforms.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import bisect
 import collections

@@ -14,7 +14,9 @@
 #
 """Implementation of bzfs --compare-snapshot-lists."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import itertools
 import os
 import time
@@ -61,8 +63,12 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import Job
-    from bzfs_main.configuration import Remote
+    from bzfs_main.bzfs import (
+        Job,
+    )
+    from bzfs_main.configuration import (
+        Remote,
+    )
 
 
 @dataclass(order=True, frozen=True)

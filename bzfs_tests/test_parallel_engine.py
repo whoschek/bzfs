@@ -15,7 +15,9 @@
 """Unit tests for the parallel engine managing work tasks; Confirms job execution honors concurrency limits and
 synchronization."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import logging
 import os
@@ -42,8 +44,13 @@ from bzfs_main.parallel_engine import (
     _make_tree_node,
     process_datasets_in_parallel_and_fault_tolerant,
 )
-from bzfs_main.retry import Retry, RetryPolicy
-from bzfs_tests.tools import stop_on_failure_subtest
+from bzfs_main.retry import (
+    Retry,
+    RetryPolicy,
+)
+from bzfs_tests.tools import (
+    stop_on_failure_subtest,
+)
 
 
 #############################################################################

@@ -14,7 +14,9 @@
 #
 """Configuration subsystem; All CLI option/parameter values are reachable from the "Params" class."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import ast
 import os
@@ -97,7 +99,9 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.connection import ConnectionPools
+    from bzfs_main.connection import (
+        ConnectionPools,
+    )
 
 
 #############################################################################

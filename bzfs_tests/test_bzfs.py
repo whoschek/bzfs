@@ -14,7 +14,9 @@
 #
 """Unit tests for the ``bzfs`` CLI."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import re
 import subprocess
 import time
@@ -40,7 +42,9 @@ from unittest.mock import (
 
 import bzfs_main.detect
 import bzfs_main.utils
-from bzfs_main import bzfs
+from bzfs_main import (
+    bzfs,
+)
 from bzfs_main.argparse_actions import (
     SnapshotFilter,
 )
@@ -72,14 +76,21 @@ from bzfs_main.utils import (
     DIE_STATUS,
     is_descendant,
 )
-from bzfs_tests.abstract_testcase import AbstractTestCase
-from bzfs_tests.tools import stop_on_failure_subtest, suppress_output
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
+from bzfs_tests.tools import (
+    stop_on_failure_subtest,
+    suppress_output,
+)
 from bzfs_tests.zfs_util import (
     is_solaris_zfs,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import Job
+    from bzfs_main.bzfs import (
+        Job,
+    )
 
 
 #############################################################################
@@ -1274,8 +1285,12 @@ class TestJobMethods(AbstractTestCase):
             mock_run.return_value = None
 
             # Act: Should complete without conflict and run a single incremental send based on h1->d2.
-            from bzfs_main.replication import replicate_dataset
-            from bzfs_main.retry import Retry
+            from bzfs_main.replication import (
+                replicate_dataset,
+            )
+            from bzfs_main.retry import (
+                Retry,
+            )
 
             replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0))
             # Assert: incremental planning was invoked (found common base -> incremental)
@@ -1397,7 +1412,9 @@ class TestPythonVersionCheck(AbstractTestCase):
         with patch("sys.stdout"), patch("sys.stderr"):
             import importlib
 
-            from bzfs_main import bzfs
+            from bzfs_main import (
+                bzfs,
+            )
 
             importlib.reload(bzfs)  # Reload module to apply version patch
             mock_exit.assert_called_with(DIE_STATUS)
@@ -1407,7 +1424,9 @@ class TestPythonVersionCheck(AbstractTestCase):
     def test_version_3_8_or_higher(self, mock_exit: MagicMock) -> None:
         import importlib
 
-        from bzfs_main import bzfs
+        from bzfs_main import (
+            bzfs,
+        )
 
         importlib.reload(bzfs)  # Reload module to apply version patch
         mock_exit.assert_not_called()

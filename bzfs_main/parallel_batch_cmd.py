@@ -42,7 +42,9 @@ zfs list -t snapshot d1 d2 d3 d4
 ```
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import sys
 from typing import (
     TYPE_CHECKING,
@@ -69,8 +71,12 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import Job
-    from bzfs_main.configuration import Remote
+    from bzfs_main.bzfs import (
+        Job,
+    )
+    from bzfs_main.configuration import (
+        Remote,
+    )
 
 T = TypeVar("T")
 

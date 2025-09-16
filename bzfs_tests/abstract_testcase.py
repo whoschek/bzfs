@@ -18,14 +18,23 @@ Provides shared setup for consistent CLI argument parsing and environment contro
 or adhoc modes, toggled by environment variables.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import logging
 import os
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import (
+    MagicMock,
+)
 
-from bzfs_main import argparse_cli, bzfs, configuration, utils
+from bzfs_main import (
+    argparse_cli,
+    bzfs,
+    configuration,
+    utils,
+)
 
 
 #############################################################################

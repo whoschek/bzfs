@@ -14,16 +14,26 @@
 #
 """Detection of ZFS features and system capabilities on local and remote hosts."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import platform
 import re
 import subprocess
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
-from subprocess import DEVNULL, PIPE
+from concurrent.futures import (
+    ThreadPoolExecutor,
+)
+from dataclasses import (
+    dataclass,
+    field,
+)
+from subprocess import (
+    DEVNULL,
+    PIPE,
+)
 from typing import (
     TYPE_CHECKING,
 )
@@ -44,8 +54,13 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import Job
-    from bzfs_main.configuration import Params, Remote
+    from bzfs_main.bzfs import (
+        Job,
+    )
+    from bzfs_main.configuration import (
+        Params,
+        Remote,
+    )
 
 # constants:
 DISABLE_PRG: str = "-"

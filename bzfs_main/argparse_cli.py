@@ -14,7 +14,9 @@
 #
 """Documentation, definition of input data and ArgumentParser used by the 'bzfs' CLI."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import dataclasses
 import itertools
@@ -34,7 +36,9 @@ from bzfs_main.argparse_actions import (
     SSHConfigFileNameAction,
     TimeRangeAndRankRangeAction,
 )
-from bzfs_main.check_range import CheckRange
+from bzfs_main.check_range import (
+    CheckRange,
+)
 from bzfs_main.detect import (
     DISABLE_PRG,
     DUMMY_DATASET,

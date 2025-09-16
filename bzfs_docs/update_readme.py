@@ -26,15 +26,22 @@ sudo apt-get -y install pandoc  # Linux
 pip install argparse-manpage  # see https://github.com/praiskup/argparse-manpage
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import os
 import re
 import subprocess
 import sys
 import tempfile
 
-from bzfs_main import bzfs, bzfs_jobrunner
-from bzfs_main.utils import find_match
+from bzfs_main import (
+    bzfs,
+    bzfs_jobrunner,
+)
+from bzfs_main.utils import (
+    find_match,
+)
 
 
 def main() -> None:

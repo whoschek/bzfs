@@ -257,12 +257,22 @@ extend-aliases = { "bzfs_main.bzfs" = "bzfs", "bzfs_main.bzfs_jobrunner" = "bzfs
 
 [tool.ruff.lint.isort]
 known-first-party = ["bzfs_*"]
-no-lines-before = ["standard-library"]  # no blank line before std-lib
-lines-between-types = 0  # keep `import ...` and `from ...` tight
-split-on-trailing-comma = true  # retain multi-line blocks when a trailing comma is present
+no-lines-before = ["standard-library"]   # no blank line before std-lib
+lines-between-types = 0                  # keep `import ...` and `from ...` tight
+split-on-trailing-comma = true           # retain multi-line blocks when a trailing comma is present
+#force-single-line = true                # forces all `from` imports to appear on their own line
 
 [tool.ruff.lint.pydocstyle]
 ignore-decorators = ["typing.overload"]  # ignore docstrings for functions or methods decorated w/ the specified decorators.
+
+[tool.isort]
+profile="black"
+line_length = 125
+known_first_party = ["bzfs_*"]
+split_on_trailing_comma = true
+include_trailing_comma = true
+use_parentheses = true
+force_grid_wrap = 1
 
 [tool.pylint."MESSAGES CONTROL"]  # see https://pylint.readthedocs.io/en/latest/user_guide/messages/messages_overview.html
 disable = ["all"]        # turn all checks off ...

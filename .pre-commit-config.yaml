@@ -80,6 +80,10 @@ repos:
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
+  # - repo: https://github.com/pycqa/isort
+  #   rev: 6.0.1
+  #   hooks:
+  #     - id: isort                     # Reformat imports more precisely
   - repo: https://github.com/pycqa/pylint
     rev: v3.3.8
     hooks:

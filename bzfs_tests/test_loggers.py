@@ -14,7 +14,9 @@
 #
 """Unit tests for logging configuration utilities."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import json
 import logging
 import os
@@ -23,15 +25,24 @@ import socket
 import sys
 import tempfile
 import unittest
-from datetime import datetime
-from logging import Logger
-from typing import Any
+from datetime import (
+    datetime,
+)
+from logging import (
+    Logger,
+)
+from typing import (
+    Any,
+)
 from unittest.mock import (
     MagicMock,
     patch,
 )
 
-from bzfs_main import argparse_cli, bzfs
+from bzfs_main import (
+    argparse_cli,
+    bzfs,
+)
 from bzfs_main.configuration import (
     LogParams,
 )
@@ -57,7 +68,9 @@ from bzfs_main.utils import (
     LOG_TRACE,
     get_home_directory,
 )
-from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
 
 
 #############################################################################

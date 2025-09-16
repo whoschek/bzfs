@@ -14,7 +14,9 @@
 #
 """Helper functions for running ZFS CLI commands, parsing and validating ZFS data."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import platform
 import re
 import subprocess

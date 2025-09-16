@@ -14,16 +14,29 @@
 #
 """Unit tests for argparse action classes used by ``bzfs``."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import unittest
-from unittest.mock import mock_open, patch
+from unittest.mock import (
+    mock_open,
+    patch,
+)
 
 import bzfs_main.utils
-from bzfs_main import argparse_actions
-from bzfs_main.check_range import CheckRange
-from bzfs_tests.abstract_testcase import AbstractTestCase
-from bzfs_tests.tools import suppress_output
+from bzfs_main import (
+    argparse_actions,
+)
+from bzfs_main.check_range import (
+    CheckRange,
+)
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
+from bzfs_tests.tools import (
+    suppress_output,
+)
 
 
 ###############################################################################

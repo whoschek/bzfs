@@ -39,7 +39,9 @@
   Simply run that script whenever you change or add ArgumentParser help text.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import contextlib
 import fcntl

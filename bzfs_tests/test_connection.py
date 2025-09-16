@@ -14,7 +14,9 @@
 #
 """Unit tests for SSH connection management utilities."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import contextlib
 import itertools
 import logging

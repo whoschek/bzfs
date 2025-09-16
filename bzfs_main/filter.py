@@ -14,7 +14,9 @@
 #
 """The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots()."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import math
 import os
 import re
@@ -45,8 +47,13 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import Job
-    from bzfs_main.configuration import Params, Remote
+    from bzfs_main.bzfs import (
+        Job,
+    )
+    from bzfs_main.configuration import (
+        Params,
+        Remote,
+    )
 
 # constants:
 SNAPSHOT_REGEX_FILTER_NAME: str = "snapshot_regex"

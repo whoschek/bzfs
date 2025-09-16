@@ -15,7 +15,9 @@
 """Logging helpers that build default and syslog-enabled loggers; Centralizes logger setup so that all bzfs tools share
 uniform formatting and configuration."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import logging
 import logging.config
@@ -24,9 +26,15 @@ import os
 import re
 import socket
 import sys
-from datetime import datetime
-from logging import Logger
-from pathlib import Path
+from datetime import (
+    datetime,
+)
+from logging import (
+    Logger,
+)
+from pathlib import (
+    Path,
+)
 from typing import (
     IO,
     TYPE_CHECKING,
@@ -43,7 +51,9 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.configuration import LogParams
+    from bzfs_main.configuration import (
+        LogParams,
+    )
 
 
 def get_logger_name() -> str:

@@ -14,13 +14,25 @@
 #
 """Unit tests for retry helper functions; Exercise exponential backoff, logging and error propagation."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import unittest
-from logging import Logger
-from unittest.mock import MagicMock, patch
+from logging import (
+    Logger,
+)
+from unittest.mock import (
+    MagicMock,
+    patch,
+)
 
-from bzfs_main.retry import Retry, RetryableError, RetryPolicy, run_with_retries
+from bzfs_main.retry import (
+    Retry,
+    RetryableError,
+    RetryPolicy,
+    run_with_retries,
+)
 
 
 #############################################################################

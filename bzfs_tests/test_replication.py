@@ -14,19 +14,31 @@
 #
 """Unit tests for replication.py utilities without requiring the zfs CLI."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import shlex
 import subprocess
 import unittest
-from collections import defaultdict
+from collections import (
+    defaultdict,
+)
 from typing import (
     TYPE_CHECKING,
     Callable,
 )
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import (
+    MagicMock,
+    call,
+    patch,
+)
 
-from bzfs_main.argparse_actions import SnapshotFilter
-from bzfs_main.filter import SNAPSHOT_REGEX_FILTER_NAME
+from bzfs_main.argparse_actions import (
+    SnapshotFilter,
+)
+from bzfs_main.filter import (
+    SNAPSHOT_REGEX_FILTER_NAME,
+)
 from bzfs_main.replication import (
     _check_zfs_dataset_busy,
     _compress_cmd,
@@ -56,7 +68,9 @@ from bzfs_main.utils import (
     SynchronizedBool,
     compile_regexes,
 )
-from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
 
 if TYPE_CHECKING:  # type-only imports for annotations
     from bzfs_main.bzfs import (

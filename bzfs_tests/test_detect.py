@@ -14,7 +14,9 @@
 #
 """Unit tests for the program detection helpers used by ``bzfs``."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import platform
 import subprocess
 import time
@@ -24,7 +26,9 @@ from unittest.mock import (
 )
 
 import bzfs_main.detect
-from bzfs_main import bzfs
+from bzfs_main import (
+    bzfs,
+)
 from bzfs_main.configuration import (
     Remote,
 )
@@ -38,8 +42,12 @@ from bzfs_main.detect import (
     _validate_default_shell,
     detect_available_programs,
 )
-from bzfs_tests.abstract_testcase import AbstractTestCase
-from bzfs_tests.tools import stop_on_failure_subtest
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
+from bzfs_tests.tools import (
+    stop_on_failure_subtest,
+)
 
 
 #############################################################################

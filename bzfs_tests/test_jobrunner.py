@@ -14,7 +14,9 @@
 #
 """Unit tests for the ``bzfs_jobrunner`` CLI; Validates job scheduling, command creation and error handling."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import platform
 import shutil
@@ -22,18 +24,35 @@ import signal
 import subprocess
 import sys
 import unittest
-from logging import Logger
-from subprocess import DEVNULL, PIPE, CalledProcessError
+from logging import (
+    Logger,
+)
+from subprocess import (
+    DEVNULL,
+    PIPE,
+    CalledProcessError,
+)
 from typing import (
     Union,
     cast,
 )
-from unittest.mock import MagicMock, patch
+from unittest.mock import (
+    MagicMock,
+    patch,
+)
 
-from bzfs_main import bzfs_jobrunner
-from bzfs_main.utils import DIE_STATUS
-from bzfs_tests.abstract_testcase import AbstractTestCase
-from bzfs_tests.tools import suppress_output
+from bzfs_main import (
+    bzfs_jobrunner,
+)
+from bzfs_main.utils import (
+    DIE_STATUS,
+)
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
+from bzfs_tests.tools import (
+    suppress_output,
+)
 
 
 #############################################################################

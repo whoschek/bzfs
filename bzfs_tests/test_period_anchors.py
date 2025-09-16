@@ -14,13 +14,21 @@
 #
 """Unit tests helpers that align times to fixed period anchors."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import sys
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import (
+    datetime,
+    timedelta,
+    timezone,
+)
 
 import bzfs_main.period_anchors
-from bzfs_main.period_anchors import PeriodAnchors
+from bzfs_main.period_anchors import (
+    PeriodAnchors,
+)
 
 
 #############################################################################

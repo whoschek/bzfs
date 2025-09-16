@@ -15,22 +15,32 @@
 """Unit tests for the iterator driving parallel ``bzfs`` execution; Confirm tasks yield results and propagate failures
 correctly."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import time
 import unittest
 from typing import (
     Iterable,
 )
 
-from bzfs_main import bzfs
-from bzfs_main.configuration import Remote
+from bzfs_main import (
+    bzfs,
+)
+from bzfs_main.configuration import (
+    Remote,
+)
 from bzfs_main.connection import (
     DEDICATED,
     SHARED,
     ConnectionPools,
 )
-from bzfs_main.parallel_batch_cmd import itr_ssh_cmd_parallel
-from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_main.parallel_batch_cmd import (
+    itr_ssh_cmd_parallel,
+)
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
 
 
 #############################################################################

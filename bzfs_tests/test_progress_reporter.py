@@ -15,7 +15,9 @@
 """Unit tests for the progress reporting utilities during replication; Verifies parsing and display of streaming subprocess
 output."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import io
 import os
 import selectors
@@ -25,24 +27,38 @@ import tempfile
 import time
 import types
 import unittest
-from logging import Logger
-from pathlib import Path
+from logging import (
+    Logger,
+)
+from pathlib import (
+    Path,
+)
 from typing import (
     IO,
     Any,
     cast,
 )
-from unittest.mock import MagicMock, patch
+from unittest.mock import (
+    MagicMock,
+    patch,
+)
 
-from bzfs_main import bzfs, progress_reporter
+from bzfs_main import (
+    bzfs,
+    progress_reporter,
+)
 from bzfs_main.progress_reporter import (
     PV_FILE_THREAD_SEPARATOR,
     ProgressReporter,
     State,
     count_num_bytes_transferred_by_zfs_send,
 )
-from bzfs_main.utils import tail
-from bzfs_tests.tools import stop_on_failure_subtest
+from bzfs_main.utils import (
+    tail,
+)
+from bzfs_tests.tools import (
+    stop_on_failure_subtest,
+)
 
 
 #############################################################################

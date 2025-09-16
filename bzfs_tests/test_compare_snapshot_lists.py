@@ -14,7 +14,9 @@
 #
 """Unit tests for bzfs --compare-snapshot-lists."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import itertools
 import os
 import tempfile
@@ -30,14 +32,20 @@ from unittest.mock import (
 )
 
 import bzfs_main.compare_snapshot_lists
-from bzfs_main import configuration
-from bzfs_main.bzfs import Job
+from bzfs_main import (
+    configuration,
+)
+from bzfs_main.bzfs import (
+    Job,
+)
 from bzfs_main.compare_snapshot_lists import (
     ComparableSnapshot,
     _print_datasets,
     run_compare_snapshot_lists,
 )
-from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
 
 
 #############################################################################

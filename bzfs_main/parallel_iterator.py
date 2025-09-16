@@ -14,7 +14,9 @@
 #
 """Parallel execution utilities for I/O-bound operations, with configurable result ordering."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import concurrent
 import itertools
 import os

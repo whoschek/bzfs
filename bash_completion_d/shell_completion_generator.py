@@ -18,18 +18,24 @@ Usage: python3 -m bash_completion_d.shell_completion_generator > /etc/bash_compl
 or     python3 -m bash_completion_d.shell_completion_generator > ~/.bash_completion.d/bzfs-shell-completion
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import importlib
-from pathlib import Path
+from pathlib import (
+    Path,
+)
+
+from bzfs_main import (
+    bzfs,
+)
 
 programs = ("bzfs", "bzfs_jobrunner")
 
 
 def _version_line() -> str:
     """Returns the program version string."""
-    from bzfs_main import bzfs
-
     for act in bzfs.argument_parser()._actions:
         if isinstance(act, argparse._VersionAction):
             return str(act.version)

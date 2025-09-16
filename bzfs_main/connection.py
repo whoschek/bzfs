@@ -15,7 +15,9 @@
 """Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool; They reuse multiplexed
 ssh connections for low latency."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import contextlib
 import copy
 import logging
@@ -53,8 +55,13 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import Job
-    from bzfs_main.configuration import Params, Remote
+    from bzfs_main.bzfs import (
+        Job,
+    )
+    from bzfs_main.configuration import (
+        Params,
+        Remote,
+    )
 
 # constants:
 SHARED: str = "shared"

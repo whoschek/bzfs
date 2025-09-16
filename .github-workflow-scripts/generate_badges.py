@@ -25,13 +25,17 @@ ZFS CLI may or may not be available.
 Copes with network failures by producing badges locally.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import os
 import platform
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import (
+    Path,
+)
 
 ROOT_DIR = "badges"
 
@@ -39,7 +43,9 @@ ROOT_DIR = "badges"
 def main() -> None:
     """API for command line clients."""
     if sys.argv[1] != "merge":
-        from bzfs_tests.zfs_util import zfs_version
+        from bzfs_tests.zfs_util import (
+            zfs_version,
+        )
 
         version = zfs_version()
         if version is None:
@@ -101,7 +107,9 @@ def _sort_versions(version_list: list[str]) -> list[str]:
 def _generate_badge(left_txt: str, right_txt: str, color: str) -> None:
     """Writes an SVG badge for the given text."""
 
-    from genbadge import Badge
+    from genbadge import (
+        Badge,
+    )
 
     badge = Badge(left_txt=left_txt, right_txt=right_txt, color=color)
     print(badge)

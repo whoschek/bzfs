@@ -14,14 +14,18 @@
 #
 """Unit tests for the ``bzfs`` CLI."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import os
 import socket
 import stat
 import tempfile
 import time
 import unittest
-from pathlib import Path
+from pathlib import (
+    Path,
+)
 from typing import (
     Any,
 )
@@ -41,7 +45,9 @@ from bzfs_main.configuration import (
 from bzfs_main.utils import (
     UNIX_TIME_INFINITY_SECS,
 )
-from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
 
 
 #############################################################################

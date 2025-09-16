@@ -14,7 +14,9 @@
 #
 """Unit tests for snapshot filtering utilities; Confirm date- and pattern-based selectors yield the expected snapshots."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import io
 import logging
@@ -37,8 +39,12 @@ from unittest.mock import (
 )
 
 import bzfs_main.argparse_actions
-from bzfs_main import bzfs
-from bzfs_main.argparse_actions import SnapshotFilter
+from bzfs_main import (
+    bzfs,
+)
+from bzfs_main.argparse_actions import (
+    SnapshotFilter,
+)
 from bzfs_main.bzfs import (
     Job,
 )
@@ -63,8 +69,12 @@ from bzfs_main.utils import (
     compile_regexes,
     unixtime_fromisoformat,
 )
-from bzfs_tests.abstract_testcase import AbstractTestCase
-from bzfs_tests.tools import suppress_output
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
+from bzfs_tests.tools import (
+    suppress_output,
+)
 
 
 #############################################################################

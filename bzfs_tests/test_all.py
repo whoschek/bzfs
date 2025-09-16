@@ -14,7 +14,9 @@
 #
 """Aggregates all tests into one centralized suite for easy execution; ensures predictable order across CI and local runs."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import os
 import sys
 import unittest
@@ -68,7 +70,9 @@ def main() -> None:
     test_mode = bzfs_main.utils.getenv_any("test_mode", "")  # Consider toggling this when testing
     is_unit_test = test_mode == "unit"  # run only unit tests (skip integration tests)
     if not is_unit_test:
-        from bzfs_tests import test_integrations
+        from bzfs_tests import (
+            test_integrations,
+        )
 
         suite.addTest(test_integrations.suite())
 

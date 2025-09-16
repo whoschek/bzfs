@@ -15,7 +15,9 @@
 """Various small tools for use in tests; Everything in this module relies only on the standard library so other modules
 remain dependency free."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import contextlib
 import io
 import logging

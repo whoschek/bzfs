@@ -14,7 +14,9 @@
 #
 """Unit tests for various small utility helpers."""
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import errno
 import os
@@ -30,6 +32,10 @@ import time
 import unittest
 from argparse import (
     Namespace,
+)
+from concurrent.futures import (
+    Future,
+    ThreadPoolExecutor,
 )
 from datetime import (
     datetime,
@@ -1327,8 +1333,6 @@ class TestSynchronousExecutor(unittest.TestCase):
         with SynchronousExecutor() as ex:
 
             def outer() -> int:
-                from concurrent.futures import Future
-
                 inner_fut: Future[int] = ex.submit(lambda: 5)
                 return 2 * inner_fut.result()
 
@@ -1341,8 +1345,6 @@ class TestSynchronousExecutor(unittest.TestCase):
             self.assertEqual(7, ex.submit(lambda: 7).result())
 
     def test_factory_for_max_workers_many_returns_threadpool(self) -> None:
-        from concurrent.futures import ThreadPoolExecutor
-
         with SynchronousExecutor.executor_for(3) as ex:
             self.assertIsInstance(ex, ThreadPoolExecutor)
             fut = ex.submit(lambda: 9)
@@ -1471,7 +1473,9 @@ class TestCurrentDateTime(unittest.TestCase):
     def test_iana_timezone(self) -> None:
         if sys.version_info < (3, 9):
             self.skipTest("ZoneInfo requires python >= 3.9")
-        from zoneinfo import ZoneInfo
+        from zoneinfo import (
+            ZoneInfo,
+        )
 
         tz_spec = "Asia/Tokyo"
         self.assertIsNotNone(current_datetime(tz_spec=tz_spec, now_fn=None))

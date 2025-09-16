@@ -18,7 +18,9 @@
 For replication of multiple datasets, including recursive replication, see bzfs.py/replicate_datasets().
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import os
 import re
 import shlex
@@ -97,8 +99,13 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import Job
-    from bzfs_main.configuration import Params, Remote
+    from bzfs_main.bzfs import (
+        Job,
+    )
+    from bzfs_main.configuration import (
+        Params,
+        Remote,
+    )
 
 
 # constants:

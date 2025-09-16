@@ -19,12 +19,20 @@ Anchors specify offsets within yearly, monthly and smaller cycles. These values 
 argument handling and makes the rounding logic reusable.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import calendar
 import dataclasses
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import (
+    dataclass,
+    field,
+)
+from datetime import (
+    datetime,
+    timedelta,
+)
 
 # constants:
 METADATA_MONTH = {"min": 1, "max": 12, "help": "The month within a year"}

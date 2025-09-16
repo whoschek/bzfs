@@ -26,10 +26,15 @@ Each endpoint can be either a number or positive or negative infinity:
 (-infinity, b) --> sup=b
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import argparse
 import operator
-from typing import Any, Final
+from typing import (
+    Any,
+    Final,
+)
 
 
 # fmt: off

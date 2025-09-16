@@ -47,14 +47,18 @@ replication phases. These tests are hermetic (no ZFS), deterministic, and use re
 observables that production code relies on.
 """
 
-from __future__ import annotations
+from __future__ import (
+    annotations,
+)
 import errno
 import os
 import tempfile
 import threading
 import time
 import unittest
-from contextlib import contextmanager
+from contextlib import (
+    contextmanager,
+)
 from datetime import (
     datetime,
     timezone,
@@ -91,10 +95,15 @@ from bzfs_main.snapshot_cache import (
 from bzfs_main.utils import (
     sha256_hex,
 )
-from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
 
 if TYPE_CHECKING:  # type-only imports for annotations
-    from bzfs_main.retry import Retry, RetryPolicy
+    from bzfs_main.retry import (
+        Retry,
+        RetryPolicy,
+    )
 
 
 #############################################################################
