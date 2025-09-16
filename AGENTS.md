@@ -59,7 +59,7 @@ To understand the system's architecture and features, follow these steps:
 
 # Step by Step Reasoning Workflow
 
-- Think systematically, take it step by step, and reason deeply before responding.
+- Think systematically, work through this step by step, and reason deeply before responding.
 - Start responses with the most relevant information, then give context.
 - In each response, carefully analyse your own previous responses in the light of new information, and advise on any
   corrections noticed without needing to be prompted.
@@ -187,7 +187,7 @@ Your goal is to improve quality with zero functional regressions.
   Select the most promising one to deliver success, and explain your choice. Then methodically execute each step of your
   plan.
 
-- **ast-grep (sg) Tool:** Consider running `./venv/bin/sg` for refactor-safe searches.
+- **ast-grep (`sg`) Tool:** Consider running `./venv/bin/sg` for refactor-safe searches.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
