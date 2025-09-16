@@ -138,10 +138,11 @@ Before committing any changes, you **must** follow this exact sequence:
 ## How to Report Bugs
 
 - **Report:** If you encounter a bug, formulate a clear and concise description of what the bug is, and the symptoms and
-  conditions under which it manifests. State the expected vs the actual behavior. Include steps that reproduce the
-  actual behavior reliably, with minimal complexity, ideally with a script. Explain the real-world consequences to
-  users, and associated impact severity (`High`, `Medium`, `Low`). Describe known work-arounds and potential solutions.
-  Finally, estimate the priority aka urgency of producing a fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
+  conditions under which it realistically manifests. State the expected vs the actual behavior. Include steps that
+  reproduce the actual behavior reliably, with minimal complexity, ideally with a script. Explain the real-world
+  consequences to users in specific **realistic use cases**, and associated impact severity (`High`, `Medium`, `Low`).
+  Describe known work-arounds and potential solutions. Finally, estimate the priority aka urgency of producing a fix
+  (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
 - **Collect Context:** Also collect other information that assists a successful bug diagnosis, for example usage
   pattern, env/config files, log files, version of software components, etc.
 
@@ -186,6 +187,8 @@ Your goal is to improve quality with zero functional regressions.
   Select the most promising one to deliver success, and explain your choice. Then methodically execute each step of your
   plan.
 
+- **ast-grep (sg) Tool:** Consider running `./venv/bin/sg` for refactor-safe searches.
+
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
 - **Preserve docstrings and code comments:** During refactors, copy existing docstrings and comments first, then keep or
@@ -200,8 +203,6 @@ Your goal is to improve quality with zero functional regressions.
 
 - **Avoid Circular Dependencies:** Extract the shared logic into a new utility module - or an existing module that keeps
   the dependency graph acyclic - rather than adding deep import chains.
-
-- **ast-grep (sg) Tool:** Consider running `./venv/bin/sg` for refactor-safe searches.
 
 ## How to Improve Code Coverage
 
