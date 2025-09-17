@@ -31,7 +31,7 @@ from bzfs_main import (
     bzfs,
 )
 
-programs = ("bzfs", "bzfs_jobrunner")
+programs = ("bzfs", "bzfs_jobrunner", "bzfs_joblauncher")
 
 
 def _version_line() -> str:

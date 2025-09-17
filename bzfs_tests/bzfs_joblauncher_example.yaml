@@ -1,0 +1,87 @@
+# Example YAML job configuration for bzfs_joblauncher
+#
+# Purpose: A friendly starting point to define a fleet-wide job configuration
+# for creating, replicating, pruning and monitoring ZFS snapshots using
+# bzfs_jobrunner. This file mirrors the power of bzfs_job_example.py, but in a
+# declarative YAML format. See README_bzfs_joblauncher.md and
+# README_bzfs_jobrunner.md for details.
+
+# A list of root dataset pairs (source -> destination). The following forms are supported:
+#   1) List of mappings with explicit keys:
+#      root_dataset_pairs:
+#        - { src: "tank1/foo/bar", dst: "tank2/boo/bar" }
+#        - { src: "tank1/baz",     dst: "tank2/baz" }
+#   2) List of 2-item lists/tuples:
+#      root_dataset_pairs:
+#        - [ "tank1/foo/bar", "tank2/boo/bar" ]
+#        - [ "tank1/baz",     "tank2/baz" ]
+#   3) Flat alternating list of strings (SRC, DST, SRC, DST, ...):
+#      root_dataset_pairs: [ "tank1/foo/bar", "tank2/boo/bar", "tank1/baz", "tank2/baz" ]
+root_dataset_pairs:
+  - { src: "tank1/foo", dst: "tank1/foo" }  # replicate to same dataset name on dst host
+  - { src: "tank1/bar", dst: "tank1/bar" }
+
+# Include descendant datasets recursively (children, children of children, ...)
+recursive: true
+
+# Source hosts (N). Each destination host can receive replicas from the same set of src hosts.
+src_hosts: [ "hostA" ]
+
+# Destination hosts (M) with logical replication targets (infix of snapshot names). An empty string is valid.
+dst_hosts:
+  nas: [ "", "onsite" ]
+
+# Snapshot targets to retain on destination when pruning. Same structure as dst_hosts. Use with care.
+retain_dst_targets:
+  nas: [ "", "onsite" ]
+
+# Destination root dataset per destination host. May be empty string. Supports magic tokens:
+#   ^SRC_HOST is replaced with the actual src hostname
+#   ^DST_HOST is replaced with the actual dst hostname
+dst_root_datasets:
+  nas: ""
+
+# Periodic snapshot plan used for creating and pruning on src. Values are counts of most-recent period cycles to keep.
+src_snapshot_plan:
+  prod:
+    onsite: { secondly: 40, minutely: 40, hourly: 36, daily: 31, weekly: 12, monthly: 18, yearly: 5 }
+
+# Bookmark plan for pruning on src. Defaults to src_snapshot_plan if omitted.
+# src_bookmark_plan: { prod: { onsite: { hourly: 36, daily: 31 } } }
+
+# Destination snapshot plan for pruning on dst. If omitted, falls back to src_bookmark_plan. Alternatively, you may set
+# dst_snapshot_plan_multiplier to scale all numbers in src_snapshot_plan by a factor (e.g., 2.0 to double retention).
+# dst_snapshot_plan:
+#   prod: { onsite: { secondly: 80, minutely: 80, hourly: 72, daily: 62, weekly: 52, monthly: 36, yearly: 10 } }
+
+# dst_snapshot_plan_multiplier: 2.0
+
+# Monitoring plan for schedule adherence alerts. Durations accept units like seconds, minutes, hours, days.
+monitor_snapshot_plan:
+  prod:
+    onsite:
+      hourly: { warning: "30 minutes", critical: "300 minutes" }
+      daily:  { warning: "4 hours",   critical: "8 hours", src_snapshot_cycles: 40, dst_snapshot_cycles: 80 }
+
+# Parallelism for sub-jobs. Accepts integer or percentage string (e.g., "100%").
+workers: "100%"
+
+# Evenly spread job starts over this many seconds to reduce bursts. 0 disables.
+work_period_seconds: 0
+
+# Randomize host order and job start time (only relevant when work_period_seconds > 0)
+jitter: false
+
+# Kill a straggling worker job if it exceeds this many seconds. Omit or null to disable.
+# worker_timeout_seconds: 3600
+
+# Optional job identifier and log directory customization for jobrunner (names are sanitized and propagated).
+# job_id: "my_daily_job"
+# log_dir: "/var/log/bzfs/my_daily_job"
+
+# Pass-through for advanced jobrunner/bzfs flags. Values here are appended as-is to the jobrunner CLI.
+# For example:
+#   - "--daemon-lifetime=86400seconds"
+#   - "--daemon-replication-frequency=minutely"
+#   - "--zfs-send-program-opts=--raw --compressed"
+extra_args: []
