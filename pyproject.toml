@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bzfs"
-version = "1.12.0.dev0"
+version = "1.12.0"
 
 description = """
 bzfs is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote) source ZFS dataset \
