@@ -80,6 +80,7 @@ from bzfs_main.utils import (
     human_readable_duration,
     percent,
     shuffle_dict,
+    terminate_process_subtree,
 )
 from bzfs_main.utils import PROG_NAME as BZFS_PROG_NAME
 
@@ -1033,6 +1034,7 @@ class Job:
                 proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
             except subprocess.TimeoutExpired:
                 log.error("%s", f"Killing worker job as it failed to terminate within {timeout_secs}s: {cmd_str}")
+                terminate_process_subtree(except_current_process=True, root_pid=proc.pid)  # Send SIGTERM to process subtree
                 proc.kill()  # Sends SIGKILL signal to job subprocess because SIGTERM wasn't enough
                 timeout_secs = min(0.025, timeout_secs)
                 with contextlib.suppress(subprocess.TimeoutExpired):
