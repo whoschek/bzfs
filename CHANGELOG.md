@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.12.0] - TBD
+## [1.12.0] - September 17, 2025
 
 - [bzfs_jobrunner] Added ability to [bzfs_jobrunner](README_bzfs_jobrunner.md) to replicate across a fleet of N source
   hosts and M destination hosts, using the same single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script. For
