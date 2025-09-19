@@ -261,8 +261,8 @@ class TestSnapshotCache(AbstractTestCase):
 
     @patch("bzfs_main.snapshot_cache.itr_ssh_cmd_parallel")
     def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
+        mock_remote = MagicMock(spec=Remote)  # spec helps catch calls to non-existent attrs
         with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
-            self.mock_remote = MagicMock(spec=Remote)  # spec helps catch calls to non-existent attrs
 
             mock_itr_parallel.return_value = [  # normal input
                 [
@@ -270,7 +270,7 @@ class TestSnapshotCache(AbstractTestCase):
                     "789\tdataset/valid2",
                 ]
             ]
-        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        results = job.cache.zfs_get_snapshots_changed(mock_remote, ["d1", "d2", "d3", "d4"])
         self.assertDictEqual({"dataset/valid1": 12345, "dataset/valid2": 789}, results)
 
         # Simulate output from a failing 'zfs list' command captured on its stdout.
@@ -282,7 +282,7 @@ class TestSnapshotCache(AbstractTestCase):
                 "789\tdataset/valid2",
             ]
         ]
-        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        results = job.cache.zfs_get_snapshots_changed(mock_remote, ["d1", "d2", "d3", "d4"])
         self.assertDictEqual({"dataset/valid1": 12345}, results)
 
         mock_itr_parallel.return_value = [
@@ -292,7 +292,7 @@ class TestSnapshotCache(AbstractTestCase):
                 "789\tdataset/valid2",
             ]
         ]
-        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        results = job.cache.zfs_get_snapshots_changed(mock_remote, ["d1", "d2", "d3", "d4"])
         self.assertDictEqual({"dataset/valid1": 12345}, results)
 
         mock_itr_parallel.return_value = [
@@ -302,7 +302,7 @@ class TestSnapshotCache(AbstractTestCase):
                 "789\tdataset/valid2",
             ]
         ]
-        results = job.cache.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        results = job.cache.zfs_get_snapshots_changed(mock_remote, ["d1", "d2", "d3", "d4"])
         self.assertDictEqual({"dataset/valid1": 12345, "foo": 0, "dataset/valid2": 789}, results)
 
     def test_monitor_initial_write_persists_creation_and_changed(self) -> None:

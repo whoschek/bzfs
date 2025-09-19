@@ -45,7 +45,7 @@ def _version_line() -> str:
 def _harvest(module: str) -> tuple[str, set[str], dict[str, str]]:
     """Returns (safe_name, flag_set, value_tokens_map) for a program based on its argument_parser() specs."""
     parser = importlib.import_module("bzfs_main." + module).argument_parser()
-    safe = module.replace("-", "_")
+    safe_name = module.replace("-", "_")
     flags: set[str] = set()
     vals: dict[str, str] = {}
     for act in parser._actions:
@@ -64,7 +64,7 @@ def _harvest(module: str) -> tuple[str, set[str], dict[str, str]]:
                 tok_str = " ".join(sorted(set(tokens)))
                 for opt in act.option_strings:
                     vals[opt] = tok_str
-    return safe, flags, vals
+    return safe_name, flags, vals
 
 
 blocks: list[str] = []

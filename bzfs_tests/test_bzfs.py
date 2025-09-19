@@ -1412,10 +1412,6 @@ class TestPythonVersionCheck(AbstractTestCase):
         with patch("sys.stdout"), patch("sys.stderr"):
             import importlib
 
-            from bzfs_main import (
-                bzfs,
-            )
-
             importlib.reload(bzfs)  # Reload module to apply version patch
             mock_exit.assert_called_with(DIE_STATUS)
 
@@ -1423,10 +1419,6 @@ class TestPythonVersionCheck(AbstractTestCase):
     @patch("sys.version_info", new=(3, 8))
     def test_version_3_8_or_higher(self, mock_exit: MagicMock) -> None:
         import importlib
-
-        from bzfs_main import (
-            bzfs,
-        )
 
         importlib.reload(bzfs)  # Reload module to apply version patch
         mock_exit.assert_not_called()
