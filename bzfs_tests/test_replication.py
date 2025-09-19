@@ -41,6 +41,7 @@ from bzfs_main.filter import (
 )
 from bzfs_main.replication import (
     _check_zfs_dataset_busy,
+    _clear_resumable_recv_state_if_necessary,
     _compress_cmd,
     _create_zfs_filesystem,
     _decompress_cmd,
@@ -86,6 +87,7 @@ if TYPE_CHECKING:  # type-only imports for annotations
 def suite() -> unittest.TestSuite:
     test_cases = [
         TestQuoting,
+        TestResumeErrorParsing,
         TestReplication,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
@@ -284,6 +286,34 @@ class TestQuoting(AbstractTestCase):
 
         self.assertTrue(seen)  # we should have seen src and dst
         self.assertTrue(all(not s.endswith("\\") for s in seen), f"_dquote saw trailing backslash: {seen!r}")
+
+
+###############################################################################
+class TestResumeErrorParsing(AbstractTestCase):
+    """Covers parsing of multi-line stderr for resumable receive recovery."""
+
+    @patch("bzfs_main.replication.try_ssh_command")
+    def test_clear_resumable_on_incremental_source_missing_with_prefix(self, try_cmd: MagicMock) -> None:
+        """Ensures multi-line stderr still triggers clearing of resumable recv state.
+
+        In the future, some platforms may prepend extra lines before the actual error. The parser must not rely on the
+        message being on the first line and should match anywhere in stderr.
+        """
+        job = _make_job(
+            zfs_program="zfs",
+            dry_run=False,
+            dst=MagicMock(sudo="sudo"),
+            log=MagicMock(),
+        )
+        stderr = (
+            "random prefix line A\n"
+            "random prefix line B\n"
+            "cannot resume send: incremental source 0xa0b1c2d3 no longer exists\n"
+            "random suffix line\n"
+        )
+        cleared: bool = _clear_resumable_recv_state_if_necessary(job, "pool/ds", stderr)
+        self.assertTrue(cleared)
+        self.assertTrue(try_cmd.called)
 
 
 ###############################################################################
