@@ -194,15 +194,11 @@ Your goal is to improve quality with zero functional regressions.
 - **Preserve docstrings and code comments:** During refactors, copy existing docstrings and comments first, then keep or
   improve them as code changes or moves.
 
-- **Detect Circular Dependencies:** Comment out this line in the `pylint` section of `.pre-commit-config.yaml` to enable
-  the detection of cyclic imports between two or more modules as part of pre-commit:
-
-  ```
-  exclude: '.*'  # Skip detection of circular imports. Comment out this line to enable detection of circular imports.
-  ```
-
 - **Avoid Circular Dependencies:** Extract the shared logic into a new utility module - or an existing module that keeps
   the dependency graph acyclic - rather than adding deep import chains.
+
+- **Detect Circular Dependencies:** Run `pre-commit run pylint --all-files --hook-stage manual` for an ad‑hoc check
+  without enabling it for every commit.
 
 ## How to Improve Code Coverage
 

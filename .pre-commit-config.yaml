@@ -88,8 +88,10 @@ repos:
     rev: v3.3.8
     hooks:
       - id: pylint
-        name: pylint R0401 (cyclic imports)
-        exclude: '.*'  # Skip detection of circular imports. Comment out this line to enable detection of circular imports.
+        name: pylint R0401 (cyclic imports, etc)
+        stages: [manual]  # Slow; only run manually or in CI via 'pre-commit run pylint --all-files --hook-stage manual'
+        files: '^bzfs_main/.*\.py$'  # limit to production files
+        # config options like `enable` live in pyproject.toml
   - repo: local
     hooks:
       - id: pyrefly-infer
