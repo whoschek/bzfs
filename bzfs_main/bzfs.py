@@ -404,8 +404,9 @@ class Job:
                             self.validate_task()
                             self.run_task()
                         except RetryableError as retryable_error:
-                            assert retryable_error.__cause__ is not None
-                            raise retryable_error.__cause__ from None
+                            cause: BaseException | None = retryable_error.__cause__
+                            assert cause is not None
+                            raise cause.with_traceback(cause.__traceback__) from getattr(cause, "__cause__", None)
                     except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                         if p.skip_on_error == "fail" or (
                             isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0

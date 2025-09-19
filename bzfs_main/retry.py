@@ -95,11 +95,12 @@ def run_with_retries(log: Logger, policy: RetryPolicy, fn: Callable[..., T], *ar
                 if policy.retries > 0:
                     log.warning(
                         f"Giving up because the last [{retry_count}/{policy.retries}] retries across "
-                        f"[{elapsed_nanos // 1_000_000_000}/{policy.max_elapsed_nanos // 1_000_000_000}] "
-                        "seconds for the current request failed!"
+                        f"[{human_readable_duration(elapsed_nanos)}/{human_readable_duration(policy.max_elapsed_nanos)}] "
+                        "for the current request failed!"
                     )
-                assert retryable_error.__cause__ is not None
-                raise retryable_error.__cause__ from None
+                cause: BaseException | None = retryable_error.__cause__
+                assert cause is not None
+                raise cause.with_traceback(cause.__traceback__) from getattr(cause, "__cause__", None)
 
 
 #############################################################################
