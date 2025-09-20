@@ -58,10 +58,11 @@ def parallel_iterator(
 
     Assumptions:
     ------------
-    - Iterator builder creates iterators that yield properly submitted Future objects
+    - The builder must submit tasks to the provided executor (e.g., via ``executor.submit(...)``) and yield an Iterator
+      over the corresponding Future[T] objects.
     - Tasks are primarily I/O-bound and benefit from parallel execution
-    - Caller can handle potential exceptions propagated from Future.result()
-    - Iterator builder properly handles ThreadPoolExecutor lifecycle
+    - Caller can handle potential exceptions propagated from ``Future.result()``
+    - The builder properly scopes any resources to the lifecycle of the provided ThreadPoolExecutor
 
     Design Rationale:
     -----------------
@@ -69,23 +70,26 @@ def parallel_iterator(
     where I/O or ZFS overhead dominates and parallel execution provides substantial performance improvements over
     sequential processing. The implementation addresses several key design challenges:
 
-    - Sliding Window Buffer: Maintains at most max_workers futures in flight, preventing resource exhaustion and bounding
-        memory consumption while maximizing thread utilization. This is crucial when processing large numbers of datasets
-        typical in ZFS operation. New tasks are submitted as completed ones are consumed.
+    - Sliding Window Buffer: Maintains at most ``max_workers`` futures in flight, preventing resource exhaustion and
+      bounding memory consumption while maximizing thread utilization. New tasks are submitted as completed ones are
+      consumed. This is crucial when processing large numbers of datasets typical in ZFS operation.
 
     - Ordered vs Unordered Execution:
 
-       - Ordered mode uses FIFO queue (deque.popleft()) ensuring sequential delivery
-       - Unordered mode uses concurrent.futures.wait(FIRST_COMPLETED) for minimal latency
+       - Ordered mode uses a FIFO queue (``deque.popleft()``) ensuring sequential delivery that preserves the order in
+         which the builder's iterators yield Futures (i.e., the chain order), regardless of completion order.
+       - Unordered mode uses ``concurrent.futures.wait(FIRST_COMPLETED)`` to yield results as soon as they complete for
+         minimum end-to-end latency.
 
-    - Exception Propagation: Future.result() naturally propagates exceptions from worker threads, maintaining error
-        visibility for debugging.
+    - Exception Propagation: ``Future.result()`` naturally propagates exceptions from worker threads, maintaining error
+      visibility for debugging.
 
     Parameters:
     -----------
     iterator_builder : Callable[[ThreadPoolExecutor], Iterable[Iterable[Future[T]]]]
-        Factory function that receives a ThreadPoolExecutor and returns a series of iterators. Each iterator should yield
-        Future objects representing submitted tasks. The builder is called once with the managed thread pool.
+        Factory function that receives a ThreadPoolExecutor and returns a series of iterators. Each iterator must yield
+        Future[T] objects representing tasks that have already been submitted to the executor. The builder is called once
+        with the managed thread pool.
 
     max_workers : int, default=os.cpu_count() or 1
         Maximum number of worker threads in the thread pool. Also determines the buffer size for the sliding window
@@ -93,16 +97,18 @@ def parallel_iterator(
 
     ordered : bool, default=True
         Controls result delivery mode:
-        - True: Results yielded in same order as input iterators (FIFO)
-        - False: Results yielded as soon as available (minimum latency)
+        - True: Results are yielded in the same order as produced by the builder's iterators (FIFO across the chained
+          iterators), not by task completion order.
+        - False: Results are yielded as soon as available (completion order) for minimum latency.
 
     Yields:
     -------
-    Results from completed Future objects, either in original order (ordered=True) or completion order (ordered=False).
+    Results from completed Future objects, either in iterator order (``ordered=True``) or completion order
+    (``ordered=False``).
 
     Raises:
     -------
-    Any exception raised by the submitted tasks will be propagated when their results are consumed via Future.result().
+    Any exception raised by the submitted tasks will be propagated when their results are consumed via ``Future.result()``.
 
     Example:
     --------

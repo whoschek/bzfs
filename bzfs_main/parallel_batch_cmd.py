@@ -127,8 +127,11 @@ def itr_ssh_cmd_parallel(
     max_batch_items: int = 2**29,
     ordered: bool = True,
 ) -> Iterator[T]:
-    """Streams results from multiple parallel (batched) SSH commands; Returns output datasets in the same order as the input
-    datasets (not in random order) if ordered == True."""
+    """Streams results from multiple parallel (batched) SSH commands.
+
+    When ordered=True, preserves the order of the batches as provided by cmd_args_list (i.e. yields results in the same order
+    as the input), not in completion order. When ordered=False, yields results as they complete for minimum latency.
+    """
     return parallel_iterator(
         iterator_builder=lambda executr: (
             itr_ssh_cmd_batched(
@@ -144,8 +147,12 @@ def itr_ssh_cmd_parallel(
 def zfs_list_snapshots_in_parallel(
     job: Job, r: Remote, cmd: list[str], datasets: list[str], ordered: bool = True
 ) -> Iterator[list[str]]:
-    """Runs 'zfs list -t snapshot' on multiple datasets at the same time; Implemented with a time and space efficient
-    streaming algorithm; easily scales to millions of datasets and any number of snapshots."""
+    """Runs 'zfs list -t snapshot' on multiple datasets at the same time.
+
+    Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and any number of
+    snapshots. For local execution (no SSH leg), the minibatch size is divided by a factor of 8 relative to the number of
+    workers to reflect reduced communication latency, which improves throughput.
+    """
     max_workers: int = job.max_workers[r.location]
     max_batch_items: int = min(
         job.max_datasets_per_minibatch_on_list_snaps[r.location],
@@ -165,7 +172,11 @@ def zfs_list_snapshots_in_parallel(
 
 
 def _max_batch_bytes(job: Job, r: Remote, cmd: list[str], sep: str) -> int:
-    """Avoids creating a cmdline that's too big for the OS to handle."""
+    """Avoids creating a cmdline that's too big for the OS to handle.
+
+    The calculation subtracts 'header_bytes', which accounts for the full SSH invocation (including control socket/options)
+    plus the fixed subcommand prefix, so that the remaining budget is reserved exclusively for the batched arguments.
+    """
     assert isinstance(sep, str)
     max_bytes: int = min(_get_max_command_line_bytes(job, "local"), _get_max_command_line_bytes(job, r.location))
     # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html

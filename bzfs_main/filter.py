@@ -148,11 +148,10 @@ def filter_snapshots(
 ) -> list[str]:
     """Returns all snapshots that pass all include/exclude policies.
 
-    `all_except=False` returns snapshots *matching* the filters, for example those that should be deleted if we are in
-    "delete selected" mode.
-
-    `all_except=True` returns snapshots *not* matching the filters, for example those that should be deleted if we are in
-    "retain selected" mode.
+    Semantics: Within a single snapshot-filter group, filters are applied sequentially (logical AND). Across groups,
+    results are union-ized (logical OR). Set `all_except=True` to invert the final selection (retain-selected vs
+    delete-selected modes). Bookmarks: when `filter_bookmarks=False`, bookmark entries (with '#') are always retained to
+    assist common-snapshot detection; when `True`, bookmarks are subject to the same filters as snapshots.
     """
 
     def resolve_timerange(timerange: UnixTimeRange) -> UnixTimeRange:
@@ -207,7 +206,11 @@ def filter_snapshots(
 def _filter_snapshots_by_regex(
     job: Job, snapshots: list[str], regexes: tuple[RegexList, RegexList], filter_bookmarks: bool = False
 ) -> list[str]:
-    """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
+    """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes.
+
+    Precondition: Each line is TSV of the form ...guid\tname. Regexes are applied to the snapshot or bookmark tag portion
+    of `name` (after '@' or, if `filter_bookmarks=True`, after '#').
+    """
     exclude_snapshot_regexes, include_snapshot_regexes = regexes
     log = job.params.log
     is_debug: bool = log.isEnabledFor(LOG_DEBUG)
@@ -231,7 +234,11 @@ def _filter_snapshots_by_regex(
 def _filter_snapshots_by_creation_time(
     job: Job, snapshots: list[str], include_snapshot_times: UnixTimeRange, filter_bookmarks: bool = False
 ) -> list[str]:
-    """Filters snapshots to those created within the specified time window."""
+    """Filters snapshots to those created within the specified time window.
+
+    Precondition: Each line is TSV of the form creation\t...\tname. The creation column (first field) is compared against
+    [lo, hi). Bookmarks are skipped unless `filter_bookmarks=True`.
+    """
     log = job.params.log
     is_debug: bool = log.isEnabledFor(LOG_DEBUG)
     lo_snaptime, hi_snaptime = include_snapshot_times or (0, UNIX_TIME_INFINITY_SECS)
@@ -258,7 +265,11 @@ def _filter_snapshots_by_creation_time_and_rank(
     include_snapshot_ranks: list[RankRange],
     filter_bookmarks: bool = False,
 ) -> list[str]:
-    """Filters by creation time and rank within the snapshot list."""
+    """Filters by creation time and rank within the snapshot list.
+
+    Precondition: Each line is TSV of the form creation\t...\tname. The creation column (first field) is compared against
+    [lo, hi). Bookmarks are skipped unless `filter_bookmarks=True`.
+    """
 
     def get_idx(rank: tuple[str, int, bool], n: int) -> int:
         """Returns index for rank tuple (kind, value, percent)."""

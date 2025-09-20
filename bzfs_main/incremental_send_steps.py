@@ -24,13 +24,13 @@ from __future__ import (
 
 
 def incremental_send_steps(
-    src_snapshots: list[str],  # the most recent common snapshot (which may be a bookmark) followed by all src snapshots
+    src_snapshots: list[str],  # [0] = the latest common snapshot (which may be a bookmark), followed by all src snapshots
     # (that are not a bookmark) that are more recent than that.
     src_guids: list[str],  # the guid of each item in src_snapshots
     included_guids: set[str],  # the guid of each snapshot (not bookmark!) that is included by --include/exclude-snapshot-*
     is_resume: bool,
     force_convert_I_to_i: bool,  # noqa: N803
-) -> list[tuple[str, str, str, list[str]]]:
+) -> list[tuple[str, str, str, list[str]]]:  # the 4th tuple item lists the to_snapshots for that step, aiding trace/logging
     """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we include
     intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-* (represented here by
     included_guids), using an optimal series of -i/-I send/receive steps that skip excluded src snapshots. The steps are
@@ -80,7 +80,7 @@ def incremental_send_steps(
         return i - 1
 
     assert len(src_guids) == len(src_snapshots)
-    assert len(included_guids) >= 0
+    assert isinstance(included_guids, set)
     steps = []
     guids: list[str] = src_guids
     n = len(guids)

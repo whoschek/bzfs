@@ -562,7 +562,7 @@ def terminate_process_subtree(
 
 
 def _get_descendant_processes(root_pid: int) -> list[int]:
-    """Returns the list of all descendant process IDs for the given root PID, on Unix systems."""
+    """Returns the list of all descendant process IDs for the given root PID, on POSIX systems."""
     procs: defaultdict[int, list[int]] = defaultdict(list)
     cmd: list[str] = ["ps", "-Ao", "pid,ppid"]
     lines: list[str] = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()

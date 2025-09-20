@@ -82,6 +82,10 @@ def run_ssh_command(
 
     The full command is the concatenation of both the command to run on the localhost in order to talk to the remote host
     ($remote.local_ssh_command()) and the command to run on the given remote host ($cmd).
+
+    Note: When executing on a remote host (remote.ssh_user_host is set), cmd arguments are pre-quoted with shlex.quote to
+    safely traverse the ssh "remote shell" boundary, as ssh concatenates argv into a single remote shell string. In local
+    mode (no remote.ssh_user_host) argv is executed directly without an intermediate shell.
     """
     level = level if level >= 0 else logging.INFO
     assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
@@ -296,11 +300,13 @@ class ConnectionPool:
             self.return_connection(conn)
 
     def get_connection(self) -> Connection:
-        """Any Connection object returned on get_connection() also remains intentionally contained in the priority queue, and
-        that identical Connection object is later, on return_connection(), temporarily removed from the priority queue,
-        updated with an incremented "free" slot count and then immediately reinserted into the priority queue.
+        """Any Connection object returned on get_connection() also remains intentionally contained in the priority queue
+        while it is "checked out", and that identical Connection object is later, on return_connection(), temporarily removed
+        from the priority queue, updated with an incremented "free" slot count and then immediately reinserted into the
+        priority queue.
 
-        In effect, any Connection object remains intentionally contained in the priority queue at all times.
+        In effect, any Connection object remains intentionally contained in the priority queue at all times. This design
+        keeps ordering/fairness accurate while avoiding duplicate Connection instances.
         """
         with self._lock:
             conn = self.priority_queue.pop() if len(self.priority_queue) > 0 else None

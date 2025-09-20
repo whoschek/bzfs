@@ -377,6 +377,7 @@ def _replicate_dataset_fully(
         if p.force_once:
             p.force.value = False
         done_checking = done_checking or _check_zfs_dataset_busy(job, dst, dst_dataset)
+        # extract SNAPSHOT_TAG from GUID<TAB>DATASET@SNAPSHOT_TAG
         delete_snapshots(job, dst, dst_dataset, snapshot_tags=cut(2, separator="@", lines=dst_snapshots_with_guids))
         if p.dry_run:
             # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really executed:

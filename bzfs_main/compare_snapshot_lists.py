@@ -76,7 +76,7 @@ class ComparableSnapshot:
     """Snapshot entry comparable by rel_dataset and GUID for sorting and merging."""
 
     key: tuple[str, str]  # rel_dataset, guid
-    cols: list[str] = field(compare=False)
+    cols: list[str] = field(compare=False)  # excluded from comparison/equality checks
 
 
 def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: list[str]) -> None:

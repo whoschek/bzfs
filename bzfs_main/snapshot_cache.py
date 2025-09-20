@@ -19,8 +19,8 @@ Purpose
 The ``--cache-snapshots`` mode speeds up snapshot scheduling, replication, and monitoring by storing just enough
 metadata in fast local inodes (no external DB, no daemon). Instead of repeatedly invoking costly
 ``zfs list -t snapshot ...`` across potentially thousands or even millions of datasets, we keep tiny (i.e. empty)
-per-dataset files whose inode times encode what we need to know. This reduces latency, load on ZFS, and network
-chatter, while remaining dependency free and robust under crashes or concurrent runs.
+per-dataset files whose inode atime/mtime atomically encode what we need to know. This reduces latency, load on ZFS, and
+network chatter, while remaining dependency free and robust under crashes or concurrent runs.
 
 Assumptions
 ===========
@@ -110,8 +110,8 @@ probe via ``zfs list -t snapshot`` once, after which monotonic rewrites restore 
 simplifies observability for operators inspecting (or debugging) cache trees, and immediately establishes a stable
 cache snapshot of reality. The cost is tiny (an inode metadata write) while the benefit is more operational simplicity.
 
-The result is a design that favors simplicity and safety: tiny inode-based payloads, conservative guardrails before any
-cache is trusted, and minimal, well-scoped invalidation to keep the system observable under change and concurrency.
+The result is a design that favors simplicity and safety: tiny inode-based atomic updates, conservative guardrails before
+any cache is trusted, and minimal, well-scoped invalidation to keep the system observable under change and concurrency.
 """
 
 from __future__ import (
@@ -121,9 +121,6 @@ import errno
 import fcntl
 import os
 import stat
-from collections import (
-    defaultdict,
-)
 from subprocess import (
     CalledProcessError,
 )
@@ -211,11 +208,8 @@ class SnapshotCache:
         p = self.job.params
         src = p.src
         src_datasets_set: set[str] = set()
-        dataset_labels: dict[str, list[SnapshotLabel]] = defaultdict(list)
-        for label, datasets in datasets_to_snapshot.items():
+        for datasets in datasets_to_snapshot.values():
             src_datasets_set.update(datasets)  # union
-            for dataset in datasets:
-                dataset_labels[dataset].append(label)
 
         sorted_datasets: list[str] = sorted(src_datasets_set)
         snapshots_changed_dict: dict[str, int] = self.zfs_get_snapshots_changed(src, sorted_datasets)
@@ -323,7 +317,7 @@ def set_last_modification_time(
             raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
 
         # Monotonic guard: only skip when the file pre-existed, to not skip the very first write.
-        if preexisted and if_more_recent and unixtimes[1] <= int(stats.st_mtime):
+        if preexisted and if_more_recent and unixtimes[1] <= round(stats.st_mtime):
             return
         os.utime(fd, times=unixtimes)  # write timestamps
     finally:

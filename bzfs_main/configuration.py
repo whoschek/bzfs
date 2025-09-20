@@ -223,6 +223,8 @@ class Params:
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
+        # zfs_full_recv_opts: dataset-specific dynamic -o/-x property options are computed later per dataset in
+        # replication._add_recv_property_options():
         self.zfs_full_recv_opts: list[str] = self.zfs_recv_program_opts.copy()
         cpconfigs = [CopyPropertiesConfig(group, flag, args, self) for group, flag in ZFS_RECV_GROUPS.items()]
         self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
@@ -298,6 +300,7 @@ class Params:
         self.max_datasets_per_minibatch_on_list_snaps: int = getenv_int("max_datasets_per_minibatch_on_list_snaps", -1)
         self.max_snapshots_per_minibatch_on_delete_snaps = getenv_int("max_snapshots_per_minibatch_on_delete_snaps", 2**29)
         self.dedicated_tcp_connection_per_zfs_send: bool = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
+        # threads: with --force-once we intentionally coerce to a single-threaded run to ensure deterministic serial behavior
         self.threads: tuple[int, bool] = (1, False) if self.force_once else args.threads
         timeout_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
         self.timeout_nanos: int | None = timeout_nanos

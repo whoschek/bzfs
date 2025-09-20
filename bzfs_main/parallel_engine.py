@@ -233,11 +233,12 @@ def process_datasets_in_parallel_and_fault_tolerant(
     assert (not is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
     assert callable(process_dataset)
     assert callable(skip_tree_on_error)
+    assert skip_on_error in ("fail", "dataset", "tree")
     assert max_workers > 0
     assert callable(interval_nanos)
     assert "%" not in task_name
     has_barrier: bool = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
-    assert (enable_barriers is not False) or not has_barrier
+    assert (enable_barriers is not False) or not has_barrier, "Barriers seen in datasets but barriers explicitly disabled"
     barriers_enabled: bool = bool(has_barrier or enable_barriers)
     assert callable(append_exception)
     if retry_policy is None:
@@ -354,7 +355,7 @@ def _complete_job_with_barriers(
     '/' directory separators within the dataset string, and multiple "datasets" form a job dependency tree by way of common
     dataset directory prefixes. Jobs that do not depend on each other can be executed in parallel, and jobs can be told to
     first wait for other jobs to complete successfully. The algorithm is based on a barrier primitive and is typically
-    disabled". It is only required for rare jobrunner configs.
+    disabled. It is only required for rare jobrunner configs.
 
     For example, a job scheduler can specify that all parallel push replications jobs to multiple destinations must succeed
     before the jobs of the pruning phase can start. More generally, with this algo, a job scheduler can specify that all jobs
