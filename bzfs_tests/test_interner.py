@@ -21,7 +21,6 @@ import unittest
 from typing import (
     Callable,
     ClassVar,
-    List,
     Protocol,
 )
 
@@ -47,7 +46,7 @@ class InternerProtocol(Protocol[T]):
     def __contains__(self, item: T) -> bool: ...
 
 
-InternerFactory = Callable[[List[str]], InternerProtocol[str]]
+InternerFactory = Callable[[list[str]], InternerProtocol[str]]
 
 
 #############################################################################

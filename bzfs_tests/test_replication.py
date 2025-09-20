@@ -269,18 +269,23 @@ class TestQuoting(AbstractTestCase):
         job.params.log_params = MagicMock(pv_log_file="/tmp/pv.log\\")  # pv log path ending in backslash
 
         seen: list[str] = []
-        with patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(  # force mbuffer to be present on all legs and include our trailing-backslash opt
-            "bzfs_main.replication._mbuffer_cmd",
-            side_effect=lambda p, loc, _sz, _rec: shlex.join([p.mbuffer_program, "-s", "1"] + p.mbuffer_program_opts),
-        ), patch(  # force pv to be present and include our backslashy opts + backslashy log path
-            "bzfs_main.replication._pv_cmd",
-            side_effect=lambda j, loc, _sz, _human, disable_progress_bar=False: f"LC_ALL=C {shlex.join([j.params.pv_program] + j.params.pv_program_opts)} 2>> {shlex.quote(j.params.log_params.pv_log_file)}",
-        ), patch(  # keep squote a no-op so we see the raw strings
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(  # capture the exact strings sent to _dquote
-            "bzfs_main.replication._dquote", side_effect=lambda s: (seen.__iadd__([s]), s)[1]
+        with (
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch(  # force mbuffer to be present on all legs and include our trailing-backslash opt
+                "bzfs_main.replication._mbuffer_cmd",
+                side_effect=lambda p, loc, _sz, _rec: shlex.join([p.mbuffer_program, "-s", "1"] + p.mbuffer_program_opts),
+            ),
+            patch(  # force pv to be present and include our backslashy opts + backslashy log path
+                "bzfs_main.replication._pv_cmd",
+                side_effect=lambda j, loc, _sz, _human, disable_progress_bar=False: f"LC_ALL=C {shlex.join([j.params.pv_program] + j.params.pv_program_opts)} 2>> {shlex.quote(j.params.log_params.pv_log_file)}",
+            ),
+            patch(  # keep squote a no-op so we see the raw strings
+                "bzfs_main.replication._squote", side_effect=lambda _r, s: s
+            ),
+            patch(  # capture the exact strings sent to _dquote
+                "bzfs_main.replication._dquote", side_effect=lambda s: (seen.__iadd__([s]), s)[1]
+            ),
         ):
             _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
 
@@ -574,14 +579,13 @@ class TestReplication(AbstractTestCase):
             return prog == "sh"
 
         job = _prepare_job(dst_host="host", is_program_available=avail)
-        with patch("bzfs_main.replication._pv_cmd") as pv, patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd") as pv,
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             pv.return_value = "pv_src"
             src, loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
@@ -596,14 +600,13 @@ class TestReplication(AbstractTestCase):
             return prog == "sh"
 
         job = _prepare_job(src_host="host", is_program_available=avail)
-        with patch("bzfs_main.replication._pv_cmd") as pv, patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd") as pv,
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             pv.return_value = "pv_dst"
             src, loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
@@ -613,14 +616,13 @@ class TestReplication(AbstractTestCase):
 
     def test_prepare_local_pv_with_compress_disabled_progress(self) -> None:
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=lambda _p, _l: True)
-        with patch("bzfs_main.replication._pv_cmd") as pv, patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="comp"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="decomp"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd") as pv,
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="comp"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="decomp"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             pv.return_value = "pv_loc"
             src, loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
@@ -637,14 +639,13 @@ class TestReplication(AbstractTestCase):
             return prog == "sh"
 
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=avail)
-        with patch("bzfs_main.replication._pv_cmd") as pv, patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd") as pv,
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             pv.return_value = "pv_loc"
             src, loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
@@ -662,14 +663,13 @@ class TestReplication(AbstractTestCase):
         def mbuf(_p: MagicMock, loc: str, *_a: object) -> str:
             return "LBUF" if loc == "local" else "cat"
 
-        with patch("bzfs_main.replication._pv_cmd", return_value="PV"), patch(
-            "bzfs_main.replication._mbuffer_cmd", side_effect=mbuf
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="PV"),
+            patch("bzfs_main.replication._mbuffer_cmd", side_effect=mbuf),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             _src, loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("| LBUF | PV | LBUF", loc)
@@ -679,14 +679,13 @@ class TestReplication(AbstractTestCase):
             return prog == "sh"
 
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=avail)
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             src, loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("zfs send", src)
@@ -702,14 +701,13 @@ class TestReplication(AbstractTestCase):
         def mbuf(_p: MagicMock, loc: str, *_a: object) -> str:
             return "LBUF" if loc == "local" else "cat"
 
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", side_effect=mbuf
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", side_effect=mbuf),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             _src, loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("| LBUF", loc)
@@ -720,14 +718,13 @@ class TestReplication(AbstractTestCase):
 
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_src_pipe_fail"] = True
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertIn("dd bs=64", src)
@@ -738,14 +735,13 @@ class TestReplication(AbstractTestCase):
 
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_src_pipe_garble"] = True
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertIn("base64", src)
@@ -756,14 +752,13 @@ class TestReplication(AbstractTestCase):
 
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_src_send_error"] = True
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertTrue(src.startswith("zfs send --injectedGarbageParameter"))
@@ -774,14 +769,13 @@ class TestReplication(AbstractTestCase):
 
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_dst_pipe_fail"] = True
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertIn("dd bs=1024", dst)
@@ -792,14 +786,13 @@ class TestReplication(AbstractTestCase):
 
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_dst_pipe_garble"] = True
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertIn("base64", dst)
@@ -810,14 +803,13 @@ class TestReplication(AbstractTestCase):
 
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_dst_receive_error"] = True
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertTrue(dst.endswith("--injectedGarbageParameter"))
@@ -827,14 +819,13 @@ class TestReplication(AbstractTestCase):
             return "SRCBUF" if loc == "src" else "cat"
 
         job = _prepare_job(is_program_available=lambda prog, loc: prog == "sh")
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", side_effect=mbuf
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", side_effect=mbuf),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertTrue(src.startswith("zfs send"))
@@ -845,14 +836,13 @@ class TestReplication(AbstractTestCase):
             return "DSTBUF" if loc == "dst" else "cat"
 
         job = _prepare_job(is_program_available=lambda prog, loc: prog == "sh")
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", side_effect=mbuf
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", side_effect=mbuf),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertIn("DSTBUF", dst)
@@ -860,14 +850,13 @@ class TestReplication(AbstractTestCase):
 
     def test_prepare_compression_commands_included(self) -> None:
         job = _prepare_job(is_program_available=lambda prog, loc: True)
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="COMP") as comp, patch(
-            "bzfs_main.replication._decompress_cmd", return_value="DECOMP"
-        ) as decomp, patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="COMP") as comp,
+            patch("bzfs_main.replication._decompress_cmd", return_value="DECOMP") as decomp,
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertTrue(src.startswith("zfs send"))
@@ -882,14 +871,13 @@ class TestReplication(AbstractTestCase):
             return prog == "sh"
 
         job = _prepare_job(is_program_available=avail)
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd") as comp, patch(
-            "bzfs_main.replication._decompress_cmd"
-        ) as decomp, patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd") as comp,
+            patch("bzfs_main.replication._decompress_cmd") as decomp,
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             _src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         comp.assert_not_called()
@@ -905,14 +893,13 @@ class TestReplication(AbstractTestCase):
 
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=avail)
 
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="COMP"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="DECOMP"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="COMP"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="DECOMP"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("zfs send", src)
@@ -923,14 +910,13 @@ class TestReplication(AbstractTestCase):
             return prog != "sh" or loc != "src"
 
         job = _prepare_job(is_program_available=avail)
-        with patch("bzfs_main.replication._pv_cmd", return_value="pv"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="BUF"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="comp"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="decomp"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="pv"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="BUF"),
+            patch("bzfs_main.replication._compress_cmd", return_value="comp"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="decomp"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("zfs send", src)
@@ -940,38 +926,37 @@ class TestReplication(AbstractTestCase):
             return prog != "sh" or loc != "dst"
 
         job = _prepare_job(is_program_available=avail)
-        with patch("bzfs_main.replication._pv_cmd", return_value="pv"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="BUF"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="comp"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="decomp"
-        ), patch(
-            "bzfs_main.replication._squote", side_effect=lambda _r, s: s
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="pv"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="BUF"),
+            patch("bzfs_main.replication._compress_cmd", return_value="comp"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="decomp"),
+            patch("bzfs_main.replication._squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("zfs recv", dst)
 
     def test_prepare_src_remote_quoted(self) -> None:
         job = _prepare_job(src_host="host", is_program_available=lambda prog, loc: prog == "sh")
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("'zfs send'", src)
 
     def test_prepare_dst_remote_quoted(self) -> None:
         job = _prepare_job(dst_host="host", is_program_available=lambda prog, loc: prog == "sh")
-        with patch("bzfs_main.replication._pv_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._mbuffer_cmd", return_value="cat"
-        ), patch("bzfs_main.replication._compress_cmd", return_value="cat"), patch(
-            "bzfs_main.replication._decompress_cmd", return_value="cat"
-        ), patch(
-            "bzfs_main.replication._dquote", side_effect=lambda s: s
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._dquote", side_effect=lambda s: s),
         ):
             _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("'zfs recv'", dst)
@@ -1036,21 +1021,21 @@ class TestReplication(AbstractTestCase):
             captured_steps.append(steps)
             return steps
 
-        with patch("bzfs_main.replication.are_bookmarks_enabled", return_value=True), patch(
-            "bzfs_main.replication.try_ssh_command", side_effect=fake_try_ssh_command
-        ), patch("bzfs_main.replication._recv_resume_token", return_value=(None, [], [])), patch(
-            "bzfs_main.replication._estimate_send_size", return_value=0
-        ), patch(
-            "bzfs_main.replication._add_recv_property_options",
-            side_effect=lambda j, _full, recv_opts, _ds, _c: (recv_opts, []),
-        ), patch(
-            "bzfs_main.replication._check_zfs_dataset_busy", return_value=True
-        ), patch(
-            "bzfs_main.replication._create_zfs_bookmarks", side_effect=lambda *_a, **_kw: None
-        ), patch(
-            "bzfs_main.replication._incremental_send_steps_wrapper", side_effect=observing_incremental_send_steps_wrapper
-        ), patch(
-            "bzfs_main.replication._run_zfs_send_receive", side_effect=lambda *_args, **_kw: None
+        with (
+            patch("bzfs_main.replication.are_bookmarks_enabled", return_value=True),
+            patch("bzfs_main.replication.try_ssh_command", side_effect=fake_try_ssh_command),
+            patch("bzfs_main.replication._recv_resume_token", return_value=(None, [], [])),
+            patch("bzfs_main.replication._estimate_send_size", return_value=0),
+            patch(
+                "bzfs_main.replication._add_recv_property_options",
+                side_effect=lambda j, _full, recv_opts, _ds, _c: (recv_opts, []),
+            ),
+            patch("bzfs_main.replication._check_zfs_dataset_busy", return_value=True),
+            patch("bzfs_main.replication._create_zfs_bookmarks", side_effect=lambda *_a, **_kw: None),
+            patch(
+                "bzfs_main.replication._incremental_send_steps_wrapper", side_effect=observing_incremental_send_steps_wrapper
+            ),
+            patch("bzfs_main.replication._run_zfs_send_receive", side_effect=lambda *_args, **_kw: None),
         ):
             replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0))
 

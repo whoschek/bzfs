@@ -20,7 +20,7 @@ from __future__ import (
 )
 import time
 import unittest
-from typing import (
+from collections.abc import (
     Iterable,
 )
 

@@ -159,7 +159,7 @@ ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
 {PROG_NAME} is written in Python and continuously runs a wide set of unit tests and integration tests to ensure
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
-versions ≥ 3.8 (including latest stable which is currently python-3.13).
+versions ≥ 3.9 (including latest stable which is currently python-3.13).
 
 {PROG_NAME} is a stand-alone program with zero required dependencies, akin to a
 stand-alone shell script or binary executable. It is designed to be able to run in restricted barebones server

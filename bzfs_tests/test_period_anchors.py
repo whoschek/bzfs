@@ -17,12 +17,14 @@
 from __future__ import (
     annotations,
 )
-import sys
 import unittest
 from datetime import (
     datetime,
     timedelta,
     timezone,
+)
+from zoneinfo import (
+    ZoneInfo,
 )
 
 import bzfs_main.period_anchors
@@ -468,10 +470,6 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected, result)
 
     def test_timezone_preservation(self) -> None:
-        if sys.version_info < (3, 9):
-            self.skipTest("ZoneInfo requires python >= 3.9")
-        from zoneinfo import ZoneInfo  # requires python >= 3.9
-
         # Create a timezone with DST
         tz = ZoneInfo("America/New_York")
 

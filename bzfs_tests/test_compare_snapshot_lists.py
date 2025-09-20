@@ -21,10 +21,12 @@ import itertools
 import os
 import tempfile
 import unittest
-from typing import (
-    Any,
+from collections.abc import (
     Iterable,
     Iterator,
+)
+from typing import (
+    Any,
 )
 from unittest.mock import (
     MagicMock,
@@ -201,9 +203,11 @@ class TestCompareSnapshotLists(AbstractTestCase):
                 for ds in datasets:
                     yield mapping.get(ds, [])
 
-            with patch("bzfs_main.compare_snapshot_lists.zfs_list_snapshots_in_parallel", side_effect=fake_zfs_list), patch(
-                "bzfs_main.compare_snapshot_lists.are_bookmarks_enabled", return_value=True
-            ), patch("bzfs_main.compare_snapshot_lists.is_solaris_zfs", return_value=is_solaris):
+            with (
+                patch("bzfs_main.compare_snapshot_lists.zfs_list_snapshots_in_parallel", side_effect=fake_zfs_list),
+                patch("bzfs_main.compare_snapshot_lists.are_bookmarks_enabled", return_value=True),
+                patch("bzfs_main.compare_snapshot_lists.is_solaris_zfs", return_value=is_solaris),
+            ):
                 run_compare_snapshot_lists(job, src_datasets, dst_datasets)
 
             tsv_dir = log_file[:-4] + ".cmp"

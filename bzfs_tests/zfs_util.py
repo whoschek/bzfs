@@ -20,10 +20,11 @@ from __future__ import (
 import platform
 import re
 import subprocess
-from typing import (
-    List,
+from collections.abc import (
     Mapping,
     Sequence,
+)
+from typing import (
     cast,
 )
 
@@ -169,7 +170,7 @@ def create_filesystem(
 
 
 def datasets(dataset: str) -> list[str]:
-    return cast(List[str], zfs_list([dataset], types=["filesystem", "volume"], max_depth=1))[1:]
+    return cast(list[str], zfs_list([dataset], types=["filesystem", "volume"], max_depth=1))[1:]
 
 
 def take_snapshot(
@@ -192,7 +193,7 @@ def take_snapshot(
 
 
 def snapshots(dataset: str, max_depth: int | None = 1) -> list[str]:
-    return cast(List[str], zfs_list([dataset], types=["snapshot"], max_depth=max_depth))
+    return cast(list[str], zfs_list([dataset], types=["snapshot"], max_depth=max_depth))
 
 
 def create_bookmark(dataset: str, snapshot_tag: str, bookmark_tag: str) -> str:
@@ -203,7 +204,7 @@ def create_bookmark(dataset: str, snapshot_tag: str, bookmark_tag: str) -> str:
 
 
 def bookmarks(dataset: str, max_depth: int = 1) -> list[str]:
-    return cast(List[str], zfs_list([dataset], types=["bookmark"], max_depth=max_depth))
+    return cast(list[str], zfs_list([dataset], types=["bookmark"], max_depth=max_depth))
 
 
 def snapshot_name(snapshot: str) -> str:

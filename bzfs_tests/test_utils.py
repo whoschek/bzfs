@@ -33,6 +33,9 @@ import unittest
 from argparse import (
     Namespace,
 )
+from collections.abc import (
+    Sequence,
+)
 from concurrent.futures import (
     Future,
     ThreadPoolExecutor,
@@ -52,13 +55,15 @@ from subprocess import (
 from typing import (
     Any,
     Callable,
-    Sequence,
     Union,
     cast,
 )
 from unittest.mock import (
     MagicMock,
     patch,
+)
+from zoneinfo import (
+    ZoneInfo,
 )
 
 from bzfs_main.utils import (
@@ -1471,12 +1476,6 @@ class TestCurrentDateTime(unittest.TestCase):
         self.assertEqual(expected, actual)
 
     def test_iana_timezone(self) -> None:
-        if sys.version_info < (3, 9):
-            self.skipTest("ZoneInfo requires python >= 3.9")
-        from zoneinfo import (
-            ZoneInfo,
-        )
-
         tz_spec = "Asia/Tokyo"
         self.assertIsNotNone(current_datetime(tz_spec=tz_spec, now_fn=None))
         tz = ZoneInfo(tz_spec)
@@ -1510,8 +1509,6 @@ class TestCurrentDateTime(unittest.TestCase):
         self.assertEqual(expected, isotime_from_unixtime(unix))
 
     def test_get_timezone_variants(self) -> None:
-        if sys.version_info < (3, 9):
-            self.skipTest("ZoneInfo requires python >= 3.9")
         self.assertIsNone(get_timezone())
         self.assertEqual(timezone.utc, get_timezone("UTC"))
         tz = get_timezone("+0130")

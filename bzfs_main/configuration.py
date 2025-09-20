@@ -28,6 +28,9 @@ import stat
 import sys
 import tempfile
 import time
+from collections.abc import (
+    Iterable,
+)
 from dataclasses import (
     dataclass,
 )
@@ -40,7 +43,6 @@ from logging import (
 )
 from typing import (
     TYPE_CHECKING,
-    Iterable,
     Literal,
     NamedTuple,
     cast,

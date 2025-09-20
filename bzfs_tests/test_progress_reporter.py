@@ -446,8 +446,9 @@ class TestHelperFunctions(unittest.TestCase):
             reporter._file_name_queue.add(pv_file)
         selector = MagicMock()
         selector.select.return_value = []
-        with patch.object(progress_reporter, "open_nofollow", side_effect=FileNotFoundError()), patch.object(
-            Path, "touch", lambda self: None
+        with (
+            patch.object(progress_reporter, "open_nofollow", side_effect=FileNotFoundError()),
+            patch.object(Path, "touch", lambda self: None),
         ):
             with self.assertRaises(ValueError):
                 reporter._inject_error = True
@@ -491,9 +492,11 @@ class TestHelperFunctions(unittest.TestCase):
         def open_side_effect(name: str, **_: Any) -> io.StringIO:
             return fd1 if name.endswith("f1") else fd2
 
-        with patch.object(progress_reporter, "open_nofollow", side_effect=open_side_effect), patch.object(
-            Path, "touch", lambda self: None
-        ), patch.object(reporter, "_update_transfer_stat", return_value=0):
+        with (
+            patch.object(progress_reporter, "open_nofollow", side_effect=open_side_effect),
+            patch.object(Path, "touch", lambda self: None),
+            patch.object(reporter, "_update_transfer_stat", return_value=0),
+        ):
             with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
                 with self.assertRaises(ValueError):
                     reporter._inject_error = True
@@ -542,8 +545,9 @@ class TestHelperFunctions(unittest.TestCase):
             def close(self) -> None:
                 pass
 
-        with patch.object(progress_reporter, "open_nofollow", return_value=io.StringIO("")), patch.object(
-            Path, "touch", lambda self: None
+        with (
+            patch.object(progress_reporter, "open_nofollow", return_value=io.StringIO("")),
+            patch.object(Path, "touch", lambda self: None),
         ):
             reporter._run_internal([], cast(selectors.BaseSelector, DummySelector()))
         self.assertEqual(2, len(selector_calls))

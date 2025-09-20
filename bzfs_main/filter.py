@@ -21,14 +21,15 @@ import math
 import os
 import re
 import socket
+from collections.abc import (
+    Iterable,
+)
 from datetime import (
     timedelta,
 )
 from typing import (
     TYPE_CHECKING,
-    Iterable,
     Optional,
-    Tuple,
     Union,
 )
 
@@ -60,8 +61,8 @@ SNAPSHOT_REGEX_FILTER_NAME: str = "snapshot_regex"
 SNAPSHOT_REGEX_FILTER_NAMES: frozenset[str] = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
 
 
-UnixTimeRange = Optional[Tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
-RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
+UnixTimeRange = Optional[tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
+RankRange = tuple[tuple[str, int, bool], tuple[str, int, bool]]  # Type alias
 
 
 def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> list[str]:

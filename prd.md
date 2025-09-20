@@ -468,7 +468,7 @@ adoption and effective daily use.
 
 | ID | Requirement | Description | Priority | Acceptance Criteria | Rationale |
 | :- | :- | :- | :- | :- | :- |
-| **FR-USA-001** | **Zero Dependencies** | The core `bzfs` and `bzfs_jobrunner` scripts must be self-contained Python scripts with no external Python library dependencies. | Must-Have | **Given** a minimal Python 3.8+ installation, **When** the `bzfs` script is executed, **Then** it runs without any `ModuleNotFoundError`. | Simplifies deployment enormously. The tool can be copied to any server and run without needing `pip` or a virtual environment. |
+| **FR-USA-001** | **Zero Dependencies** | The core `bzfs` and `bzfs_jobrunner` scripts must be self-contained Python scripts with no external Python library dependencies. | Must-Have | **Given** a minimal Python 3.9+ installation, **When** the `bzfs` script is executed, **Then** it runs without any `ModuleNotFoundError`. | Simplifies deployment enormously. The tool can be copied to any server and run without needing `pip` or a virtual environment. |
 | **FR-USA-002** | **Comprehensive Help and Documentation** | The CLI shall provide detailed `--help` output with clear explanations and examples for every option. | Must-Have | **When** `bzfs --help` is run, **Then** the output is well-formatted, comprehensive, and includes practical examples. | Makes the tool's powerful features discoverable and reduces the learning curve. |
 | **FR-USA-003** | **Dry Run Mode** | A `--dryrun` mode shall be available that simulates all operations and prints the commands that would be executed, without making any changes to the source or destination. | Must-Have | 1. **Given** a replication command with `--dryrun`, **When** it is run, **Then** the log output shows the `zfs send` and `zfs receive` commands that would be executed. <br> 2. **Given** `--dryrun=recv`, **Then** the send stream is generated and sent, but discarded by `zfs receive -n`. | Allows users to safely test and validate complex filter and pruning rules before applying them destructively. |
 | **FR-USA-004** | **Verbose Logging** | The system shall provide multiple levels of verbosity (`-v`, `-v -v`, etc.) to aid in debugging. At the highest level, it shall print the exact shell commands being executed. | Must-Have | **Given** `-v -v` is used, **When** replication is run, **Then** the log contains the full, copy-pasteable shell command for the SSH and ZFS pipeline. | Essential for diagnosing complex issues with remote execution, permissions, or pipeline tools. |
@@ -559,7 +559,7 @@ for an "Infrastructure as Code" approach.
 
 ### 5.5. Compatibility<a name="55-compatibility"></a>
 
-- **NFR-COM-001:** The tool must be compatible with Python 3.8 and all subsequent versions.
+- **NFR-COM-001:** The tool must be compatible with Python 3.9 and all subsequent versions.
 - **NFR-COM-002:** The tool must be tested and verified to work with major versions of OpenZFS (>= 2.1) on Linux and
   FreeBSD.
 

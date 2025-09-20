@@ -23,6 +23,11 @@ import time
 from collections import (
     defaultdict,
 )
+from collections.abc import (
+    Iterable,
+    Iterator,
+    Sequence,
+)
 from dataclasses import (
     dataclass,
     field,
@@ -30,9 +35,6 @@ from dataclasses import (
 from typing import (
     TYPE_CHECKING,
     Callable,
-    Iterable,
-    Iterator,
-    Sequence,
 )
 
 from bzfs_main.argparse_cli import (

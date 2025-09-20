@@ -28,13 +28,15 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import (
+    Iterable,
+)
 from subprocess import (
     DEVNULL,
     PIPE,
 )
 from typing import (
     TYPE_CHECKING,
-    Iterable,
 )
 
 from bzfs_main.argparse_actions import (

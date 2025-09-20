@@ -14,7 +14,7 @@
 
 # Inline script metadata conforming to https://packaging.python.org/specifications/inline-script-metadata
 # /// script
-# requires-python = ">=3.8"
+# requires-python = ">=3.9"
 # dependencies = []
 # ///
 #
@@ -55,7 +55,11 @@ import sys
 import threading
 import time
 from collections import (
+    Counter,
     defaultdict,
+)
+from collections.abc import (
+    Collection,
 )
 from datetime import (
     datetime,
@@ -74,8 +78,6 @@ from typing import (
     IO,
     Any,
     Callable,
-    Collection,
-    Counter,
     cast,
 )
 
@@ -201,7 +203,7 @@ __version__: str = bzfs_main.argparse_cli.__version__
 CRITICAL_STATUS: int = 2
 WARNING_STATUS: int = 1
 STILL_RUNNING_STATUS: int = 4
-MIN_PYTHON_VERSION: tuple[int, int] = (3, 8)
+MIN_PYTHON_VERSION: tuple[int, int] = (3, 9)
 if sys.version_info < MIN_PYTHON_VERSION:
     print(f"ERROR: {PROG_NAME} requires Python version >= {'.'.join(map(str, MIN_PYTHON_VERSION))}!")
     sys.exit(DIE_STATUS)

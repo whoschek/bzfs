@@ -64,7 +64,7 @@ def main() -> None:
         _generate_badge("zfs", _merge_versions(f"{ROOT_DIR}/zfs", natsort=True), color)
         _generate_badge("os", _merge_versions(f"{ROOT_DIR}/os"), color)
         py_versions = _merge_versions(f"{ROOT_DIR}/python")
-        py_versions = " | ".join(["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"])
+        py_versions = " | ".join(["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"])
         _generate_badge("python", py_versions, color)
         pypi_versions = ""
         _generate_badge("pypi", pypi_versions, color)

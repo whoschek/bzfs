@@ -21,9 +21,11 @@ from __future__ import (
 import contextlib
 import io
 import logging
+from collections.abc import (
+    Iterator,
+)
 from typing import (
     Any,
-    Iterator,
 )
 
 

@@ -44,6 +44,12 @@ from collections import (
     defaultdict,
     deque,
 )
+from collections.abc import (
+    ItemsView,
+    Iterable,
+    Iterator,
+    Sequence,
+)
 from concurrent.futures import (
     Executor,
     Future,
@@ -65,17 +71,15 @@ from typing import (
     Callable,
     Final,
     Generic,
-    ItemsView,
-    Iterable,
-    Iterator,
-    List,
+    Literal,
     NoReturn,
     Protocol,
-    Sequence,
     TextIO,
-    Tuple,
     TypeVar,
     cast,
+)
+from zoneinfo import (
+    ZoneInfo,
 )
 
 # constants:
@@ -95,7 +99,7 @@ SHELL_CHARS: str = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
 FILE_PERMISSIONS: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
 DIR_PERMISSIONS: int = stat.S_IRWXU  # rwx------ (user read + write + execute)
 
-RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
+RegexList = list[tuple[re.Pattern, bool]]  # Type alias
 
 
 def getenv_any(key: str, default: str | None = None) -> str | None:
@@ -719,9 +723,7 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
             offset: int = int(hours) * 60 + int(minutes)
             offset = -offset if sign == "-" else offset
             tz = timezone(timedelta(minutes=offset))
-        elif "/" in tz_spec and sys.version_info >= (3, 9):
-            from zoneinfo import ZoneInfo  # requires python >= 3.9
-
+        elif "/" in tz_spec:
             tz = ZoneInfo(tz_spec)
         else:
             raise ValueError(f"Invalid timezone specification: {tz_spec}")
@@ -1053,7 +1055,7 @@ class SynchronousExecutor(Executor):
     def __init__(self) -> None:
         self._shutdown: bool = False
 
-    def submit(self, fn: Callable[..., R_], /, *args: Any, **kwargs: Any) -> Future[R_]:  # type: ignore[override]
+    def submit(self, fn: Callable[..., R_], /, *args: Any, **kwargs: Any) -> Future[R_]:
         """Executes `fn(*args, **kwargs)` immediately and returns its Future."""
         future: Future[R_] = Future()
         if self._shutdown:
@@ -1084,9 +1086,9 @@ class _XFinally(contextlib.AbstractContextManager):
         """Records the callable to run upon exit."""
         self._cleanup = cleanup  # Zero-argument callable executed after the `with` block exits.
 
-    def __exit__(  # type: ignore[exit-return]  # need to ignore on python <= 3.8
+    def __exit__(
         self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: types.TracebackType | None
-    ) -> bool:
+    ) -> Literal[False]:
         """Runs cleanup and propagate any exceptions appropriately."""
         try:
             self._cleanup()

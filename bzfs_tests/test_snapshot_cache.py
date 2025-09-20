@@ -56,6 +56,9 @@ import tempfile
 import threading
 import time
 import unittest
+from collections.abc import (
+    Iterator,
+)
 from contextlib import (
     contextmanager,
 )
@@ -66,7 +69,6 @@ from datetime import (
 from typing import (
     TYPE_CHECKING,
     Callable,
-    Iterator,
 )
 from unittest.mock import (
     MagicMock,
@@ -350,8 +352,9 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=changed)
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
             ):
                 job.monitor_snapshots(job.params.src, [SRC_DATASET])
 
@@ -404,9 +407,11 @@ class TestSnapshotCache(AbstractTestCase):
                     return {}
                 return {DST_DATASET: 2_000_000_100} if i == 1 else {DST_DATASET: 1_900_000_100}
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", return_value=True),
+                patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed),
+            ):
 
                 # First replication with newer snapshots_changed
                 job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_000)
@@ -454,9 +459,11 @@ class TestSnapshotCache(AbstractTestCase):
                     return {}
                 return {DST_DATASET: 2_000_000_050} if i == 1 else {DST_DATASET: 1_900_000_050}
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", return_value=True),
+                patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed),
+            ):
 
                 job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_000)
                 job.replicate_datasets([SRC_DATASET], task_description="t", max_workers=1)
@@ -627,15 +634,17 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             # First run (newer)
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
             ):
                 job.monitor_snapshots(job.params.src, [SRC_DATASET])
 
             # Second run (older)
             job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=1_900_000_050)
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
             ):
                 job.monitor_snapshots(job.params.src, [SRC_DATASET])
 
@@ -712,9 +721,11 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Case 1: too recent (no trust)
             job.num_cache_hits = job.num_cache_misses = 0
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=snapshots_changed + (bzfs.MATURITY_TIME_THRESHOLD_SECS / 2)):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=snapshots_changed + (bzfs.MATURITY_TIME_THRESHOLD_SECS / 2)),
+            ):
                 job.monitor_snapshots(job.params.src, [dataset])
             self.assertListEqual([dataset], received)
             self.assertEqual(0, job.num_cache_hits)
@@ -723,9 +734,11 @@ class TestSnapshotCache(AbstractTestCase):
             # Case 2: mature (trust cache)
             received.clear()
             job.num_cache_hits = job.num_cache_misses = 0
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=snapshots_changed + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=snapshots_changed + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2),
+            ):
                 # keep current_datetime == creation to avoid alerts
                 job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(creation, tz=timezone.utc)
                 job.monitor_snapshots(job.params.src, [dataset])
@@ -778,10 +791,11 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(src_repl_file, unixtime_in_secs=t0, if_more_recent=True)
             job.num_cache_hits = job.num_cache_misses = 0
             called.clear()
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
-            ), patch.object(job.cache, "zfs_get_snapshots_changed", return_value={}), patch(
-                "time.time", return_value=t0 + (bzfs.MATURITY_TIME_THRESHOLD_SECS / 2)
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset),
+                patch.object(job.cache, "zfs_get_snapshots_changed", return_value={}),
+                patch("time.time", return_value=t0 + (bzfs.MATURITY_TIME_THRESHOLD_SECS / 2)),
             ):
                 job.replicate_datasets([SRC_DATASET], "t", 1)
             self.assertListEqual([SRC_DATASET], called)
@@ -793,10 +807,11 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_eq_file, unixtime_in_secs=t_dst, if_more_recent=True)
             job.num_cache_hits = job.num_cache_misses = 0
             called.clear()
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
-            ), patch.object(job.cache, "zfs_get_snapshots_changed", return_value={DST_DATASET: t_dst}), patch(
-                "time.time", return_value=t0 + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset),
+                patch.object(job.cache, "zfs_get_snapshots_changed", return_value={DST_DATASET: t_dst}),
+                patch("time.time", return_value=t0 + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2),
             ):
                 job.replicate_datasets([SRC_DATASET], "t", 1)
             self.assertListEqual([], called)
@@ -908,12 +923,11 @@ class TestSnapshotCache(AbstractTestCase):
                     a_repl_done.set()
                 return True
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset
-            ), patch(
-                "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe
-            ), patch(
-                "time.time", return_value=mature_now
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset),
+                patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe),
+                patch("time.time", return_value=mature_now),
             ):
                 t_a = threading.Thread(target=run_job_a)
                 t_b = threading.Thread(target=run_job_b)
@@ -1049,12 +1063,11 @@ class TestSnapshotCache(AbstractTestCase):
                     r_repl_done.set()
                 return True
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset
-            ), patch(
-                "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe
-            ), patch(
-                "time.time", return_value=mature_now
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset),
+                patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time_safe),
+                patch("time.time", return_value=mature_now),
             ):
                 t_m = threading.Thread(target=run_monitor_snapshots)
                 t_r = threading.Thread(target=run_replicate_datasets)
@@ -1183,12 +1196,11 @@ class TestSnapshotCache(AbstractTestCase):
                     r_repl_done2.set()
                 return True
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset
-            ), patch(
-                "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time
-            ), patch(
-                "time.time", return_value=mature_now2
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset),
+                patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time),
+                patch("time.time", return_value=mature_now2),
             ):
                 t_s = threading.Thread(target=run_find_datasets_to_snapshot)
                 t_r = threading.Thread(target=run_replicate_datasets)
@@ -1371,12 +1383,11 @@ class TestSnapshotCache(AbstractTestCase):
                     r3_repl_done.set()
                 return True
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset
-            ), patch(
-                "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time
-            ), patch(
-                "time.time", return_value=mature_now3
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset),
+                patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time),
+                patch("time.time", return_value=mature_now3),
             ):
                 t_m = threading.Thread(target=run_monitor_snapshots)
                 t_s = threading.Thread(target=run_find_datasets_to_snapshot)
@@ -1420,17 +1431,20 @@ class TestSnapshotCache(AbstractTestCase):
                 # Deterministic: always return the intended dst snapshots_changed for replicate
                 return {DST_DATASET: r_dst_old}
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", return_value=True
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", return_value=True),
             ):
-                with patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_monitor_old), patch(
-                    "bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time
+                with (
+                    patch.object(job_m, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_monitor_old),
+                    patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time),
                 ):
                     job_m.monitor_snapshots(job_m.params.src, [SRC_DATASET])
 
-                with patch.object(
-                    job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_on_find_snapshots_old
-                ), patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time):
+                with (
+                    patch.object(job_s, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_on_find_snapshots_old),
+                    patch("bzfs_main.bzfs.set_last_modification_time_safe", side_effect=wrapped_set_last_modification_time),
+                ):
                     job_s.find_datasets_to_snapshot([SRC_DATASET])
 
                 with patch.object(
@@ -1537,8 +1551,9 @@ class TestSnapshotCache(AbstractTestCase):
             ) -> list[str]:
                 return []
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_noop
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_noop),
             ):
                 job_s.find_datasets_to_snapshot([SRC_DATASET])
 
@@ -1573,8 +1588,9 @@ class TestSnapshotCache(AbstractTestCase):
                 fn_latest(0, 2_000_000_100, SRC_DATASET, "")
                 return []
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_monitor
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_monitor),
             ):
                 job_m.monitor_snapshots(job_m.params.src, [SRC_DATASET])
 
@@ -1599,8 +1615,9 @@ class TestSnapshotCache(AbstractTestCase):
                     fn_on_finish_dataset(SRC_DATASET)
                 return []
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_snap
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots_snap),
             ):
                 job_s.find_datasets_to_snapshot([SRC_DATASET])
 
@@ -1620,9 +1637,11 @@ class TestSnapshotCache(AbstractTestCase):
                 fake_zfs_get_snapshots_changed_r_state4["i"] = i + 1
                 return {} if i == 0 else {DST_DATASET: 2_000_000_140}
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", return_value=True
-            ), patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_r):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", return_value=True),
+                patch.object(job_r.cache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed_r),
+            ):
                 job_r.replicate_datasets([SRC_DATASET], task_description="R", max_workers=1)
 
             self.assertEqual(2_000_000_130, SnapshotCache(job_r).get_snapshots_changed(last_repl_file))
@@ -1693,9 +1712,11 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             # Run scheduler with caching enabled; ensure caches are considered mature
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=snapshots_changed_new + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=snapshots_changed_new + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2),
+            ):
                 result = job.find_datasets_to_snapshot([dataset])
 
             # Correct behavior: dataset must be scheduled for this label (creation is older than 1h)
@@ -1772,8 +1793,9 @@ class TestSnapshotCache(AbstractTestCase):
                     fn_on_finish_dataset(dataset)
                 return []
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
             ):
                 job.find_datasets_to_snapshot([dataset])
 
@@ -1849,17 +1871,21 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Too recent -> fallback
             received.clear()
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=t0 + (bzfs.MATURITY_TIME_THRESHOLD_SECS / 2)):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=t0 + (bzfs.MATURITY_TIME_THRESHOLD_SECS / 2)),
+            ):
                 job.find_datasets_to_snapshot([dataset])
             self.assertListEqual([dataset], received)
 
             # Mature -> trust cache, no fallback
             received.clear()
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=t0 + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=t0 + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2),
+            ):
                 job.find_datasets_to_snapshot([dataset])
             self.assertListEqual([], received)
 
@@ -1937,9 +1963,11 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             # Advance time beyond threshold so maturity does not block cache trust
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=t0 + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=t0 + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2),
+            ):
                 job.find_datasets_to_snapshot([dataset])
 
             # Correct behavior: fallback invoked due to label.mtime==0 (untrusted)
@@ -2014,8 +2042,9 @@ class TestSnapshotCache(AbstractTestCase):
                 received.extend(datasets)
                 return []
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
             ):
                 job.find_datasets_to_snapshot([dataset])
 
@@ -2123,9 +2152,11 @@ class TestSnapshotCache(AbstractTestCase):
                 return True
 
             # zfs_get_snapshots_changed(dst) returns t_dst for dst_dataset (equal to cached dst '=')
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
-            ), patch.object(job_b.cache, "zfs_get_snapshots_changed", return_value={DST_DATASET: t_dst}):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset),
+                patch.object(job_b.cache, "zfs_get_snapshots_changed", return_value={DST_DATASET: t_dst}),
+            ):
                 job_b.replicate_datasets([SRC_DATASET], task_description="T", max_workers=1)
 
             # Because paths are segregated by port, Job B processes the dataset (no false cheap-skip)
@@ -2183,9 +2214,11 @@ class TestSnapshotCache(AbstractTestCase):
             # First run: populate caches (expect misses == N, hits == 0; replicate called N times)
             job.num_cache_hits = job.num_cache_misses = 0
             called.clear()
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
-            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset),
+                patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed),
+            ):
                 job.replicate_datasets(src_datasets, task_description="stress-1", max_workers=1)
 
             self.assertEqual(n, job.num_cache_misses)
@@ -2206,9 +2239,11 @@ class TestSnapshotCache(AbstractTestCase):
             # Second run: unchanged; should be cheap-skipped entirely via caches
             before_hits, before_misses = job.num_cache_hits, job.num_cache_misses
             called.clear()
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
-            ), patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset),
+                patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed),
+            ):
                 job.replicate_datasets(src_datasets, task_description="stress-2", max_workers=1)
 
             self.assertEqual(before_misses, job.num_cache_misses)  # no additional misses
@@ -2270,8 +2305,9 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             job.num_cache_hits = job.num_cache_misses = 0
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots1
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots1),
             ):
                 job.monitor_snapshots(job.params.src, src_datasets)
 
@@ -2308,9 +2344,11 @@ class TestSnapshotCache(AbstractTestCase):
                 received_count["n"] += len(datasets)
                 return []
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots2
-            ), patch("time.time", return_value=sc + bzfs.MATURITY_TIME_THRESHOLD_SECS + 1.0):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots2),
+                patch("time.time", return_value=sc + bzfs.MATURITY_TIME_THRESHOLD_SECS + 1.0),
+            ):
                 job.monitor_snapshots(job.params.src, src_datasets)
 
             self.assertEqual(n, job.num_cache_hits)  # added n hits
@@ -2392,9 +2430,11 @@ class TestSnapshotCache(AbstractTestCase):
                 received_count["n"] += len(datasets)
                 return []
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=sc + bzfs.MATURITY_TIME_THRESHOLD_SECS + 1.0):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=sc + bzfs.MATURITY_TIME_THRESHOLD_SECS + 1.0),
+            ):
                 mapping = job.find_datasets_to_snapshot(src_datasets)
 
             # No datasets are due; mapping contains only empty lists; and no fallback probing was required
@@ -2479,18 +2519,22 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Phase 1: initiator behind -> fallback
             received.clear()
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=now_i):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=now_i),
+            ):
                 job.find_datasets_to_snapshot([dataset])
             self.assertListEqual([dataset], received)
 
             # Phase 2: initiator catches up -> trust cache (no fallback)
             received.clear()
             now_i2 = t_src_future + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.2
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=now_i2):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=now_i2),
+            ):
                 job.find_datasets_to_snapshot([dataset])
             self.assertListEqual([], received)
 
@@ -2558,10 +2602,11 @@ class TestSnapshotCache(AbstractTestCase):
                 return True
 
             job.num_cache_hits = job.num_cache_misses = 0
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
-            ), patch.object(job.cache, "zfs_get_snapshots_changed", return_value={DST_DATASET: t_dst_past}), patch(
-                "time.time", return_value=now_i
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset),
+                patch.object(job.cache, "zfs_get_snapshots_changed", return_value={DST_DATASET: t_dst_past}),
+                patch("time.time", return_value=now_i),
             ):
                 job.replicate_datasets([SRC_DATASET], task_description="skew", max_workers=1)
             self.assertListEqual([SRC_DATASET], called)
@@ -2572,10 +2617,11 @@ class TestSnapshotCache(AbstractTestCase):
             now_i2 = t_src_future + bzfs.MATURITY_TIME_THRESHOLD_SECS + 1.0
             called.clear()
             job.num_cache_hits = job.num_cache_misses = 0
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch(
-                "bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset
-            ), patch.object(job.cache, "zfs_get_snapshots_changed", return_value={DST_DATASET: t_dst_past}), patch(
-                "time.time", return_value=now_i2
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", new=fake_replicate_dataset),
+                patch.object(job.cache, "zfs_get_snapshots_changed", return_value={DST_DATASET: t_dst_past}),
+                patch("time.time", return_value=now_i2),
             ):
                 job.replicate_datasets([SRC_DATASET], task_description="skew2", max_workers=1)
             self.assertListEqual([], called)
@@ -2685,9 +2731,11 @@ class TestSnapshotCache(AbstractTestCase):
                 # Do not probe anything; just return empty list (no datasets without snapshots)
                 return []
 
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=now_i):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=now_i),
+            ):
                 job.monitor_snapshots(job.params.src, [SRC_DATASET])  # src -> miss
                 job.monitor_snapshots(job.params.dst, [DST_DATASET])  # dst -> hit
             self.assertEqual(1, job.num_cache_hits)
@@ -2696,9 +2744,11 @@ class TestSnapshotCache(AbstractTestCase):
             # Phase 2: creeping catch-up beyond maturity for src; both become hits
             now_i2 = t_src_future + bzfs.MATURITY_TIME_THRESHOLD_SECS + 5.0
             job.num_cache_hits = job.num_cache_misses = 0
-            with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-                Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots
-            ), patch("time.time", return_value=now_i2):
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+                patch("time.time", return_value=now_i2),
+            ):
                 job.monitor_snapshots(job.params.src, [SRC_DATASET])  # src -> hit now that it's matured
                 job.monitor_snapshots(job.params.dst, [DST_DATASET])  # dst -> still hit
             self.assertEqual(2, job.num_cache_hits)

@@ -21,6 +21,9 @@ import re
 import subprocess
 import time
 import unittest
+from collections.abc import (
+    Iterator,
+)
 from datetime import (
     datetime,
     timezone,
@@ -31,8 +34,6 @@ from itertools import (
 from typing import (
     TYPE_CHECKING,
     Callable,
-    Iterator,
-    List,
     cast,
 )
 from unittest.mock import (
@@ -279,15 +280,15 @@ class TestHelperFunctions(AbstractTestCase):
             job.is_test_mode = True
             actual = job.root_datasets_if_recursive_zfs_snapshot_is_possible(src_datasets, basis_src_datasets)
             if expected is not None:
-                self.assertListEqual(expected, cast(List[str], actual))
+                self.assertListEqual(expected, cast(list[str], actual))
             self.assertEqual(expected, actual)
             expected = self.root_datasets_if_recursive_zfs_snapshot_is_possible_faster_but_not_ideal(
                 src_datasets, basis_src_datasets
             )
             if expected is not None:
-                self.assertListEqual(expected, cast(List[str], actual))
+                self.assertListEqual(expected, cast(list[str], actual))
             self.assertEqual(expected, actual)
-            return cast(List[str], actual)
+            return cast(list[str], actual)
 
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/d"]
         self.assertListEqual([], run_filter([], basis_src_datasets))
@@ -852,8 +853,9 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def test_appends_x_options_when_supported(self) -> None:
         recv_opts: list[str] = []
-        with patch.object(self.p, "is_program_available", return_value=True), patch(
-            "bzfs_main.replication._zfs_get", return_value={}
+        with (
+            patch.object(self.p, "is_program_available", return_value=True),
+            patch("bzfs_main.replication._zfs_get", return_value={}),
         ):
             result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
         self.assertEqual(["-x", "xprop1", "-x", "xprop2"], result_opts)
@@ -863,8 +865,9 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def test_skips_x_options_when_not_supported(self) -> None:
         recv_opts: list[str] = []
-        with patch.object(self.p, "is_program_available", return_value=False), patch(
-            "bzfs_main.replication._zfs_get", return_value={}
+        with (
+            patch.object(self.p, "is_program_available", return_value=False),
+            patch("bzfs_main.replication._zfs_get", return_value={}),
         ):
             result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
         self.assertEqual([], result_opts)
@@ -891,8 +894,9 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
                 return {"compression": "on"}
             raise AssertionError(f"unexpected props {propnames}")
 
-        with patch.object(self.p, "is_program_available", return_value=True), patch(
-            "bzfs_main.replication._zfs_get", side_effect=fake_zfs_get
+        with (
+            patch.object(self.p, "is_program_available", return_value=True),
+            patch("bzfs_main.replication._zfs_get", side_effect=fake_zfs_get),
         ):
             result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
         self.assertEqual(["-o", "compression=on"], result_opts)
@@ -913,8 +917,9 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
                 return {}
             raise AssertionError(f"unexpected props {propnames}")
 
-        with patch.object(self.p, "is_program_available", return_value=True), patch(
-            "bzfs_main.replication._zfs_get", side_effect=fake_zfs_get
+        with (
+            patch.object(self.p, "is_program_available", return_value=True),
+            patch("bzfs_main.replication._zfs_get", side_effect=fake_zfs_get),
         ):
             result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
         self.assertEqual([], result_opts)
@@ -1243,24 +1248,21 @@ class TestJobMethods(AbstractTestCase):
         dst_lines = ["guid2\tpool/dst@h1"]
 
         # Patch out remote calls and heavy operations to isolate the logic
-        with patch("bzfs_main.replication.try_ssh_command") as mock_try, patch(
-            "bzfs_main.replication._run_zfs_send_receive"
-        ) as mock_run, patch("bzfs_main.replication._estimate_send_size", return_value=0), patch(
-            "bzfs_main.replication._check_zfs_dataset_busy", return_value=True
-        ), patch(
-            "bzfs_main.replication._create_zfs_filesystem"
-        ), patch(
-            "bzfs_main.replication._create_zfs_bookmarks"
-        ), patch(
-            "bzfs_main.replication._zfs_set"
-        ), patch(
-            "bzfs_main.replication.are_bookmarks_enabled", return_value=False
-        ), patch(
-            "bzfs_main.replication.is_zpool_feature_enabled_or_active", return_value=False
-        ), patch(
-            "bzfs_main.replication._incremental_send_steps_wrapper",
-            return_value=[("-i", "pool/src@h1", "pool/src@d2", ["pool/src@d2"])],
-        ) as mock_steps:
+        with (
+            patch("bzfs_main.replication.try_ssh_command") as mock_try,
+            patch("bzfs_main.replication._run_zfs_send_receive") as mock_run,
+            patch("bzfs_main.replication._estimate_send_size", return_value=0),
+            patch("bzfs_main.replication._check_zfs_dataset_busy", return_value=True),
+            patch("bzfs_main.replication._create_zfs_filesystem"),
+            patch("bzfs_main.replication._create_zfs_bookmarks"),
+            patch("bzfs_main.replication._zfs_set"),
+            patch("bzfs_main.replication.are_bookmarks_enabled", return_value=False),
+            patch("bzfs_main.replication.is_zpool_feature_enabled_or_active", return_value=False),
+            patch(
+                "bzfs_main.replication._incremental_send_steps_wrapper",
+                return_value=[("-i", "pool/src@h1", "pool/src@d2", ["pool/src@d2"])],
+            ) as mock_steps,
+        ):
 
             # Filtered listing on src will be built by the code; we just return the raw list and let filters apply.
             def side_effect(
@@ -1388,8 +1390,9 @@ class TestJobMethods(AbstractTestCase):
         p.available_programs = {"local": {"pv": "pv"}}
         p.log_params.pv_log_file = "pv.log"
         job.num_snapshots_replicated = 5
-        with patch("time.monotonic_ns", return_value=2_000_000_000), patch(
-            "bzfs_main.bzfs.count_num_bytes_transferred_by_zfs_send", return_value=1024 * 1024
+        with (
+            patch("time.monotonic_ns", return_value=2_000_000_000),
+            patch("bzfs_main.bzfs.count_num_bytes_transferred_by_zfs_send", return_value=1024 * 1024),
         ):
             job.print_replication_stats(0)
         msg = cast(MagicMock, p.log.info).call_args[0][1]
@@ -1400,14 +1403,14 @@ class TestJobMethods(AbstractTestCase):
 #############################################################################
 class TestPythonVersionCheck(AbstractTestCase):
     """Test version check near top of program:
-    if sys.version_info < (3, 8):
-        print(f"ERROR: {prog_name} requires Python version >= 3.8!", file=sys.stderr)
+    if sys.version_info < (3, 9):
+        print(f"ERROR: {prog_name} requires Python version >= 3.9!", file=sys.stderr)
         sys.exit(die_status)
     """
 
     @patch("sys.exit")
-    @patch("sys.version_info", new=(3, 6))
-    def test_version_below_3_8(self, mock_exit: MagicMock) -> None:
+    @patch("sys.version_info", new=(3, 8))
+    def test_version_below_3_9(self, mock_exit: MagicMock) -> None:
         """Verifies exit on unsupported Python version while silencing output."""
         with patch("sys.stdout"), patch("sys.stderr"):
             import importlib
@@ -1416,8 +1419,8 @@ class TestPythonVersionCheck(AbstractTestCase):
             mock_exit.assert_called_with(DIE_STATUS)
 
     @patch("sys.exit")
-    @patch("sys.version_info", new=(3, 8))
-    def test_version_3_8_or_higher(self, mock_exit: MagicMock) -> None:
+    @patch("sys.version_info", new=(3, 9))
+    def test_version_3_9_or_higher(self, mock_exit: MagicMock) -> None:
         import importlib
 
         importlib.reload(bzfs)  # Reload module to apply version patch
@@ -1494,10 +1497,13 @@ class TestDeleteEmptyDstDatasetsTask(AbstractTestCase):
         job = self._job()
         basis = ["a", "a/b", "a/b/c", "a/d"]
         datasets = list(basis)
-        with patch(
-            "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
-            return_value=iter([["a/b/c@s1"]]),
-        ) as mock_list, patch("bzfs_main.bzfs.delete_datasets") as mock_del:
+        with (
+            patch(
+                "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
+                return_value=iter([["a/b/c@s1"]]),
+            ) as mock_list,
+            patch("bzfs_main.bzfs.delete_datasets") as mock_del,
+        ):
             basis_datasets_result, result = job.delete_empty_dst_datasets_task(basis, datasets)
         self.assertListEqual(["a", "a/b", "a/b/c"], result)
         self.assertListEqual(["a", "a/b", "a/b/c"], basis_datasets_result)
@@ -1511,13 +1517,17 @@ class TestDeleteEmptyDstDatasetsTask(AbstractTestCase):
         job = self._job(delete_snapshots_and_bookmarks=True)
         basis = ["b"]
         datasets = list(basis)
-        with patch(
-            "bzfs_main.bzfs.are_bookmarks_enabled",
-            return_value=True,
-        ), patch(
-            "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
-            return_value=iter([["b#bm1"]]),
-        ) as mock_list, patch("bzfs_main.bzfs.delete_datasets") as mock_del:
+        with (
+            patch(
+                "bzfs_main.bzfs.are_bookmarks_enabled",
+                return_value=True,
+            ),
+            patch(
+                "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
+                return_value=iter([["b#bm1"]]),
+            ) as mock_list,
+            patch("bzfs_main.bzfs.delete_datasets") as mock_del,
+        ):
             basis_datasets_result, result = job.delete_empty_dst_datasets_task(basis, datasets)
         self.assertListEqual(["b"], result)
         self.assertListEqual(["b"], basis_datasets_result)
@@ -1532,10 +1542,13 @@ class TestDeleteEmptyDstDatasetsTask(AbstractTestCase):
         job = self._job()
         basis = ["a", "a/b"]
         datasets = list(basis)
-        with patch(
-            "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
-            return_value=iter([]),
-        ) as mock_list, patch("bzfs_main.bzfs.delete_datasets") as mock_del:
+        with (
+            patch(
+                "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
+                return_value=iter([]),
+            ) as mock_list,
+            patch("bzfs_main.bzfs.delete_datasets") as mock_del,
+        ):
             basis_datasets_result, result = job.delete_empty_dst_datasets_task(basis, datasets)
         self.assertListEqual([], result)
         self.assertListEqual([], basis_datasets_result)
@@ -1714,8 +1727,9 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
                 fn_latest(0, int(times[ds].timestamp()), ds, "")
             return []
 
-        with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=False), patch.object(
-            bzfs.Job, "handle_minmax_snapshots", new=fake_handle
+        with (
+            patch("bzfs_main.bzfs.is_caching_snapshots", return_value=False),
+            patch.object(bzfs.Job, "handle_minmax_snapshots", new=fake_handle),
         ):
             result = job.find_datasets_to_snapshot(["tank/a", "tank/b"])
 
@@ -1789,9 +1803,11 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
                     fn_on_finish_dataset(ds)
             return []
 
-        with patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True), patch.object(
-            bzfs.Job, "handle_minmax_snapshots", new=fake_handle
-        ), patch("bzfs_main.bzfs.set_last_modification_time_safe"):
+        with (
+            patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+            patch.object(bzfs.Job, "handle_minmax_snapshots", new=fake_handle),
+            patch("bzfs_main.bzfs.set_last_modification_time_safe"),
+        ):
             result = job.find_datasets_to_snapshot(["tank/a", "tank/b"])
 
         self.assertListEqual(["tank/b"], received)

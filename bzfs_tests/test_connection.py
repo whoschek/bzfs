@@ -28,12 +28,14 @@ import unittest
 from collections import (
     Counter,
 )
+from collections.abc import (
+    Iterator,
+)
 from types import (
     SimpleNamespace,
 )
 from typing import (
     Any,
-    Iterator,
     cast,
 )
 from unittest.mock import (

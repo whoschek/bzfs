@@ -24,6 +24,10 @@ import sys
 from collections import (
     deque,
 )
+from collections.abc import (
+    Iterable,
+    Iterator,
+)
 from concurrent.futures import (
     FIRST_COMPLETED,
     Future,
@@ -31,8 +35,6 @@ from concurrent.futures import (
 )
 from typing import (
     Callable,
-    Iterable,
-    Iterator,
     TypeVar,
 )
 

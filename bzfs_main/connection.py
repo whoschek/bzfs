@@ -25,6 +25,12 @@ import shlex
 import subprocess
 import threading
 import time
+from collections import (
+    Counter,
+)
+from collections.abc import (
+    Iterator,
+)
 from dataclasses import (
     dataclass,
 )
@@ -36,8 +42,6 @@ from subprocess import (
 )
 from typing import (
     TYPE_CHECKING,
-    Counter,
-    Iterator,
 )
 
 from bzfs_main.retry import (
@@ -102,7 +106,7 @@ def run_ssh_command(
         if is_dry:
             return ""
         try:
-            process: CompletedProcess = subprocess_run(
+            process: CompletedProcess[str] = subprocess_run(
                 ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=check
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
@@ -113,7 +117,7 @@ def run_ssh_command(
         else:
             xprint(log, process.stdout, run=print_stdout, end="")
             xprint(log, process.stderr, run=print_stderr, end="")
-            return process.stdout  # type: ignore[no-any-return]  # need to ignore on python <= 3.8
+            return process.stdout
 
 
 def try_ssh_command(

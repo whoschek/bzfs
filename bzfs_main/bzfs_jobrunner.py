@@ -14,7 +14,7 @@
 
 # Inline script metadata conforming to https://packaging.python.org/specifications/inline-script-metadata
 # /// script
-# requires-python = ">=3.8"
+# requires-python = ">=3.9"
 # dependencies = []
 # ///
 #
@@ -49,6 +49,9 @@ import uuid
 from ast import (
     literal_eval,
 )
+from collections.abc import (
+    Iterable,
+)
 from logging import (
     Logger,
 )
@@ -58,7 +61,6 @@ from subprocess import (
 )
 from typing import (
     Any,
-    Iterable,
     NoReturn,
     TypeVar,
     Union,

@@ -38,7 +38,6 @@ from logging import (
 from typing import (
     Any,
     Callable,
-    Dict,
     NamedTuple,
 )
 
@@ -64,7 +63,7 @@ BARRIER_CHAR: str = "~"
 
 
 #############################################################################
-Tree = Dict[str, "Tree"]  # Type alias
+Tree = dict[str, "Tree"]  # Type alias
 
 
 def _build_dataset_tree(sorted_datasets: list[str]) -> Tree:

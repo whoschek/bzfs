@@ -29,7 +29,6 @@ from datetime import (
 )
 from typing import (
     Any,
-    Tuple,
     Union,
     cast,
 )
@@ -397,26 +396,26 @@ class TestTimeRangeAction(CommonTest):
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
         p = self.make_params(args=args)
-        timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+        timerange = cast(tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
         self.assertEqual(timedelta(seconds=0), timerange[0])
         self.assertEqual(timedelta(seconds=60), timerange[1])
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1secs ago..60secs ago"])
         p = self.make_params(args=args)
-        timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+        timerange = cast(tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
         self.assertEqual(timedelta(seconds=1), timerange[0])
         self.assertEqual(timedelta(seconds=60), timerange[1])
 
         for wildcard in wildcards:
             args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01.." + wildcard])
             p = self.make_params(args=args)
-            timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+            timerange = cast(tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
             self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), timerange[0])
             self.assertLess(int(time.time() + 86400 * 365 * 1000), cast(int, timerange[1]))
 
             args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + wildcard + "..2024-01-01"])
             p = self.make_params(args=args)
-            timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+            timerange = cast(tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
             self.assertEqual(0, timerange[0])
             self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), cast(int, timerange[1]))
 

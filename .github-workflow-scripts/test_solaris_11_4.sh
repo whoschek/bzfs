@@ -22,7 +22,6 @@ uname -a
 uname -v
 if [ "$(uname -v)" = "11.4.0.15.0" ]; then
   pyversion=3.9.20; export ax_cv_c_float_words_bigendian=no
-  # pyversion=3.8.19; export ax_cv_c_float_words_bigendian=no
   # pyversion=3.7.17 # works fine too
   # pyversion=3.10.14; export ax_cv_c_float_words_bigendian=no # works fine too
   wget https://www.python.org/ftp/python/$pyversion/Python-$pyversion.tgz
@@ -42,7 +41,7 @@ else  # it's a more recent solaris version and as such has python >= 3.7 preinst
     mkdir -p /python3/bin
     ln -s $(command -v python3.9) /python3/bin/python3
   fi
-  ##wget https://bootstrap.pypa.io/pip/3.8/get-pip.py  # see https://github.com/pypa/get-pip
+  ##wget https://bootstrap.pypa.io/pip/3.9/get-pip.py  # see https://github.com/pypa/get-pip
   ##sudo python3 get-pip.py  # for coverage.sh only: manually install pip as it is missing in the preinstalled version
 fi
 id -u -n

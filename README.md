@@ -89,7 +89,7 @@ granted corresponding ZFS permissions by administrators via 'zfs allow' delegati
 
 bzfs is written in Python and continuously runs a wide set of unit tests and integration tests to
 ensure coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris,
-on all Python versions ≥ 3.8 (including latest stable which is currently python-3.13).
+on all Python versions ≥ 3.9 (including latest stable which is currently python-3.13).
 
 bzfs is a stand-alone program with zero required dependencies, akin to a stand-alone shell script
 or binary executable. It is designed to be able to run in restricted barebones server
@@ -517,7 +517,7 @@ The script also demonstrates functioning installation steps on Ubuntu, FreeBSD, 
 The script also generates code coverage reports which are published
 [here](https://whoschek.github.io/bzfs/coverage).
 
-The gist is that it should work on any platform, with python (3.8 or higher, no additional python packages required)
+The gist is that it should work on any platform, with python (3.9 or higher, no additional python packages required)
 only needed on the initiator host.
 
 
@@ -550,7 +550,7 @@ coverage report that merges all jobs of the run.
 ```bash
 # Check prerequisites
 zfs --version                      # verify ZFS is installed
-python3 --version                  # verify Python 3.8 or newer is installed
+python3 --version                  # verify Python 3.9 or newer is installed
 sudo --non-interactive ls          # verify non-interactive sudo works
 
 # If sshd uses a non-standard port

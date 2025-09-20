@@ -43,6 +43,9 @@ import unittest
 from collections import (
     Counter,
 )
+from collections.abc import (
+    Iterable,
+)
 from pathlib import (
     Path,
 )
@@ -53,7 +56,6 @@ from subprocess import (
 from typing import (
     Any,
     Callable,
-    Iterable,
     cast,
 )
 from unittest.mock import (
