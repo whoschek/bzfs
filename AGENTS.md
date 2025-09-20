@@ -57,20 +57,57 @@ To understand the system's architecture and features, follow these steps:
 - **Code Design:** Read the overview docstrings at the top of `bzfs_main/bzfs.py` and `bzfs_main/bzfs_jobrunner.py` to
   see where key functionalities are implemented.
 
+## Instruction Precedence
+
+- **Instruction Precedence:** If there is any conflict, the User's explicit requests for the current session take
+  precedence over this document.
+
 # Step by Step Reasoning Workflow
 
-- Think systematically, work through this step by step, and reason deeply before responding.
+- Think systematically through what's been asked of you, work through this step by step, and reason deeply before
+  responding.
 - Start responses with the most relevant information, then give context.
-- In each response, carefully analyse your own previous responses in the light of new information, and advise on any
+- In each response, carefully analyze your own previous responses in the light of new information, and advise on any
   corrections noticed without needing to be prompted.
-- Start each of your replies with a section called "Summary:", where you provide an overview of everything discussed in
-  the conversation so far, calling out anything you need to remember, including the status of prior tasks and action
-  items.
-- Following that should be a section called "Thoughts:" where you systematically think through what's been asked of you,
-  adding your thoughts in bullet point form, step by step. This can include your previous thoughts from the
-  conversation.
-- And following that, maintain a section called "Task List:" where you list planned actions needed for the project.
-- And finally, formulate the contents of the "Reply:" section.
+- Maintain a task list where you list the status of prior tasks and action items, and planned actions needed for the
+  project.
+- For non-trivial tasks, maintain a visible task list (via the `update_plan` tool if available) with exactly one
+  `in_progress` step; mark completed steps before starting a new step, and avoid repeating the full plan in messages.
+  Summarize the change and highlight the next step instead.
+
+# Change Validation Workflow
+
+To validate your changes, you **must** follow this exact sequence:
+
+1. **Initialize Environment**: If the `venv` directory does not exist, create it and set it up with all development
+   dependencies as described in [How to Set up the Environment](#how-to-set-up-the-environment).
+
+2. **Activate the venv:** Run `source venv/bin/activate` to ensure the Python virtual environment is active so that all
+   tools and pre-commit hooks run consistently.
+
+3. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite. Always invoke tests via
+   `./test.sh` (set `bzfs_test_mode` as needed); do not call test modules directly. Iterate on your code until all tests
+   pass (or fail if test failure is indeed the expected behavior) before proceeding.
+
+4. **Stage Your Own Untracked Files (if any):** Run `git add <paths>` on the files you added or renamed **yourself**,
+   but exclude the files the user or a third party added or renamed. This ensures that subsequent `pre-commit` checks
+   only see the relevant files. Note: `pre-commit` processes only tracked files, even with `--all-files`.
+
+5. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run the `pre-commit` hooks specified in
+   `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting (with `ruff`), formatting (with
+   `black`), type checking (with `mypy`). Fix any reported issues and iterate until all hooks pass.
+
+6. **Update Documentation (if applicable):** Run `./update_readme.sh` if you have changed any `argparse` help text in
+   `.py` files, to regenerate the README files.
+
+7. **Final Review:** If you made any changes during steps 3 or 5-6, repeat the entire workflow from step 3 to ensure all
+   checks still pass.
+
+8. **Integration tests:** If the user explicitly requests to use the environment variable `bzfs_test_mode` with a value
+   other than `unit` (e.g. `smoke` to run the "smoke tests" or `functional` to run the "functional tests" or "" to run
+   all integration tests) then you must always invoke tests via `./test.sh` (never directly via `python ...`) to ensure
+   the corresponding integration tests are setup and executed correctly. Otherwise use `bzfs_test_mode=unit` by default,
+   as integration tests require that the `zfs` CLI is installed, and ZFS admin permissions are available.
 
 # Core Software Development Workflow
 
@@ -90,8 +127,9 @@ For software development, you **must** follow this exact sequence:
 
 4. **Write documentation:** Translate the specified documentation changes to file updates.
 
-5. **Use TDD: Write tests before implementation:** First, translate test specifications to test code. Run to see red.
-   Finally implement minimal code to reach green, then refactor.
+5. **Use TDD: Write tests before implementation:** First, translate test specifications to test code. Run to see red,
+   using the [Change Validation Workflow](#change-validation-workflow). Finally implement minimal code to reach green,
+   run the **entire** [Change Validation Workflow](#change-validation-workflow), then refactor.
 
 6. **Iterate:** Repeat the entire workflow from step 1 to gain additional tests, an incrementally better design
    rationale (≤ 200 words), and a corresponding better implementation.
@@ -100,38 +138,17 @@ For software development, you **must** follow this exact sequence:
 
 Before committing any changes, you **must** follow this exact sequence:
 
-1. **Initialize Environment**: If the `venv` directory does not exist, create it and set it up with all development
-   dependencies as described in [How to Set up the Environment](#how-to-set-up-the-environment).
+1. Stop this Commit Workflow unless the user explicitly requests to commit.
 
-2. **Activate the venv:** Run `source venv/bin/activate` to ensure the Python virtual environment is active so that all
-   tools and pre-commit hooks run consistently.
+2. Run the [Change Validation Workflow](#change-validation-workflow). Iterate until it passes before proceeding.
 
-3. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite. Iterate on your code until
-   all tests pass before proceeding.
-
-4. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run the `pre-commit` hooks specified in
-   `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting (with `ruff`), formatting (with
-   `black`), type checking (with `mypy`). Fix any reported issues and iterate until all hooks pass.
-
-5. **Update Documentation (if applicable):** Run `./update_readme.sh` if you have changed any `argparse` help text in
-   `.py` files, to regenerate the README files.
-
-6. **Final Review:** If you made any changes during steps 3-5, repeat the entire workflow from step 3 to ensure all
-   checks still pass.
-
-7. **Commit:**
+3. **Commit:**
 
 - Use `git commit -s` to sign off on your work.
 - Use conventional commit messages of the form **Type(Scope): Description** for all commits, e.g. 'feat(bzfs_jobrunner):
   add --foo CLI option', using the following Type and (optional) Scope categories:
   - **Types:** `build`, `bump`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `style`, `test`
   - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`
-
-8. **Integration tests:** If the user explicitly requests to use the environment variable `bzfs_test_mode` with a value
-   other than `unit` (e.g. `smoke` to run the "smoke tests" or `functional` to run the "functional tests" or "" to run
-   all integration tests) then you must **always invoke tests** via `./test.sh` (and never directly via `python ...`) to
-   ensure that the corresponding integration tests are setup and executed correctly. Otherwise use `bzfs_test_mode=unit`
-   by default, as integration tests require that the `zfs` CLI is installed, and ZFS admin permissions are available.
 
 # Guidelines and Best Practices
 
@@ -186,8 +203,6 @@ Your goal is to improve quality with zero functional regressions.
   using different perspectives, methodologies, and techniques. Explain and evaluate the pros/cons of each approach.
   Select the most promising one to deliver success, and explain your choice. Then methodically execute each step of your
   plan.
-
-- **ast-grep (`sg`) Tool:** Consider running `./venv/bin/sg` for refactor-safe searches.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
@@ -248,3 +263,12 @@ If asked to improve coverage:
   pip install -e '.[dev]'                   # Install all development dependencies
   pre-commit install --install-hooks        # Ensure Linters and Formatters run on every commit
   ```
+
+## Safety Rules
+
+- Never run `rm -rf`.
+- Never run `git reset --hard`.
+- Never operate on the `.git` directory with anything other than the `git` CLI.
+- Never delete, rename or push branches, tags, or releases unless the user explicitly requests it.
+- Never upload anything unless the user explicitly requests it.
+- Never download or install any software unless the user explicitly requests it.
