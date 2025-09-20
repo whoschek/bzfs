@@ -417,7 +417,7 @@ def xappend(lst: list[TAPPEND], *items: TAPPEND | Iterable[TAPPEND]) -> list[TAP
     for item in items:
         if isinstance(item, str) or not isinstance(item, collections.abc.Iterable):
             if item:
-                lst.append(cast(TAPPEND, item))
+                lst.append(item)
         else:
             xappend(lst, *item)
     return lst

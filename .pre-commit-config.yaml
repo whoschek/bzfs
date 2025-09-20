@@ -29,7 +29,7 @@ repos:
     hooks:                              # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
       - id: gitleaks                    # defaults to: gitleaks git --pre-commit --redact --staged --verbose
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: detect-private-key          # Prevent the accidental inclusion of private keys in your commits
       - id: check-merge-conflict        # Check that merge conflicts are not being committed
@@ -53,17 +53,17 @@ repos:
       - id: trailing-whitespace         # Remove whitespace from the end of lines
       - id: end-of-file-fixer           # Remove whitespace from the end of files and replace end of files with linefeed
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.33.3
+    rev: 0.34.0
     hooks:
       - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
       #- id: check-compose-spec         # Validate syntax of Docker Compose files
       - id: check-dependabot            # Validate syntax of Dependabot config files
-#  - repo: https://github.com/woodruffw/zizmor-pre-commit  # also see https://github.com/zizmorcore/zizmor
-#    rev: v1.12.1
-#    hooks:
-#      - id: zizmor                     # Validate syntax of GitHub Workflow YAML files
-#        args: [--fix=all]
+  # - repo: https://github.com/woodruffw/zizmor-pre-commit  # also see https://github.com/zizmorcore/zizmor
+  #   rev: v1.13.0
+  #   hooks:
+  #     - id: zizmor                     # Validate syntax of GitHub Workflow YAML files
+  #       args: [--fix=all]
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:
@@ -76,7 +76,7 @@ repos:
         additional_dependencies: [tomli]
         # config options like `wrap-summaries` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.0
+    rev: v0.13.1
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
@@ -99,10 +99,10 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.33.0']
+        additional_dependencies: ['pyrefly==0.33.1']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.16.1
+    rev: v1.18.2
     hooks:
       - id: mypy                             # Run `mypy` Python type checker
         exclude: '^\.git.*$'
