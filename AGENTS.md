@@ -64,7 +64,7 @@ To understand the system's architecture and features, follow these steps:
 
 # Step by Step Reasoning Workflow
 
-- Think systematically through what's been asked of you, work through this step by step, and reason deeply before
+- Think systematically through what's been asked of you, work through it step by step, and reason deeply before
   responding.
 - Start responses with the most relevant information, then give context.
 - In each response, carefully analyze your own previous responses in the light of new information, and advise on any
@@ -91,7 +91,7 @@ To validate your changes, you **must** follow this exact sequence:
 
 4. **Stage Your Own Untracked Files (if any):** Run `git add <paths>` on the files you added or renamed **yourself**,
    but exclude the files the user or a third party added or renamed. This ensures that subsequent `pre-commit` checks
-   only see the relevant files. Note: `pre-commit` processes only tracked files, even with `--all-files`.
+   only see relevant files. Note: `pre-commit` processes only tracked files, even with `--all-files`.
 
 5. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run the `pre-commit` hooks specified in
    `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting (with `ruff`), formatting (with
@@ -209,11 +209,11 @@ Your goal is to improve quality with zero functional regressions.
 - **Preserve docstrings and code comments:** During refactors, copy existing docstrings and comments first, then keep or
   improve them as code changes or moves.
 
-- **Avoid Circular Dependencies:** Extract the shared logic into a new utility module - or an existing module that keeps
-  the dependency graph acyclic - rather than adding deep import chains.
-
 - **Detect Circular Dependencies:** Run `pre-commit run pylint --all-files --hook-stage manual` for an ad‑hoc check
   without enabling it for every commit.
+
+- **Avoid Circular Dependencies:** Extract the shared logic into a new utility module - or an existing module that keeps
+  the dependency graph acyclic - rather than adding deep import chains.
 
 ## How to Improve Code Coverage
 
@@ -267,8 +267,8 @@ If asked to improve coverage:
 ## Safety Rules
 
 - Never run `rm -rf`.
-- Never run `git reset --hard`.
+- Never run `git reset`.
 - Never operate on the `.git` directory with anything other than the `git` CLI.
-- Never delete, rename or push branches, tags, or releases unless the user explicitly requests it.
+- Never delete, rename or push a branch, tag, or release unless the user explicitly requests it.
 - Never upload anything unless the user explicitly requests it.
-- Never download or install any software unless the user explicitly requests it.
+- Never download anything or install any software unless the user explicitly requests it.
