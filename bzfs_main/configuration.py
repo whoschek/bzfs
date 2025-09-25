@@ -75,6 +75,7 @@ from bzfs_main.utils import (
     PROG_NAME,
     SHELL_CHARS,
     SNAPSHOT_FILTERS_VAR,
+    UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH,
     UNIX_TIME_INFINITY_SECS,
     RegexList,
     SnapshotPeriods,
@@ -476,12 +477,14 @@ class Remote:
             ["-v"] if args.verbose >= 3 else []
         )
         self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
+        self.ssh_exit_on_shutdown: bool = args.ssh_exit_on_shutdown or platform.system() == "SunOS"
+        self.ssh_control_persist_secs: int = args.ssh_control_persist_secs
+        self.socket_prefix: str = "s"
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
             self.ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs")
             os.makedirs(os.path.dirname(self.ssh_socket_dir), exist_ok=True)
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
-            self.socket_prefix: str = "s"
             _delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
         self.sanitize1_regex: re.Pattern = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
         self.sanitize2_regex: re.Pattern = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # Remove disallowed chars
@@ -497,7 +500,7 @@ class Remote:
         self.ssh_user_host: str = ""
         self.is_nonlocal: bool = False
 
-    def local_ssh_command(self) -> list[str]:
+    def local_ssh_command(self, socket_file: str | None) -> list[str]:
         """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
         command to run on the remote host, which will be appended later."""
         if not self.ssh_user_host:
@@ -517,15 +520,18 @@ class Remote:
         if self.reuse_ssh_connection:
             # Performance: reuse ssh connection for low latency startup of frequent ssh invocations via the 'ssh -S' and
             # 'ssh -S -M -oControlPersist=60s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
-            # Generate unique private Unix domain socket file name in user's home dir and pass it to 'ssh -S /path/to/socket'
-            def sanitize(name: str) -> str:
-                name = self.sanitize1_regex.sub("~", name)  # replace whitespace, /, $, \, @ with a ~ tilde char
-                name = self.sanitize2_regex.sub("", name)  # Remove disallowed chars
-                return name
+            if not socket_file:
+                # Generate unique private Unix domain socket file name in user's home dir and pass it to 'ssh -S /path/to/socket'
+                def sanitize(name: str) -> str:
+                    name = self.sanitize1_regex.sub("~", name)  # replace whitespace, /, $, \, @ with a ~ tilde char
+                    name = self.sanitize2_regex.sub("", name)  # Remove disallowed chars
+                    return name
 
-            unique: str = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999_999_999)}"
-            socket_name: str = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
-            socket_file: str = os.path.join(self.ssh_socket_dir, socket_name)[: max(100, len(self.ssh_socket_dir) + 10)]
+                unique: str = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999_999_999)}"
+                socket_name: str = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
+                socket_file = os.path.join(self.ssh_socket_dir, socket_name)[
+                    0 : max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(self.ssh_socket_dir) + 10)
+                ]
             ssh_cmd += ["-S", socket_file]
         ssh_cmd += [self.ssh_user_host]
         return ssh_cmd

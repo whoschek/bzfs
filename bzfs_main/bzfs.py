@@ -249,7 +249,6 @@ class Job:
         self.dedicated_tcp_connection_per_zfs_send: bool = True
         self.max_datasets_per_minibatch_on_list_snaps: dict[str, int] = {}
         self.max_workers: dict[str, int] = {}
-        self.control_persist_secs: int = 90
         self.control_persist_margin_secs: int = 2
         self.progress_reporter: ProgressReporter = cast(ProgressReporter, None)
         self.is_first_replication_task: SynchronizedBool = SynchronizedBool(True)
@@ -325,7 +324,9 @@ class Job:
                 with open_nofollow(log_params.log_file, "a", encoding="utf-8", perm=FILE_PERMISSIONS) as log_file_fd:
                     with contextlib.redirect_stderr(cast(IO[Any], Tee(log_file_fd, sys.stderr))):  # stderr to logfile+stderr
                         lock_file: str = p.lock_file_name()
-                        lock_fd = os.open(lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW, FILE_PERMISSIONS)
+                        lock_fd = os.open(
+                            lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, FILE_PERMISSIONS
+                        )
                         with xfinally(lambda: os.close(lock_fd)):
                             try:
                                 # Acquire an exclusive lock; will raise an error if lock is already held by another process.

@@ -18,7 +18,9 @@ from __future__ import (
     annotations,
 )
 import argparse
+import base64
 import errno
+import hashlib
 import os
 import re
 import shutil
@@ -75,7 +77,9 @@ from bzfs_main.utils import (
     SynchronousExecutor,
     _get_descendant_processes,
     append_if_absent,
+    base32_str,
     binary_search,
+    close_quietly,
     compile_regexes,
     current_datetime,
     cut,
@@ -98,6 +102,7 @@ from bzfs_main.utils import (
     pid_exists,
     pretty_print_formatter,
     replace_capturing_groups_with_non_capturing_groups,
+    sha256_base32_str,
     shuffle_dict,
     sorted_dict,
     subprocess_run,
@@ -116,6 +121,7 @@ from bzfs_tests.tools import (
 def suite() -> unittest.TestSuite:
     test_cases = [
         TestHelperFunctions,
+        TestBase32,
         TestCut,
         TestDrain,
         TestShuffleDict,
@@ -125,6 +131,7 @@ def suite() -> unittest.TestSuite:
         TestGetHomeDirectory,
         TestHumanReadable,
         TestOpenNoFollow,
+        TestCloseQuietly,
         TestFindMatch,
         TestReplaceCapturingGroups,
         TestSubprocessRun,
@@ -247,6 +254,83 @@ class TestHelperFunctions(unittest.TestCase):
         xprint(log, "", run=True)
         xprint(log, "", run=False)
         xprint(log, None)
+
+
+#############################################################################
+class TestBase32(unittest.TestCase):
+
+    def test_sha256_base32_length_charset_padding(self) -> None:
+        """All SHA-256 digests are 32 bytes; RFC 4648 Base32 yields 56 chars with 4 '=' trailing pad for 32-byte input."""
+        inputs = [
+            "",
+            "a",
+            "abc",
+            "hello",
+            "hello world",
+            "The quick brown fox jumps over the lazy dog",
+            "häßlich",  # non-ASCII, ensure UTF-8 handling
+        ]
+        pattern = re.compile(r"^[A-Z2-7=]+$")
+        for text in inputs:
+            out = sha256_base32_str(text, padding=True)
+            self.assertEqual(56, len(out))
+            self.assertTrue(out.endswith("===="))
+            out = sha256_base32_str(text, padding=False)
+            self.assertEqual(52, len(out))
+            self.assertTrue(pattern.fullmatch(out))
+            self.assertFalse(out.endswith("="))
+            self.assertEqual(out, sha256_base32_str(text, padding=False))  # Deterministic
+
+    def test_sha256_base32_matches_stdlib_composition(self) -> None:
+        for text in ["", "abc", "hello world", "häßlich"]:
+            expected = base64.b32encode(hashlib.sha256(text.encode("utf-8")).digest()).decode()
+            self.assertEqual(expected, sha256_base32_str(text, padding=True))
+            expected = base64.b32encode(hashlib.sha256(text.encode("utf-8")).digest()).decode().rstrip("=")
+            self.assertEqual(expected, sha256_base32_str(text, padding=False))
+
+    def test_base32_fixed_length_8_chars(self) -> None:
+        max_value = 999_999_999_999
+        samples = [0, 1, 42, 2**20, max_value]
+        pattern = re.compile(r"^[A-Z2-7]+$")
+        for n in samples:
+            out = base32_str(n, max_value, padding=True)
+            self.assertEqual(8, len(out))
+            self.assertNotIn("=", out)
+            out = base32_str(n, max_value, padding=False)
+            self.assertEqual(8, len(out))
+            self.assertIsNotNone(pattern.fullmatch(out))
+            self.assertNotIn("=", out)
+        self.assertEqual("AAAAAAAA", base32_str(0, max_value, padding=False))
+
+    def test_base32_fixed_length_16_chars(self) -> None:
+        max_value = 2**64 - 1
+        pattern = re.compile(r"^[A-Z2-7]+$")
+        for n in [0, 1, 2**32, 2**63, (2**64) - 1]:
+            out = base32_str(n, max_value, padding=True)
+            self.assertEqual(16, len(out))
+            self.assertTrue(out.endswith("==="))
+            out = base32_str(n, max_value, padding=False)
+            self.assertEqual(13, len(out))
+            self.assertIsNotNone(pattern.fullmatch(out))
+            self.assertNotIn("=", out)
+        self.assertEqual("A" * 13 + "===", base32_str(0, max_value, padding=True))
+        self.assertEqual("A" * 13, base32_str(0, max_value, padding=False))
+
+    def test_base32_expected_lengths_for_various_byte_widths(self) -> None:
+        """Validate that for byte widths 1..5 the length matches RFC 4648 when '=' is stripped."""
+        for byte_len in range(1, 6):
+            expected_len = len(base64.b32encode(b"\x00" * byte_len).decode())
+            expected_len_stripped = len(base64.b32encode(b"\x00" * byte_len).decode().rstrip("="))
+            max_value = (1 << (8 * byte_len)) - 1
+            for n in [0, 1, max_value // 2, max_value]:
+                out = base32_str(n, max_value, padding=True)
+                self.assertEqual(expected_len, len(out))
+                out = base32_str(n, max_value, padding=False)
+                self.assertEqual(expected_len_stripped, len(out))
+
+    def test_base32_zero_max_value_edge_case(self) -> None:
+        self.assertEqual("", base32_str(0, 0, padding=True))
+        self.assertEqual("", base32_str(0, 0, padding=False))
 
 
 ###############################################################################
@@ -689,6 +773,46 @@ class TestOpenNoFollow(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 open_nofollow(self.real_path, "r")
         m_close.assert_called_once()
+
+
+#############################################################################
+class TestCloseQuietly(unittest.TestCase):
+
+    def test_closes_valid_fd(self) -> None:
+        """Closes a valid FD so subsequent close raises OSError (EBADF)."""
+        r, w = os.pipe()
+        try:
+            close_quietly(w)
+            with self.assertRaises(OSError):
+                os.close(w)  # already closed
+        finally:
+            close_quietly(r)
+
+    def test_ignores_negative_fd(self) -> None:
+        """Negative FD is a no-op and must not raise."""
+        close_quietly(-1)
+
+    def test_swallow_error_on_already_closed_fd(self) -> None:
+        """Closing an already-closed FD must not propagate exceptions."""
+        r, w = os.pipe()
+        try:
+            os.close(w)
+            close_quietly(w)  # should not raise
+        finally:
+            close_quietly(r)
+
+    def test_does_not_affect_duplicated_fd(self) -> None:
+        """Closing one FD must not close its duplicate; IO via duplicate works."""
+        r, w = os.pipe()
+        d = os.dup(w)
+        try:
+            close_quietly(w)
+            os.write(d, b"X")  # duplicate remains valid
+            data = os.read(r, 1)
+            self.assertEqual(b"X", data)
+        finally:
+            close_quietly(d)
+            close_quietly(r)
 
 
 #############################################################################

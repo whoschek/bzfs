@@ -23,6 +23,7 @@ from __future__ import (
     annotations,
 )
 import argparse
+import base64
 import bisect
 import collections
 import contextlib
@@ -30,6 +31,7 @@ import errno
 import hashlib
 import logging
 import os
+import platform
 import pwd
 import random
 import re
@@ -98,6 +100,7 @@ DONT_SKIP_DATASET: str = ""
 SHELL_CHARS: str = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
 FILE_PERMISSIONS: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
 DIR_PERMISSIONS: int = stat.S_IRWXU  # rwx------ (user read + write + execute)
+UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH: int = 107 if platform.system() == "Linux" else 103  # see Google for 'sun_path'
 
 RegexList = list[tuple[re.Pattern, bool]]  # Type alias
 
@@ -310,6 +313,15 @@ def open_nofollow(
         raise
 
 
+def close_quietly(fd: int) -> None:
+    """Closes the given file descriptor while swallowing any exception that might arise as part of this."""
+    if fd >= 0:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+
 P = TypeVar("P")
 
 
@@ -509,6 +521,24 @@ def xprint(log: logging.Logger, value: Any, run: bool = True, end: str = "\n", f
 def sha256_hex(text: str) -> str:
     """Returns the sha256 hex string for the given text."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def sha256_base32_str(text: str, padding: bool = True) -> str:
+    """Returns the base32-encoded sha256 value for the given text."""
+    digest: bytes = hashlib.sha256(text.encode("utf-8")).digest()
+    s: str = base64.b32encode(digest).decode()
+    return s if padding else s.rstrip("=")
+
+
+def base32_str(
+    value: int, max_value: int = 2**64 - 1, padding: bool = True, byteorder: Literal["little", "big"] = "big"
+) -> str:
+    """Returns the base32 string encoding of the given value, assuming it is contained in the range [0..max_value]."""
+    assert value >= 0
+    assert max_value >= value
+    max_bytes: int = (max_value.bit_length() + 7) // 8
+    s: str = base64.b32encode(value.to_bytes(max_bytes, byteorder)).decode()
+    return s if padding else s.rstrip("=")
 
 
 def die(msg: str, exit_code: int = DIE_STATUS, parser: argparse.ArgumentParser | None = None) -> NoReturn:

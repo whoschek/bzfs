@@ -44,6 +44,10 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from bzfs_main.connection_lease import (
+    ConnectionLease,
+    ConnectionLeaseManager,
+)
 from bzfs_main.retry import (
     RetryableError,
 )
@@ -160,28 +164,29 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
     if not remote.reuse_ssh_connection:
         return
     # Performance: reuse ssh connection for low latency startup of frequent ssh invocations via the 'ssh -S' and
-    # 'ssh -S -M -oControlPersist=60s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
-    control_persist_limit_nanos: int = (job.control_persist_secs - job.control_persist_margin_secs) * 1_000_000_000
+    # 'ssh -S -M -oControlPersist=90s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
+    # and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
+    control_persist_limit_nanos: int = (remote.ssh_control_persist_secs - job.control_persist_margin_secs) * 1_000_000_000
     with conn.lock:
         if time.monotonic_ns() - conn.last_refresh_time < control_persist_limit_nanos:
             return  # ssh master is alive, reuse its TCP connection (this is the common case and the ultra-fast path)
         ssh_cmd: list[str] = conn.ssh_cmd
         ssh_socket_cmd: list[str] = ssh_cmd[0:-1]  # omit trailing ssh_user_host
         ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
-        # extend lifetime of ssh master by $control_persist_secs via 'ssh -O check' if master is still running.
+        # extend lifetime of ssh master by $ssh_control_persist_secs via 'ssh -O check' if master is still running.
         # 'ssh -S /path/to/socket -O check' doesn't talk over the network, hence is still a low latency fast path.
         t: float | None = timeout(job)
         if subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=t).returncode == 0:
             log.log(LOG_TRACE, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
         else:  # ssh master is not alive; start a new master:
             log.log(LOG_TRACE, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
-            control_persist_secs: int = job.control_persist_secs
+            ssh_control_persist_secs: int = remote.ssh_control_persist_secs
             if "-v" in remote.ssh_extra_opts:
                 # Unfortunately, with `ssh -v` (debug mode), the ssh master won't background; instead it stays in the
                 # foreground and blocks until the ControlPersist timer expires (90 secs). To make progress earlier we ...
-                control_persist_secs = min(control_persist_secs, 1)  # tell ssh to block as briefly as possible (1 sec)
+                ssh_control_persist_secs = min(1, ssh_control_persist_secs)  # tell ssh to block as briefly as possible (1s)
             ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-            ssh_socket_cmd += ["-M", f"-oControlPersist={control_persist_secs}s", remote.ssh_user_host, "exit"]
+            ssh_socket_cmd += ["-M", f"-oControlPersist={ssh_control_persist_secs}s", remote.ssh_user_host, "exit"]
             log.log(LOG_TRACE, "Executing: %s", list_formatter(ssh_socket_cmd))
             process = subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=timeout(job))
             if process.returncode != 0:
@@ -242,7 +247,15 @@ class Connection:
         self.free: int = max_concurrent_ssh_sessions_per_tcp_connection
         self.last_modified: int = 0  # monotonically increasing
         self.cid: int = cid
-        self.ssh_cmd: list[str] = remote.local_ssh_command()
+        self.reuse_ssh_connection: bool = remote.reuse_ssh_connection
+        self.connection_lease: ConnectionLease | None = None
+        if remote.ssh_user_host and remote.reuse_ssh_connection and not remote.ssh_exit_on_shutdown:
+            self.connection_lease = ConnectionLeaseManager(
+                root_dir=remote.ssh_socket_dir, namespace=remote.cache_namespace(), log=remote.params.log
+            ).acquire()
+        self.ssh_cmd: list[str] = remote.local_ssh_command(
+            None if self.connection_lease is None else self.connection_lease.socket_path
+        )
         self.ssh_cmd_quoted: list[str] = [shlex.quote(item) for item in self.ssh_cmd]
         self.lock: threading.Lock = threading.Lock()
         self.last_refresh_time: int = 0
@@ -265,18 +278,21 @@ class Connection:
         self.last_modified = last_modified
 
     def shutdown(self, msg_prefix: str, p: Params) -> None:
-        """Closes the underlying SSH master connection."""
+        """Closes the underlying SSH master connection and releases the corresponding connection lease."""
         ssh_cmd: list[str] = self.ssh_cmd
-        if ssh_cmd:
-            ssh_socket_cmd: list[str] = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
-            p.log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_socket_cmd))
-            try:
-                proc: CompletedProcess = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=0.1)
-            except subprocess.TimeoutExpired as e:  # harmless as master conn auto-exits after control_persist_secs anyway
-                p.log.log(LOG_TRACE, "Harmless ssh master connection shutdown timeout: %s", e)
+        if ssh_cmd and self.reuse_ssh_connection:
+            if self.connection_lease is None:
+                ssh_sock_cmd: list[str] = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
+                p.log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_sock_cmd))
+                try:
+                    proc: CompletedProcess = subprocess.run(ssh_sock_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=0.1)
+                except subprocess.TimeoutExpired as e:  # harmless as master auto-exits after ssh_control_persist_secs anyway
+                    p.log.log(LOG_TRACE, "Harmless ssh master connection shutdown timeout: %s", e)
+                else:
+                    if proc.returncode != 0:  # harmless for the same reason
+                        p.log.log(LOG_TRACE, "Harmless ssh master connection shutdown issue: %s", proc.stderr.rstrip())
             else:
-                if proc.returncode != 0:  # harmless for the same reason
-                    p.log.log(LOG_TRACE, "Harmless ssh master connection shutdown issue: %s", proc.stderr.rstrip())
+                self.connection_lease.release()
 
 
 #############################################################################
@@ -339,10 +355,12 @@ class ConnectionPool:
     def shutdown(self, msg_prefix: str) -> None:
         """Closes all SSH connections managed by this pool."""
         with self._lock:
-            if self.remote.reuse_ssh_connection:
-                for conn in self.priority_queue:
-                    conn.shutdown(msg_prefix, self.remote.params)
-            self.priority_queue.clear()
+            try:
+                if self.remote.reuse_ssh_connection:
+                    for conn in self.priority_queue:
+                        conn.shutdown(msg_prefix, self.remote.params)
+            finally:
+                self.priority_queue.clear()
 
     def __repr__(self) -> str:
         with self._lock:

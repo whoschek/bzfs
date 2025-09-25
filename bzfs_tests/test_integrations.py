@@ -1840,6 +1840,14 @@ class LocalTestCase(IntegrationTestCase):
                 else:
                     self.assert_snapshots(dst_root_dataset, 3, "s")
 
+    def test_basic_replication_flat_with_ssh_exit_on_shutdown(self) -> None:
+        self.setup_basic()
+        self.assertTrue(dataset_exists(dst_root_dataset))
+        for i in range(2):
+            with stop_on_failure_subtest(i=i):
+                self.run_bzfs(src_root_dataset, dst_root_dataset, "--ssh-exit-on-shutdown")
+                self.assert_snapshots(dst_root_dataset, 3, "s")
+
     def test_basic_replication_flat_nothing_todo(self) -> None:
         for i in range(2):
             with stop_on_failure_subtest(i=i):
@@ -5633,6 +5641,9 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_basic_replication_flat_with_multiple_root_datasets_converted_from_recursive(self) -> None:
         LocalTestCase(param=self.param).test_basic_replication_flat_with_multiple_root_datasets_converted_from_recursive()
+
+    def test_basic_replication_flat_with_ssh_exit_on_shutdown(self) -> None:
+        LocalTestCase(param=self.param).test_basic_replication_flat_with_ssh_exit_on_shutdown()
 
     def test_zfs_set(self) -> None:
         LocalTestCase(param=self.param).test_zfs_set()
