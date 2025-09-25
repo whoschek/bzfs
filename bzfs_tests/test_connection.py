@@ -23,6 +23,7 @@ import logging
 import os
 import platform
 import random
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -683,13 +684,20 @@ class TestDecrementInjectionCounter(AbstractTestCase):
 @unittest.skipIf(platform.system() == "SunOS", "skip on solaris")
 class TestConnectionLease(AbstractTestCase):
 
+    def test_rename_file_to_itself_must_be_a_noop(self) -> None:
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="user@host#22#cfg", log=MagicMock(logging.Logger))
+            lease: ConnectionLease = mgr.acquire()
+            os.rename(lease.used_path, lease.used_path)  # POSIX rename file to itself must be a noop and must not fail
+            os.replace(lease.used_path, lease.used_path)  # POSIX rename file to itself must be a noop and must not fail
+
     def test_manager_acquire_release(self) -> None:
         """Purpose: Validate the end-to-end lifecycle of a connection lease, covering acquisition of two distinct
         leases, directory placement in ``used/`` during ownership, and safe release back to ``free/`` with proper file
         movement. Also verifies the ControlPath directory is consistent across leases and that unique names are
         allocated.
 
-        Assumptions: POSIX filesystem semantics, advisory ``flock`` behavior, and atomic ``os.replace`` are available.
+        Assumptions: POSIX filesystem semantics, advisory ``flock`` behavior, and atomic ``os.rename`` are available.
         The temporary directory is not meddled with by other processes. Only this test manipulates files under the
         manager's root. The OS permits creating Unix domain socket paths in the generated directory.
 
@@ -700,8 +708,8 @@ class TestConnectionLease(AbstractTestCase):
         releases are idempotent with the expected terminal state.
         """
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            mgr = ConnectionLeaseManager(root_dir=tmpdir, namespace="user@host#22#cfg", log=MagicMock(logging.Logger))
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="user@host#22#cfg", log=MagicMock(logging.Logger))
             lease1: ConnectionLease = mgr.acquire()
             lease2: ConnectionLease = mgr.acquire()
             try:
@@ -743,29 +751,29 @@ class TestConnectionLease(AbstractTestCase):
         ``_try_lock`` on a second manager demonstrates that re-acquired leases cannot be stolen while held, capturing
         the concurrency contract.
         """
-        root_dir: str = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX)
-        mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="user@host:22", log=MagicMock(logging.Logger))
-        # Create a lease then release to populate free/
-        lease1: ConnectionLease = mgr.acquire()
-        socket_name = os.path.basename(lease1.socket_path)
-        lease1.release()
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="user@host:22", log=MagicMock(logging.Logger))
+            # Create a lease then release to populate free/
+            lease1: ConnectionLease = mgr.acquire()
+            socket_name = os.path.basename(lease1.socket_path)
+            lease1.release()
 
-        lease2: ConnectionLease = mgr.acquire()
-        try:
-            self.assertEqual(socket_name, os.path.basename(lease2.socket_path))
-            # File should have moved to used/
-            self.assertTrue(os.path.exists(lease2.used_path))
-            self.assertFalse(os.path.exists(lease2.free_path))
-            # Path length should not exceed OS domain socket limits in typical setups
-            self.assertLessEqual(len(lease2.socket_path), UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH)
-            # Another contender cannot acquire the same lock while lease is held
-            other = ConnectionLeaseManager(root_dir=root_dir, namespace="user@host:22", log=MagicMock(logging.Logger))
-            self.assertIsNone(other._try_lock(lease2.used_path, open_flags=os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC))
-        finally:
-            lease2.release()
-            # After release, the file should be back in free/
-            self.assertTrue(os.path.exists(lease2.free_path))
-            self.assertFalse(os.path.exists(lease2.used_path))
+            lease2: ConnectionLease = mgr.acquire()
+            try:
+                self.assertEqual(socket_name, os.path.basename(lease2.socket_path))
+                # File should have moved to used/
+                self.assertTrue(os.path.exists(lease2.used_path))
+                self.assertFalse(os.path.exists(lease2.free_path))
+                # Path length should not exceed OS domain socket limits in typical setups
+                self.assertLessEqual(len(lease2.socket_path), UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH)
+                # Another contender cannot acquire the same lock while lease is held
+                other = ConnectionLeaseManager(root_dir=root_dir, namespace="user@host:22", log=MagicMock(logging.Logger))
+                self.assertIsNone(other._try_lock(lease2.used_path, open_flags=os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC))
+            finally:
+                lease2.release()
+                # After release, the file should be back in free/
+                self.assertTrue(os.path.exists(lease2.free_path))
+                self.assertFalse(os.path.exists(lease2.used_path))
 
     def test_acquire_salvages_from_used_when_unlocked(self) -> None:
         """Purpose: Verify salvage semantics from ``used/`` when a previous owner crashed and released the advisory lock
@@ -781,26 +789,26 @@ class TestConnectionLease(AbstractTestCase):
         once the test holds the lease, normal exclusion guarantees apply. The test keeps assertions focused on visible
         behaviors rather than implementation internals.
         """
-        root_dir: str = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX)
-        mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
-        mgr._validate_dirs()
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
+            mgr._validate_dirs()
 
-        # Create an unlocked file in used/ to simulate a crashed process
-        socket_name: str = "ssalvage"
-        used_path: str = os.path.join(mgr._used_dir, socket_name)
-        with open(used_path, "w", encoding="utf-8"):
-            pass
+            # Create an unlocked file in used/ to simulate a crashed process
+            socket_name: str = "ssalvage"
+            used_path: str = os.path.join(mgr._used_dir, socket_name)
+            with open(used_path, "w", encoding="utf-8"):
+                pass
 
-        lease: ConnectionLease = mgr.acquire()
-        try:
-            self.assertEqual(socket_name, os.path.basename(lease.socket_path))
-            # The path should remain in used/ during the lease
-            self.assertTrue(os.path.exists(lease.used_path))
-            # Another lock attempt should fail while we hold the lease
-            other = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
-            self.assertIsNone(other._try_lock(lease.used_path, open_flags=os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC))
-        finally:
-            lease.release()
+            lease: ConnectionLease = mgr.acquire()
+            try:
+                self.assertEqual(socket_name, os.path.basename(lease.socket_path))
+                # The path should remain in used/ during the lease
+                self.assertTrue(os.path.exists(lease.used_path))
+                # Another lock attempt should fail while we hold the lease
+                other = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
+                self.assertIsNone(other._try_lock(lease.used_path, open_flags=os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC))
+            finally:
+                lease.release()
 
     def test_acquire_creates_when_empty_and_obeys_cap(self) -> None:
         """Purpose: Confirm that the manager creates a new, well-formed ControlPath when both ``free/`` and ``used/``
@@ -815,16 +823,16 @@ class TestConnectionLease(AbstractTestCase):
         exceeding the configured cap. This keeps the test fast, deterministic, and independent from system SSH
         behavior, while still validating correctness constraints that impact real-world stability.
         """
-        root_dir: str = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX)
-        mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="abc", log=MagicMock(logging.Logger))
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="abc", log=MagicMock(logging.Logger))
 
-        lease: ConnectionLease = mgr.acquire()
-        try:
-            self.assertTrue(os.path.basename(lease.socket_path).startswith("s"))
-            self.assertTrue(os.path.exists(lease.used_path))
-            self.assertLessEqual(len(lease.socket_path), UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH)
-        finally:
-            lease.release()
+            lease: ConnectionLease = mgr.acquire()
+            try:
+                self.assertTrue(os.path.basename(lease.socket_path).startswith("s"))
+                self.assertTrue(os.path.exists(lease.used_path))
+                self.assertLessEqual(len(lease.socket_path), UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH)
+            finally:
+                lease.release()
 
     def test_salvage_from_used_after_crash(self) -> None:
         """Purpose: Exercise the crash-recovery scenario in which a process that owned a lease terminates abruptly,
@@ -839,8 +847,8 @@ class TestConnectionLease(AbstractTestCase):
         accidental re-creation and to confirm a true salvage. Final checks ensure that releasing the salvaged lease
         returns the file to ``free/``, leaving the directory tree in a clean, reusable state for subsequent tests.
         """
-        with tempfile.TemporaryDirectory() as tmpdir:
-            mgr = ConnectionLeaseManager(root_dir=tmpdir, namespace="user@host#22#cfg", log=MagicMock(logging.Logger))
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="user@host#22#cfg", log=MagicMock(logging.Logger))
             lease1: ConnectionLease = mgr.acquire()
             # Crash simulation: drop the flock but leave the file in used/
             os.close(lease1.fd)
@@ -861,36 +869,74 @@ class TestConnectionLease(AbstractTestCase):
     def test_release_ignores_missing_used_path_and_closes_fd(self) -> None:
         """Acquire a lease and then remove its used_path to simulate external deletion; Call release() and ensure no
         exception and the fd is closed."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            mgr = ConnectionLeaseManager(root_dir=tmpdir, namespace="ns", log=MagicMock(logging.Logger))
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
             lease: ConnectionLease = mgr.acquire()
-            # Remove the file to force FileNotFoundError in os.replace during release
+            # Remove the file to force FileNotFoundError in os.rename during release
             os.remove(lease.used_path)
             # Should not raise; should still close the fd
             lease.release()
             with self.assertRaises(OSError):
                 os.fstat(lease.fd)  # fd must be closed
 
+    def test_release_when_free_dir_missing_salvage_on_next_acquire(self) -> None:
+        """If ``free/`` is removed before ``release()``, the rename fails with FileNotFoundError which is ignored; the lock
+        file remains in ``used/`` and the next ``acquire()`` must salvage it successfully.
+
+        Purpose: Validate robustness when an external actor removes ``free/`` between acquisition and release.
+
+        Assumptions: POSIX rename to a missing destination parent raises FileNotFoundError; advisory locks release on
+        close; the manager recreates directories via ``_validate_dirs()`` on the next acquire.
+        """
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
+            lease1: ConnectionLease = mgr.acquire()
+            name1 = os.path.basename(lease1.socket_path)
+
+            # Remove free/ so that release() cannot move used -> free and must ignore FileNotFoundError
+            self.assertTrue(os.path.isdir(mgr._free_dir))
+            shutil.rmtree(mgr._free_dir)
+
+            # Release should not raise; file remains in used/, fd must be closed
+            lease1.release()
+            self.assertTrue(os.path.exists(lease1.used_path))
+            self.assertFalse(os.path.exists(lease1.free_path))
+            with self.assertRaises(OSError):
+                os.fstat(lease1.fd)
+
+            # Next acquire() must recreate directories and salvage the same socket from used/
+            lease2: ConnectionLease = mgr.acquire()
+            try:
+                self.assertEqual(name1, os.path.basename(lease2.socket_path))
+                self.assertEqual(lease1.socket_path, lease2.socket_path)
+                self.assertEqual(lease1.used_path, lease2.used_path)
+                self.assertEqual(lease1.free_path, lease2.free_path)
+                self.assertTrue(os.path.exists(lease2.used_path))
+            finally:
+                lease2.release()
+                self.assertTrue(os.path.exists(lease2.free_path))
+                self.assertFalse(os.path.exists(lease2.used_path))
+
     def test_find_and_acquire_skips_non_matching_entries(self) -> None:
         """Ensures junk files and non-files are ignored and _try_lock is not invoked."""
-        root_dir: str = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX)
-        mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
-        mgr._validate_dirs()
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
+            mgr._validate_dirs()
 
-        # Create entries that must be skipped by the scanner
-        junk_file = os.path.join(mgr._free_dir, "junk")  # does not start with 's'
-        with open(junk_file, "w", encoding="utf-8"):
-            pass
-        os.mkdir(os.path.join(mgr._free_dir, "sdir"))  # starts with 's' but is a directory
+            # Create entries that must be skipped by the scanner
+            junk_file = os.path.join(mgr._free_dir, "junk")  # does not start with 's'
+            with open(junk_file, "w", encoding="utf-8"):
+                pass
+            os.mkdir(os.path.join(mgr._free_dir, "sdir"))  # starts with 's' but is a directory
 
-        # Ensure _try_lock is not called for skipped entries
-        with patch.object(mgr, "_try_lock", side_effect=AssertionError("_try_lock should not be called")):
-            self.assertIsNone(mgr._find_and_acquire(mgr._free_dir))
+            # Ensure _try_lock is not called for skipped entries
+            with patch.object(mgr, "_try_lock", side_effect=AssertionError("_try_lock should not be called")):
+                self.assertIsNone(mgr._find_and_acquire(mgr._free_dir))
 
     def test_create_and_acquire_retries_on_first_lock_failure(self) -> None:
         """BlockingIOError from flock; second attempt must succeed and return a lease."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            mgr = ConnectionLeaseManager(root_dir=tmpdir, namespace="ns", log=MagicMock(logging.Logger))
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
 
             # First flock call fails with BlockingIOError, second succeeds
             call_sequence: list[Exception | None] = [BlockingIOError(), None]
@@ -909,22 +955,22 @@ class TestConnectionLease(AbstractTestCase):
 
     def test_try_lock_file_not_found_calls_validate_and_returns_none(self) -> None:
         """Calling _try_lock on a path whose parent does not exist must call _validate_dirs() and return None."""
-        root_dir: str = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX)
-        mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
-        with patch.object(mgr, "_validate_dirs") as mock_validate:
-            missing_parent = os.path.join(mgr._free_dir, "missing", "file")
-            result = mgr._try_lock(missing_parent, open_flags=os.O_WRONLY)
-            self.assertIsNone(result)
-            self.assertTrue(mock_validate.called)
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
+            with patch.object(mgr, "_validate_dirs") as mock_validate:
+                missing_parent = os.path.join(mgr._free_dir, "missing", "file")
+                result = mgr._try_lock(missing_parent, open_flags=os.O_WRONLY)
+                self.assertIsNone(result)
+                self.assertTrue(mock_validate.called)
 
     def test_try_lock_other_oserror_is_raised(self) -> None:
         """Simulate a non-BlockingIOError, non-FileNotFoundError (e.g., PermissionError) from os.open and assert it is re-
         raised by _try_lock."""
-        root_dir: str = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX)
-        mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
-        with patch("bzfs_main.connection_lease.os.open", side_effect=PermissionError("denied")):
-            with self.assertRaises(PermissionError):
-                _ = mgr._try_lock(os.path.join(mgr._free_dir, "sabc"), open_flags=os.O_WRONLY)
+        with tempfile.TemporaryDirectory() as root_dir:
+            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
+            with patch("bzfs_main.connection_lease.os.open", side_effect=PermissionError("denied")):
+                with self.assertRaises(PermissionError):
+                    _ = mgr._try_lock(os.path.join(mgr._free_dir, "sabc"), open_flags=os.O_WRONLY)
 
 
 #############################################################################
@@ -980,21 +1026,22 @@ class TestSshExitOnShutdown(AbstractTestCase):
         independent of incidental command formatting or environment. This keeps the specification crisp: in this mode,
         shutdown should be a no-op with respect to master termination.
         """
-        args = self.argparser_parse_args(["src", "dst"])  # default is to NOT exit masters immediately
-        p = self.make_params(args=args)
-        r = cast(
-            Remote,
-            _FakeRemote(
-                params=p,
-                location="src",
-                ssh_user_host="host",
-                reuse_ssh_connection=True,
-                ssh_exit_on_shutdown=False,
-                ssh_extra_opts=[],
-                ssh_socket_dir=tempfile.mkdtemp(prefix=TEST_DIR_PREFIX),
-            ),
-        )
-        conn: Connection = Connection(r, 1, 0)
-        conn.shutdown("test", p)
-        # No call to run expected when immediate exit is false
-        self.assertFalse(mock_run.called)
+        with tempfile.TemporaryDirectory() as ssh_socket_dir:
+            args = self.argparser_parse_args(["src", "dst"])  # default is to NOT exit masters immediately
+            p = self.make_params(args=args)
+            r = cast(
+                Remote,
+                _FakeRemote(
+                    params=p,
+                    location="src",
+                    ssh_user_host="host",
+                    reuse_ssh_connection=True,
+                    ssh_exit_on_shutdown=False,
+                    ssh_extra_opts=[],
+                    ssh_socket_dir=ssh_socket_dir,
+                ),
+            )
+            conn: Connection = Connection(r, 1, 0)
+            conn.shutdown("test", p)
+            # No call to run expected when immediate exit is false
+            self.assertFalse(mock_run.called)

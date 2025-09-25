@@ -69,7 +69,7 @@ Design Rationale
   is immutable and simple to reason about, with an explicit ``release()`` to return capacity to the pool.
 - No external services, daemons, or background threads are required. The design favors determinate behavior under failures,
   idempotent operations, and ease of testing. This approach integrates cleanly with ``bzfs`` where predictable SSH reuse and
-  teardown during long-running snapshot replication must remain both fast and safe.
+  teardown during snapshot replication must remain both fast and safe.
 """
 
 from __future__ import (
@@ -128,8 +128,7 @@ class ConnectionLease(NamedTuple):
     def release(self) -> None:
         """Releases the lease: moves the lockfile from used/ dir back to free/ dir, then unlocks it by closing its fd."""
         try:
-            os.makedirs(os.path.dirname(self.free_path), mode=DIR_PERMISSIONS, exist_ok=True)
-            os.replace(self.used_path, self.free_path)  # mv lockfile atomically
+            os.rename(self.used_path, self.free_path)  # mv lockfile atomically
         except FileNotFoundError:
             pass  # harmless
         finally:
@@ -152,15 +151,15 @@ class ConnectionLeaseManager:
 
     def __init__(self, root_dir: str, namespace: str, log: Logger) -> None:
         # immutable variables:
-        self._log: Logger = log
         assert root_dir
-        self._root_dir: str = root_dir
+        assert namespace
+        self._log: Logger = log
         ns: str = sha256_base32_str(namespace, padding=False)
         ns = ns[0 : len(ns) // 2]
-        self._base_dir: str = os.path.join(root_dir, ns)
-        self._sockets_dir: str = os.path.join(self._base_dir, SOCKETS_DIR)
-        self._free_dir: str = os.path.join(self._base_dir, FREE_DIR)
-        self._used_dir: str = os.path.join(self._base_dir, USED_DIR)
+        base_dir: str = os.path.join(root_dir, ns)
+        self._sockets_dir: str = os.path.join(base_dir, SOCKETS_DIR)
+        self._free_dir: str = os.path.join(base_dir, FREE_DIR)
+        self._used_dir: str = os.path.join(base_dir, USED_DIR)
         self._open_flags: int = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
         os.makedirs(root_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("connection lease root_dir ", root_dir)
@@ -228,7 +227,7 @@ class ConnectionLeaseManager:
 
             socket_name: str = os.path.basename(src_path)
             used_path: str = os.path.join(self._used_dir, socket_name)
-            os.replace(src_path, used_path)  # mv lockfile atomically
+            os.rename(src_path, used_path)  # mv lockfile atomically
         except OSError as e:
             close_quietly(fd)
             if isinstance(e, BlockingIOError):
