@@ -88,8 +88,8 @@ destination host. bzfs can run as root or non-root user, in the latter case via 
 granted corresponding ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
 bzfs is written in Python and continuously runs a wide set of unit tests and integration tests to
-ensure coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris,
-on all Python versions ≥ 3.9 (including latest stable which is currently python-3.13).
+ensure coverage and compatibility with old and new versions of ZFS on Linux and FreeBSD, on all
+Python versions ≥ 3.9 (including latest stable which is currently python-3.13).
 
 bzfs is a stand-alone program with zero required dependencies, akin to a stand-alone shell script
 or binary executable. It is designed to be able to run in restricted barebones server
@@ -446,7 +446,7 @@ properties to create or replicate or delete or compare.
 * Supports pull, push, pull-push and local transfer mode.
 * Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
 delete mode.
-* Continuously tested on Linux, FreeBSD and Solaris.
+* Continuously tested on Linux and FreeBSD.
 * Code is almost 100% covered by tests.
 * Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly
 deletes (or monitors or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as frequently
@@ -510,10 +510,10 @@ Chances are that CI tests will catch changes that have unintended side effects.
 
 # Continuous Testing
 
-Results of continuous test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris are
+Results of continuous test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD are
 [here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
 by [this script](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml).
-The script also demonstrates functioning installation steps on Ubuntu, FreeBSD, Solaris, etc.
+The script also demonstrates functioning installation steps on Ubuntu and FreeBSD, etc.
 The script also generates code coverage reports which are published
 [here](https://whoschek.github.io/bzfs/coverage).
 
@@ -528,7 +528,7 @@ only needed on the initiator host.
 * Then select 'All workflows' -> 'Tests' on the left side.
 * Then click the 'Run workflow' dropdown menu on the right side, which looks something like
 [this screenshot](https://raw.githubusercontent.com/whoschek/bzfs/main/bzfs_docs/run_workflow_dialog.jpg).
-* Select the name of the job to run (e.g. 'test_ubuntu_24_04' or 'test_freebsd_14_1' or 'test_solaris_11_4', etc) or
+* Select the name of the job to run (e.g. 'test_ubuntu_24_04' or 'test_freebsd_14_1', etc) or
 select 'Run all jobs' to test all supported platforms, plus select the git branch to run with (typically the branch
 containing your changes).
 * Then click the 'Run workflow' button which kicks off the job.

@@ -17,7 +17,6 @@
 from __future__ import (
     annotations,
 )
-import platform
 import subprocess
 import time
 import unittest
@@ -133,14 +132,6 @@ class TestDisableAndHelpers(AbstractTestCase):
         cmds = bzfs_main.detect._find_available_programs(p)
         self.assertIn("default_shell-", cmds)
         self.assertIn(f"command -v {p.zpool_program}", cmds)
-
-    def test_is_solaris_zfs_and_location(self) -> None:
-        args = self.argparser_parse_args(["src", "dst"])
-        p = self.make_params(args=args)
-        p.available_programs = {"src": {"zfs": "notOpenZFS"}}
-        with patch.object(platform, "system", return_value="SunOS"):
-            self.assertTrue(bzfs_main.detect.is_solaris_zfs_location(p, "local"))
-        self.assertTrue(bzfs_main.detect.is_solaris_zfs(p, p.src))
 
     def test_is_dummy(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
@@ -396,14 +387,13 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
 
     def test_not_openzfs_handling(self) -> None:
         job, remote = self._setup()
-        p = job.params
         err = subprocess.CalledProcessError(
             returncode=1, cmd="zfs", output="", stderr="unrecognized command '--version'\nrun: zfs help"
         )
-        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=err):
-            avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
-            p.available_programs[remote.location] = avail
-        self.assertEqual("notOpenZFS", p.available_programs[remote.location]["zfs"])
+        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit) as cm:
+            bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
+        self.assertIn("Unsupported ZFS platform", str(cm.exception))
+        self.assertIn("unrecognized command '--version'", str(cm.exception))
 
     def test_called_process_error_non_zfs(self) -> None:
         job, remote = self._setup()

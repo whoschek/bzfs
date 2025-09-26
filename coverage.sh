@@ -26,10 +26,6 @@ cd "$(dirname "$(realpath "$0")")"
 
 if [ "$(uname -s)" = "FreeBSD" ]; then
   echo "Running on FreeBSD"
-elif [ "$(uname -s)" = "SunOS" ]; then
-  echo "Running on SunOS"
-  python3 -m ensurepip --upgrade
-  python3 -m pip install 'coverage[toml]'
 elif [ "$(which coverage 2> /dev/null)" = "" ]; then
   python3 -m pip install --upgrade pip
   python3 -m pip install --upgrade "coverage[toml]>=7.6"

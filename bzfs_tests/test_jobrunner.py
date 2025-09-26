@@ -18,7 +18,6 @@ from __future__ import (
     annotations,
 )
 import argparse
-import platform
 import shutil
 import signal
 import subprocess
@@ -160,8 +159,6 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertIsNotNone(str(bzfs_jobrunner._pretty_print_formatter({"foo": "bar"})))
 
     def test_help(self) -> None:
-        if is_solaris_zfs():
-            self.skipTest("FIXME: BlockingIOError: [Errno 11] write could not complete without blocking")
         parser = bzfs_jobrunner.argument_parser()
         with self.assertRaises(SystemExit) as e, suppress_output():
             parser.parse_args(["--help"])
@@ -1064,8 +1061,3 @@ class TestValidateMonitorSnapshotPlan(AbstractTestCase):
         plan: dict[str, dict[str, dict[str, dict[str, object]]]] = {"org": {"tgt": {"hour": {"warn": object()}}}}
         with self.assertRaises(SystemExit):
             self.job.validate_monitor_snapshot_plan(plan)  # type: ignore[arg-type]
-
-
-#############################################################################
-def is_solaris_zfs() -> bool:
-    return platform.system() == "SunOS"

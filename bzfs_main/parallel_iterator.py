@@ -209,7 +209,6 @@ def get_max_command_line_bytes(os_name: str) -> int:
 MAX_CMDLINE_BYTES: dict[str, int] = {
     "Linux": 2 * 1024 * 1024,
     "FreeBSD": 256 * 1024,
-    "SunOS": 1 * 1024 * 1024,
     "Darwin": 1 * 1024 * 1024,
     "Windows": 32 * 1024,
 }

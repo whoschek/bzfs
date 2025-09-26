@@ -42,7 +42,6 @@ from bzfs_main.argparse_cli import (
 )
 from bzfs_main.detect import (
     are_bookmarks_enabled,
-    is_solaris_zfs,
 )
 from bzfs_main.filter import (
     filter_snapshots,
@@ -109,10 +108,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Iterator[str]:
         """Lists snapshots sorted by dataset name; All snapshots of a given dataset will be adjacent."""
         assert (not job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
-        written_zfs_prop: str = "written"  # https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
-        if is_solaris_zfs(p, r):  # solaris-11.4 zfs does not know the "written" ZFS snapshot property
-            written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
-        props: str = job.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
+        props: str = job.creation_prefix + "creation,guid,createtxg,written,name"
         types: str = "snapshot"
         if p.use_bookmark and r.location == "src" and are_bookmarks_enabled(p, r):
             types = "snapshot,bookmark"  # output list ordering: intentionally makes bookmarks appear *after* snapshots
@@ -135,14 +131,11 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
             last_guid: str = ""
             for line in snapshots:
                 cols = line.split("\t")
-                creation, guid, createtxg, written, snapshot_name = cols
+                _creation, guid, _createtxg, _written, snapshot_name = cols
                 if guid == last_guid:
                     assert "#" in snapshot_name
                     continue  # ignore bookmarks whose snapshot still exists. also ignore dupes of bookmarks
                 last_guid = guid
-                if written == "snapshot":
-                    written = "-"  # sanitize solaris-11.4 work-around (solaris-11.4 also has no bookmark feature)
-                    cols = [creation, guid, createtxg, written, snapshot_name]
                 key = (rel_dataset, guid)  # ensures src snapshots and dst snapshots with the same GUID will be adjacent
                 yield ComparableSnapshot(key, cols)
 

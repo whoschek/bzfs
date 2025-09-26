@@ -175,7 +175,6 @@ class TestCompareSnapshotLists(AbstractTestCase):
         src_datasets: list[str],
         dst_datasets: list[str],
         compare_choice: str = "src+dst+all",
-        is_solaris: bool = False,
     ) -> tuple[list[list[str]], list[list[str]]]:
         """Runs run_compare_snapshot_lists() with stubbed ZFS output and returns TSV rows.
 
@@ -206,7 +205,6 @@ class TestCompareSnapshotLists(AbstractTestCase):
             with (
                 patch("bzfs_main.compare_snapshot_lists.zfs_list_snapshots_in_parallel", side_effect=fake_zfs_list),
                 patch("bzfs_main.compare_snapshot_lists.are_bookmarks_enabled", return_value=True),
-                patch("bzfs_main.compare_snapshot_lists.is_solaris_zfs", return_value=is_solaris),
             ):
                 run_compare_snapshot_lists(job, src_datasets, dst_datasets)
 
@@ -313,11 +311,3 @@ class TestCompareSnapshotLists(AbstractTestCase):
         self.assertEqual("all", rows[0][0])
         self.assertEqual("tank/src/foo@snap1", rows[0][7])
         self.assertEqual([["all", "/foo", "tank/src/foo", "tank/dst/foo"]], rel_rows)
-
-    def test_run_compare_snapshot_lists_solaris_sanitizes_written_field(self) -> None:
-        """On Solaris, the 'written' column value 'snapshot' is sanitized to '-'."""
-
-        src_lines = {"tank/src/foo": ["100\tg1\t1\tsnapshot\ttank/src/foo@snapA"]}
-        rows, rel_rows = self._run_compare(src_lines, {}, ["tank/src/foo"], [], is_solaris=True)
-        self.assertEqual("-", rows[0][9])
-        self.assertEqual([["src", "/foo", "tank/src/foo", ""]], rel_rows)

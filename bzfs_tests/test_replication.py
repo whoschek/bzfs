@@ -329,8 +329,7 @@ class TestReplication(AbstractTestCase):
         self.assertEqual("0B".rjust(7), _format_size(0))
         self.assertEqual("1MiB".rjust(7), _format_size(1048576))
 
-    @patch("bzfs_main.replication.is_solaris_zfs_location", return_value=False)
-    def test_mbuffer_cmd_no_mbuffer(self, _loc: MagicMock) -> None:
+    def test_mbuffer_cmd_no_mbuffer(self) -> None:
         p = _make_params(
             min_pipe_transfer_size=1,
             src=MagicMock(is_nonlocal=True),
@@ -341,8 +340,7 @@ class TestReplication(AbstractTestCase):
         )
         self.assertEqual("cat", _mbuffer_cmd(p, "src", 2, 1024))
 
-    @patch("bzfs_main.replication.is_solaris_zfs_location", return_value=False)
-    def test_mbuffer_cmd_uses_mbuffer(self, _loc: MagicMock) -> None:
+    def test_mbuffer_cmd_uses_mbuffer(self) -> None:
         p = _make_params(
             min_pipe_transfer_size=1,
             src=MagicMock(is_nonlocal=True),
@@ -518,9 +516,8 @@ class TestReplication(AbstractTestCase):
             ]
         )
 
-    @patch("bzfs_main.replication.is_solaris_zfs", return_value=False)
     @patch("bzfs_main.replication.try_ssh_command", return_value="size\t123\n")
-    def test_estimate_send_size_parses_output(self, try_cmd: MagicMock, _sol: MagicMock) -> None:
+    def test_estimate_send_size_parses_output(self, try_cmd: MagicMock) -> None:
         job = _make_job(
             no_estimate_send_size=False,
             zfs_program="zfs",
@@ -533,9 +530,8 @@ class TestReplication(AbstractTestCase):
         try_cmd.assert_called_once()
 
     @patch("bzfs_main.replication._clear_resumable_recv_state_if_necessary", return_value=True)
-    @patch("bzfs_main.replication.is_solaris_zfs", return_value=False)
     @patch("bzfs_main.replication.try_ssh_command")
-    def test_estimate_send_size_retryable_error(self, try_cmd: MagicMock, _sol: MagicMock, clear: MagicMock) -> None:
+    def test_estimate_send_size_retryable_error(self, try_cmd: MagicMock, clear: MagicMock) -> None:
         cp_error = subprocess.CalledProcessError(1, "cmd", stderr="cannot resume send: fail")
 
         def side_effect(*_args: object, **_kwargs: object) -> str:

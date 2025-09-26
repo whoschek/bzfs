@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # This workflow will run automated unit tests and integration tests on a matrix
-# of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris.
+# of various old and new versions of ZFS/Python/Linux/FreeBSD.
 # It will also generate code coverage reports.
 name: Tests
 
@@ -41,7 +41,6 @@ on:
         - test_ubuntu_22_04_zfs_0_8_x
         - test_freebsd_14_3
         - test_freebsd_13_4
-        - test_solaris_11_4
         - none
         default: "test_ubuntu_24_04_fast"
       job_names:
@@ -486,33 +485,6 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_solaris_11_4:
-    needs: create_iteration_test_matrix
-    if: (github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_solaris_11_4' || contains(github.event.inputs.job_names, 'test_solaris_11_4')) && github.actor != 'dependabot[bot]'
-#    if: false  # job currently disabled
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-      fail-fast: false
-    timeout-minutes: 160
-    steps:
-    - uses: actions/checkout@v5
-      with:
-        persist-credentials: false
-    - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      id: test
-      uses: vmactions/solaris-vm@v1.1.1  # see https://github.com/vmactions/solaris-vm
-      with:
-        release: "11.4"
-        envs: "bzfs_test_mode"
-        mem: 8192
-        cpu: 4
-        run: |
-          ./.github-workflow-scripts/test_solaris_11_4.sh
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/workflows/coverage-upload
 
 
   combine_coverage_reports:
@@ -527,7 +499,6 @@ jobs:
       - test_ubuntu_22_04_zfs_0_8_x
       - test_freebsd_14_3
       - test_freebsd_13_4
-      - test_solaris_11_4
     steps:
       - uses: actions/checkout@v5
         with:
@@ -572,11 +543,6 @@ jobs:
         with:
           name: coverage-test_freebsd_13_4
           path: coverage-test_freebsd_13_4
-      - name: Download coverage artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: coverage-test_solaris_11_4
-          path: coverage-test_solaris_11_4
       - name: Run common preparation steps
         uses: ./.github/workflows/common
         with:

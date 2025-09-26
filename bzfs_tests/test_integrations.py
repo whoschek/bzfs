@@ -119,7 +119,6 @@ from bzfs_tests.zfs_util import (
     destroy,
     destroy_pool,
     destroy_snapshots,
-    is_solaris_zfs,
     run_cmd,
     set_sudo_cmd,
     snapshot_name,
@@ -158,7 +157,7 @@ HAS_NETCAT_PROG: bool = shutil.which("nc") is not None
 
 ssh_program: str = cast(str, getenv_any("test_ssh_program", "ssh"))  # also works with "hpnssh"
 sudo_cmd = []
-if getenv_bool("test_enable_sudo", True) and (os.getuid() != 0 or platform.system() == "SunOS"):
+if getenv_bool("test_enable_sudo", True) and os.getuid() != 0:
     sudo_cmd = ["sudo", "-n"]
     set_sudo_cmd(["sudo", "-n"])
 
@@ -323,10 +322,7 @@ class IntegrationTestCase(ParametrizedTestCase):
     def setup_basic(self, volume: bool = False) -> None:
         compression_props = ["-o", "compression=on"]
         encryption_props = ["-o", f"encryption={ENCRYPTION_ALGO}"]
-        if is_solaris_zfs():
-            encryption_props += ["-o", f"keysource=passphrase,{KEYLOCATION}"]
-        else:
-            encryption_props += ["-o", "keyformat=passphrase", "-o", f"keylocation={KEYLOCATION}"]
+        encryption_props += ["-o", "keyformat=passphrase", "-o", f"keylocation={KEYLOCATION}"]
 
         dataset_props = encryption_props + compression_props if self.is_encryption_mode() else compression_props
         src_foo = create_filesystem(src_root_dataset, "foo", props=dataset_props)
@@ -409,7 +405,7 @@ class IntegrationTestCase(ParametrizedTestCase):
             if (
                 getenv_bool("test_enable_IPv6", True)
                 and RNG.randint(0, 2) % 3 == 0
-                and not (platform.platform().startswith("FreeBSD-") or platform.system() == "SunOS")
+                and not platform.platform().startswith("FreeBSD-")
                 and not ssh_program == "hpnssh"
             ):
                 src_host = [] if use_jobrunner else ["--ssh-src-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
@@ -439,15 +435,11 @@ class IntegrationTestCase(ParametrizedTestCase):
         if self.is_no_privilege_elevation():
             # test ZFS delegation in combination with --no-privilege-elevation flag
             args = args + ["--no-privilege-elevation"]
-            src_permissions = "send,snapshot,hold"
-            if not is_solaris_zfs():
-                src_permissions += ",bookmark"
+            src_permissions = "send,snapshot,hold,bookmark"
             if delete_injection_triggers is not None:
                 src_permissions += ",destroy,mount"
-            optional_dst_permissions = ",canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize"
-            optional_dst_permissions = (
-                ",keylocation,compression" if not is_solaris_zfs() else ",keysource,encryption,salt,compression,checksum"
-            )
+            # optional_dst_permissions = ",canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize"
+            optional_dst_permissions = ",keylocation,compression"
             dst_permissions = "mount,create,receive,rollback,destroy" + optional_dst_permissions
             cmd = f"sudo -n zfs allow -u {os_username()} {src_permissions}".split(" ") + [SRC_POOL_NAME]
             if dataset_exists(SRC_POOL_NAME):
@@ -536,7 +528,7 @@ class IntegrationTestCase(ParametrizedTestCase):
             )
 
         old_dedicated_tcp_connection_per_zfs_send = os.environ.get(ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send")
-        if platform.platform().startswith("FreeBSD-13") or platform.system() == "SunOS":
+        if platform.platform().startswith("FreeBSD-13"):
             # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
             # probably caused by https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=283101
             # via https://github.com/openzfs/zfs/issues/16731#issuecomment-2561987688
@@ -1233,8 +1225,6 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_snapshotting_generates_identical_createtxg()
 
     def assert_snapshotting_generates_identical_createtxg(self) -> None:
-        if is_solaris_zfs():
-            return  # solaris 'zfs snapshot' CLI does not support multiple datasets
         createtxgs = set()
         creations = set()
         for line in zfs_list([src_root_dataset], props=["name,createtxg,creation"], types=["snapshot"]):
@@ -1720,7 +1710,7 @@ class LocalTestCase(IntegrationTestCase):
         w, q = 3, 3
         threads = 4
         maxsessions = (
-            threads if (platform.platform().startswith("FreeBSD-13") or platform.system() == "SunOS") else threads // 2
+            threads if platform.platform().startswith("FreeBSD-13") else threads // 2
         )  # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU on non-Linux
         self.setup_basic_woo(w=w, q=q)
         for i in range(1):
@@ -2522,7 +2512,6 @@ class LocalTestCase(IntegrationTestCase):
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication")
         self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="Linux") > 0)
         self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="FreeBSD") > 0)
-        self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="SunOS") > 0)
         self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="Darwin") > 0)
         self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="Windows") > 0)
         self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="unknown") > 0)
@@ -2584,10 +2573,7 @@ class LocalTestCase(IntegrationTestCase):
 
     @staticmethod
     def zfs_recv_x_excludes() -> list[str]:
-        if is_solaris_zfs():
-            return ["effectivereadlimit", "effectivewritelimit", "encryption", "keysource"]
-        else:
-            return []
+        return []
 
     def test_zfs_recv_include_regex(self) -> None:
         if self.is_no_privilege_elevation():
@@ -2686,11 +2672,6 @@ class LocalTestCase(IntegrationTestCase):
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--force", expected_status=DIE_STATUS, inject_params=inject_params)
 
     def test_periodic_job_locking(self) -> None:
-        if is_solaris_zfs():
-            self.skipTest(
-                "On Solaris fcntl.flock() does not work quite as expected. Solaris grants the lock on both file "
-                "descriptors simultaneously; probably because they are both in the same process; seems harmless."
-            )
         if self.param and self.param.get("ssh_mode", "local") != "local":
             self.skipTest(
                 "run_bzfs changes params so this test only passes in local mode (the feature works "
@@ -3866,14 +3847,9 @@ class LocalTestCase(IntegrationTestCase):
                         self.assertLessEqual(0, int(lines[0].split("\t")[creation]))
                         self.assertLessEqual(0, int(lines[1].split("\t")[creation]))
                         self.assertLessEqual(0, int(lines[2].split("\t")[creation]))
-                        if not is_solaris_zfs():
-                            self.assertLessEqual(0, int(lines[0].split("\t")[written]))
-                            self.assertLessEqual(0, int(lines[1].split("\t")[written]))
-                            self.assertLessEqual(0, int(lines[2].split("\t")[written]))
-                        else:
-                            self.assertLessEqual("-", lines[0].split("\t")[written])
-                            self.assertLessEqual("-", lines[1].split("\t")[written])
-                            self.assertLessEqual("-", lines[2].split("\t")[written])
+                        self.assertLessEqual(0, int(lines[0].split("\t")[written]))
+                        self.assertLessEqual(0, int(lines[1].split("\t")[written]))
+                        self.assertLessEqual(0, int(lines[2].split("\t")[written]))
 
                         for cmp in cmp_choices:
                             job = self.run_bzfs(
@@ -5831,13 +5807,7 @@ def natsort_key(s: str) -> tuple[str, int, str]:
     return s, 0, ""
 
 
-def is_solaris_zfs_at_least_11_4_42() -> bool:
-    return is_solaris_zfs() and is_version_at_least(".".join(platform.version().split(".")[0:3]), "11.4.42")
-
-
 def is_zfs_at_least_2_3_0() -> bool:
-    if is_solaris_zfs():
-        return False
     ver = zfs_version()
     if ver is None:
         return False
@@ -5845,8 +5815,6 @@ def is_zfs_at_least_2_3_0() -> bool:
 
 
 def is_zfs_at_least_2_2_0() -> bool:
-    if is_solaris_zfs():
-        return False
     ver = zfs_version()
     if ver is None:
         return False
@@ -5854,8 +5822,6 @@ def is_zfs_at_least_2_2_0() -> bool:
 
 
 def is_zfs_at_least_2_1_0() -> bool:
-    if is_solaris_zfs():
-        return False
     ver = zfs_version()
     if ver is None:
         return False

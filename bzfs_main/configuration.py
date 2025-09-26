@@ -273,8 +273,7 @@ class Params:
         self.compression_program_opts: list[str] = self.split_args(args.compression_program_opts)
         for opt in {"-o", "--output-file"}.intersection(self.compression_program_opts):
             die(f"--compression-program-opts: {opt} is disallowed for security reasons.")
-        self.getconf_program: str = self._program_name("getconf")  # print number of CPUs on POSIX except Solaris
-        self.psrinfo_program: str = self._program_name("psrinfo")  # print number of CPUs on Solaris
+        self.getconf_program: str = self._program_name("getconf")  # print number of CPUs on POSIX
         self.mbuffer_program: str = self._program_name(args.mbuffer_program)
         self.mbuffer_program_opts: list[str] = self.split_args(args.mbuffer_program_opts)
         for opt in {"-i", "-I", "-o", "-O", "-l", "-L", "-t", "-T", "-a", "-A"}.intersection(self.mbuffer_program_opts):
@@ -477,7 +476,7 @@ class Remote:
             ["-v"] if args.verbose >= 3 else []
         )
         self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
-        self.ssh_exit_on_shutdown: bool = args.ssh_exit_on_shutdown or platform.system() == "SunOS"
+        self.ssh_exit_on_shutdown: bool = args.ssh_exit_on_shutdown
         self.ssh_control_persist_secs: int = args.ssh_control_persist_secs
         self.socket_prefix: str = "s"
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)

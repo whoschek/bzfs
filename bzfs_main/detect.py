@@ -17,7 +17,6 @@
 from __future__ import (
     annotations,
 )
-import platform
 import re
 import subprocess
 import sys
@@ -155,14 +154,12 @@ def detect_available_programs(job: Job) -> None:
             if program.startswith("uname-"):
                 # uname-Linux foo 5.15.0-69-generic #76-Ubuntu SMP Fri Mar 17 17:19:29 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux
                 # uname-FreeBSD freebsd 14.1-RELEASE FreeBSD 14.1-RELEASE releng/14.1-n267679-10e31f0946d8 GENERIC amd64
-                # uname-SunOS solaris 5.11 11.4.42.111.0 i86pc i386 i86pc # https://blogs.oracle.com/solaris/post/building-open-source-software-on-oracle-solaris-114-cbe-release
-                # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
                 # uname-Darwin foo 23.6.0 Darwin Kernel Version 23.6.0: Mon Jul 29 21:13:04 PDT 2024; root:xnu-10063.141.2~1/RELEASE_ARM64_T6020 arm64
                 programs.pop(program)
                 uname: str = program[len("uname-") :]
                 programs["uname"] = uname
                 log.log(LOG_TRACE, f"available_programs[{key}][uname]: %s", uname)
-                programs["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
+                programs["os"] = uname.split(" ")[0]  # Linux|FreeBSD|Darwin
                 log.log(LOG_TRACE, f"available_programs[{key}][os]: %s", programs["os"])
             elif program.startswith("default_shell-"):
                 programs.pop(program)
@@ -218,9 +215,7 @@ def _find_available_programs(p: Params) -> str:
     cmds.append(f"if command -v {p.pv_program} > /dev/null; then printf 'pv\n'; fi")
     cmds.append(f"if command -v {p.ps_program} > /dev/null; then printf 'ps\n'; fi")
     cmds.append(
-        f"if command -v {p.psrinfo_program} > /dev/null; then "
-        f"printf 'getconf_cpu_count-'; {p.psrinfo_program} -p; "
-        f"elif command -v {p.getconf_program} > /dev/null; then "
+        f"if command -v {p.getconf_program} > /dev/null; then "
         f"printf 'getconf_cpu_count-'; {p.getconf_program} _NPROCESSORS_ONLN; "
         "fi"
     )
@@ -241,15 +236,13 @@ def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: s
         # on Linux, 'zfs --version' returns with zero status and prints the correct info
         # on FreeBSD, 'zfs --version' always prints the same (correct) info as Linux, but nonetheless sometimes
         # returns with non-zero status (sometimes = if the zfs kernel module is not loaded)
-        # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
-        # option is not known there
         lines = run_ssh_command(job, remote, LOG_TRACE, print_stderr=False, cmd=[p.zfs_program, "--version"])
         assert lines
     except (FileNotFoundError, PermissionError):  # location is local and program file was not found
         die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
     except subprocess.CalledProcessError as e:
         if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
-            available_programs["zfs"] = "notOpenZFS"  # solaris-11.4 zfs does not know --version flag
+            die(f"Unsupported ZFS platform: {e.stderr}")  # solaris is unsupported
         elif not e.stdout.startswith("zfs"):
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         else:
@@ -282,18 +275,6 @@ def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: s
         log.warning("%s", f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions...")
     available_programs.update(available_programs_minimum)
     return available_programs
-
-
-def is_solaris_zfs(p: Params, remote: Remote) -> bool:
-    """Returns True if the remote ZFS implementation uses Solaris ZFS."""
-    return is_solaris_zfs_location(p, remote.location)
-
-
-def is_solaris_zfs_location(p: Params, location: str) -> bool:
-    """Returns True if ``location`` uses Solaris ZFS."""
-    if location == "local":
-        return platform.system() == "SunOS"
-    return p.available_programs[location].get("zfs") == "notOpenZFS"
 
 
 def is_dummy(r: Remote) -> bool:

@@ -56,8 +56,6 @@ from bzfs_main.detect import (
     ZFS_VERSION_IS_AT_LEAST_2_1_0,
     ZFS_VERSION_IS_AT_LEAST_2_2_0,
     are_bookmarks_enabled,
-    is_solaris_zfs,
-    is_solaris_zfs_location,
     is_zpool_feature_enabled_or_active,
 )
 from bzfs_main.filter import (
@@ -823,7 +821,7 @@ def _mbuffer_cmd(p: Params, loc: str, size_estimate_bytes: int, recordsize: int)
         )
         and p.is_program_available("mbuffer", loc)
     ):
-        recordsize = max(recordsize, 128 * 1024 if is_solaris_zfs_location(p, loc) else 2 * 1024 * 1024)
+        recordsize = max(recordsize, 2 * 1024 * 1024)
         return shlex.join([p.mbuffer_program, "-s", str(recordsize)] + p.mbuffer_program_opts)
     else:
         return "cat"
@@ -915,7 +913,7 @@ def delete_snapshots(job: Job, remote: Remote, dataset: str, snapshot_tags: list
         _delete_snapshot_cmd(p, remote, dataset + "@"),
         snapshot_tags,
         lambda batch: _delete_snapshot(job, remote, dataset, dataset + "@" + ",".join(batch)),
-        max_batch_items=1 if is_solaris_zfs(p, remote) else job.params.max_snapshots_per_minibatch_on_delete_snaps,
+        max_batch_items=job.params.max_snapshots_per_minibatch_on_delete_snaps,
         sep=",",
     )
 
@@ -924,7 +922,7 @@ def _delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str
     """Runs zfs destroy for a comma-separated snapshot list."""
     p = job.params
     cmd: list[str] = _delete_snapshot_cmd(p, r, snapshots_to_delete)
-    is_dry: bool = p.dry_run and is_solaris_zfs(p, r)  # solaris-11.4 knows no 'zfs destroy -n' flag
+    is_dry: bool = False  # False is safe because we're using the 'zfs destroy -n' flag
     try:
         maybe_inject_error(job, cmd=cmd, error_trigger="zfs_delete_snapshot")
         run_ssh_command(job, r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
@@ -978,7 +976,7 @@ def delete_datasets(job: Job, remote: Remote, datasets: Iterable[str]) -> None:
             p.dry_run_destroy,
             dataset,
         )
-        is_dry = p.dry_run and is_solaris_zfs(p, remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
+        is_dry: bool = False  # False is safe because we're using the 'zfs destroy -n' flag
         run_ssh_command(job, remote, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
         last_deleted_dataset = dataset
 
@@ -1039,8 +1037,8 @@ def _create_zfs_bookmarks(job: Job, remote: Remote, dataset: str, snapshots: lis
 def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_token: str | None, *items: str) -> int:
     """Estimates num bytes to transfer via 'zfs send'."""
     p = job.params
-    if p.no_estimate_send_size or is_solaris_zfs(p, remote):
-        return 0  # solaris-11.4 does not have a --parsable equivalent
+    if p.no_estimate_send_size:
+        return 0
     zfs_send_program_opts: list[str] = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
     zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
     if recv_resume_token:
@@ -1079,7 +1077,7 @@ def _zfs_set(job: Job, properties: list[str], remote: Remote, dataset: str) -> N
         lambda batch: run_ssh_command(
             job, remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch + [dataset]
         ),
-        max_batch_items=1 if is_solaris_zfs(p, remote) else 2**29,  # solaris-11.4 CLI doesn't accept multiple props
+        max_batch_items=2**29,
     )
 
 

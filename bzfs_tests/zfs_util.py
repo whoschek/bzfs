@@ -17,7 +17,6 @@
 from __future__ import (
     annotations,
 )
-import platform
 import re
 import subprocess
 from collections.abc import (
@@ -54,13 +53,9 @@ def destroy(name: str, recursive: bool = False, force: bool = False) -> None:
 def destroy_snapshots(dataset: str, snapshots: Sequence[str] = ()) -> None:
     if len(snapshots) == 0:
         return
-    if is_solaris_zfs():  # solaris-11.4 does not support passing multiple snapshots per CLI invocation
-        for snapshot in snapshots:
-            destroy(snapshot)
-    else:
-        cmd = sudo_cmd + ["zfs", "destroy"]
-        cmd += [dataset + "@" + ",".join([snap[snap.find("@") + 1 :] for snap in snapshots])]
-        run_cmd(cmd)
+    cmd = sudo_cmd + ["zfs", "destroy"]
+    cmd += [dataset + "@" + ",".join([snap[snap.find("@") + 1 :] for snap in snapshots])]
+    run_cmd(cmd)
 
 
 def create_volume(
@@ -337,11 +332,7 @@ def zfs_set(names: list[str] | None = None, properties: Mapping[str, str] | None
             cmd += names
         run_cmd(cmd)
 
-    if not is_solaris_zfs():  # send all properties in a batch
-        run_zfs_set([f"{name}={value}" for name, value in properties.items()])
-    else:  # solaris-14.0 does not accept multiple properties per 'zfs set' CLI call
-        for name, value in properties.items():
-            run_zfs_set([f"{name}={value}"])
+    run_zfs_set([f"{name}={value}" for name, value in properties.items()])
 
 
 def zfs_inherit(
@@ -388,19 +379,17 @@ def build(name: str, check: bool = True) -> str:
     return name
 
 
-def zfs_version() -> str | None:
+def zfs_version() -> str:
     """Example zfs-2.1.5~rc5-ubuntu3 -> 2.1.5."""
     try:
         # on Linux, 'zfs --version' returns with zero status and prints the correct info
         # on FreeBSD, 'zfs --version' always prints the same (correct) info as Linux, but nonetheless sometimes
         # returns with non-zero status (sometimes = if the zfs kernel module is not loaded)
-        # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
-        # option is not known there
         lines = subprocess.run(["zfs", "--version"], capture_output=True, text=True, check=True).stdout
         assert lines
     except subprocess.CalledProcessError as e:
         if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
-            return None  # solaris-11.4 zfs does not know --version flag
+            raise
         elif not e.stdout.startswith("zfs"):
             raise
         else:
@@ -419,10 +408,6 @@ def zfs_version() -> str | None:
 def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     """Check if the version string is at least the minimum version string."""
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
-
-
-def is_solaris_zfs() -> bool:
-    return platform.system() == "SunOS"
 
 
 def run_cmd(cmd: Sequence[str], splitlines: bool = True) -> list[str] | str:

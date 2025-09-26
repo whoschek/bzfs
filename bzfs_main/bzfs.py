@@ -114,7 +114,6 @@ from bzfs_main.detect import (
     detect_available_programs,
     is_caching_snapshots,
     is_dummy,
-    is_solaris_zfs,
     is_zpool_feature_enabled_or_active,
 )
 from bzfs_main.filter import (
@@ -555,13 +554,7 @@ class Job:
 
         zfs_send_program_opts: list[str] = p.curr_zfs_send_program_opts
         if is_zpool_feature_enabled_or_active(p, dst, "feature@large_blocks"):
-            append_if_absent(zfs_send_program_opts, "--large-block")  # solaris-11.4 does not have this feature
-        if is_solaris_zfs(p, dst):
-            p.dry_run_destroy = ""  # solaris-11.4 knows no 'zfs destroy -n' flag
-            p.verbose_destroy = ""  # solaris-11.4 knows no 'zfs destroy -v' flag
-        if is_solaris_zfs(p, src):  # solaris-11.4 only knows -w compress
-            zfs_send_program_opts = ["-p" if opt == "--props" else opt for opt in zfs_send_program_opts]
-            zfs_send_program_opts = fix_solaris_raw_mode(zfs_send_program_opts)
+            append_if_absent(zfs_send_program_opts, "--large-block")
         p.curr_zfs_send_program_opts = zfs_send_program_opts
 
         self.max_workers = {}
@@ -781,7 +774,7 @@ class Job:
             src,
             ((commands[lbl], (f"{ds}@{lbl}" for ds in datasets)) for lbl, datasets in datasets_to_snapshot.items()),
             fn=lambda cmd, batch: run_ssh_command(self, src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
-            max_batch_items=1 if is_solaris_zfs(p, src) else 2**29,  # solaris CLI doesn't accept multiple datasets
+            max_batch_items=2**29,
         )
         if is_caching_snapshots(p, src):
             # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
@@ -1564,19 +1557,6 @@ class DatasetProperties:
 
         # mutable variables:
         self.snapshots_changed: int = snapshots_changed
-
-
-#############################################################################
-def fix_solaris_raw_mode(lst: list[str]) -> list[str]:
-    """Adjusts zfs send options for Solaris compatibility."""
-    lst = ["-w" if opt == "--raw" else opt for opt in lst]
-    lst = ["compress" if opt == "--compressed" else opt for opt in lst]
-    i = lst.index("-w") if "-w" in lst else -1
-    if i >= 0:
-        i += 1
-        if i == len(lst) or (lst[i] != "none" and lst[i] != "compress" and lst[i] != "crypto"):
-            lst.insert(i, "none")
-    return lst
 
 
 def has_siblings(sorted_datasets: list[str], is_test_mode: bool = False) -> bool:

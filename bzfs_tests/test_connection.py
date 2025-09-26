@@ -21,7 +21,6 @@ import contextlib
 import itertools
 import logging
 import os
-import platform
 import random
 import shutil
 import subprocess
@@ -681,7 +680,6 @@ class TestDecrementInjectionCounter(AbstractTestCase):
 
 
 #############################################################################
-@unittest.skipIf(platform.system() == "SunOS", "skip on solaris")
 class TestConnectionLease(AbstractTestCase):
 
     def test_rename_lockfile_to_itself_must_be_a_noop(self) -> None:

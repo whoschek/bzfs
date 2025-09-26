@@ -146,7 +146,6 @@ def try_ssh_command(
             if exists and (
                 ": dataset does not exist" in stderr
                 or ": filesystem does not exist" in stderr  # solaris 11.4.0
-                or ": does not exist" in stderr  # solaris 11.4.0 'zfs send' with missing snapshot
                 or ": no such pool" in stderr
             ):
                 return None

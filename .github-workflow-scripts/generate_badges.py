@@ -31,7 +31,6 @@ from __future__ import (
 import os
 import platform
 import re
-import subprocess
 import sys
 from pathlib import (
     Path,
@@ -48,14 +47,6 @@ def main() -> None:
         )
 
         version = zfs_version()
-        if version is None:
-            # Example: "11.4" for solaris
-            try:
-                version = subprocess.run(["uname", "-v"], stdout=subprocess.PIPE, text=True, check=True).stdout  # noqa: S607
-                version = version.strip().split()[0]
-            except subprocess.CalledProcessError:
-                version = "2.3.0"
-
         _touch(f"{ROOT_DIR}/zfs", version)
         _touch(f"{ROOT_DIR}/python", f"{sys.version_info.major}.{sys.version_info.minor}")
         _touch(f"{ROOT_DIR}/os", platform.system().split()[0])
@@ -84,7 +75,6 @@ def _merge_versions(input_dir: str, natsort: bool = False) -> str:
         versions = _sort_versions(versions)
     else:
         versions = sorted(versions)
-        versions = ["Solaris" if v == "SunOS" else v for v in versions]
         if "Linux" in versions:
             versions = ["Linux"] + [v for v in versions if v != "Linux"]
     return " | ".join(versions)
