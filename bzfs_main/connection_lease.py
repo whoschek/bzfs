@@ -41,7 +41,7 @@ and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
 
 Assumptions
 -----------
-- The filesystem is POSIX-compliant and supports ``fcntl.flock`` advisory locks, atomic ``os.replace`` renames, and
+- The filesystem is POSIX-compliant and supports ``fcntl.flock`` advisory locks, atomic ``os.rename`` renames, and
   permissions enforcement. The process runs on the same host as the SSH client using the ControlPath.
 - High performance: scanning the ``free/`` and ``used/`` directories has bounded cost and is typically O(1) expected
   time because names are uniformly random. Directory contents are small and ephemeral.

@@ -684,12 +684,13 @@ class TestDecrementInjectionCounter(AbstractTestCase):
 @unittest.skipIf(platform.system() == "SunOS", "skip on solaris")
 class TestConnectionLease(AbstractTestCase):
 
-    def test_rename_file_to_itself_must_be_a_noop(self) -> None:
+    def test_rename_lockfile_to_itself_must_be_a_noop(self) -> None:
         with tempfile.TemporaryDirectory() as root_dir:
             mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="user@host#22#cfg", log=MagicMock(logging.Logger))
             lease: ConnectionLease = mgr.acquire()
-            os.rename(lease.used_path, lease.used_path)  # POSIX rename file to itself must be a noop and must not fail
-            os.replace(lease.used_path, lease.used_path)  # POSIX rename file to itself must be a noop and must not fail
+            self.assertTrue(os.path.isfile(lease.used_path))
+            os.rename(lease.used_path, lease.used_path)  # POSIX rename lockfile to itself must be a noop and must not fail
+            os.replace(lease.used_path, lease.used_path)  # POSIX rename lockfile to itself must be a noop and must not fail
 
     def test_manager_acquire_release(self) -> None:
         """Purpose: Validate the end-to-end lifecycle of a connection lease, covering acquisition of two distinct

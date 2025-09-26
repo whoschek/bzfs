@@ -298,7 +298,7 @@ def open_nofollow(
     if "+" in mode:
         flags = (flags & ~os.O_WRONLY) | os.O_RDWR
     flags |= os.O_NOFOLLOW | os.O_CLOEXEC
-    fd = os.open(path, flags=flags, mode=perm)
+    fd: int = os.open(path, flags=flags, mode=perm)
     try:
         if check_owner:
             st_uid: int = os.fstat(fd).st_uid
@@ -314,7 +314,7 @@ def open_nofollow(
 
 
 def close_quietly(fd: int) -> None:
-    """Closes the given file descriptor while swallowing any exception that might arise as part of this."""
+    """Closes the given file descriptor while silently swallowing any exception that might arise as part of this."""
     if fd >= 0:
         try:
             os.close(fd)

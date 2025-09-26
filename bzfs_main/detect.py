@@ -318,7 +318,7 @@ def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict) -
                 raise
             log.warning("%s", f"Failed to detect zpool features on {loc}: {r.pool}. Continuing with minimal assumptions ...")
         else:
-            props: dict[str, str] = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
+            props: dict[str, str] = dict(line.split("\t", 1) for line in lines)
             features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
     if len(lines) == 0:
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
