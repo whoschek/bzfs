@@ -55,7 +55,7 @@ def parallel_iterator(
     Purpose:
     --------
     Enables parallel/concurrent execution of multiple iterator streams while providing either sequential (ordered) or
-    optimized-latency (unordered) result delivery. Primarily designed for I/O-bound operations like ZFS/SSH command
+    performance-optimized (unordered) result delivery. Primarily designed for I/O-bound operations like ZFS/SSH command
     execution where parallelism significantly improves throughput.
 
     Assumptions:
@@ -81,7 +81,7 @@ def parallel_iterator(
        - Ordered mode uses a FIFO queue (``deque.popleft()``) ensuring sequential delivery that preserves the order in
          which the builder's iterators yield Futures (i.e., the chain order), regardless of completion order.
        - Unordered mode uses ``concurrent.futures.wait(FIRST_COMPLETED)`` to yield results as soon as they complete for
-         minimum end-to-end latency.
+         minimum end-to-end latency and maximum throughput.
 
     - Exception Propagation: ``Future.result()`` naturally propagates exceptions from worker threads, maintaining error
       visibility for debugging.
@@ -101,7 +101,7 @@ def parallel_iterator(
         Controls result delivery mode:
         - True: Results are yielded in the same order as produced by the builder's iterators (FIFO across the chained
           iterators), not by task completion order.
-        - False: Results are yielded as soon as available (completion order) for minimum latency.
+        - False: Results are yielded as soon as available (completion order) for minimum latency and maximum throughput.
 
     Yields:
     -------

@@ -109,6 +109,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Iterator[str]:
         """Lists snapshots sorted by dataset name; All snapshots of a given dataset will be adjacent."""
         assert (not job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
+        # Also see https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
         props: str = job.creation_prefix + "creation,guid,createtxg,written,name"
         types: str = "snapshot"
         if p.use_bookmark and r.location == "src" and are_bookmarks_enabled(p, r):

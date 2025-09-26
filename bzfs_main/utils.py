@@ -120,7 +120,7 @@ def getenv_bool(key: str, default: bool = False) -> bool:
     return cast(str, getenv_any(key, str(default))).lower().strip() == "true"
 
 
-def cut(field: int = -1, separator: str = "\t", lines: list[str] | None = None) -> list[str]:
+def cut(field: int, separator: str = "\t", *, lines: list[str]) -> list[str]:
     """Retains only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
     assert lines is not None
     assert isinstance(lines, list)
@@ -130,13 +130,13 @@ def cut(field: int = -1, separator: str = "\t", lines: list[str] | None = None) 
     elif field == 2:
         return [line[line.index(separator) + 1 :] for line in lines]
     else:
-        raise ValueError("Unsupported parameter value")
+        raise ValueError(f"Invalid field value: {field}")
 
 
 def drain(iterable: Iterable[Any]) -> None:
     """Consumes all items in the iterable, effectively draining it."""
     for _ in iterable:
-        _ = None  # help gc
+        _ = None  # help gc (iterable can block)
 
 
 K_ = TypeVar("K_")
