@@ -276,7 +276,7 @@ def open_nofollow(
     errors: str | None = None,
     newline: str | None = None,
     *,
-    perm: int = stat.S_IRUSR | stat.S_IWUSR,  # rw------- (user read + write)
+    perm: int = FILE_PERMISSIONS,
     check_owner: bool = True,
     **kwargs: Any,
 ) -> IO[Any]:

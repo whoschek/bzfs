@@ -135,6 +135,7 @@ from bzfs_main.parallel_batch_cmd import (
     itr_ssh_cmd_parallel,
 )
 from bzfs_main.utils import (
+    DIR_PERMISSIONS,
     LOG_TRACE,
     SortedInterner,
     stderr_to_str,
@@ -268,7 +269,7 @@ def set_last_modification_time_safe(
 ) -> None:
     """Like set_last_modification_time() but creates directories if necessary."""
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.makedirs(os.path.dirname(path), mode=DIR_PERMISSIONS, exist_ok=True)
         set_last_modification_time(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
     except FileNotFoundError:
         pass  # harmless

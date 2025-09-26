@@ -57,6 +57,7 @@ from typing import (
 )
 
 from bzfs_main.utils import (
+    FILE_PERMISSIONS,
     InterruptibleSleep,
     human_readable_bytes,
     open_nofollow,
@@ -239,7 +240,7 @@ class ProgressReporter:
                     latest_samples: deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measures
             for pv_log_file in local_file_name_queue:
                 try:
-                    Path(pv_log_file).touch()
+                    Path(pv_log_file).touch(mode=FILE_PERMISSIONS)
                     fd = open_nofollow(pv_log_file, mode="r", newline="", encoding="utf-8")
                 except FileNotFoundError:  # a third party has somehow deleted the log file or directory
                     with self._lock:

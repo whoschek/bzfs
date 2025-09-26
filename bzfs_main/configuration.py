@@ -72,6 +72,7 @@ from bzfs_main.retry import (
 )
 from bzfs_main.utils import (
     DIR_PERMISSIONS,
+    FILE_PERMISSIONS,
     PROG_NAME,
     SHELL_CHARS,
     SNAPSHOT_FILTERS_VAR,
@@ -147,6 +148,7 @@ class LogParams:
             prefix=f"{self.log_file_prefix}{self.timestamp}{self.log_file_infix}{self.log_file_suffix}-",
             dir=self.log_dir,
         )
+        os.chmod(fd, mode=FILE_PERMISSIONS, follow_symlinks=False)
         os.close(fd)
         self.pv_log_file: str = self.log_file[0 : -len(".log")] + ".pv"
         self.last_modified_cache_dir: str = os.path.join(log_parent_dir, ".cache", "last_modified")
@@ -482,7 +484,7 @@ class Remote:
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
             self.ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs")
-            os.makedirs(os.path.dirname(self.ssh_socket_dir), exist_ok=True)
+            os.makedirs(os.path.dirname(self.ssh_socket_dir), mode=DIR_PERMISSIONS, exist_ok=True)
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             _delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
         self.sanitize1_regex: re.Pattern = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char

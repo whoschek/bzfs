@@ -448,7 +448,7 @@ class TestHelperFunctions(unittest.TestCase):
         selector.select.return_value = []
         with (
             patch.object(progress_reporter, "open_nofollow", side_effect=FileNotFoundError()),
-            patch.object(Path, "touch", lambda self: None),
+            patch.object(Path, "touch", lambda self, *args, **kwargs: None),
         ):
             with self.assertRaises(ValueError):
                 reporter._inject_error = True
@@ -494,7 +494,7 @@ class TestHelperFunctions(unittest.TestCase):
 
         with (
             patch.object(progress_reporter, "open_nofollow", side_effect=open_side_effect),
-            patch.object(Path, "touch", lambda self: None),
+            patch.object(Path, "touch", lambda self, *args, **kwargs: None),
             patch.object(reporter, "_update_transfer_stat", return_value=0),
         ):
             with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
@@ -547,7 +547,7 @@ class TestHelperFunctions(unittest.TestCase):
 
         with (
             patch.object(progress_reporter, "open_nofollow", return_value=io.StringIO("")),
-            patch.object(Path, "touch", lambda self: None),
+            patch.object(Path, "touch", lambda self, *args, **kwargs: None),
         ):
             reporter._run_internal([], cast(selectors.BaseSelector, DummySelector()))
         self.assertEqual(2, len(selector_calls))

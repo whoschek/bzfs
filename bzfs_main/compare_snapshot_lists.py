@@ -53,6 +53,7 @@ from bzfs_main.parallel_iterator import (
     run_in_parallel,
 )
 from bzfs_main.utils import (
+    DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     Interner,
     T,
@@ -96,7 +97,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     src, dst = p.src, p.dst
     task: str = src.root_dataset + " vs. " + dst.root_dataset
     tsv_dir: str = p.log_params.log_file[0 : -len(".log")] + ".cmp"
-    os.makedirs(tsv_dir, exist_ok=True)
+    os.makedirs(tsv_dir, mode=DIR_PERMISSIONS, exist_ok=True)
     tsv_file: str = os.path.join(tsv_dir, (src.root_dataset + "%" + dst.root_dataset).replace("/", "~") + ".tsv")
     tmp_tsv_file: str = tsv_file + ".tmp"
     compare_snapshot_lists: set[str] = set(p.compare_snapshot_lists.split("+"))
