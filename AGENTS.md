@@ -155,8 +155,8 @@ Before committing any changes, you **must** follow this exact sequence:
 ## How to Report Bugs
 
 - **Report:** If you encounter a bug, formulate a clear and concise description of what the bug is, and the symptoms and
-  conditions under which it realistically manifests. State the expected vs the actual behavior. Include steps that
-  reproduce the actual behavior reliably, with minimal complexity, ideally with a script. Explain the real-world
+  conditions under which it realistically manifests. State the expected vs the observed behavior. Include steps that
+  reproduce the observed behavior reliably, with minimal complexity, ideally with a script. Explain the real-world
   consequences to users in specific **realistic use cases**, and associated impact severity (`High`, `Medium`, `Low`).
   Describe known work-arounds and outline potential solutions. Finally, estimate the priority aka urgency of producing a
   fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
