@@ -39,8 +39,8 @@ Assumptions
 Design Rationale
 ================
 We intentionally encode only minimal invariants into inode timestamps and not arbitrary text payloads. This keeps I/O
-tiny and allows safe, atomic low-latency updates via a single ``utime`` call under an advisory filesystem lock. The
-cache consists of four families:
+tiny and allows safe, atomic low-latency updates via a single ``utime`` call under an exclusive advisory file lock via
+flock(2). The cache consists of four families:
 
 1) Dataset-level ("=") per dataset and location (src or dst); for --create-src-snapshots, --replicate, --monitor-snapshots
    - Path: ``<cache_root>/<user@host[#port]>/<dataset>/=``
