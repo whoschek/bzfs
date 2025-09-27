@@ -198,8 +198,9 @@ class SnapshotCache:
             try:  # Best-effort: no locking needed. Not recursive on purpose.
                 zero_times = (0, 0)
                 os_utime = os.utime
-                for entry in os.scandir(os.path.dirname(cache_file)):
-                    os_utime(entry.path, times=zero_times)
+                with os.scandir(os.path.dirname(cache_file)) as iterator:
+                    for entry in iterator:
+                        os_utime(entry.path, times=zero_times)
                 os_utime(cache_file, times=zero_times)
             except FileNotFoundError:
                 pass  # harmless

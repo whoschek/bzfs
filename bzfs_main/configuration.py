@@ -838,23 +838,24 @@ def _delete_stale_files(
     seconds: float = millis / 1000
     now: float = time.time()
     validate_is_not_a_symlink("", root_dir)
-    for entry in os.scandir(root_dir):
-        if entry.name == exclude or not entry.name.startswith(prefix):
-            continue
-        try:
-            stats = entry.stat(follow_symlinks=False)
-            is_dir = entry.is_dir(follow_symlinks=False)
-            if ((dirs and is_dir) or (not dirs and not is_dir)) and now - stats.st_mtime >= seconds:
-                if dirs:
-                    shutil.rmtree(entry.path, ignore_errors=True)
-                elif not (ssh and stat.S_ISSOCK(stats.st_mode)):
-                    os.remove(entry.path)
-                elif match := SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
-                    pid: int = int(match.group(0))
-                    if pid_exists(pid) is False or now - stats.st_mtime >= 31 * 24 * 60 * 60:
-                        os.remove(entry.path)  # bzfs process is no longer alive; its ssh master process isn't either
-        except FileNotFoundError:
-            pass  # harmless
+    with os.scandir(root_dir) as iterator:
+        for entry in iterator:
+            if entry.name == exclude or not entry.name.startswith(prefix):
+                continue
+            try:
+                stats = entry.stat(follow_symlinks=False)
+                is_dir = entry.is_dir(follow_symlinks=False)
+                if ((dirs and is_dir) or (not dirs and not is_dir)) and now - stats.st_mtime >= seconds:
+                    if dirs:
+                        shutil.rmtree(entry.path, ignore_errors=True)
+                    elif not (ssh and stat.S_ISSOCK(stats.st_mode)):
+                        os.remove(entry.path)
+                    elif match := SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
+                        pid: int = int(match.group(0))
+                        if pid_exists(pid) is False or now - stats.st_mtime >= 31 * 24 * 60 * 60:
+                            os.remove(entry.path)  # bzfs process is no longer alive; its ssh master process isn't either
+            except FileNotFoundError:
+                pass  # harmless
 
 
 def _create_symlink(src: str, dst_dir: str, dst: str) -> None:
