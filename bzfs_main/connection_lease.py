@@ -30,12 +30,14 @@ without background daemons, external services, or warm-up procedures.
 How This Is Achieved
 --------------------
 This module provides a small, fast, safe, and reliable mechanism to allocate and reuse unique Unix domain socket files
-(ControlPaths) in a per-endpoint namespace, even under high concurrency. A bzfs process acquires an exclusive advisory file
-lock via flock(2) on a named empty lock file, then atomically moves it between free/ and used/ directories to speed up
-later searches for available names in each category. The held lease exposes the open file descriptor (which maintains the
-lock) and the computed ControlPath so callers can safely establish or reuse SSH master connections without races or leaks.
-Holding a lease's lock for the duration of a `bzfs` process guarantees exclusive ownership of that SSH master while allowing
-the underlying TCP connection to persist beyond bzfs process exit via OpenSSH ControlPersist.
+(ControlPaths) in a per-endpoint namespace, even under high concurrency. The full socket-path namespace is ~/.ssh/bzfs/ (per
+local user) plus a hashed subdirectory derived from the remote endpoint identity (user@host, port, ssh_config_file hash).
+A bzfs process acquires an exclusive advisory file lock via flock(2) on a named empty lock file in the namespace directory
+tree, then atomically moves it between free/ and used/ subdirectories to speed up later searches for available names in each
+category of that namespace. The held lease exposes the open file descriptor (which maintains the lock) and the computed
+ControlPath so callers can safely establish or reuse SSH master connections without races or leaks. Holding a lease's lock
+for the duration of a `bzfs` process guarantees exclusive ownership of that SSH master while allowing the underlying TCP
+connection to persist beyond bzfs process exit via OpenSSH ControlPersist.
 
 Also see https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
 and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
@@ -44,20 +46,20 @@ Assumptions
 -----------
 - The filesystem is POSIX-compliant and supports ``fcntl.flock`` advisory locks, atomic ``os.rename`` file moves, and
   permissions enforcement. The process runs on the same host as the SSH client using the ControlPath.
-- Low latency: scanning the ``free/`` and ``used/`` directories has bounded cost and is O(1) expected time because
-  names are uniformly random. Directory contents are small and ephemeral.
-- Crash recovery is acceptable by salvaging an unlocked file from ``used/``; an unlock indicates process termination
-  or orderly release. The lock itself is the source of truth; directory names provide fast classification.
+- Low latency: scanning the free/ and used/ directories has bounded cost and is O(1) expected time because names are
+  uniformly random. Directory contents are small and ephemeral.
+- Crash recovery is acceptable by salvaging an unlocked file from used/; an unlock indicates process termination or orderly
+  release. The lock itself is the source of truth; directory names provide fast classification.
 
 Design Rationale
 ----------------
 - File locks plus atomic renames form a minimal, portable concurrency primitive that composes well with process lifecycles.
   Locks are released automatically on process exit or when the file descriptor is closed, ensuring no cleanup logic is
   required after abnormal termination.
-- The two-directory layout (``free/`` and ``used/``) makes hot-path acquisition fast. We first probe ``free/`` to reuse
-  previously released names. If that doesn't produce an acquisition we probe ``used/`` to salvage leftovers from crashed
-  processes that no longer hold locks. If that doesn't produce an acquisition either we finally generate a new name. This
-  yields a compact, garbage-free namespace without a janitor.
+- The two-directory layout (free/ and used/) makes hot-path acquisition fast. We first probe free/ to reuse previously
+  released names. If that doesn't produce an acquisition we probe used/ to salvage leftovers from crashed processes that no
+  longer hold locks. If that doesn't produce an acquisition either we finally generate a new name. This yields a compact,
+  garbage-free namespace without a janitor.
 - Name generation mixes in a cryptographically strong random component, encoded in URL-safe base64 to avoid long names and
   path-unfriendly characters. This reduces collision probability and helps with human diagnostics.
 - Security is prioritized: the root, sockets, and lease directories are created with explicit permissions, and symlinks are
@@ -99,7 +101,7 @@ SOCKETS_DIR: str = "c"
 FREE_DIR: str = "free"
 USED_DIR: str = "used"
 SOCKET_PREFIX: str = "s"
-NAMESPACE_DIR_LENGTH: int = 43  # 43 uses all chars of the SHA-256 of the SSH endpoint
+NAMESPACE_DIR_LENGTH: int = 43  # 43 Base64 chars contain the entire SHA-256 of the SSH endpoint
 
 
 #############################################################################
@@ -111,10 +113,10 @@ class ConnectionLease(NamedTuple):
     tree.
 
     Design Rationale: A small, immutable class captures just the essential handles needed for correctness and observability:
-    the open fd, the ``used/`` and ``free/`` lock file paths, and the Unix domain socket ControlPath that SSH uses.
-    Immutability prevents accidental mutation bugs, keeps equality semantics straightforward, and encourages explicit
-    ownership transfer. A dedicated ``release()`` method centralizes cleanup and safe transition of the lock file to
-    ``free/``, followed by closing the fd for deterministic unlock.
+    the open fd, the used/ and free/ lock file paths, and the Unix domain socket ControlPath that SSH uses. Immutability
+    prevents accidental mutation bugs, keeps equality semantics straightforward, and encourages explicit ownership transfer.
+    A dedicated ``release()`` method centralizes cleanup and safe transition of the lock file to free/, followed by closing
+    the fd for deterministic unlock.
     """
 
     # immutable variables:
@@ -141,14 +143,15 @@ class ConnectionLeaseManager:
     filesystem and uses advisory locks consistently. Path lengths must respect common Unix domain socket limits. Callers
     use the socket path with OpenSSH.
 
-    Design Rationale: A compact state machine with ``free/`` and ``used/`` stages, guided by atomically acquired file locks
-    and renames, yields predictable latency, natural crash recovery, and zero background maintenance. The API is
-    intentionally minimal to reduce misuse. Defensive checks and secure open flags balance correctness, performance, and
-    security without external dependencies.
+    Design Rationale: A compact state machine with free/ and used/ stages, guided by atomically acquired file locks and
+    renames, yields predictable latency, natural crash recovery, and zero background maintenance. The API is intentionally
+    minimal to reduce misuse. Defensive checks and secure open flags balance correctness, performance, and security without
+    external dependencies.
     """
 
     def __init__(self, root_dir: str, namespace: str, log: Logger) -> None:
-        # namespace is the concatenation of SSH username+host+port+ssh_config_file; see class Connection in connection.py
+        """The local user is implied by root_dir; ``namespace`` is derived from the remote endpoint identity (ssh_user_host,
+        port, ssh_config_file hash)."""
         # immutable variables:
         assert root_dir
         assert namespace
