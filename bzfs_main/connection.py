@@ -246,6 +246,8 @@ class Connection:
         self.free: int = max_concurrent_ssh_sessions_per_tcp_connection
         self.last_modified: int = 0  # monotonically increasing
         self.cid: int = cid
+        self.last_refresh_time: int = 0
+        self.lock: threading.Lock = threading.Lock()
         self.reuse_ssh_connection: bool = remote.reuse_ssh_connection
         self.connection_lease: ConnectionLease | None = None
         if remote.ssh_user_host and remote.reuse_ssh_connection and not remote.ssh_exit_on_shutdown:
@@ -256,8 +258,6 @@ class Connection:
             None if self.connection_lease is None else self.connection_lease.socket_path
         )
         self.ssh_cmd_quoted: list[str] = [shlex.quote(item) for item in self.ssh_cmd]
-        self.lock: threading.Lock = threading.Lock()
-        self.last_refresh_time: int = 0
 
     def __repr__(self) -> str:
         return str({"free": self.free, "cid": self.cid})
