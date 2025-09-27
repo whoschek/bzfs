@@ -77,7 +77,6 @@ from bzfs_main.utils import (
     SynchronousExecutor,
     _get_descendant_processes,
     append_if_absent,
-    base32_str,
     binary_search,
     close_quietly,
     compile_regexes,
@@ -102,13 +101,14 @@ from bzfs_main.utils import (
     pid_exists,
     pretty_print_formatter,
     replace_capturing_groups_with_non_capturing_groups,
-    sha256_base32_str,
+    sha256_urlsafe_base64,
     shuffle_dict,
     sorted_dict,
     subprocess_run,
     tail,
     terminate_process_subtree,
     unixtime_fromisoformat,
+    urlsafe_base64,
     xfinally,
     xprint,
 )
@@ -121,7 +121,7 @@ from bzfs_tests.tools import (
 def suite() -> unittest.TestSuite:
     test_cases = [
         TestHelperFunctions,
-        TestBase32,
+        TestBase64,
         TestCut,
         TestDrain,
         TestShuffleDict,
@@ -257,10 +257,10 @@ class TestHelperFunctions(unittest.TestCase):
 
 
 #############################################################################
-class TestBase32(unittest.TestCase):
+class TestBase64(unittest.TestCase):
 
-    def test_sha256_base32_length_charset_padding(self) -> None:
-        """All SHA-256 digests are 32 bytes; RFC 4648 Base32 yields 56 chars with 4 '=' trailing pad for 32-byte input."""
+    def test_sha256_base64_urlsafe_length_charset_padding(self) -> None:
+        """All SHA-256 digests are 32 bytes; URL-safe Base64 yields 44 chars with 1 '=' trailing pad for 32-byte input."""
         inputs = [
             "",
             "a",
@@ -270,67 +270,67 @@ class TestBase32(unittest.TestCase):
             "The quick brown fox jumps over the lazy dog",
             "häßlich",  # non-ASCII, ensure UTF-8 handling
         ]
-        pattern = re.compile(r"^[A-Z2-7=]+$")
+        # Allow only URL-safe Base64 characters (no padding expected when padding=False)
+        pattern = re.compile(r"[A-Za-z0-9_-]+")
         for text in inputs:
-            out = sha256_base32_str(text, padding=True)
-            self.assertEqual(56, len(out))
-            self.assertTrue(out.endswith("===="))
-            out = sha256_base32_str(text, padding=False)
-            self.assertEqual(52, len(out))
+            out = sha256_urlsafe_base64(text, padding=True)
+            self.assertEqual(44, len(out))
+            self.assertTrue(out.endswith("="))
+            out = sha256_urlsafe_base64(text, padding=False)
+            self.assertEqual(43, len(out))
             self.assertTrue(pattern.fullmatch(out))
             self.assertFalse(out.endswith("="))
-            self.assertEqual(out, sha256_base32_str(text, padding=False))  # Deterministic
+            self.assertEqual(out, sha256_urlsafe_base64(text, padding=False))  # Deterministic
 
-    def test_sha256_base32_matches_stdlib_composition(self) -> None:
+    def test_sha256_urlsafe_base64_matches_stdlib_composition(self) -> None:
         for text in ["", "abc", "hello world", "häßlich"]:
-            expected = base64.b32encode(hashlib.sha256(text.encode("utf-8")).digest()).decode()
-            self.assertEqual(expected, sha256_base32_str(text, padding=True))
-            expected = base64.b32encode(hashlib.sha256(text.encode("utf-8")).digest()).decode().rstrip("=")
-            self.assertEqual(expected, sha256_base32_str(text, padding=False))
+            expected = base64.urlsafe_b64encode(hashlib.sha256(text.encode("utf-8")).digest()).decode()
+            self.assertEqual(expected, sha256_urlsafe_base64(text, padding=True))
+            expected = base64.urlsafe_b64encode(hashlib.sha256(text.encode("utf-8")).digest()).decode().rstrip("=")
+            self.assertEqual(expected, sha256_urlsafe_base64(text, padding=False))
 
-    def test_base32_fixed_length_8_chars(self) -> None:
-        max_value = 999_999_999_999
+    def test_urlsafe_base64_fixed_length_24_bits(self) -> None:
+        max_value = 2**24 - 1
         samples = [0, 1, 42, 2**20, max_value]
-        pattern = re.compile(r"^[A-Z2-7]+$")
+        pattern = re.compile(r"[A-Za-z0-9_-]+")  # URL-safe Base64 alphabet
         for n in samples:
-            out = base32_str(n, max_value, padding=True)
-            self.assertEqual(8, len(out))
-            self.assertNotIn("=", out)
-            out = base32_str(n, max_value, padding=False)
-            self.assertEqual(8, len(out))
+            out = urlsafe_base64(n, max_value, padding=True)
+            self.assertEqual(4, len(out))
+            out = urlsafe_base64(n, max_value, padding=False)
+            self.assertEqual(4, len(out))
             self.assertIsNotNone(pattern.fullmatch(out))
             self.assertNotIn("=", out)
-        self.assertEqual("AAAAAAAA", base32_str(0, max_value, padding=False))
+        self.assertEqual("A" * 4, urlsafe_base64(0, max_value, padding=False))
 
-    def test_base32_fixed_length_16_chars(self) -> None:
+    def test_urlsafe_base64_fixed_length_64_bits(self) -> None:
         max_value = 2**64 - 1
-        pattern = re.compile(r"^[A-Z2-7]+$")
-        for n in [0, 1, 2**32, 2**63, (2**64) - 1]:
-            out = base32_str(n, max_value, padding=True)
-            self.assertEqual(16, len(out))
-            self.assertTrue(out.endswith("==="))
-            out = base32_str(n, max_value, padding=False)
-            self.assertEqual(13, len(out))
+        samples = [0, 1, 42, 2**20, max_value]
+        pattern = re.compile(r"[A-Za-z0-9_-]+")  # URL-safe Base64 alphabet
+        for n in samples:
+            out = urlsafe_base64(n, max_value, padding=True)
+            self.assertEqual(12, len(out))
+            self.assertTrue(out.endswith("="))
+            out = urlsafe_base64(n, max_value, padding=False)
+            self.assertEqual(11, len(out))
             self.assertIsNotNone(pattern.fullmatch(out))
             self.assertNotIn("=", out)
-        self.assertEqual("A" * 13 + "===", base32_str(0, max_value, padding=True))
-        self.assertEqual("A" * 13, base32_str(0, max_value, padding=False))
+        self.assertEqual("A" * 11, urlsafe_base64(0, max_value, padding=False))
 
-    def test_base32_expected_lengths_for_various_byte_widths(self) -> None:
-        """Validate that for byte widths 1..5 the length matches RFC 4648 when '=' is stripped."""
+    def test_urlsafe_base64_expected_lengths_for_various_byte_widths(self) -> None:
+        """Validate that for byte widths 1..5 the URL-safe Base64 length matches spec, with and without '=' padding."""
         for byte_len in range(1, 6):
-            expected_len = len(base64.b32encode(b"\x00" * byte_len).decode())
-            expected_len_stripped = len(base64.b32encode(b"\x00" * byte_len).decode().rstrip("="))
+            expected_len = len(base64.urlsafe_b64encode(b"\x00" * byte_len).decode())
+            expected_len_stripped = len(base64.urlsafe_b64encode(b"\x00" * byte_len).decode().rstrip("="))
             max_value = (1 << (8 * byte_len)) - 1
             for n in [0, 1, max_value // 2, max_value]:
-                out = base32_str(n, max_value, padding=True)
+                out = urlsafe_base64(n, max_value, padding=True)
                 self.assertEqual(expected_len, len(out))
-                out = base32_str(n, max_value, padding=False)
+                out = urlsafe_base64(n, max_value, padding=False)
                 self.assertEqual(expected_len_stripped, len(out))
 
-    def test_base32_zero_max_value_edge_case(self) -> None:
-        self.assertEqual("", base32_str(0, 0, padding=True))
-        self.assertEqual("", base32_str(0, 0, padding=False))
+    def test_urlsafe_base64_zero_max_value_edge_case(self) -> None:
+        self.assertEqual("", urlsafe_base64(0, 0, padding=True))
+        self.assertEqual("", urlsafe_base64(0, 0, padding=False))
 
 
 ###############################################################################

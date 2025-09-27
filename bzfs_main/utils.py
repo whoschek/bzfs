@@ -523,20 +523,21 @@ def sha256_hex(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def sha256_base32_str(text: str, padding: bool = True) -> str:
-    """Returns the base32-encoded sha256 value for the given text."""
+def sha256_urlsafe_base64(text: str, padding: bool = True) -> str:
+    """Returns the URL-safe base64-encoded sha256 value for the given text."""
     digest: bytes = hashlib.sha256(text.encode("utf-8")).digest()
-    s: str = base64.b32encode(digest).decode("utf-8")
+    s: str = base64.urlsafe_b64encode(digest).decode("utf-8")
     return s if padding else s.rstrip("=")
 
 
-def base32_str(
+def urlsafe_base64(
     value: int, max_value: int = 2**64 - 1, padding: bool = True, byteorder: Literal["little", "big"] = "big"
 ) -> str:
-    """Returns the base32 string encoding of the given int value, assuming it is contained in the range [0..max_value]."""
+    """Returns the URL-safe base64 string encoding of the int value, assuming it is contained in the range [0..max_value]."""
     assert 0 <= value <= max_value
     max_bytes: int = (max_value.bit_length() + 7) // 8
-    s: str = base64.b32encode(value.to_bytes(max_bytes, byteorder)).decode("utf-8")
+    value_bytes: bytes = value.to_bytes(max_bytes, byteorder)
+    s: str = base64.urlsafe_b64encode(value_bytes).decode("utf-8")
     return s if padding else s.rstrip("=")
 
 

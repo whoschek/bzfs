@@ -36,6 +36,7 @@ exposes the open file descriptor (which maintains the lock) and the computed Con
 reuse SSH master connections without races or leaks. Holding a lease's lock for the duration of a `bzfs` process guarantees
 exclusive ownership of that SSH master while allowing the underlying TCP connection to persist beyond process exit via
 OpenSSH ControlPersist.
+
 Also see https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
 and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
 
@@ -43,12 +44,10 @@ Assumptions
 -----------
 - The filesystem is POSIX-compliant and supports ``fcntl.flock`` advisory locks, atomic ``os.rename`` renames, and
   permissions enforcement. The process runs on the same host as the SSH client using the ControlPath.
-- High performance: scanning the ``free/`` and ``used/`` directories has bounded cost and is typically O(1) expected
-  time because names are uniformly random. Directory contents are small and ephemeral.
+- High performance: scanning the ``free/`` and ``used/`` directories has bounded cost and is O(1) expected time because
+  names are uniformly random. Directory contents are small and ephemeral.
 - Crash recovery is acceptable by salvaging an unlocked file from ``used/``; an unlock indicates process termination
   or orderly release. The lock itself is the source of truth; directory names provide fast classification.
-- Unix domain socket path length limits apply; paths are truncated to remain within portable OS caps while retaining a
-  high-entropy prefix.
 
 Design Rationale
 ----------------
@@ -58,10 +57,8 @@ Design Rationale
 - The two-directory layout (``free/`` and ``used/``) makes hot-path acquisition fast. We first probe ``free/`` to reuse
   previously released names, then probe ``used/`` to salvage leftovers from crashed processes that no longer hold locks,
   and finally generate a new name if necessary. This yields a compact, garbage-free namespace without a janitor.
-- Name generation mixes a cryptographically strong random component with a monotonic timestamp, encoded in base32 to avoid
-  long names and path-unfriendly characters. This reduces collision probability and helps with human diagnostics while
-  bypassing filesystem assumptions about case sensitivity. We cap the resulting ControlPath length to satisfy kernel limits
-  for Unix domain sockets while still ensuring an atomic path creation flow.
+- Name generation mixes in a cryptographically strong random component, encoded in URL-safe base64 to avoid long names and
+  path-unfriendly characters. This reduces collision probability and helps with human diagnostics.
 - Security is prioritized: the root, sockets, and lease directories are created with explicit permissions, and symlinks are
   rejected to avoid redirection attacks. Open flags include ``O_NOFOLLOW`` and ``O_CLOEXEC`` to remove common foot-guns.
 - The public API is intentionally tiny and ergonomic. ``ConnectionLeaseManager.acquire()`` never blocks: it either returns
@@ -78,7 +75,6 @@ from __future__ import (
 import fcntl
 import os
 import random
-import time
 from logging import (
     Logger,
 )
@@ -91,9 +87,9 @@ from bzfs_main.utils import (
     FILE_PERMISSIONS,
     LOG_TRACE,
     UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH,
-    base32_str,
     close_quietly,
-    sha256_base32_str,
+    sha256_urlsafe_base64,
+    urlsafe_base64,
     validate_is_not_a_symlink,
 )
 
@@ -102,11 +98,12 @@ SOCKETS_DIR: str = "c"
 FREE_DIR: str = "free"
 USED_DIR: str = "used"
 SOCKET_PREFIX: str = "s"
+NAMESPACE_DIR_LENGTH: int = 43  # 43 uses all chars of the SHA-256 of the SSH endpoint
 
 
 #############################################################################
 class ConnectionLease(NamedTuple):
-    """Purpose: Reduce SSH connection startup latency via safe ControlPath reuse.
+    """Purpose: Reduce SSH connection startup latency of a fresh bzfs process via safe OpenSSH ControlPath reuse.
 
     Assumptions: Callers hold this object only while the lease is needed. The file descriptor remains valid and keeps an
     exclusive advisory lock until ``release()`` or process exit. Paths are absolute and live within the manager's directory
@@ -128,7 +125,7 @@ class ConnectionLease(NamedTuple):
     def release(self) -> None:
         """Releases the lease: moves the lockfile from used/ dir back to free/ dir, then unlocks it by closing its fd."""
         try:
-            os.rename(self.used_path, self.free_path)  # mv lockfile atomically
+            os.rename(self.used_path, self.free_path)  # mv lockfile atomically while holding the lock
         except FileNotFoundError:
             pass  # harmless
         finally:
@@ -137,7 +134,7 @@ class ConnectionLease(NamedTuple):
 
 #############################################################################
 class ConnectionLeaseManager:
-    """Purpose: Enable fast SSH connection reuse to cut startup latency for repeated operations.
+    """Purpose: Reduce SSH connection startup latency of a fresh bzfs process via safe OpenSSH ControlPath reuse.
 
     Assumptions: The manager has exclusive control of its root directory subtree. The process operates on a POSIX-compliant
     filesystem and uses advisory locks consistently. Path lengths must respect common Unix domain socket limits. Callers
@@ -150,12 +147,14 @@ class ConnectionLeaseManager:
     """
 
     def __init__(self, root_dir: str, namespace: str, log: Logger) -> None:
+        # namespace is the concatenation of SSH username+host+port+ssh_config_file; see class Connection in connection.py
         # immutable variables:
         assert root_dir
         assert namespace
         self._log: Logger = log
-        ns: str = sha256_base32_str(namespace, padding=False)
-        ns = ns[0 : len(ns) // 2]
+        ns: str = sha256_urlsafe_base64(namespace, padding=False)
+        assert NAMESPACE_DIR_LENGTH >= 22  # a minimum degree of safety: 22 URL-safe Base64 chars = 132 bits of entropy
+        ns = ns[0:NAMESPACE_DIR_LENGTH]
         base_dir: str = os.path.join(root_dir, ns)
         self._sockets_dir: str = os.path.join(base_dir, SOCKETS_DIR)
         self._free_dir: str = os.path.join(base_dir, FREE_DIR)
@@ -195,21 +194,22 @@ class ConnectionLeaseManager:
         return None
 
     def _create_and_acquire(self) -> ConnectionLease:
-        max_rand: int = 999_999_999_999
+        max_rand: int = 2**64 - 1
         rand: random.Random = random.SystemRandom()
         while True:
-            random_prefix: str = base32_str(rand.randint(0, max_rand), max_value=max_rand, padding=False)
-            curr_time: str = base32_str(time.time_ns(), max_value=2**64 - 1, padding=False)
-            socket_name: str = f"{SOCKET_PREFIX}{random_prefix}@{curr_time}"
+            random_prefix: str = urlsafe_base64(rand.randint(0, max_rand), max_value=max_rand, padding=False)
+            socket_name: str = f"{SOCKET_PREFIX}{random_prefix}"
+            socket_path: str = os.path.join(self._sockets_dir, socket_name)
 
-            # Cap the socket_path length because the OS rejects Unix domain socket file paths that are too long. Yet
-            # intentionally fail hard later on os.open(socket_path) if the OS cap limit cannot be met reasonably as the
-            # Unix user name (which is part of the home directory path) happens to be unreasonably long.
-            max_socket_path_len: int = max(
-                UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH,
-                len(self._sockets_dir) + 1 + len(SOCKET_PREFIX) + len(random_prefix),
-            )
-            socket_path: str = os.path.join(self._sockets_dir, socket_name)[:max_socket_path_len]
+            # Intentionally error out hard if the max OS Unix domain socket path limit cannot be met reasonably as the home
+            # directory path is too long, typically because the Unix user name is unreasonably long. Failing fast here avoids
+            # opaque OS errors later in `ssh`.
+            if len(socket_path) > UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH:
+                raise OSError(
+                    "SSH ControlPath exceeds Unix domain socket limit "
+                    f"({len(socket_path)} > {UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH}); "
+                    f"shorten the SSH socket directory by shortening the home directory path: {socket_path}"
+                )
 
             free_path: str = os.path.join(self._free_dir, os.path.basename(socket_path))
             lease: ConnectionLease | None = self._try_lock(free_path, open_flags=self._open_flags | os.O_CREAT)
@@ -221,13 +221,17 @@ class ConnectionLeaseManager:
         try:
             fd = os.open(src_path, flags=open_flags, mode=FILE_PERMISSIONS)
 
-            # Acquire an exclusive lock; will raise an error if lock is already held by another process.
+            # Acquire an exclusive lock; will raise a BlockingIOError if lock is already held by another process.
             # The (advisory) lock is auto-released when the process terminates or the fd is closed.
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
 
             socket_name: str = os.path.basename(src_path)
             used_path: str = os.path.join(self._used_dir, socket_name)
-            os.rename(src_path, used_path)  # mv lockfile atomically
+            if src_path != used_path and os.path.exists(used_path):  # extremely rare name collision?
+                close_quietly(fd)
+                return None  # harmless; retry with another name. See test_collision_on_create_then_salvage_and_release()
+
+            os.rename(src_path, used_path)  # mv lockfile atomically while holding the lock
         except OSError as e:
             close_quietly(fd)
             if isinstance(e, BlockingIOError):
