@@ -20,31 +20,31 @@ immediately to an existing OpenSSH ControlMaster connection, and in doing so ski
 authentication, and other delays from multiple network round-trips. This way, the very first remote ZFS command starts
 hundreds of milliseconds earlier as compared to when creating an SSH connection from scratch.
 
-The higher-level goal is predictable performance, shorter critical paths, and less noisy-neighbor impact across periodic
-replication jobs at fleet scale. To achieve this, masters remain alive across bzfs process lifecycles unless they become idle
-for a specified time period, and inter-process reuse of ControlPath sockets is coordinated safely so every new bzfs process
-benefits from an existing connection when present, and can recreate it deterministically when absent. This amortizes startup
-costs, reduces tail latency, and improves operational reliability without background daemons, external services, or warm-up
-procedures.
+The higher-level goal is predictable performance, shorter critical paths, and less noisy-neighbor impact across frequent
+periodic replication jobs at fleet scale, including at high concurrency. To achieve this, masters remain alive across bzfs
+process lifecycles unless they become idle for a specified time period, and inter-process reuse of ControlPath sockets is
+coordinated safely so every new bzfs process benefits from an existing connection when present, and can recreate it
+deterministically when absent. This amortizes startup costs, reduces tail latency, and improves operational reliability
+without background daemons, external services, or warm-up procedures.
 
 How This Is Achieved
 --------------------
-This module provides a small, fast, safe mechanism to allocate and reuse unique Unix domain socket files (ControlPaths)
-in a per-endpoint namespace. A bzfs process acquires an exclusive advisory filesystem lock on an empty lockfile and atomically
-moves the lockfile back and forth between ``free/`` and ``used/`` directories to track exclusive ownership. The held lease
-exposes the open file descriptor (which maintains the lock) and the computed ControlPath so callers can safely establish or
-reuse SSH master connections without races or leaks. Holding a lease's lock for the duration of a `bzfs` process guarantees
-exclusive ownership of that SSH master while allowing the underlying TCP connection to persist beyond process exit via
-OpenSSH ControlPersist.
+This module provides a small, fast, safe, and reliable mechanism to allocate and reuse unique Unix domain socket files
+(ControlPaths) in a per-endpoint namespace, even under high concurrency. A bzfs process acquires an exclusive advisory file
+lock via flock(2) on a named empty lock file, then atomically moves it between free/ and used/ directories to speed up
+later searches for available names in each category. The held lease exposes the open file descriptor (which maintains the
+lock) and the computed ControlPath so callers can safely establish or reuse SSH master connections without races or leaks.
+Holding a lease's lock for the duration of a `bzfs` process guarantees exclusive ownership of that SSH master while allowing
+the underlying TCP connection to persist beyond bzfs process exit via OpenSSH ControlPersist.
 
 Also see https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
 and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
 
 Assumptions
 -----------
-- The filesystem is POSIX-compliant and supports ``fcntl.flock`` advisory locks, atomic ``os.rename`` renames, and
+- The filesystem is POSIX-compliant and supports ``fcntl.flock`` advisory locks, atomic ``os.rename`` file moves, and
   permissions enforcement. The process runs on the same host as the SSH client using the ControlPath.
-- High performance: scanning the ``free/`` and ``used/`` directories has bounded cost and is O(1) expected time because
+- Low latency: scanning the ``free/`` and ``used/`` directories has bounded cost and is O(1) expected time because
   names are uniformly random. Directory contents are small and ephemeral.
 - Crash recovery is acceptable by salvaging an unlocked file from ``used/``; an unlock indicates process termination
   or orderly release. The lock itself is the source of truth; directory names provide fast classification.
@@ -55,14 +55,15 @@ Design Rationale
   Locks are released automatically on process exit or when the file descriptor is closed, ensuring no cleanup logic is
   required after abnormal termination.
 - The two-directory layout (``free/`` and ``used/``) makes hot-path acquisition fast. We first probe ``free/`` to reuse
-  previously released names, then probe ``used/`` to salvage leftovers from crashed processes that no longer hold locks,
-  and finally generate a new name if necessary. This yields a compact, garbage-free namespace without a janitor.
+  previously released names. If that doesn't produce an acquisition we probe ``used/`` to salvage leftovers from crashed
+  processes that no longer hold locks. If that doesn't produce an acquisition either we finally generate a new name. This
+  yields a compact, garbage-free namespace without a janitor.
 - Name generation mixes in a cryptographically strong random component, encoded in URL-safe base64 to avoid long names and
   path-unfriendly characters. This reduces collision probability and helps with human diagnostics.
 - Security is prioritized: the root, sockets, and lease directories are created with explicit permissions, and symlinks are
   rejected to avoid redirection attacks. Open flags include ``O_NOFOLLOW`` and ``O_CLOEXEC`` to remove common foot-guns.
 - The public API is intentionally tiny and ergonomic. ``ConnectionLeaseManager.acquire()`` never blocks: it either returns
-  a held lease or silently retries the next candidate, ensuring predictable latency under contention. The ``ConnectionLease``
+  a lease for an existing name or a new name, ensuring predictable low latency under contention. The ``ConnectionLease``
   is immutable and simple to reason about, with an explicit ``release()`` to return capacity to the pool.
 - No external services, daemons, or background threads are required. The design favors determinate behavior under failures,
   idempotent operations, and ease of testing. This approach integrates cleanly with ``bzfs`` where predictable SSH reuse and
@@ -110,9 +111,9 @@ class ConnectionLease(NamedTuple):
     tree.
 
     Design Rationale: A small, immutable class captures just the essential handles needed for correctness and observability:
-    the open fd, the ``used/`` and ``free/`` lockfile paths, and the Unix domain socket ControlPath that SSH uses.
+    the open fd, the ``used/`` and ``free/`` lock file paths, and the Unix domain socket ControlPath that SSH uses.
     Immutability prevents accidental mutation bugs, keeps equality semantics straightforward, and encourages explicit
-    ownership transfer. A dedicated ``release()`` method centralizes cleanup and safe transition of the lockfile to
+    ownership transfer. A dedicated ``release()`` method centralizes cleanup and safe transition of the lock file to
     ``free/``, followed by closing the fd for deterministic unlock.
     """
 
@@ -123,9 +124,9 @@ class ConnectionLease(NamedTuple):
     socket_path: str
 
     def release(self) -> None:
-        """Releases the lease: moves the lockfile from used/ dir back to free/ dir, then unlocks it by closing its fd."""
+        """Releases the lease: moves the lock file from used/ dir back to free/ dir, then unlocks it by closing its fd."""
         try:
-            os.rename(self.used_path, self.free_path)  # mv lockfile atomically while holding the lock
+            os.rename(self.used_path, self.free_path)  # mv lock file atomically while holding the lock
         except FileNotFoundError:
             pass  # harmless
         finally:
@@ -204,10 +205,11 @@ class ConnectionLeaseManager:
             # Intentionally error out hard if the max OS Unix domain socket path limit cannot be met reasonably as the home
             # directory path is too long, typically because the Unix user name is unreasonably long. Failing fast here avoids
             # opaque OS errors later in `ssh`.
-            if len(socket_path) > UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH:
+            socket_path_bytes: bytes = os.fsencode(socket_path)
+            if len(socket_path_bytes) > UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH:
                 raise OSError(
                     "SSH ControlPath exceeds Unix domain socket limit "
-                    f"({len(socket_path)} > {UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH}); "
+                    f"({len(socket_path_bytes)} > {UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH}); "
                     f"shorten the SSH socket directory by shortening the home directory path: {socket_path}"
                 )
 
@@ -231,7 +233,7 @@ class ConnectionLeaseManager:
                 close_quietly(fd)
                 return None  # harmless; retry with another name. See test_collision_on_create_then_salvage_and_release()
 
-            os.rename(src_path, used_path)  # mv lockfile atomically while holding the lock
+            os.rename(src_path, used_path)  # mv lock file atomically while holding the lock
         except OSError as e:
             close_quietly(fd)
             if isinstance(e, BlockingIOError):
