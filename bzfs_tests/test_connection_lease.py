@@ -22,6 +22,7 @@ import os
 import platform
 import shutil
 import tempfile
+import time
 import unittest
 from unittest.mock import (
     MagicMock,
@@ -42,6 +43,9 @@ from bzfs_main.utils import (
     UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH,
     sha256_urlsafe_base64,
 )
+from bzfs_tests.abstract_testcase import (
+    AbstractTestCase,
+)
 
 
 #############################################################################
@@ -53,7 +57,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class TestConnectionLease(unittest.TestCase):
+class TestConnectionLease(AbstractTestCase):
 
     def test_rename_lockfile_to_itself_must_be_a_noop(self) -> None:
         """Purpose: Establish that renaming a lease lockfile to itself is a guaranteed no-op on POSIX filesystems and
@@ -684,6 +688,56 @@ class TestConnectionLease(unittest.TestCase):
             os.symlink(target, sl)
             with self.assertRaises(OSError):
                 _ = mgr._try_lock(sl, open_flags=mgr._open_flags)
+
+    def test_xbenchmark_find_and_acquire_used_when_all_locked(self) -> None:
+        """Benchmark: Populate used/ with N locked entries, then measure how many ``_find_and_acquire(used_dir)`` calls per
+        second can be completed when every attempt returns ``None`` because no files are 'free' and all files are already
+        locked by another process.
+
+        This simulates a fresh bzfs process attempting to acquire a connection lease while N existing connections are already
+        open to the same endpoint (same namespace) by the same user, ensuring the scanner latency remains predictable under
+        load.
+        """
+        if self.is_unit_test or self.is_smoke_test:
+            self.skipTest("Ignore test_xbenchmark_find_and_acquire_used_when_all_locked() if is unit test or smoke test")
+
+        all_num_locks = [20, 200]
+        all_num_locks += [1000] if platform.system() != "Darwin" else []  # OSX defaults to max 256 open FDs per process
+        measure_seconds = 0.5
+
+        for num_locks in all_num_locks:
+            with get_tmpdir() as root_dir:
+                ns = f"test_xbenchmark_find_and_acquire_used_when_all_locked_{all_num_locks}"
+                log = MagicMock(logging.Logger)
+                mgr = ConnectionLeaseManager(root_dir=root_dir, namespace=ns, log=log)
+
+                # Acquire and hold many leases to keep "used/" full of locked files
+                leases: list[ConnectionLease] = []
+                try:
+                    for _ in range(num_locks):
+                        leases.append(mgr.acquire())
+
+                    # Warm-up
+                    for _ in range(3):
+                        self.assertIsNone(mgr._find_and_acquire(mgr._used_dir))
+
+                    probe = ConnectionLeaseManager(root_dir=root_dir, namespace=ns, log=log)
+
+                    # Measure: calls/second when every scan returns None
+                    start = time.perf_counter()
+                    deadline = start + measure_seconds
+                    calls = 0
+                    while time.perf_counter() < deadline:
+                        self.assertIsNone(probe._find_and_acquire(probe._used_dir))
+                        calls += 1
+                    elapsed = time.perf_counter() - start
+                    cps = round(calls / elapsed)
+                    logging.getLogger(__name__).warning(
+                        "_find_and_acquire(used_dir): %d negative calls/sec with %d locked files", cps, num_locks
+                    )
+                finally:
+                    for lease in leases:
+                        lease.release()
 
 
 def get_tmpdir() -> tempfile.TemporaryDirectory[str]:

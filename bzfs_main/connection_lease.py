@@ -49,7 +49,7 @@ Assumptions
 - Low latency: scanning the free/ and used/ directories has bounded cost and is O(1) expected time because names are
   uniformly random. Directory contents are small and ephemeral.
 - Crash recovery is acceptable by salvaging an unlocked file from used/; an unlock indicates process termination or orderly
-  release. The lock itself is the source of truth; directory names provide fast classification.
+  release. The flock itself is the source of truth; directory names merely provide fast classification.
 
 Design Rationale
 ----------------
@@ -159,10 +159,10 @@ class ConnectionLeaseManager:
         ns: str = sha256_urlsafe_base64(namespace, padding=False)
         assert NAMESPACE_DIR_LENGTH >= 22  # a minimum degree of safety: 22 URL-safe Base64 chars = 132 bits of entropy
         ns = ns[0:NAMESPACE_DIR_LENGTH]
-        base_dir: str = os.path.join(root_dir, ns)
-        self._sockets_dir: str = os.path.join(base_dir, SOCKETS_DIR)
-        self._free_dir: str = os.path.join(base_dir, FREE_DIR)
-        self._used_dir: str = os.path.join(base_dir, USED_DIR)
+        namespace_dir: str = os.path.join(root_dir, ns)
+        self._sockets_dir: str = os.path.join(namespace_dir, SOCKETS_DIR)
+        self._free_dir: str = os.path.join(namespace_dir, FREE_DIR)
+        self._used_dir: str = os.path.join(namespace_dir, USED_DIR)
         self._open_flags: int = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
         os.makedirs(root_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("connection lease root_dir ", root_dir)
