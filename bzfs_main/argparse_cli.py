@@ -1183,7 +1183,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
              "--ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
              "keyword in ssh_config(5) for more information: "
-             "https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `%(default)s`\n\n")
+             "https://manpages.ubuntu.com/manpages/man5/ssh_config.5.html. Default: `%(default)s`\n\n")
 
     locations = ["src", "dst"]
     for loc in locations:

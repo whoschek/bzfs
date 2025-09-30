@@ -1887,7 +1887,7 @@ usage: bzfs [-h] [--recursive]
 *  SSH cipher specification for encrypting the session (optional); will be passed into ssh
     -c CLI. --ssh-cipher is a comma-separated list of ciphers listed in order of preference. See
     the 'Ciphers' keyword in ssh_config(5) for more information:
-    https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default:
+    https://manpages.ubuntu.com/manpages/man5/ssh_config.5.html. Default:
     `^aes256-gcm@openssh.com`
 
 <!-- -->
