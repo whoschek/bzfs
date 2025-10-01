@@ -101,6 +101,7 @@ from bzfs_main.utils import (
     pid_exists,
     pretty_print_formatter,
     replace_capturing_groups_with_non_capturing_groups,
+    sha256_hex,
     sha256_urlsafe_base64,
     shuffle_dict,
     sorted_dict,
@@ -258,6 +259,29 @@ class TestHelperFunctions(unittest.TestCase):
 
 #############################################################################
 class TestBase64(unittest.TestCase):
+
+    def test_sha256_hex_basic(self) -> None:
+        """sha256_hex returns 64 lowercase hex chars and is deterministic."""
+        inputs = [
+            "",
+            "a",
+            "abc",
+            "hello",
+            "hello world",
+            "The quick brown fox jumps over the lazy dog",
+            "häßlich",  # non-ASCII, ensure UTF-8 handling
+        ]
+        hex_re = re.compile(r"[0-9a-f]{64}")
+        for text in inputs:
+            out = sha256_hex(text)
+            self.assertEqual(64, len(out))
+            self.assertIsNotNone(hex_re.fullmatch(out))
+            self.assertEqual(out, sha256_hex(text))  # Deterministic
+
+    def test_sha256_hex_matches_stdlib(self) -> None:
+        for text in ["", "abc", "hello world", "häßlich"]:
+            expected = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            self.assertEqual(expected, sha256_hex(text))
 
     def test_sha256_base64_urlsafe_length_charset_padding(self) -> None:
         """All SHA-256 digests are 32 bytes; URL-safe Base64 yields 44 chars with 1 '=' trailing pad for 32-byte input."""
