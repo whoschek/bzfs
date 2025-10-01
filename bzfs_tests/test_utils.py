@@ -70,6 +70,8 @@ from zoneinfo import (
 
 from bzfs_main.utils import (
     DESCENDANTS_RE_SUFFIX,
+    DIR_PERMISSIONS,
+    FILE_PERMISSIONS,
     SmallPriorityQueue,
     SnapshotPeriods,
     SynchronizedBool,
@@ -110,6 +112,7 @@ from bzfs_main.utils import (
     terminate_process_subtree,
     unixtime_fromisoformat,
     urlsafe_base64,
+    validate_file_permissions,
     xfinally,
     xprint,
 )
@@ -133,6 +136,7 @@ def suite() -> unittest.TestSuite:
         TestHumanReadable,
         TestOpenNoFollow,
         TestCloseQuietly,
+        TestValidateFilePermissions,
         TestFindMatch,
         TestReplaceCapturingGroups,
         TestSubprocessRun,
@@ -837,6 +841,44 @@ class TestCloseQuietly(unittest.TestCase):
         finally:
             close_quietly(d)
             close_quietly(r)
+
+
+#############################################################################
+class TestValidateFilePermissions(unittest.TestCase):
+
+    def test_ok_when_owner_and_mode_match(self) -> None:
+        with tempfile.NamedTemporaryFile(delete=True) as f:
+            os.chmod(f.name, FILE_PERMISSIONS)
+            validate_file_permissions(f.name, mode=FILE_PERMISSIONS)
+
+    def test_owner_mismatch_raises(self) -> None:
+        with tempfile.NamedTemporaryFile(delete=True) as f:
+            os.chmod(f.name, FILE_PERMISSIONS)
+            real_uid = os.stat(f.name).st_uid
+            fake_euid = real_uid + 1
+            with patch("os.geteuid", return_value=fake_euid):
+                with self.assertRaises(SystemExit) as cm, suppress_output():
+                    validate_file_permissions(f.name, mode=FILE_PERMISSIONS)
+        msg = str(cm.exception)
+        self.assertIn(str(real_uid), msg)
+        self.assertIn(str(fake_euid), msg)
+        self.assertIn("is owned by uid", msg)
+
+    def test_mode_mismatch_raises_and_reports_bits_and_text(self) -> None:
+        with tempfile.NamedTemporaryFile(delete=True) as f:
+            # os.chmod(f.name, 0o600)
+            # expected_mode = 0o700
+            os.chmod(f.name, FILE_PERMISSIONS)
+            expected_mode = DIR_PERMISSIONS
+            with self.assertRaises(SystemExit) as cm, suppress_output():
+                validate_file_permissions(f.name, mode=expected_mode)
+        msg = str(cm.exception)
+        actual = FILE_PERMISSIONS  # aka 0o600
+        # Ensure message mentions both numeric and textual representations
+        self.assertIn(f"{actual:03o}", msg)
+        self.assertIn("rw-------", msg)  # actual 0o600
+        self.assertIn(f"{expected_mode:03o}", msg)
+        self.assertIn("rwx------", msg)  # expected 0o700
 
 
 #############################################################################

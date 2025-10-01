@@ -195,6 +195,8 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
                     f"first, considering diagnostic log file output from running {PROG_NAME} with: -v -v -v"
                 )
         conn.last_refresh_time = time.monotonic_ns()
+        if conn.connection_lease is not None:
+            conn.connection_lease.set_socket_mtime_to_now()
 
 
 def timeout(job: Job) -> float | None:
@@ -240,7 +242,10 @@ class Connection:
     free: int  # sort order evens out the number of concurrent sessions among the TCP connections
     last_modified: int  # LIFO: tiebreaker favors latest returned conn as that's most alive and hot; also ensures no dupes
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int) -> None:
+    def __init__(
+        self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int, pool_name: str
+    ) -> None:
+        assert pool_name
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
         self.free: int = max_concurrent_ssh_sessions_per_tcp_connection
@@ -252,7 +257,10 @@ class Connection:
         self.connection_lease: ConnectionLease | None = None
         if remote.ssh_user_host and remote.reuse_ssh_connection and not remote.ssh_exit_on_shutdown:
             self.connection_lease = ConnectionLeaseManager(
-                root_dir=remote.ssh_socket_dir, namespace=remote.cache_namespace(), log=remote.params.log
+                root_dir=remote.ssh_socket_dir,
+                namespace=f"{remote.cache_namespace()}#{pool_name}",
+                ssh_control_persist_secs=max(90 * 60, 2 * remote.ssh_control_persist_secs + 2),
+                log=remote.params.log,
             ).acquire()
         self.ssh_cmd: list[str] = remote.local_ssh_command(
             None if self.connection_lease is None else self.connection_lease.socket_path
@@ -298,10 +306,11 @@ class Connection:
 class ConnectionPool:
     """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse."""
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int) -> None:
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, pool_name: str) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.remote: Remote = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
+        self.pool_name: str = pool_name
         self.priority_queue: SmallPriorityQueue[Connection] = SmallPriorityQueue(
             reverse=True  # sorted by #free slots and last_modified
         )
@@ -332,7 +341,7 @@ class ConnectionPool:
             if conn is None or conn.is_full():
                 if conn is not None:
                     self.priority_queue.push(conn)
-                conn = Connection(self.remote, self.capacity, self.cid)  # add a new connection
+                conn = Connection(self.remote, self.capacity, self.cid, self.pool_name)  # add a new connection
                 self.last_modified += 1
                 conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
                 self.cid += 1
@@ -374,7 +383,7 @@ class ConnectionPools:
     def __init__(self, remote: Remote, capacities: dict[str, int]) -> None:
         """Creates one connection pool per name with the given capacities."""
         self.pools: dict[str, ConnectionPool] = {
-            name: ConnectionPool(remote, capacity) for name, capacity in capacities.items()
+            name: ConnectionPool(remote, capacity, name) for name, capacity in capacities.items()
         }
 
     def __repr__(self) -> str:

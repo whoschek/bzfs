@@ -688,6 +688,20 @@ def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentPars
         die(f"{msg}must not be a symlink: {path}", parser=parser)
 
 
+def validate_file_permissions(path: str, mode: int) -> None:
+    """Verify permissions and that ownership is current effective UID."""
+    stats: os.stat_result = os.stat(path)
+    st_uid: int = stats.st_uid
+    if st_uid != os.geteuid():  # verify ownership is current effective UID
+        die(f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}")
+    st_mode = stat.S_IMODE(stats.st_mode)
+    if st_mode != mode:
+        die(
+            f"{path!r} has permissions {st_mode:03o} aka {stat.filemode(st_mode)[1:]}, "
+            f"not {mode:03o} aka {stat.filemode(mode)[1:]})"
+        )
+
+
 def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
     """Parses human duration strings like '5m' or '2 hours' to milliseconds."""
     unit_milliseconds: dict[str, int] = {

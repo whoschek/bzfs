@@ -24,6 +24,9 @@ import shutil
 import tempfile
 import time
 import unittest
+from pathlib import (
+    Path,
+)
 from unittest.mock import (
     MagicMock,
     patch,
@@ -58,6 +61,23 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestConnectionLease(AbstractTestCase):
+
+    def test__set_socket_mtime_to_now_updates_when_file_exists(self) -> None:
+        with tempfile.NamedTemporaryFile(delete=True) as tf:
+            socket_path = tf.name
+            lease = ConnectionLease(fd=-1, used_path="", free_path="", socket_path=socket_path)
+            os.utime(socket_path, (0, 0))
+            before = os.stat(socket_path).st_mtime
+            lease.set_socket_mtime_to_now()
+            after = os.stat(socket_path).st_mtime
+            self.assertGreater(after, before)
+
+    def test__set_socket_mtime_to_now_ignores_missing_file(self) -> None:
+        missing_path = os.path.join(tempfile.gettempdir(), f"bzfs_utime_now_missing_{int(time.time()*1e6)}")
+        if os.path.exists(missing_path):
+            os.remove(missing_path)
+        lease = ConnectionLease(fd=-1, used_path="", free_path="", socket_path=missing_path)
+        lease.set_socket_mtime_to_now()  # must not raise
 
     def test_rename_lockfile_to_itself_must_be_a_noop(self) -> None:
         """Purpose: Establish that renaming a lease lockfile to itself is a guaranteed no-op on POSIX filesystems and
@@ -135,22 +155,19 @@ class TestConnectionLease(AbstractTestCase):
                 self.assertFalse(os.path.exists(lease2.used_path))
 
     def test_acquire_from_free_prefers_free(self) -> None:
-        """Purpose: Ensure that acquisition prefers reusing a previously freed ControlPath over generating a new one.
-        After priming the ``free/`` directory by acquiring and releasing a lease, the next acquisition should return
-        the identical socket name moved to ``used/``. This preserves stable ControlPath names across short-lived bzfs
-        processes and yields predictable performance by keeping OS caches warm and avoiding unnecessary directory churn.
+        """Purpose: Ensure acquisition prefers reusing a previously freed ControlPath when the corresponding
+        ControlPath (socket) exists. To assert deterministic reuse, create the socket file before reacquiring.
 
         Assumptions: The ``free/`` directory contains exactly one matching candidate and no other concurrent writer is
         racing on the same root. The OS path length cap is respected by construction. Non-following open flags and
         symlink checks remain active and uncompromised. Both managers operate within the same namespace root and see
         identical filesystem state.
 
-        Design Rationale: Reuse minimizes churn and reduces namespace fragmentation. The test inspects both name
-        equality and directory placement to confirm that reuse occurred through a lock-based atomic move rather than
-        accidental regeneration. A negative probe via ``_try_lock`` on a second manager demonstrates that re-acquired
-        leases cannot be stolen while held, capturing the concurrency contract and protecting against inadvertent
-        shared ownership. The final assertions confirm correct cleanup semantics: used -> free transition and the absence
-        of residual files in ``used/`` once the lease is released, ensuring the pool is ready for future acquisitions.
+        Design Rationale: Reuse minimizes churn and reduces namespace fragmentation when a live or recently used master
+        exists. Creating the socket path ensures ``_find_and_acquire()`` preserves the entry, thereby verifying the
+        preferred fast-path reuse behavior. A negative probe via ``_try_lock`` on a second manager demonstrates that
+        re-acquired leases cannot be stolen while held, preserving the concurrency contract. The final assertions
+        confirm correct cleanup: used -> free transition and absence of residual files in ``used/`` once released.
         """
         with get_tmpdir() as root_dir:
             mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="user@host:22", log=MagicMock(logging.Logger))
@@ -158,6 +175,12 @@ class TestConnectionLease(AbstractTestCase):
             lease1: ConnectionLease = mgr.acquire()
             socket_name = os.path.basename(lease1.socket_path)
             lease1.release()
+
+            # _find_and_acquire() prunes free/ entries if the ControlPath (socket) is missing or too old.
+            # Ensure reuse by creating the socket path so the entry is preserved and preferred.
+            os.makedirs(mgr._sockets_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+            with open(os.path.join(mgr._sockets_dir, socket_name), "w", encoding="utf-8"):
+                pass
 
             lease2: ConnectionLease = mgr.acquire()
             try:
@@ -193,13 +216,21 @@ class TestConnectionLease(AbstractTestCase):
         important for operators correlating logs with filesystem artifacts during incident analysis.
         """
         with get_tmpdir() as root_dir:
-            mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
+            mgr = ConnectionLeaseManager(
+                root_dir=root_dir,
+                namespace="ns",
+                ssh_control_persist_secs=90,
+                log=MagicMock(logging.Logger),
+            )
             mgr._validate_dirs()
 
             # Create an unlocked file in used/ to simulate a crashed process
             socket_name: str = "ssalvage"
             used_path: str = os.path.join(mgr._used_dir, socket_name)
             with open(used_path, "w", encoding="utf-8"):
+                pass
+            sockets_path: str = os.path.join(mgr._sockets_dir, socket_name)
+            with open(sockets_path, "w", encoding="utf-8"):
                 pass
 
             lease: ConnectionLease = mgr.acquire()
@@ -262,10 +293,155 @@ class TestConnectionLease(AbstractTestCase):
         with get_tmpdir() as tmp:
             long_component = "x" * (UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH + 50)
             root_dir = os.path.join(tmp, long_component)
-            os.makedirs(root_dir, exist_ok=True)
+            os.makedirs(root_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="abc", log=MagicMock(logging.Logger))
             with self.assertRaisesRegex(OSError, r"exceeds Unix domain socket limit"):
                 _ = mgr.acquire()
+
+    def test_salvage_prunes_stale_used_without_socket(self) -> None:
+        """Prunes an unlocked used/<name> if it is older than ControlPersist and the control socket does not exist.
+
+        Ensures directory size is bounded after crash storms while preserving reuse when sockets exist.
+        """
+        with get_tmpdir() as root_dir:
+            ttl = 5
+            mgr = ConnectionLeaseManager(
+                root_dir=root_dir,
+                namespace="ns",
+                ssh_control_persist_secs=ttl,
+                log=MagicMock(logging.Logger),
+            )
+            mgr._validate_dirs()
+
+            # Prepare an old, unlocked salvage candidate in used/
+            salvage_name = "ssalvage_old"
+            used_path = os.path.join(mgr._used_dir, salvage_name)
+            with open(used_path, "w", encoding="utf-8"):
+                pass
+            old_ts = int(time.time()) - (ttl + 2)
+            os.utime(used_path, times=(old_ts, old_ts))
+
+            # Ensure the corresponding control socket does not exist
+            socket_path = os.path.join(mgr._sockets_dir, salvage_name)
+            if os.path.exists(socket_path):
+                os.remove(socket_path)
+
+            # Free dir empty to force salvage path
+            with os.scandir(mgr._free_dir) as it:
+                self.assertFalse(any(e.is_file(follow_symlinks=False) for e in it))
+
+            lease = mgr.acquire()
+            try:
+                # The old used/<name> must have been pruned
+                self.assertFalse(os.path.exists(used_path))
+                # We created a new lease (name differs)
+                self.assertNotEqual(salvage_name, os.path.basename(lease.socket_path))
+                self.assertTrue(os.path.exists(lease.used_path))
+            finally:
+                lease.release()
+
+    def test_salvage_prunes_when_socket_exists_but_is_old(self) -> None:
+        """Prunes an unlocked used/<name> when the corresponding control socket exists but is older than TTL.
+
+        Observable behavior: _find_and_acquire(used_dir) removes both the socket and the used/ entry and returns None
+        when there are no other candidates, exercising the TTL-based cleanup path.
+        """
+        with get_tmpdir() as root_dir:
+            ttl = 3
+            mgr = ConnectionLeaseManager(
+                root_dir=root_dir,
+                namespace="ns",
+                ssh_control_persist_secs=ttl,
+                log=MagicMock(logging.Logger),
+            )
+            mgr._validate_dirs()
+
+            name = "ssocket_old"
+            used_path = os.path.join(mgr._used_dir, name)
+            with open(used_path, "w", encoding="utf-8"):
+                pass
+            socket_path = os.path.join(mgr._sockets_dir, name)
+            with open(socket_path, "w", encoding="utf-8"):
+                pass
+            # Make socket older than TTL
+            old_ts = int(time.time()) - (ttl + 2)
+            os.utime(socket_path, times=(old_ts, old_ts))
+
+            # Scan used/: should prune the old socket + used entry and return None (no candidates left)
+            self.assertIsNone(mgr._find_and_acquire(mgr._used_dir))
+            self.assertFalse(os.path.exists(socket_path))
+            self.assertFalse(os.path.exists(used_path))
+
+    def test_salvage_preserves_recent_or_socket_present(self) -> None:
+        """Does not prune if the control socket exists even when mtime is older than TTL; returns the lease instead."""
+        with get_tmpdir() as root_dir:
+            ttl = 5
+            mgr = ConnectionLeaseManager(
+                root_dir=root_dir,
+                namespace="ns",
+                ssh_control_persist_secs=ttl,
+                log=MagicMock(logging.Logger),
+            )
+            mgr._validate_dirs()
+
+            salvage_name = "ssalvage_live"
+            used_path = os.path.join(mgr._used_dir, salvage_name)
+            with open(used_path, "w", encoding="utf-8"):
+                pass
+            # Make it older than TTL
+            old_ts = int(time.time()) - (ttl + 2)
+            os.utime(used_path, times=(old_ts, old_ts))
+
+            # Create a placeholder control socket path to simulate a live master
+            os.makedirs(mgr._sockets_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+            socket_path = os.path.join(mgr._sockets_dir, salvage_name)
+            with open(socket_path, "w", encoding="utf-8"):
+                pass
+
+            # Ensure free/ is empty
+            with os.scandir(mgr._free_dir) as it:
+                self.assertFalse(any(e.is_file(follow_symlinks=False) for e in it))
+
+            lease = mgr.acquire()
+            try:
+                # The same name must be returned (preserved for reuse)
+                self.assertEqual(salvage_name, os.path.basename(lease.socket_path))
+                self.assertTrue(os.path.exists(lease.used_path))
+            finally:
+                lease.release()
+
+    def test_prune_stale_free_entry_removes_renamed_used_entry(self) -> None:
+        """When scanning free/, pruning a stale entry must remove the lockfile at its post-rename location (used/).
+
+        Critical behavior: _find_and_acquire(free_dir) locks free/<name>, atomically renames it to used/<name>, then
+        decides to prune if the corresponding control socket is missing or too old. The implementation must unlink the
+        renamed path in used/ while still holding the lock, not the original free/ path which no longer exists.
+        """
+        with get_tmpdir() as root_dir:
+            mgr = ConnectionLeaseManager(
+                root_dir=root_dir,
+                namespace="ns-free-prune",
+                ssh_control_persist_secs=5,
+                log=MagicMock(logging.Logger),
+            )
+            mgr._validate_dirs()
+
+            # Prepare a candidate in free/ without a corresponding socket to force pruning
+            name = "sstale_free"
+            free_path = os.path.join(mgr._free_dir, name)
+            with open(free_path, "w", encoding="utf-8"):
+                pass
+            used_path = os.path.join(mgr._used_dir, name)
+            socket_path = os.path.join(mgr._sockets_dir, name)
+            if os.path.exists(socket_path):
+                os.remove(socket_path)
+
+            # Scan free/: should prune and return None
+            self.assertIsNone(mgr._find_and_acquire(mgr._free_dir))
+
+            # Both the original free/ path and the renamed used/ path must be gone
+            self.assertFalse(os.path.exists(free_path))
+            self.assertFalse(os.path.exists(used_path))
 
     def test_salvage_from_used_after_crash(self) -> None:
         """Purpose: Exercise the crash-recovery scenario in which a process that owned a lease terminates abruptly,
@@ -290,6 +466,11 @@ class TestConnectionLease(AbstractTestCase):
             lease1: ConnectionLease = mgr.acquire()
             # Crash simulation: drop the flock but leave the file in used/
             os.close(lease1.fd)
+
+            # Ensure a matching ControlPath socket exists so salvage preserves the name.
+            sockets_path = os.path.join(mgr._sockets_dir, os.path.basename(lease1.socket_path))
+            with open(sockets_path, "w", encoding="utf-8"):
+                pass
 
             # Next acquisition should salvage from locked/
             lease2: ConnectionLease = mgr.acquire()
@@ -349,6 +530,7 @@ class TestConnectionLease(AbstractTestCase):
             mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
             lease1: ConnectionLease = mgr.acquire()
             name1 = os.path.basename(lease1.socket_path)
+            sockets_path = os.path.join(mgr._sockets_dir, name1)
 
             # Remove free/ so that release() cannot move used -> free and must ignore FileNotFoundError
             self.assertTrue(os.path.isdir(mgr._free_dir))
@@ -360,6 +542,9 @@ class TestConnectionLease(AbstractTestCase):
             self.assertFalse(os.path.exists(lease1.free_path))
             with self.assertRaises(OSError):
                 os.fstat(lease1.fd)
+            # Ensure a matching ControlPath exists so salvage preserves the same name.
+            with open(sockets_path, "w", encoding="utf-8"):
+                pass
 
             # Next acquire() must recreate directories and salvage the same socket from used/
             lease2: ConnectionLease = mgr.acquire()
@@ -402,6 +587,7 @@ class TestConnectionLease(AbstractTestCase):
             socket_name = "smanual"
             used_path = os.path.join(mgr._used_dir, socket_name)
             free_path = os.path.join(mgr._free_dir, socket_name)
+            sockets_path = os.path.join(mgr._sockets_dir, socket_name)
 
             # Pre-create an unlocked file in used/ to force a name collision on create in free/
             with open(used_path, "w", encoding="utf-8"):
@@ -415,7 +601,10 @@ class TestConnectionLease(AbstractTestCase):
             self.assertTrue(os.path.exists(free_path))
             self.assertTrue(os.path.exists(used_path))
 
-            # Salvage by scanning used/: must acquire the lease for the collided name
+            # Salvage by scanning used/: must acquire the lease for the collided name.
+            # Ensure a matching ControlPath socket exists so salvage proceeds.
+            with open(sockets_path, "w", encoding="utf-8"):
+                pass
             lease = mgr._find_and_acquire(mgr._used_dir)
             assert lease is not None
             try:
@@ -484,8 +673,9 @@ class TestConnectionLease(AbstractTestCase):
                 if isinstance(result, Exception):
                     raise result
 
+            mgr._validate_dirs()  # avoid any unrelated flock calls before the patch is active
             with patch("bzfs_main.connection_lease.fcntl.flock", side_effect=fake_flock):
-                lease = mgr.acquire()
+                lease = mgr._create_and_acquire()
                 try:
                     self.assertTrue(os.path.exists(lease.used_path))
                 finally:
@@ -533,6 +723,24 @@ class TestConnectionLease(AbstractTestCase):
                 with self.assertRaises(PermissionError):
                     _ = mgr._try_lock(os.path.join(mgr._free_dir, "sabc"), open_flags=os.O_WRONLY)
 
+    def test_find_and_acquire_used_returns_none_when_locked(self) -> None:
+        """When all candidates in used/ are currently locked by other processes, scanning used/ returns None.
+
+        Observable behavior: A second manager enumerates used/ and fails non-blocking flock, thus _try_lock returns
+        None for each entry and _find_and_acquire yields None. This covers the negative branch of the lease acquisition
+        check in the used/ scan path.
+        """
+        with get_tmpdir() as root_dir:
+            ns = "ns-locked"
+            mgr1 = ConnectionLeaseManager(root_dir=root_dir, namespace=ns, log=MagicMock(logging.Logger))
+            # Hold a lease so used/ contains a locked entry
+            lease = mgr1.acquire()
+            try:
+                mgr2 = ConnectionLeaseManager(root_dir=root_dir, namespace=ns, log=MagicMock(logging.Logger))
+                self.assertIsNone(mgr2._find_and_acquire(mgr2._used_dir))
+            finally:
+                lease.release()
+
     def test_try_lock_missing_used_dir_triggers_validate_and_returns_none(self) -> None:
         """Purpose: Exercise the ``_try_lock`` branch where renaming from ``free/`` to a missing ``used/`` parent raises
         ``FileNotFoundError``. The method must recreate directories via ``_validate_dirs()`` and return ``None``.
@@ -540,7 +748,7 @@ class TestConnectionLease(AbstractTestCase):
         with get_tmpdir() as root_dir:
             mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
             # Prepare free/ candidate and ensure used/ is removed
-            os.makedirs(mgr._free_dir, exist_ok=True)
+            os.makedirs(mgr._free_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             if os.path.isdir(mgr._used_dir):
                 shutil.rmtree(mgr._used_dir)
             name = os.path.join(mgr._free_dir, "sfoo")
@@ -550,6 +758,10 @@ class TestConnectionLease(AbstractTestCase):
                 result = mgr._try_lock(name, open_flags=mgr._open_flags)
                 self.assertIsNone(result)
                 self.assertTrue(mock_validate.called)
+            # Create the corresponding socket so _find_and_acquire() does not prune the free/ entry
+            os.makedirs(mgr._sockets_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+            with open(os.path.join(mgr._sockets_dir, "sfoo"), "w", encoding="utf-8"):
+                pass
             # Acquire should now succeed and move the same entry into used/
             lease = mgr.acquire()
             try:
@@ -599,7 +811,7 @@ class TestConnectionLease(AbstractTestCase):
         """
         with get_tmpdir() as root_dir:
             mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="user@h:22", log=MagicMock(logging.Logger))
-            os.makedirs(os.path.dirname(mgr._free_dir), exist_ok=True)  # ensure base dir exists
+            os.makedirs(os.path.dirname(mgr._free_dir), mode=DIR_PERMISSIONS, exist_ok=True)  # ensure base dir exists
             # Point free/ to a safe existing directory (e.g., /tmp) to avoid creation
             os.symlink("/tmp", mgr._free_dir)
             with self.assertRaises(SystemExit):
@@ -680,7 +892,7 @@ class TestConnectionLease(AbstractTestCase):
         """
         with get_tmpdir() as root_dir:
             mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
-            os.makedirs(mgr._free_dir, exist_ok=True)
+            os.makedirs(mgr._free_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             target = os.path.join(root_dir, "t.txt")
             with open(target, "w", encoding="utf-8"):
                 pass
@@ -715,7 +927,9 @@ class TestConnectionLease(AbstractTestCase):
                 leases: list[ConnectionLease] = []
                 try:
                     for _ in range(num_locks):
-                        leases.append(mgr.acquire())
+                        lease = mgr.acquire()
+                        Path(lease.socket_path).touch(exist_ok=False)
+                        leases.append(lease)
 
                     # Warm-up
                     for _ in range(3):

@@ -94,7 +94,7 @@ TEST_DIR_PREFIX: str = "t_bzfs"
 class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better implementation against this baseline
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int) -> None:
-        super().__init__(remote, max_concurrent_ssh_sessions_per_tcp_connection)
+        super().__init__(remote, max_concurrent_ssh_sessions_per_tcp_connection, SHARED)
         self.priority_queue: list[Connection] = []  # type: ignore
 
     def get_connection(self) -> Connection:
@@ -102,7 +102,7 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
             self.priority_queue.sort()
             conn = self.priority_queue[-1] if self.priority_queue else None
             if conn is None or conn.is_full():
-                conn = Connection(self.remote, self.capacity, self.cid)
+                conn = Connection(self.remote, self.capacity, self.cid, SHARED)
                 self.last_modified += 1
                 conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
                 self.cid += 1
@@ -127,7 +127,7 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
 class TestConnectionPool(AbstractTestCase):
 
     def setUp(self) -> None:
-        args = self.argparser_parse_args(args=["src", "dst", "-v"])
+        args = self.argparser_parse_args(args=["src", "dst", "-v", "--ssh-exit-on-shutdown"])
         p = self.make_params(args=args)
         self.src = p.src
         self.dst = p.dst
@@ -168,10 +168,10 @@ class TestConnectionPool(AbstractTestCase):
         self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: [str(next(counter))]  # type: ignore
 
         with self.assertRaises(AssertionError):
-            ConnectionPool(self.src, 0)
+            ConnectionPool(self.src, 0, SHARED)
 
         capacity = 2
-        cpool = ConnectionPool(self.src, capacity)
+        cpool = ConnectionPool(self.src, capacity, SHARED)
         dpool = SlowButCorrectConnectionPool(self.src2, capacity)
         self.assert_priority_queue(cpool, 0)
         self.assertIsNotNone(repr(cpool))
@@ -214,7 +214,7 @@ class TestConnectionPool(AbstractTestCase):
 
     def test_multiple_tcp_connections(self) -> None:
         capacity = 2
-        cpool = ConnectionPool(self.remote, capacity)
+        cpool = ConnectionPool(self.remote, capacity, SHARED)
 
         conn1 = cpool.get_connection()
         self.assertEqual((capacity - 1) * 1, conn1.free)
@@ -298,7 +298,7 @@ class TestConnectionPool(AbstractTestCase):
         maxsessions = 10
         items = 10
         for j in range(3):
-            cpool = ConnectionPool(self.src, maxsessions)
+            cpool = ConnectionPool(self.src, maxsessions, SHARED)
             dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
             rng = random.Random(12345)
             conns = [self.get_connection(cpool, dpool) for _ in range(items)]
@@ -321,7 +321,7 @@ class TestConnectionPool(AbstractTestCase):
                 counter1b = itertools.count()
                 self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: [str(next(counter))]  # type: ignore
                 self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: [str(next(counter))]  # type: ignore
-                cpool = ConnectionPool(self.src, maxsessions)
+                cpool = ConnectionPool(self.src, maxsessions, SHARED)
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
                 # dpool = ConnectionPool(self.src2, maxsessions)
                 rng = random.Random(12345)
@@ -545,7 +545,7 @@ class TestRefreshSshConnection(AbstractTestCase):
                 ssh_extra_opts=[],
             ),
         )
-        self.conn = connection.Connection(self.remote, 1, 0)
+        self.conn = connection.Connection(self.remote, 1, 0, SHARED)
         self.conn.last_refresh_time = 0
 
     @patch("bzfs_main.connection.subprocess_run")
@@ -596,6 +596,50 @@ class TestRefreshSshConnection(AbstractTestCase):
         connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
         args = mock_run.call_args_list[1][0][0]
         self.assertIn("-oControlPersist=1s", args)
+
+    @patch("bzfs_main.connection_lease.ConnectionLease.set_socket_mtime_to_now")
+    @patch("bzfs_main.connection.subprocess_run")
+    def test_mtime_now_invoked_when_connection_lease_present(self, mock_run: MagicMock, mock_utime: MagicMock) -> None:
+        """Ensures set_socket_mtime_to_now() is called when a Connection has a lease (socket path).
+
+        Uses a remote with ssh_exit_on_shutdown=False so Connection acquires a lease in __init__. Mocks subprocess_run to the
+        fast 'alive' path (returncode=0).
+        """
+        mock_run.return_value = MagicMock(returncode=0)
+        with get_tmpdir() as ssh_socket_dir:
+            remote = cast(
+                Remote,
+                _FakeRemote(
+                    params=self.job.params,
+                    location="dst",
+                    ssh_user_host="host",
+                    reuse_ssh_connection=True,
+                    ssh_control_persist_secs=4,
+                    ssh_exit_on_shutdown=False,  # acquire lease
+                    ssh_extra_opts=[],
+                    ssh_socket_dir=ssh_socket_dir,
+                ),
+            )
+            conn = connection.Connection(remote, 1, 0, SHARED)
+            try:
+                conn.last_refresh_time = 0  # avoid fast return
+                connection.refresh_ssh_connection_if_necessary(self.job, remote, conn)
+                self.assertTrue(mock_utime.called)
+                self.assertIsNotNone(conn.connection_lease)
+                mock_utime.assert_called_once()
+            finally:
+                conn.shutdown("test", self.job.params)
+
+    @patch("bzfs_main.connection_lease.ConnectionLease.set_socket_mtime_to_now")
+    @patch("bzfs_main.connection.subprocess_run")
+    def test_mtime_now_not_invoked_when_no_connection_lease(self, mock_run: MagicMock, mock_utime: MagicMock) -> None:
+        """Ensures set_socket_mtime_to_now() is not called when a Connection has no lease (lease is None)."""
+        mock_run.return_value = MagicMock(returncode=0)
+        self.conn.last_refresh_time = 0  # avoid fast return
+        # In setUp, ssh_exit_on_shutdown=True ensures no lease is acquired.
+        self.assertIsNone(self.conn.connection_lease)
+        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        mock_utime.assert_not_called()
 
 
 #############################################################################
@@ -688,7 +732,7 @@ class TestSshExitOnShutdown(AbstractTestCase):
         low-flake assertion that still proves the intended behavior is wired end-to-end.
         """
 
-        args = self.argparser_parse_args(["src", "dst", "--ssh-exit-on-shutdown"])
+        args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
         r = cast(
             Remote,
@@ -701,7 +745,7 @@ class TestSshExitOnShutdown(AbstractTestCase):
                 ssh_extra_opts=[],
             ),
         )
-        conn: Connection = Connection(r, 1, 0)
+        conn: Connection = Connection(r, 1, 0, SHARED)
         conn.shutdown("test", p)
         self.assertTrue(mock_run.called)
         argv = mock_run.call_args[0][0]
@@ -734,11 +778,12 @@ class TestSshExitOnShutdown(AbstractTestCase):
                     ssh_user_host="host",
                     reuse_ssh_connection=True,
                     ssh_exit_on_shutdown=False,
+                    ssh_control_persist_secs=90,
                     ssh_extra_opts=[],
                     ssh_socket_dir=ssh_socket_dir,
                 ),
             )
-            conn: Connection = Connection(r, 1, 0)
+            conn: Connection = Connection(r, 1, 0, SHARED)
             conn.shutdown("test", p)
             # No call to run expected when immediate exit is false
             self.assertFalse(mock_run.called)

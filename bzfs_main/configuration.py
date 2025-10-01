@@ -96,7 +96,10 @@ from bzfs_main.utils import (
     parse_duration_to_milliseconds,
     pid_exists,
     sha256_hex,
+    sha256_urlsafe_base64,
+    urlsafe_base64,
     validate_dataset_name,
+    validate_file_permissions,
     validate_is_not_a_symlink,
     validate_property_name,
     xappend,
@@ -471,7 +474,9 @@ class Remote:
         if self.ssh_config_file:
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
-        self.ssh_config_file_hash: str = sha256_hex(os.path.abspath(self.ssh_config_file)) if self.ssh_config_file else ""
+        self.ssh_config_file_hash: str = (
+            sha256_urlsafe_base64(os.path.abspath(self.ssh_config_file), padding=False) if self.ssh_config_file else ""
+        )
         self.ssh_cipher: str = p.validate_arg_str(args.ssh_cipher)
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
@@ -483,10 +488,15 @@ class Remote:
         self.socket_prefix: str = "s"
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
-            self.ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs")
-            os.makedirs(os.path.dirname(self.ssh_socket_dir), mode=DIR_PERMISSIONS, exist_ok=True)
+            ssh_home_dir: str = os.path.join(get_home_directory(), ".ssh")
+            os.makedirs(ssh_home_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+            self.ssh_socket_dir: str = os.path.join(ssh_home_dir, "bzfs")
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
-            _delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
+            validate_file_permissions(self.ssh_socket_dir, mode=DIR_PERMISSIONS)
+            self.ssh_exit_on_shutdown_socket_dir: str = os.path.join(self.ssh_socket_dir, "x")
+            os.makedirs(self.ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+            validate_file_permissions(self.ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS)
+            _delete_stale_files(self.ssh_exit_on_shutdown_socket_dir, self.socket_prefix, ssh=True)
         self.sanitize1_regex: re.Pattern = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
         self.sanitize2_regex: re.Pattern = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # Remove disallowed chars
 
@@ -528,10 +538,13 @@ class Remote:
                     name = self.sanitize2_regex.sub("", name)  # Remove disallowed chars
                     return name
 
-                unique: str = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999_999_999)}"
+                max_rand: int = 999_999_999_999
+                rand_str: str = urlsafe_base64(random.SystemRandom().randint(0, max_rand), max_value=max_rand, padding=False)
+                curr_time: str = urlsafe_base64(time.time_ns(), max_value=2**64 - 1, padding=False)
+                unique: str = f"{os.getpid()}@{curr_time}@{rand_str}"
                 socket_name: str = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
-                socket_file = os.path.join(self.ssh_socket_dir, socket_name)[
-                    0 : max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(self.ssh_socket_dir) + 10)
+                socket_file = os.path.join(self.ssh_exit_on_shutdown_socket_dir, socket_name)[
+                    0 : max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(self.ssh_exit_on_shutdown_socket_dir) + 10)
                 ]
             ssh_cmd += ["-S", socket_file]
         ssh_cmd += [self.ssh_user_host]

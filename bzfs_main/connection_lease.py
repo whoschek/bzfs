@@ -21,16 +21,16 @@ authentication, and other delays from multiple network round-trips. This way, th
 hundreds of milliseconds earlier as compared to when creating an SSH connection from scratch.
 
 The higher-level goal is predictable performance, shorter critical paths, and less noisy-neighbor impact across frequent
-periodic replication jobs at fleet scale, including at high concurrency. To achieve this, masters remain alive across bzfs
-process lifecycles unless they become idle for a specified time period, and inter-process reuse of ControlPath sockets is
-coordinated safely so every new bzfs process benefits from an existing connection when present, and can recreate it
-deterministically when absent. This amortizes startup costs, reduces tail latency, and improves operational reliability
+periodic replication jobs at fleet scale, including at high concurrency. To achieve this, OpenSSH masters remain alive after
+bzfs process termination (unless masters become idle for a specified time period), and inter-process reuse of ControlPath
+sockets is coordinated safely so every new bzfs process benefits from an existing connection when present, and can recreate
+it deterministically when absent. This amortizes startup costs, reduces tail latency, and improves operational reliability
 without background daemons, external services, or warm-up procedures.
 
 How This Is Achieved
 --------------------
 This module provides a small, fast, safe, and reliable mechanism to allocate and reuse unique Unix domain socket files
-(ControlPaths) in a per-endpoint namespace, even under high concurrency. The full socket-path namespace is ~/.ssh/bzfs/ (per
+(ControlPaths) in a per-endpoint namespace, even under high concurrency. The full socket path namespace is ~/.ssh/bzfs/ (per
 local user) plus a hashed subdirectory derived from the remote endpoint identity (user@host, port, ssh_config_file hash).
 A bzfs process acquires an exclusive advisory file lock via flock(2) on a named empty lock file in the namespace directory
 tree, then atomically moves it between free/ and used/ subdirectories to speed up later searches for available names in each
@@ -64,6 +64,7 @@ Design Rationale
   path-unfriendly characters. This reduces collision probability and helps with human diagnostics.
 - Security is prioritized: the root, sockets, and lease directories are created with explicit permissions, and symlinks are
   rejected to avoid redirection attacks. Open flags include ``O_NOFOLLOW`` and ``O_CLOEXEC`` to remove common foot-guns.
+  Foreign file ownership and overly permissive file permissions are rejected to avoid sockets being used by third parties.
 - The public API is intentionally tiny and ergonomic. ``ConnectionLeaseManager.acquire()`` never blocks: it either returns
   a lease for an existing name or a new name, ensuring predictable low latency under contention. The ``ConnectionLease``
   is immutable and simple to reason about, with an explicit ``release()`` to return capacity to the pool.
@@ -76,11 +77,11 @@ from __future__ import (
     annotations,
 )
 import fcntl
+import logging
 import os
+import pathlib
 import random
-from logging import (
-    Logger,
-)
+import time
 from typing import (
     NamedTuple,
 )
@@ -93,6 +94,7 @@ from bzfs_main.utils import (
     close_quietly,
     sha256_urlsafe_base64,
     urlsafe_base64,
+    validate_file_permissions,
     validate_is_not_a_symlink,
 )
 
@@ -132,7 +134,14 @@ class ConnectionLease(NamedTuple):
         except FileNotFoundError:
             pass  # harmless
         finally:
-            close_quietly(self.fd)
+            close_quietly(self.fd)  # release lock
+
+    def set_socket_mtime_to_now(self) -> None:
+        """Sets the mtime of the lease's ControlPath socket file to now; noop if the file is missing."""
+        try:
+            os.utime(self.socket_path, None)
+        except FileNotFoundError:
+            pass  # harmless
 
 
 #############################################################################
@@ -149,13 +158,21 @@ class ConnectionLeaseManager:
     external dependencies.
     """
 
-    def __init__(self, root_dir: str, namespace: str, log: Logger) -> None:
-        """The local user is implied by root_dir; ``namespace`` is derived from the remote endpoint identity (ssh_user_host,
-        port, ssh_config_file hash)."""
+    def __init__(
+        self,
+        root_dir: str,  # the local user is implied by root_dir
+        namespace: str,  # derived from the remote endpoint identity (ssh_user_host, port, ssh_config_file hash)
+        ssh_control_persist_secs: int = 90,  # TTL for garbage collecting stale files while preserving reuse of live masters
+        *,
+        log: logging.Logger,
+    ) -> None:
+        """Initializes manager with namespaced dirs and security settings for SSH ControlPath reuse."""
         # immutable variables:
         assert root_dir
         assert namespace
-        self._log: Logger = log
+        assert ssh_control_persist_secs >= 1
+        self._ssh_control_persist_secs: int = ssh_control_persist_secs
+        self._log: logging.Logger = log
         ns: str = sha256_urlsafe_base64(namespace, padding=False)
         assert NAMESPACE_DIR_LENGTH >= 22  # a minimum degree of safety: 22 URL-safe Base64 chars = 132 bits of entropy
         ns = ns[0:NAMESPACE_DIR_LENGTH]
@@ -166,6 +183,17 @@ class ConnectionLeaseManager:
         self._open_flags: int = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
         os.makedirs(root_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("connection lease root_dir ", root_dir)
+        validate_file_permissions(root_dir, mode=DIR_PERMISSIONS)
+        os.makedirs(namespace_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        validate_is_not_a_symlink("connection lease namespace_dir ", namespace_dir)
+        validate_file_permissions(namespace_dir, mode=DIR_PERMISSIONS)
+
+    def _validate_dirs(self) -> None:
+        """Ensures sockets/free/used directories exist, are not symlinks, and have strict permissions."""
+        for _dir in (self._sockets_dir, self._free_dir, self._used_dir):
+            os.makedirs(_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+            validate_is_not_a_symlink("connection lease dir ", _dir)
+            validate_file_permissions(_dir, mode=DIR_PERMISSIONS)
 
     def acquire(self) -> ConnectionLease:
         """Acquires and returns a ConnectionLease with an open, flocked fd and the SSH ControlPath aka socket file path."""
@@ -174,7 +202,7 @@ class ConnectionLeaseManager:
         if lease is not None:
             self._log.log(LOG_TRACE, "_find_and_acquire: %s", self._free_dir)
             return lease
-        lease = self._find_and_acquire(self._used_dir)  # salvage from used yet unlocked socket names leftover from crashes
+        lease = self._find_and_acquire(self._used_dir)  # salvage from used yet unlocked socket names leftover from crash
         if lease is not None:
             self._log.log(LOG_TRACE, "_find_and_acquire: %s", self._used_dir)
             return lease
@@ -182,22 +210,34 @@ class ConnectionLeaseManager:
         self._log.log(LOG_TRACE, "_create_and_acquire: %s", self._free_dir)
         return lease
 
-    def _validate_dirs(self) -> None:
-        for d in (self._sockets_dir, self._free_dir, self._used_dir):
-            os.makedirs(d, mode=DIR_PERMISSIONS, exist_ok=True)
-            validate_is_not_a_symlink("connection lease dir ", d)
-
     def _find_and_acquire(self, scan_dir: str) -> ConnectionLease | None:
+        """Scans a directory for an unlocked lease, prunes stale entries, and returns a locked lease if found."""
         with os.scandir(scan_dir) as iterator:
             for entry in iterator:
-                if (not entry.name.startswith(SOCKET_PREFIX)) or not entry.is_file(follow_symlinks=False):
-                    continue
-                lease: ConnectionLease | None = self._try_lock(entry.path, open_flags=self._open_flags)
-                if lease is not None:
-                    return lease
+                if entry.name.startswith(SOCKET_PREFIX) and entry.is_file(follow_symlinks=False):
+                    lease: ConnectionLease | None = self._try_lock(entry.path, open_flags=self._open_flags)
+                    if lease is not None:
+                        # If the control socket does not exist or is too old, then prune this entry to keep directory sizes
+                        # bounded after crash storms, without losing opportunities to reuse a live SSH master connection.
+                        delete_used_path: bool = False
+                        try:
+                            age_secs: float = time.time() - os.stat(lease.socket_path).st_mtime
+                            if age_secs > self._ssh_control_persist_secs:  # old garbage left over from crash?
+                                delete_used_path = True
+                                os.unlink(lease.socket_path)  # remove control socket garbage while holding the lock
+                        except FileNotFoundError:
+                            delete_used_path = True  # control socket does not exist anymore
+                        if not delete_used_path:
+                            return lease  # return locked lease; this is the common case
+                        try:  # Remove the renamed lock file at its current location under used/ while holding the lock
+                            pathlib.Path(lease.used_path).unlink(missing_ok=True)
+                        finally:
+                            close_quietly(lease.fd)  # release lock
+                        # keep scanning for a better candidate
         return None
 
     def _create_and_acquire(self) -> ConnectionLease:
+        """Creates a new unique lease name, enforces socket path length, and returns a locked lease."""
         max_rand: int = 2**64 - 1
         rand: random.Random = random.SystemRandom()
         while True:
@@ -213,7 +253,7 @@ class ConnectionLeaseManager:
                 raise OSError(
                     "SSH ControlPath exceeds Unix domain socket limit "
                     f"({len(socket_path_bytes)} > {UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH}); "
-                    f"shorten the SSH socket directory by shortening the home directory path: {socket_path}"
+                    f"shorten it by shortening the home directory path: {socket_path}"
                 )
 
             free_path: str = os.path.join(self._free_dir, os.path.basename(socket_path))
@@ -222,6 +262,7 @@ class ConnectionLeaseManager:
                 return lease
 
     def _try_lock(self, src_path: str, open_flags: int) -> ConnectionLease | None:
+        """Attempts to open and exclusively flock a lease file, atomically moves it to used/, and builds the lease."""
         fd: int = -1
         try:
             fd = os.open(src_path, flags=open_flags, mode=FILE_PERMISSIONS)
@@ -233,19 +274,23 @@ class ConnectionLeaseManager:
             socket_name: str = os.path.basename(src_path)
             used_path: str = os.path.join(self._used_dir, socket_name)
             if src_path != used_path and os.path.exists(used_path):  # extremely rare name collision?
-                close_quietly(fd)
+                close_quietly(fd)  # release lock
                 return None  # harmless; retry with another name. See test_collision_on_create_then_salvage_and_release()
 
+            # Rename cannot race: only free/<name> -> used/<name> produces used/ entries, and requires holding an exclusive
+            # flock on free/<name>. We hold that lock while renaming. With exclusive subtree control, used/<name> cannot
+            # appear between exists() and rename(). The atomic rename below is safe.
             os.rename(src_path, used_path)  # mv lock file atomically while holding the lock
+
         except OSError as e:
-            close_quietly(fd)
+            close_quietly(fd)  # release lock
             if isinstance(e, BlockingIOError):
-                return None
+                return None  # lock is already held by another process
             elif isinstance(e, FileNotFoundError):
                 self._validate_dirs()
                 return None
             raise
-        else:
+        else:  # success
             return ConnectionLease(
                 fd=fd,
                 used_path=used_path,
