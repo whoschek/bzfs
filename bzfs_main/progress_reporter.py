@@ -176,8 +176,9 @@ class ProgressReporter:
                 for fd in fds:
                     fd.close()
         except BaseException as e:
-            self._exception = e  # will be reraised in stop()
-            log.exception("%s", "ProgressReporter:")
+            if not isinstance(e, BrokenPipeError):
+                self._exception = e  # will be reraised in stop()
+                log.exception("%s", "ProgressReporter:")
 
     @dataclass
     class TransferStat:

@@ -19,6 +19,7 @@ from __future__ import (
     annotations,
 )
 import argparse
+import contextlib
 import logging
 import logging.config
 import logging.handlers
@@ -71,7 +72,8 @@ def reset_logger() -> None:
     for log in [logging.getLogger(get_logger_name()), logging.getLogger(get_logger_subname())]:
         for handler in log.handlers.copy():
             log.removeHandler(handler)
-            handler.flush()
+            with contextlib.suppress(BrokenPipeError):
+                handler.flush()
             handler.close()
         for _filter in log.filters.copy():
             log.removeFilter(_filter)
@@ -135,6 +137,7 @@ def _get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logg
     logging.logProcesses = False
     logging.logThreads = False
     logging.logMultiprocessing = False
+    logging.raiseExceptions = False  # avoid noisy tracebacks from logging handler errors like BrokenPipeError in production
     return log
 
 

@@ -350,7 +350,8 @@ class Job:
                                 for _ in range(2 if self.max_command_line_bytes else 1):
                                     self.shutdown()
                                 print("", end="", file=sys.stderr)
-                                sys.stderr.flush()
+                                with contextlib.suppress(BrokenPipeError):
+                                    sys.stderr.flush()
             except subprocess.CalledProcessError as e:
                 log_error_on_exit(e, e.returncode)
                 raise
@@ -369,7 +370,8 @@ class Job:
             finally:
                 log.info("%s", f"Log file was: {log_params.log_file}")
             log.info("Success. Goodbye!")
-            sys.stderr.flush()
+            with contextlib.suppress(BrokenPipeError):
+                sys.stderr.flush()
 
     def run_tasks(self) -> None:
         """Executes replication cycles, repeating until daemon lifetime expires."""
