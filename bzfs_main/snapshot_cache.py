@@ -40,29 +40,37 @@ Design Rationale
 ================
 We intentionally encode only minimal invariants into inode timestamps and not arbitrary text payloads. This keeps I/O
 tiny and allows safe, atomic low-latency updates via a single ``utime`` call under an exclusive advisory file lock via
-flock(2). The cache consists of four families:
+flock(2).
 
+Cache root and hashed path segments
+-----------------------------------
+The cache tree lives under ``<log_parent_dir>/.cache/mods`` (see ``LogParams.last_modified_cache_dir``). To keep paths
+short and safe, variable path segments are stored as URL-safe base64-encoded SHA-256 digests without padding. In what
+follows, ``hash(X)`` denotes ``sha256_urlsafe_base64(str(X), padding=False)`` or a truncated variant used for brevity.
+
+The cache consists of four families:
+------------------------------------
 1) Dataset-level ("=") per dataset and location (src or dst); for --create-src-snapshots, --replicate, --monitor-snapshots
-   - Path: ``<cache_root>/<user@host[#port]>/<dataset>/=``
+   - Path: ``<cache_root>/<hash(user@host[#port])>/<hash(dataset)>/=``
    - mtime: the ZFS ``snapshots_changed`` time observed for that dataset. Monotonic writes only.
    - Used by: snapshot scheduler, replicate, monitor - as the anchor for cache equality checks.
 
 2) Replication-scoped ("==") per source dataset and destination dataset+filters; for --replicate
-   - Path: ``<cache_root>/<src_user@host[#port]>/<src_dataset>/==/<dst_user@host[#port]>/<dst_dataset>/<filters_hash>``
-   - Path label encodes destination user@host, destination dataset and the snapshot-filter hash.
+   - Path: ``<cache_root>/<hash(src_user@host[#port])>/<hash(src_dataset)>/==/<hash(dst_user@host[#port])>/<hash(dst_dataset)>/<hash(filters)>``
+   - Path label encodes destination namespace, destination dataset and the snapshot-filter hash.
    - mtime: last replicated source ``snapshots_changed`` for that destination and filter set. Monotonic.
    - Used by: replicate - to cheaply decide "src unchanged since last successful run to this dst+filters".
 
 3) Monitor ("===") per dataset and label (Latest/Oldest); for --monitor-snapshots
-   - Path: ``<cache_root>/<user@host[#port]>/<dataset>/===/<kind>/<label>/<hash>``
-     - ``kind``: alert check mode; either "Latest" or "Oldest".
-     - ``hash``: stable SHA-256 over the monitor alert plan to scope caches per plan.
+   - Path: ``<cache_root>/<hash(user@host[#port])>/<hash(dataset)>/===/<kind>/<hash(label)>/<hash(alert_plan)>``
+     - ``kind``: alert check mode; either "L" (Latest) or "O" (Oldest).
+     - ``hash(alert_plan)``: stable digest over the monitor alert plan to scope caches per plan.
    - atime: creation time of the relevant latest/oldest snapshot.
    - mtime: dataset ``snapshots_changed`` observed when that creation was recorded. Monotonic.
    - Used by: monitor - to alert on stale snapshots without listing them every time.
 
 4) Snapshot scheduler per-label files (under the source dataset); for --create-src-snapshots
-   - Path: ``<cache_root>/<src_user@host:port>/<src_dataset>/<label>``
+   - Path: ``<cache_root>/<hash(src_user@host[#port])>/<hash(src_dataset)>/<hash(label)>``
    - atime: creation time of the latest snapshot matching that label.
    - mtime: the dataset-level "=" value at the time of the write (i.e., the then-current ``snapshots_changed``).
    - Used by: ``--create-src-snapshots`` - to cheaply decide whether a label is due without ``zfs list -t snapshot``.
