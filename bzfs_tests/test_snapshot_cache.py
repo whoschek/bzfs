@@ -51,7 +51,10 @@ from __future__ import (
     annotations,
 )
 import errno
+import logging
 import os
+import random
+import string
 import tempfile
 import threading
 import time
@@ -84,6 +87,7 @@ from bzfs_main.bzfs import (
     Job,
 )
 from bzfs_main.configuration import (
+    MonitorSnapshotAlert,
     Remote,
     SnapshotLabel,
 )
@@ -95,7 +99,8 @@ from bzfs_main.snapshot_cache import (
     set_last_modification_time_safe,
 )
 from bzfs_main.utils import (
-    sha256_hex,
+    sha256_85_urlsafe_base64,
+    sha256_128_urlsafe_base64,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
@@ -157,10 +162,27 @@ class TestSnapshotCache(AbstractTestCase):
         and code duplication across tests computing this label.
         """
         assert dst_dataset
-        hash_key = tuple(tuple(f) for f in job.params.snapshot_filters)
-        hash_code = sha256_hex(str(hash_key))
-        userhost_dir = job.params.dst.cache_namespace()
-        return SnapshotLabel(os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset, hash_code), "", "", "")
+        filter_key = tuple(tuple(f) for f in job.params.snapshot_filters)
+        filter_hash_code: str = sha256_85_urlsafe_base64(str(filter_key))
+        userhost_dir: str = sha256_85_urlsafe_base64(job.params.dst.cache_namespace())
+        dst_dataset_hash: str = sha256_85_urlsafe_base64(dst_dataset)
+        return SnapshotLabel(
+            os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset_hash, filter_hash_code), "", "", ""
+        )
+
+    def monitor_cache_label(self, cfg_kind: str, label: SnapshotLabel, alerts: list[MonitorSnapshotAlert]) -> SnapshotLabel:
+        assert cfg_kind
+        assert label is not None
+        assert len(alerts) > 0
+        alerts_hash_code = sha256_128_urlsafe_base64(str(tuple(alerts)))
+        label_hash_code = sha256_128_urlsafe_base64(str(label))
+        kind_hash_code = cfg_kind[1]
+        return SnapshotLabel(
+            os.path.join(MONITOR_CACHE_FILE_PREFIX, kind_hash_code, label_hash_code, alerts_hash_code), "", "", ""
+        )
+
+    def snapshot_cache_label(self, label: SnapshotLabel) -> SnapshotLabel:
+        return SnapshotLabel(os.path.join(sha256_128_urlsafe_base64(str(label))), "", "", "")
 
     def test_set_last_modification_time(self) -> None:
         for func in [set_last_modification_time, set_last_modification_time_old]:
@@ -333,10 +355,7 @@ class TestSnapshotCache(AbstractTestCase):
             alert = alerts[0]
             cfg = alert.latest
             assert cfg is not None
-            hash_code = sha256_hex(str(tuple(alerts)))
-            cache_label = SnapshotLabel(
-                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(alert.label), hash_code), "", "", ""
-            )
+            cache_label = self.monitor_cache_label(cfg.kind, alert.label, alerts)
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, cache_label)
 
             def fake_handle_minmax_snapshots(
@@ -613,9 +632,7 @@ class TestSnapshotCache(AbstractTestCase):
             label = alert.label
             cfg = alert.latest
             assert cfg is not None
-            hash_code = sha256_hex(str(tuple(alerts)))
-
-            cache_label = SnapshotLabel(os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(label), hash_code), "", "", "")
+            cache_label = self.monitor_cache_label(cfg.kind, label, alerts)
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, cache_label)
 
             # Stub: force fallback and inject creation times via handle_minmax_snapshots
@@ -699,8 +716,7 @@ class TestSnapshotCache(AbstractTestCase):
             snapshots_changed = 2_000_000_050
             job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
 
-            hash_code = sha256_hex(str(tuple(alerts)))
-            cache_label = SnapshotLabel(os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(label), hash_code), "", "", "")
+            cache_label = self.monitor_cache_label(cfg.kind, label, alerts)
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, cache_label)
             set_last_modification_time_safe(cache_file, unixtime_in_secs=(creation, snapshots_changed), if_more_recent=True)
 
@@ -989,10 +1005,7 @@ class TestSnapshotCache(AbstractTestCase):
             lbl = alert.label
             cfg = alert.latest
             assert cfg is not None
-            hash_code = sha256_hex(str(tuple(alerts)))
-            mon_cache_label = SnapshotLabel(
-                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(lbl), hash_code), "", "", ""
-            )
+            mon_cache_label = self.monitor_cache_label(cfg.kind, lbl, alerts)
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, SRC_DATASET, mon_cache_label)
 
             # Identify replicate cache files
@@ -1127,6 +1140,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Labels and cache files for snapshot path
             labels = job_s.params.create_src_snapshots_config.snapshot_labels()
             lbl = labels[0]
+            lbl = self.snapshot_cache_label(lbl)
             label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl)
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET)
 
@@ -1284,13 +1298,11 @@ class TestSnapshotCache(AbstractTestCase):
             lbl_mon = alert.label
             cfg = alert.latest
             assert cfg is not None
-            hashcode_m = sha256_hex(str(tuple(alerts)))
-            mon_cache_label = SnapshotLabel(
-                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(lbl_mon), hashcode_m), "", "", ""
-            )
+            mon_cache_label = self.monitor_cache_label(cfg.kind, lbl_mon, alerts)
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, SRC_DATASET, mon_cache_label)
 
             lbl_s = job_s.params.create_src_snapshots_config.snapshot_labels()[0]
+            lbl_s = self.snapshot_cache_label(lbl_s)
             label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl_s)
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET)
 
@@ -1526,6 +1538,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Resolve cache files
             labels = job_s.params.create_src_snapshots_config.snapshot_labels()
             lbl = labels[0]
+            lbl = self.snapshot_cache_label(lbl)
             label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl)
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET)
 
@@ -1570,10 +1583,7 @@ class TestSnapshotCache(AbstractTestCase):
             lbl_mon = alert.label
             cfg = alert.latest
             assert cfg is not None
-            hashcode_m2 = sha256_hex(str(tuple(alerts)))
-            mon_cache_label = SnapshotLabel(
-                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(lbl_mon), hashcode_m2), "", "", ""
-            )
+            mon_cache_label = self.monitor_cache_label(cfg.kind, lbl_mon, alerts)
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, SRC_DATASET, mon_cache_label)
 
             def fake_handle_minmax_snapshots_monitor(
@@ -1775,6 +1785,7 @@ class TestSnapshotCache(AbstractTestCase):
             job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
 
             label = job.params.create_src_snapshots_config.snapshot_labels()[0]
+            label = self.snapshot_cache_label(label)
             label_path = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
 
             # Force fallback by leaving dataset '=' cache empty and feed creation via handle_minmax
@@ -2319,10 +2330,7 @@ class TestSnapshotCache(AbstractTestCase):
             alert = alerts[0]
             cfg = alert.latest
             assert cfg is not None
-            hash_code = sha256_hex(str(tuple(alerts)))
-            cache_label = SnapshotLabel(
-                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(alert.label), hash_code), "", "", ""
-            )
+            cache_label = self.monitor_cache_label(cfg.kind, alert.label, alerts)
             sample = src_datasets[0]
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, sample, cache_label)
             at, mt = SnapshotCache(job).get_snapshots_changed2(cache_file)
@@ -2705,11 +2713,7 @@ class TestSnapshotCache(AbstractTestCase):
             alert = alerts[0]
             cfg = alert.latest
             assert cfg is not None
-            hash_code = sha256_hex(str(tuple(alerts)))
-
-            mon_cache_label_src = SnapshotLabel(
-                os.path.join(MONITOR_CACHE_FILE_PREFIX, cfg.kind, str(alert.label), hash_code), "", "", ""
-            )
+            mon_cache_label_src = self.monitor_cache_label(cfg.kind, alert.label, alerts)
             mon_cache_label_dst = mon_cache_label_src  # same label space; different remote namespace ensures separation
             cache_file_src = SnapshotCache(job).last_modified_cache_file(job.params.src, SRC_DATASET, mon_cache_label_src)
             cache_file_dst = SnapshotCache(job).last_modified_cache_file(job.params.dst, DST_DATASET, mon_cache_label_dst)
@@ -2754,13 +2758,50 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(2, job.num_cache_hits)
             self.assertEqual(0, job.num_cache_misses)
 
+    @unittest.skip("benchmark; enable for performance measurements")
+    def test_benchmark_last_modified_cache_file(self) -> None:
+        """Benchmark: Measure calls/sec for last_modified_cache_file() with large inputs."""
+        # Construct fixed-size inputs based on deterministic ASCII randomness
+        rng = random.Random(12345)
+        letters = string.ascii_letters + string.digits
+        dataset_100 = "".join(rng.choice(letters) for _ in range(100))
+        prefix_10 = "".join(rng.choice(letters) for _ in range(9)) + "_"  # length 10
+        infix_10 = "".join(rng.choice(letters) for _ in range(9)) + "_"  # length 10
+        suffix_20 = "_" + "".join(rng.choice(letters) for _ in range(19))  # length 20; total label visible length = 40
+        label_40 = SnapshotLabel(prefix=prefix_10, infix=infix_10, timestamp="2025-01-01_12-34:56", suffix=suffix_20)
+
+        with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
+            cache = SnapshotCache(job)
+            remote: Remote = job.params.src
+            # Configure a 100-char cache namespace using a 98-char random ssh_user_host plus two separators
+            remote.ssh_user_host = "".join(rng.choice(letters) for _ in range(98))
+            remote.ssh_port = 22
+            remote.ssh_config_file_hash = ""
+            self.assertEqual(100 + 2, len(remote.cache_namespace()))
+
+            # Warmup to let Python/CPU settle and populate caches
+            warmup = 100
+            sink: str = ""
+            for _ in range(warmup):
+                sink = cache.last_modified_cache_file(remote, dataset_100, label_40)
+
+            # Measured run
+            iters = 10_000
+            start = time.perf_counter()
+            for _ in range(iters):
+                sink = cache.last_modified_cache_file(remote, dataset_100, label_40)
+            elapsed = time.perf_counter() - start
+            self.assertTrue(bool(sink))
+
+            # Report throughput
+            ops_per_sec = iters / elapsed if elapsed > 0 else float("inf")
+            logging.getLogger(__name__).warning(
+                f"last_modified_cache_file(): {iters} iters in {elapsed:.3f}s -> {ops_per_sec:.0f} ops/sec"
+            )
+
     @unittest.skip("benchmark; enable for performance comparison")
     def test_benchmark_set_last_modification_time(self) -> None:
-
-        funcs = {
-            "old": set_last_modification_time_old,
-            "flock": set_last_modification_time,
-        }
+        funcs = {"old": set_last_modification_time_old, "flock": set_last_modification_time}
         with tempfile.TemporaryDirectory() as tmpdir:
             file = os.path.join(tmpdir, "f")
             iterations = 100_000
@@ -2769,7 +2810,7 @@ class TestSnapshotCache(AbstractTestCase):
                 for i in range(iterations):
                     func(file, i)
                 elapsed = time.perf_counter() - start
-                print(name, elapsed)
+                logging.getLogger(__name__).warning(f"{name}: {elapsed}")
         self.assertEqual(iterations - 1, round(os.stat(file).st_mtime))
 
     def _stresstest_num_datasets(self) -> int:

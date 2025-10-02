@@ -520,14 +520,26 @@ def xprint(log: logging.Logger, value: Any, run: bool = True, end: str = "\n", f
 
 def sha256_hex(text: str) -> str:
     """Returns the sha256 hex string for the given text."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def sha256_urlsafe_base64(text: str, padding: bool = True) -> str:
     """Returns the URL-safe base64-encoded sha256 value for the given text."""
-    digest: bytes = hashlib.sha256(text.encode("utf-8")).digest()
-    s: str = base64.urlsafe_b64encode(digest).decode("utf-8")
+    digest: bytes = hashlib.sha256(text.encode()).digest()
+    s: str = base64.urlsafe_b64encode(digest).decode()
     return s if padding else s.rstrip("=")
+
+
+def sha256_128_urlsafe_base64(text: str) -> str:
+    """Returns the left half portion of the unpadded URL-safe base64-encoded sha256 value for the given text."""
+    s: str = sha256_urlsafe_base64(text, padding=False)
+    return s[: len(s) // 2]
+
+
+def sha256_85_urlsafe_base64(text: str) -> str:
+    """Returns the left one third portion of the unpadded URL-safe base64-encoded sha256 value for the given text."""
+    s: str = sha256_urlsafe_base64(text, padding=False)
+    return s[: len(s) // 3]
 
 
 def urlsafe_base64(
@@ -537,7 +549,7 @@ def urlsafe_base64(
     assert 0 <= value <= max_value
     max_bytes: int = (max_value.bit_length() + 7) // 8
     value_bytes: bytes = value.to_bytes(max_bytes, byteorder)
-    s: str = base64.urlsafe_b64encode(value_bytes).decode("utf-8")
+    s: str = base64.urlsafe_b64encode(value_bytes).decode()
     return s if padding else s.rstrip("=")
 
 

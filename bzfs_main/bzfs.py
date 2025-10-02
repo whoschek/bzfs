@@ -189,7 +189,8 @@ from bzfs_main.utils import (
     pretty_print_formatter,
     replace_in_lines,
     replace_prefix,
-    sha256_hex,
+    sha256_85_urlsafe_base64,
+    sha256_128_urlsafe_base64,
     terminate_process_subtree,
     validate_dataset_name,
     validate_property_name,
@@ -1018,12 +1019,13 @@ class Job:
         if is_caching_snapshots(p, remote):
             props: dict[str, DatasetProperties] = self.dst_properties if remote is p.dst else self.src_properties
             snapshots_changed_dict: dict[str, int] = {dataset: vals.snapshots_changed for dataset, vals in props.items()}
-            hash_code: str = sha256_hex(str(tuple(alerts)))
+            alerts_hash: str = sha256_128_urlsafe_base64(str(tuple(alerts)))
+            label_hashes: dict[SnapshotLabel, str] = {label: sha256_128_urlsafe_base64(str(label)) for label in labels}
         is_caching: bool = False
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
             cache_label = SnapshotLabel(
-                os.path.join(MONITOR_CACHE_FILE_PREFIX, alert_cfg.kind, str(label), hash_code), "", "", ""
+                os.path.join(MONITOR_CACHE_FILE_PREFIX, alert_cfg.kind[1], label_hashes[label], alerts_hash), "", "", ""
             )
             return self.cache.last_modified_cache_file(r, dataset, cache_label)
 
@@ -1165,13 +1167,14 @@ class Job:
             cache_files: dict[str, str] = {}
             stale_src_datasets1: list[str] = []
             maybe_stale_dst_datasets: list[str] = []
-            userhost_dir: str = p.dst.cache_namespace()
-            hash_key = tuple(tuple(f) for f in p.snapshot_filters)  # cache is only valid for same --include/excl-snapshot*
-            hash_code: str = sha256_hex(str(hash_key))
+            userhost_dir: str = sha256_85_urlsafe_base64(p.dst.cache_namespace())
+            filter_key = tuple(tuple(f) for f in p.snapshot_filters)  # cache is only valid for same --include/excl-snapshot*
+            filter_hash_code: str = sha256_85_urlsafe_base64(str(filter_key))
             for src_dataset in src_datasets:
                 dst_dataset: str = src2dst(src_dataset)  # cache is only valid for identical destination dataset
-                cache_label = SnapshotLabel(
-                    os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset, hash_code), "", "", ""
+                dst_dataset_dir: str = sha256_85_urlsafe_base64(dst_dataset)
+                cache_label: SnapshotLabel = SnapshotLabel(
+                    os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset_dir, filter_hash_code), "", "", ""
                 )
                 cache_file: str = self.cache.last_modified_cache_file(src, src_dataset, cache_label)
                 cache_files[src_dataset] = cache_file
@@ -1390,7 +1393,7 @@ class Job:
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
                 # Per-label cache stores (atime=creation, mtime=snapshots_changed) so later runs can safely trust creation
                 # only when the label's mtime matches the current dataset-level '=' cache value.
-                cache_file: str = self.cache.last_modified_cache_file(src, dataset, label)
+                cache_file: str = self.cache.last_modified_cache_file(src, dataset, label_hashes[label])
                 unixtimes: tuple[int, int] = (creation_unixtime, self.src_properties[dataset].snapshots_changed)
                 set_last_modification_time_safe(cache_file, unixtime_in_secs=unixtimes, if_more_recent=True)
 
@@ -1404,6 +1407,9 @@ class Job:
                 labels.append(label)
         if len(labels) == 0:
             return datasets_to_snapshot  # nothing more TBD
+        label_hashes: dict[SnapshotLabel, SnapshotLabel] = {
+            label: SnapshotLabel(sha256_128_urlsafe_base64(str(label)), "", "", "") for label in labels
+        }
 
         # satisfy request from local cache as much as possible
         cached_datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)

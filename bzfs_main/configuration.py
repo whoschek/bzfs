@@ -154,7 +154,7 @@ class LogParams:
         os.chmod(fd, mode=FILE_PERMISSIONS, follow_symlinks=False)
         os.close(fd)
         self.pv_log_file: str = self.log_file[0 : -len(".log")] + ".pv"
-        self.last_modified_cache_dir: str = os.path.join(log_parent_dir, ".cache", "last_modified")
+        self.last_modified_cache_dir: str = os.path.join(log_parent_dir, ".cache", "mods")
         os.makedirs(os.path.dirname(self.last_modified_cache_dir), mode=DIR_PERMISSIONS, exist_ok=True)
 
         # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.

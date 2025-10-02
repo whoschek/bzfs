@@ -5,6 +5,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [1.13.0] - TBD
 
 - [bzfs] [perf] Reduce SSH startup latency on bzfs process startup even more
+- [bzfs] Make snapshot cache file paths shorter
 - [bzfs] Remove support for python-3.8 as it has been officially EOL'd since Oct 10, 2024
 - [bzfs] Remove support for Solaris (legacy)
 

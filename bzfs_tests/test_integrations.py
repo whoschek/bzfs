@@ -5448,6 +5448,9 @@ class LocalTestCase(IntegrationTestCase):
                     bzfs_jobrunner.main()
                 self.assertEqual(2, context.exception.code)
 
+                # cmd = ["find", get_home_directory()]
+                # subprocess.run(args=cmd, stdin=DEVNULL, check=True)
+
     def test_jobrunner_flat_simple_with_empty_targets(self) -> None:
         def run_jobrunner(*args: str, **kwargs: Any) -> bzfs_jobrunner.Job:
             return self.run_bzfs_jobrunner(
