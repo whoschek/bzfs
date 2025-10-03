@@ -352,10 +352,12 @@ class TestConnectionPool(AbstractTestCase):
                                 log.log(loglevel, f"return {i}/{len(conns)+1}: conn: {conn}, donn: {donn} ")
                             self.return_connection(cpool, conn, dpool, donn)
                 except Exception:
-                    print("Ooops!")
-                    print(f"maxsessions: {maxsessions}, items: {items}, step: {step}, item: {item}")
-                    print(f"clen: {len(cpool.priority_queue)}, cpool: {cpool.priority_queue}")
-                    print(f"dlen: {len(dpool.priority_queue)}, dpool: {dpool.priority_queue}")
+                    logging.getLogger(__name__).warning("Ooops!")
+                    logging.getLogger(__name__).warning(
+                        f"maxsessions: {maxsessions}, items: {items}, step: {step}, item: {item}"
+                    )
+                    logging.getLogger(__name__).warning(f"clen: {len(cpool.priority_queue)}, cpool: {cpool.priority_queue}")
+                    logging.getLogger(__name__).warning(f"dlen: {len(dpool.priority_queue)}, dpool: {dpool.priority_queue}")
                     raise
                 log.log(loglevel, "cpool: %s", cpool)
                 # log.log(bzfs.log_debug, "cpool: %s", cpool)

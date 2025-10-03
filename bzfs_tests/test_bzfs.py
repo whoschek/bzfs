@@ -17,6 +17,7 @@
 from __future__ import (
     annotations,
 )
+import logging
 import re
 import subprocess
 import time
@@ -664,10 +665,10 @@ class TestParseDatasetLocator(AbstractTestCase):
 
         if status != expected_status or (not passed):
             if status != expected_status:
-                print("Validation Test failed:")
+                logging.getLogger(__name__).warning("Validation Test failed:")
             else:
-                print("Test failed:")
-            print(
+                logging.getLogger(__name__).warning("Test failed:")
+            logging.getLogger(__name__).warning(
                 f"input: {input_value}\nuser exp: '{expected_user}' vs '{user}'\nhost exp: '{expected_host}' vs "
                 f"'{host}'\nuserhost exp: '{expected_user_host}' vs '{user_host}'\ndataset exp: '{expected_dataset}' vs "
                 f"'{dataset}'"
@@ -1806,4 +1807,6 @@ class TestPerformance(AbstractTestCase):
                     ).stdout
                     self.assertTrue(stdout)
                 secs = (time.time_ns() - start_time_nanos) / 1000_000_000
-                print(f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters/secs:.1f}")
+                logging.getLogger(__name__).warning(
+                    f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters/secs:.1f}"
+                )

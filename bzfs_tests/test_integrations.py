@@ -26,6 +26,7 @@ import fcntl
 import glob
 import itertools
 import json
+import logging
 import os
 import platform
 import pwd
@@ -295,7 +296,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         if zpool_features is None:
             zpool_features = {}
             detect_zpool_features("src", SRC_POOL_NAME)
-            print(f"zpool bookmarks feature: {are_bookmarks_enabled('src')}", file=sys.stderr)
+            logging.getLogger(__name__).warning(f"zpool bookmarks feature: {are_bookmarks_enabled('src')}")
             props = zpool_features["src"]
             features = "\n".join(
                 [f"{k}: {v}" for k, v in sorted(props.items()) if k.startswith("feature@") or k == "delegation"]
@@ -652,7 +653,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         try:
             subprocess.run(cmd, stdout=PIPE, stderr=PIPE, text=True, check=True)
         except subprocess.CalledProcessError as e:
-            print(f"generate_recv_resume_token stdout: {e.stdout}")
+            logging.getLogger(__name__).warning(f"generate_recv_resume_token stdout: {e.stdout}")
             self.assertIn("Partially received snapshot is saved", e.stderr)
         receive_resume_token = dataset_property(dst_dataset, "receive_resume_token")
         self.assertTrue(receive_resume_token)
@@ -990,7 +991,7 @@ class TestSSHLatency(IntegrationTestCase):
 class LocalTestCase(IntegrationTestCase):
 
     def test_aaa_log_diagnostics_first(self) -> None:
-        print(f"itest: self.param={self.param}")
+        logging.getLogger(__name__).warning(f"itest: self.param={self.param}")
 
     def test_basic_snapshotting_flat_simple(self) -> None:
         destroy(dst_root_dataset, recursive=True)
@@ -1067,7 +1068,9 @@ class LocalTestCase(IntegrationTestCase):
                         self.assert_snapshots(src_root_dataset + "/foo/b", 0)
                         for b in range(3):
                             with stop_on_failure_subtest(i=q):
-                                print(f"itest: zzz, m={m}, k={k}, j={j}, i={i}, b={b}, q={q}, self.param={self.param}")
+                                logging.getLogger(__name__).warning(
+                                    f"itest: zzz, m={m}, k={k}, j={j}, i={i}, b={b}, q={q}, self.param={self.param}"
+                                )
                                 q += 1
                                 self.run_bzfs(
                                     src_root_dataset,
@@ -1203,13 +1206,15 @@ class LocalTestCase(IntegrationTestCase):
         k = 1
         n = 100 * k
         self.setUp(pool_size_bytes=max(k * 50 * 1024 * 1024, POOL_SIZE_BYTES_DEFAULT))
-        print(f"Creating {n} filesystems which may take a while ...")
+        logging.getLogger(__name__).warning(f"Creating {n} filesystems which may take a while ...")
         sys.stdout.flush()
         create_filesystem(src_root_dataset, "xxx")
         start_time_nanos = time.time_ns()
         for i in range(n):
             create_filesystem(src_root_dataset, f"foo{i}")
-        print(f"Creating {n} filesystems took {human_readable_duration(time.time_ns() - start_time_nanos)}")
+        logging.getLogger(__name__).warning(
+            f"Creating {n} filesystems took {human_readable_duration(time.time_ns() - start_time_nanos)}"
+        )
         start_time_nanos = time.time_ns()
         self.run_bzfs(
             src_root_dataset,
@@ -1221,7 +1226,9 @@ class LocalTestCase(IntegrationTestCase):
             "--create-src-snapshots-plan=" + str({"z": {"onsite": {"foo": 1}}}),
             "--create-src-snapshots-timeformat=",
         )
-        print(f"Snapshotting took {human_readable_duration(time.time_ns() - start_time_nanos)}")
+        logging.getLogger(__name__).warning(
+            f"Snapshotting took {human_readable_duration(time.time_ns() - start_time_nanos)}"
+        )
         self.assert_snapshotting_generates_identical_createtxg()
 
     def assert_snapshotting_generates_identical_createtxg(self) -> None:
@@ -3590,7 +3597,7 @@ class LocalTestCase(IntegrationTestCase):
             self.assertIsNotNone(curr_token)  # assert clear_resumable_recv_state() didn't get called
             self.assertNotEqual(prev_token, curr_token)  # assert send/recv transfers are making progress
             prev_token = curr_token
-        print(f"iterations to fully replicate all snapshots: {max_iters}")
+        logging.getLogger(__name__).warning(f"iterations to fully replicate all snapshots: {max_iters}")
         self.assert_receive_resume_token(dst_root_dataset, exists=False)
         self.assert_snapshots(dst_root_dataset, n - 1, "s")
         self.assertGreater(max_iters, 2)
