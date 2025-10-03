@@ -36,8 +36,8 @@ programs = ("bzfs", "bzfs_jobrunner")
 
 def _version_line() -> str:
     """Returns the program version string."""
-    for act in bzfs.argument_parser()._actions:
-        if isinstance(act, argparse._VersionAction):
+    for act in bzfs.argument_parser()._actions:  # pylint: disable=W0212
+        if isinstance(act, argparse._VersionAction):  # pylint: disable=W0212
             return str(act.version)
     raise RuntimeError("Version not found in bzfs argument parser.")
 
@@ -48,7 +48,7 @@ def _harvest(module: str) -> tuple[str, set[str], dict[str, str]]:
     safe_name = module.replace("-", "_")
     flags: set[str] = set()
     vals: dict[str, str] = {}
-    for act in parser._actions:
+    for act in parser._actions:  # pylint: disable=W0212
         if act.help is argparse.SUPPRESS:
             continue
         flags.update(act.option_strings)

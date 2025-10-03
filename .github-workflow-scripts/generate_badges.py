@@ -97,7 +97,7 @@ def _sort_versions(version_list: list[str]) -> list[str]:
 def _generate_badge(left_txt: str, right_txt: str, color: str) -> None:
     """Writes an SVG badge for the given text."""
 
-    from genbadge import (
+    from genbadge import (  # pylint: disable=E0401
         Badge,
     )
 

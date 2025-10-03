@@ -149,6 +149,7 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "ISC",      # flake8-implicit-str-concat
     "LOG",      # flake8-logging
     "N",        # pep8-naming, snake_case
+    "PERF101",  # unnecessary-list-cast
     "PERF402",  # use list or list.copy to create a copy of a list
     "PGH",      # pygrep-hooks
     "PIE",      # flake8-pie
@@ -274,36 +275,24 @@ use_parentheses = true
 force_grid_wrap = 1
 
 [tool.pylint."MESSAGES CONTROL"]  # see https://pylint.readthedocs.io/en/latest/user_guide/messages/messages_overview.html
-disable = ["all"]        # turn all checks off ...
-enable  = [              # ...then re-enable selected high-value checks
-    # Only include checks that are not yet supported by ruff or mypy; see https://github.com/astral-sh/ruff/issues/970
-    "E0119",  # misplaced .format call
-    "E0202",  # method hidden by attribute
-    "E0236",  # non-string in __slots__
-    "E0238",  # invalid __slots__ object
-    "E0242",  # __slots__ conflicts with class var/method
-    "E0701",  # catching a base exception before a derived one
-    "E0702",  # raising bad type
-    "E0710",  # raising non-exception
-    "E0712",  # catching non-exception
-    "E1200",  # logging unsupported format
-    "E4702",  # iterated dict is being modified inside for loop body
-    "R0401",  # detect cyclic imports
-    "W0101",  # unreachable code
-    "W0120",  # useless-else-on-loop
-    "W0127",  # self-assigning-variable
-    "W0129",  # assert-on-string-literal
-    "W0201",  # instance attribute defined outside the __init__ method
-    "W0231",  # __init__ method from base class is not called
-    "W0406",  # module is importing itself
-    "W0621",  # redefining name from outer scope
-    "W0714",  # overlapping except handlers
-    "W1501",  # bad-open-mode
-    "W1507",  # shallow-copy-environ
-    "W1508",  # invalid-envvar-default
-    "W2101",  # useless-with-lock
-    "W3201",  # bad-dunder-method-name
-    "W4701",  # iterated list is being modified inside for loop body
+# Preferably only include checks that are not yet supported by ruff or mypy; see https://github.com/astral-sh/ruff/issues/970
+enable  = [
+    "E",     # errors
+    "W",     # warnings
+]
+disable = [
+#    "all",  # turn all checks off ...
+    "C",     # convention
+    "E1101", # no-member
+    "E0606", # possibly-used-before-assignment
+    "I",     # information
+    "R",     # refactor
+    "W0106", # expression-not-assigned
+    "W0108", # unnecessary-lambda
+    "W0511", # fixme
+    "W0613", # unused-argument
+    "W0718", # broad-exception-caught
+    "W1510", # subprocess-run-check
 ]
 
 [tool.mypy]
