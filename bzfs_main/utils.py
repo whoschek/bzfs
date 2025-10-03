@@ -787,28 +787,6 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
 
 
 ###############################################################################
-S = TypeVar("S")
-
-
-class Interner(Generic[S]):
-    """Same as sys.intern() except that it isn't global and can also be used for types other than str."""
-
-    def __init__(self, items: Iterable[S] = frozenset()) -> None:
-        self._items: dict[S, S] = {v: v for v in items}
-
-    def intern(self, item: S) -> S:
-        """Interns the given item."""
-        return self._items.setdefault(item, item)
-
-    def interned(self, item: S) -> S:
-        """Returns the interned (aka deduped) item if an equal item is contained, else returns the non-interned item."""
-        return self._items.get(item, item)
-
-    def __contains__(self, item: S) -> bool:
-        return item in self._items
-
-
-###############################################################################
 class SnapshotPeriods:  # thread-safe
     """Parses snapshot suffix strings and converts between durations."""
 
@@ -961,6 +939,28 @@ def binary_search(sorted_list: list[T], item: T) -> int:
     returns index >=0, the index will be the left-most index in case multiple such equal items are contained."""
     i = bisect.bisect_left(sorted_list, item)
     return i if i < len(sorted_list) and sorted_list[i] == item else -i - 1
+
+
+###############################################################################
+S = TypeVar("S")
+
+
+class Interner(Generic[S]):
+    """Same as sys.intern() except that it isn't global and can also be used for types other than str."""
+
+    def __init__(self, items: Iterable[S] = frozenset()) -> None:
+        self._items: dict[S, S] = {v: v for v in items}
+
+    def intern(self, item: S) -> S:
+        """Interns the given item."""
+        return self._items.setdefault(item, item)
+
+    def interned(self, item: S) -> S:
+        """Returns the interned (aka deduped) item if an equal item is contained, else returns the non-interned item."""
+        return self._items.get(item, item)
+
+    def __contains__(self, item: S) -> bool:
+        return item in self._items
 
 
 #############################################################################
