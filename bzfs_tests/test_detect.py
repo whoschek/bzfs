@@ -18,9 +18,14 @@ from __future__ import (
     annotations,
 )
 import subprocess
+import threading
 import time
 import unittest
+from typing import (
+    cast,
+)
 from unittest.mock import (
+    MagicMock,
     patch,
 )
 
@@ -104,15 +109,38 @@ class TestRemoteConfCache(AbstractTestCase):
         item = RemoteConfCacheItem(pools, {"os": "Linux"}, {"feat": "on"}, expired_ts)
         job.remote_conf_cache[p.src.cache_key()] = item
         job.remote_conf_cache[p.dst.cache_key()] = item
+        # Create thread-safe wrappers around mocks so concurrent calls are counted reliably
+        lock = threading.Lock()
+        d1 = MagicMock(side_effect=lambda job_, r, host: {"ssh": ""})
+        d2 = MagicMock(side_effect=lambda job_, r, available_programs: {"feat": "on"})
+
+        def _ts1(
+            job_: bzfs.Job,
+            r: Remote,
+            host: str,
+            _lock: threading.Lock = lock,
+            _mock: MagicMock = d1,
+        ) -> dict[str, str]:
+            with _lock:
+                return cast(dict[str, str], _mock(job_, r, host))
+
+        def _ts2(
+            job_: bzfs.Job,
+            r: Remote,
+            available_programs: dict[str, str],
+            _lock: threading.Lock = lock,
+            _mock: MagicMock = d2,
+        ) -> dict[str, str]:
+            with _lock:
+                return cast(dict[str, str], _mock(job_, r, available_programs))
+
         with (
-            patch.object(bzfs_main.detect, "_detect_available_programs_remote") as d1,
-            patch.object(bzfs_main.detect, "_detect_zpool_features") as d2,
+            patch.object(bzfs_main.detect, "_detect_available_programs_remote", new=_ts1),
+            patch.object(bzfs_main.detect, "_detect_zpool_features", new=_ts2),
         ):
-            d1.side_effect = lambda job_, r, host: {"ssh": ""}
-            d2.side_effect = lambda job_, r, available_programs: {"feat": "on"}
             detect_available_programs(job)
-            self.assertEqual(2, d1.call_count)
-            self.assertEqual(2, d2.call_count)
+        self.assertEqual(2, d1.call_count)
+        self.assertEqual(2, d2.call_count)
 
 
 #############################################################################
