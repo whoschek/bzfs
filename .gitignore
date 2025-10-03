@@ -155,3 +155,4 @@ pip-selfcheck.json
 .pyre/
 .pytype/
 trained_model.*
+tmp*/
