@@ -176,7 +176,7 @@ class TestSnapshotCache(AbstractTestCase):
         assert len(alerts) > 0
         alerts_hash_code = sha256_128_urlsafe_base64(str(tuple(alerts)))
         label_hash_code = sha256_128_urlsafe_base64(str(label))
-        kind_hash_code = cfg_kind[1]
+        kind_hash_code = cfg_kind[0]
         return SnapshotLabel(
             os.path.join(MONITOR_CACHE_FILE_PREFIX, kind_hash_code, label_hash_code, alerts_hash_code), "", "", ""
         )

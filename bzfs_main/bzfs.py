@@ -1025,7 +1025,7 @@ class Job:
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
             cache_label = SnapshotLabel(
-                os.path.join(MONITOR_CACHE_FILE_PREFIX, alert_cfg.kind[1], label_hashes[label], alerts_hash), "", "", ""
+                os.path.join(MONITOR_CACHE_FILE_PREFIX, alert_cfg.kind[0], label_hashes[label], alerts_hash), "", "", ""
             )
             return self.cache.last_modified_cache_file(r, dataset, cache_label)
 
