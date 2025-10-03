@@ -300,7 +300,7 @@ class Job:
                 log = bzfs_main.loggers.get_logger(log_params=log_params, args=args, log=log)
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
-                get_simple_logger(PROG_NAME).error("Log init: %s", e, exc_info=False if isinstance(e, SystemExit) else True)
+                get_simple_logger(PROG_NAME).error("Log init: %s", e, exc_info=not isinstance(e, SystemExit))
                 raise
 
             aux_args: list[str] = []

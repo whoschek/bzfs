@@ -459,7 +459,7 @@ def _replicate_dataset_incrementally(
         last_appended_guid: str = ""
         snapshot_itr = reversed(basis_src_snapshots_with_guids)
         while True:
-            guid, snapshot = snapshot_itr.__next__().split("\t", 1)
+            guid, snapshot = next(snapshot_itr).split("\t", 1)
             if "@" in snapshot:
                 result_snapshots.append(snapshot)
                 result_guids.append(guid)
