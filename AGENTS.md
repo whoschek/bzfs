@@ -169,10 +169,10 @@ Before committing any changes, you **must** follow this exact sequence:
   external data. Think harder to understand *why* the bug occurs, not just *what* it does.
 - **Analyze Non-trivial Bugs:** Before claiming a non-trivial bug, meticulously cross-check and validate it against the
   existing unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug"
-  covered by a passing test indicates a flawed analysis. Simultaneously explore three completely distinct promising
-  approaches, using different perspectives, methodologies, and techniques. Explain and evaluate the pros/cons of each
-  approach. Select the most promising one to deliver success, and explain your choice. Perform a thorough root cause
-  analysis.
+  covered by a passing test indicates a flawed analysis.
+- **Use Tree of Thought for Non-trivial Bugs:** Simultaneously explore three completely distinct promising approaches,
+  using different perspectives, methodologies, and techniques. Explain and evaluate the pros/cons of each approach.
+  Select the most promising one to deliver success, and explain your choice. Perform a thorough root cause analysis.
 - **Test First, Then Fix:** Use TDD: You **must** follow the sequence of steps described above in
   [Core Software Development Workflow](#core-software-development-workflow).
 
@@ -199,10 +199,11 @@ Before committing any changes, you **must** follow this exact sequence:
 Your goal is to improve quality with zero functional regressions.
 
 - **Plan First:** Think harder. Write a structured step-by-step plan (≤ 300 words) summarizing the intended actions and
-  changes, chosen tool, and validation steps. Simultaneously explore three completely distinct promising approaches,
-  using different perspectives, methodologies, and techniques. Explain and evaluate the pros/cons of each approach.
-  Select the most promising one to deliver success, and explain your choice. Then methodically execute each step of your
-  plan.
+  changes, chosen tool, and validation steps.
+
+- **Tree of Thought:** Simultaneously explore three completely distinct promising approaches, using different
+  perspectives, methodologies, and techniques. Explain and evaluate the pros/cons of each approach. Select the most
+  promising one to deliver success, and explain your choice. Then methodically execute each step of your plan.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
