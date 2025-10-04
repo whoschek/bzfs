@@ -261,7 +261,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     datasets_set: SortedInterner[str] = SortedInterner(datasets)  # reduces memory footprint
     priority_queue: list[TreeNode] = _build_dataset_tree_and_find_roots(datasets)
     heapq.heapify(priority_queue)  # same order as sorted()
-    executor: Executor = ThreadPoolExecutor(max_workers=max_workers) if max_workers != 1 else SynchronousExecutor()
+    executor: Executor = ThreadPoolExecutor(max_workers) if max_workers != 1 and len_datasets > 1 else SynchronousExecutor()
     with executor:
         todo_futures: set[Future[bool]] = set()
         future_to_node: dict[Future[bool], TreeNode] = {}
@@ -295,6 +295,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
             return len(todo_futures) > 0
 
         def complete_datasets() -> None:
+            """Waits for completed futures, processes results and errors, then enqueues follow-up tasks per policy."""
             nonlocal todo_futures
             done_futures: set[Future[bool]]
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
@@ -395,8 +396,8 @@ def _complete_job_with_barriers(
     if no_skip:
         enqueue_children(node)  # make child datasets available for start of processing
     else:  # job completed without success
-        tmp: TreeNode | None = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
-        while tmp is not None:
+        tmp: TreeNode | None = node
+        while tmp is not None:  # ... thus, opening the barrier shall always do nothing in node and its ancestors
             tmp.mut.barrier = immutable_empty_barrier
             tmp = tmp.parent
     assert node.mut.pending >= 0

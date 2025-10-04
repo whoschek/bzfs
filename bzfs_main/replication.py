@@ -173,7 +173,8 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
             done_checking,
             retry_count,
             tid,
-        )  # we have now created a common snapshot
+        )
+        # we have now created a common snapshot
         latest_common_src_snapshot, dry_run_no_send, done_checking, retry_count = full_result
     if latest_common_src_snapshot:
         # finally, incrementally replicate all selected snapshots from latest common snapshot until latest src snapshot
