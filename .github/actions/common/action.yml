@@ -13,19 +13,20 @@
 # limitations under the License.
 
 name: Common Steps
+description: Common preparation steps (Python, deps, ssh, optional ZFS/pv)
 
 inputs:
   python-version:
+    description: Python version to set up
     required: true
-    type: string
   install-zfs:
+    description: Install ZFS userland packages
     required: false
-    type: boolean
-    default: true
+    default: 'true'
   install-pv:
+    description: Install pv package
     required: false
-    type: boolean
-    default: true
+    default: 'true'
 runs:
   using: 'composite'
   steps:

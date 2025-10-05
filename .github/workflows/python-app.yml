@@ -48,15 +48,15 @@ on:
         type: string
         default: ""
       bzfs_test_mode:
-        description: "bzfs_test_mode env var choice"
+        description: "Name of test suite to run"
         type: choice
         options:
         - unit
         - smoke
         - functional
         - adhoc
-        - ""
-        default: ""  # empty string means 'run all tests'
+        - all
+        default: all
       bzfs_test_mode_string:
         description: "bzfs_test_mode env var custom string"
         type: string
@@ -81,7 +81,7 @@ permissions:
   contents: read
 
 env:  # it's sufficient to run smoke tests when dependabot is detected
-  bzfs_test_mode: ${{ (github.actor == 'dependabot[bot]' && 'smoke') || (github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string || github.event.inputs.bzfs_test_mode || '') }}
+  bzfs_test_mode: ${{ (github.actor == 'dependabot[bot]' && 'smoke') || (github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string || (github.event.inputs.bzfs_test_mode == 'all' && '' || github.event.inputs.bzfs_test_mode)) }}
   NUM_RUNS: ${{ github.event.inputs.num_runs != '' && github.event.inputs.num_runs || '1' }}
 
 jobs:
@@ -94,7 +94,7 @@ jobs:
         shell: bash
         run: |
           echo "Using bzfs_test_mode=$bzfs_test_mode"
-          echo "iteration_test_matrix_output=[$(seq -s ',' 1 "$NUM_RUNS")]" >> $GITHUB_OUTPUT
+          echo "iteration_test_matrix_output=[$(seq -s ',' 1 "$NUM_RUNS")]" >> "$GITHUB_OUTPUT"
 
 
   test_ubuntu_24_04_fast:  # currently uses zfs-2.2.2
@@ -112,7 +112,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/workflows/common
+      uses: ./.github/actions/common
       with:
         python-version: ${{ matrix.python-version }}
     - name: Display ZFS version and Python version
@@ -169,7 +169,7 @@ jobs:
 
         ./.github-workflow-scripts/install_ubuntu_24_04_pv_fr.sh
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/workflows/common
+      uses: ./.github/actions/common
       with:
         python-version: ${{ matrix.python-version }}
         install-zfs: false
@@ -200,7 +200,7 @@ jobs:
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       if: ${{ matrix.python-version == '3.14-dev' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
-      uses: ./.github/workflows/coverage-upload
+      uses: ./.github/actions/coverage-upload
 
 
   test_ubuntu_24_04_zfs_2_3_latest:  # currently uses zfs-2.3.4
@@ -225,7 +225,7 @@ jobs:
         sudo apt-get -y install zfs-dkms zfsutils-linux
         zfs --version
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/workflows/common
+      uses: ./.github/actions/common
       with:
         python-version: ${{ matrix.python-version }}
         install-zfs: false
@@ -249,7 +249,7 @@ jobs:
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       if: ${{ matrix.python-version == '3.11' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
-      uses: ./.github/workflows/coverage-upload
+      uses: ./.github/actions/coverage-upload
 
 
   test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.8
@@ -273,7 +273,7 @@ jobs:
         sudo apt-get -y install openzfs-zfs-dkms
         zfs --version
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/workflows/common
+      uses: ./.github/actions/common
       with:
         python-version: ${{ matrix.python-version }}
         install-zfs: false
@@ -297,7 +297,7 @@ jobs:
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/workflows/coverage-upload
+      uses: ./.github/actions/coverage-upload
 
 
   test_ubuntu_24_04:  # currently uses zfs-2.2.2
@@ -315,7 +315,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/workflows/common
+      uses: ./.github/actions/common
       with:
         python-version: ${{ matrix.python-version }}
     - name: Display ZFS version and Python version
@@ -338,7 +338,7 @@ jobs:
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/workflows/coverage-upload
+      uses: ./.github/actions/coverage-upload
 
 
   test_ubuntu_22_04:   # currently uses zfs-2.1.5
@@ -356,7 +356,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/workflows/common
+      uses: ./.github/actions/common
       with:
         python-version: ${{ matrix.python-version }}
     - name: Display ZFS version and Python version
@@ -376,16 +376,16 @@ jobs:
 
         echo "Now running tests as root user"
         sudo mkdir -p /root/.ssh
-        sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
-        cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
-        sudo bzfs_test_mode=$bzfs_test_mode ./test.sh
+        sudo cp -a "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub" /root/.ssh/
+        cat "$HOME/.ssh/id_rsa.pub" | sudo tee -a /root/.ssh/authorized_keys > /dev/null
+        sudo bzfs_test_mode="$bzfs_test_mode" ./test.sh
     - name: Run tests and generate code coverage
       run: |
         ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       if: ${{ matrix.python-version == '3.10' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
-      uses: ./.github/workflows/coverage-upload
+      uses: ./.github/actions/coverage-upload
 
 
   test_ubuntu_22_04_zfs_0_8_x:  # currently uses zfs-0.8.3
@@ -403,7 +403,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/workflows/common
+      uses: ./.github/actions/common
       with:
         python-version: ${{ matrix.python-version }}
         install-zfs: false
@@ -430,7 +430,7 @@ jobs:
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/workflows/coverage-upload
+      uses: ./.github/actions/coverage-upload
 
 
   test_freebsd_14_3:  # currently uses zfs-2.2.7
@@ -456,7 +456,7 @@ jobs:
           ./.github-workflow-scripts/test_freebsd_14_1.sh
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/workflows/coverage-upload
+      uses: ./.github/actions/coverage-upload
 
 
   test_freebsd_13_4:  # currently uses zfs-2.1.15
@@ -482,7 +482,7 @@ jobs:
          touch coverage_report.txt; exit 0  # ./.github-workflow-scripts/test_freebsd_13_3.sh
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/workflows/coverage-upload
+      uses: ./.github/actions/coverage-upload
 
 
 
@@ -544,12 +544,12 @@ jobs:
           name: coverage-test_freebsd_13_4
           path: coverage-test_freebsd_13_4
       - name: Run common preparation steps
-        uses: ./.github/workflows/common
+        uses: ./.github/actions/common
         with:
           python-version: "3.12"
       - name: Merge coverage reports
         run: |
-          coverage combine $(find . -name '.coverage*')
+          find . -name '.coverage*' -print0 | xargs -0 coverage combine
           coverage report | tee coverage_report.txt
           coverage html
           coverage xml
@@ -560,10 +560,10 @@ jobs:
           genbadge coverage -v -i coverage.xml -o badges/coverage-badge.svg
       - name: Merge badges
         run: |
-          cp -r */badges ./
+          cp -r -- */badges ./
           PYTHONPATH=. .github-workflow-scripts/generate_badges.py merge
       - name: Upload combined coverage report to workflow run page
-        uses: ./.github/workflows/coverage-upload
+        uses: ./.github/actions/coverage-upload
 
 
   generate_website:
@@ -602,7 +602,8 @@ jobs:
 
 
   upload_website_to_github_pages:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.event.inputs.bzfs_test_mode == '' && github.event.inputs.bzfs_test_mode_string == ''
+    # upload website only when full test suite ran (choice 'all'), on main, and no custom bzfs_test_mode_string override was used, and it's not a PR
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.event.inputs.bzfs_test_mode == 'all' && github.event.inputs.bzfs_test_mode_string == ''
     runs-on: ubuntu-24.04
     needs:
       - generate_website

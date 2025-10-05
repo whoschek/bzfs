@@ -1,6 +1,6 @@
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------
 # pre‑commit configuration for this repository; see https://github.com/pre-commit/pre-commit
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------
 # How to enable the Git hook on your machine (do this once per clone):
 #   1. Install the helper tool:
 #          pip install pre-commit
@@ -18,7 +18,7 @@
 #
 # These steps are also mirrored in CI (e.g. `pre-commit run --all-files`) to guarantee that
 # the same checks are enforced everywhere.
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------
 fail_fast: true                         # Abort on first failing hook
 default_install_hook_types:
   - pre-commit
@@ -53,6 +53,11 @@ repos:
         args: [--fix=lf]                # Replace line endings with linefeed
       - id: trailing-whitespace         # Remove whitespace from the end of lines
       - id: end-of-file-fixer           # Remove whitespace from the end of files and replace end of files with linefeed
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck                  # Validate syntax of shell scripts
+        exclude: '^\.github-workflow-scripts'
   - repo: https://github.com/python-jsonschema/check-jsonschema
     rev: 0.34.0
     hooks:
@@ -60,16 +65,16 @@ repos:
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
       #- id: check-compose-spec         # Validate syntax of Docker Compose files
       - id: check-dependabot            # Validate syntax of Dependabot config files
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint                  # Validate semantics (and some syntax) of GitHub Workflow YAML files
+        args: [--shellcheck=venv/bin/shellcheck]
   # - repo: https://github.com/woodruffw/zizmor-pre-commit  # also see https://github.com/zizmorcore/zizmor
-  #   rev: v1.13.0
+  #   rev: v1.14.2
   #   hooks:
   #     - id: zizmor                     # Validate syntax of GitHub Workflow YAML files
   #       args: [--fix=all]
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
-    hooks:
-      - id: shellcheck                  # Validate syntax of shell scripts
-        exclude: '^\.github-workflow-scripts'
   - repo: https://github.com/PyCQA/docformatter
     rev: v1.7.7
     hooks:
