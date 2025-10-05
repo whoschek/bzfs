@@ -16,8 +16,8 @@
 #   * pre-commit autoupdate             # Bump pinned revs to latest released tags
 #   * pre-commit uninstall              # Remove the .git/hooks/pre-commit hook script
 #
-# These steps should also be mirrored in CI (e.g. `pre-commit run --all-files`)
-# to guarantee that the same checks are enforced everywhere.
+# These steps are also mirrored in CI (e.g. `pre-commit run --all-files`) to guarantee that
+# the same checks are enforced everywhere.
 # ---------------------------------------------------------------------------
 fail_fast: true                         # Abort on first failing hook
 default_install_hook_types:
@@ -48,6 +48,7 @@ repos:
           --top-keys="",                # No keys forced to the top
         ]
       - id: check-symlinks              # Check for symlinks that do not point to anything
+      - id: check-case-conflict         # Prevent filename clashes on case-insensitive filesystems
       - id: mixed-line-ending
         args: [--fix=lf]                # Replace line endings with linefeed
       - id: trailing-whitespace         # Remove whitespace from the end of lines
