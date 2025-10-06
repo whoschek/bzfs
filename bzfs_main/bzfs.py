@@ -182,7 +182,6 @@ from bzfs_main.utils import (
     cut,
     die,
     has_duplicates,
-    has_siblings,
     human_readable_bytes,
     human_readable_duration,
     is_descendant,
@@ -248,7 +247,6 @@ class Job:
         self.max_exceptions_to_summarize: int = 10000
         self.first_exception: BaseException | None = None
         self.remote_conf_cache: dict[tuple, RemoteConfCacheItem] = {}
-        self.dedicated_tcp_connection_per_zfs_send: bool = True
         self.max_datasets_per_minibatch_on_list_snaps: dict[str, int] = {}
         self.max_workers: dict[str, int] = {}
         self.control_persist_margin_secs: int = 2
@@ -1150,12 +1148,6 @@ class Job:
         src, dst = p.src, p.dst
         self.num_snapshots_found = 0
         self.num_snapshots_replicated = 0
-        # perf/latency: no need to set up a dedicated TCP connection if no parallel replication is possible
-        self.dedicated_tcp_connection_per_zfs_send = (
-            p.dedicated_tcp_connection_per_zfs_send
-            and max_workers > 1
-            and has_siblings(src_datasets, is_test_mode=self.is_test_mode)  # siblings can be replicated in parallel
-        )
         log.info("Starting replication task: %s", task_description + f" [{len(src_datasets)} datasets]")
         start_time_nanos: int = time.monotonic_ns()
 

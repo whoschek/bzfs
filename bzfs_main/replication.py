@@ -688,7 +688,7 @@ def _run_zfs_send_receive(
         job, src_dataset, send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human
     )
     src_pipe, local_pipe, dst_pipe = pipes
-    conn_pool_name: str = DEDICATED if job.dedicated_tcp_connection_per_zfs_send else SHARED
+    conn_pool_name: str = DEDICATED if p.dedicated_tcp_connection_per_zfs_send else SHARED
     src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(conn_pool_name)
     dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
     with src_conn_pool.connection() as src_conn, dst_conn_pool.connection() as dst_conn:
