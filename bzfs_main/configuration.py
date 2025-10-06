@@ -547,10 +547,12 @@ class Remote:
                 rand_str: str = urlsafe_base64(random.SystemRandom().randint(0, max_rand), max_value=max_rand, padding=False)
                 curr_time: str = urlsafe_base64(time.time_ns(), max_value=2**64 - 1, padding=False)
                 unique: str = f"{os.getpid()}@{curr_time}@{rand_str}"
-                socket_name: str = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
-                socket_file = os.path.join(self.ssh_exit_on_shutdown_socket_dir, socket_name)[
-                    0 : max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(self.ssh_exit_on_shutdown_socket_dir) + 10)
-                ]
+                optional: str = f"@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
+                socket_name: str = f"{self.socket_prefix}{unique}{optional}"
+                socket_file = os.path.join(self.ssh_exit_on_shutdown_socket_dir, socket_name)
+                socket_file = socket_file[0 : max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(socket_file) - len(optional))]
+                # `ssh` will error out later if the max OS Unix domain socket path limit cannot be met reasonably as the
+                # home directory path is too long, typically because the Unix user name is unreasonably long.
             ssh_cmd += ["-S", socket_file]
         ssh_cmd += [self.ssh_user_host]
         return ssh_cmd

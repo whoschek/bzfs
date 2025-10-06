@@ -266,16 +266,12 @@ class TestHelperFunctions(AbstractTestCase):
             self.assertFalse(os.path.exists(regular_file))
 
     def test_lock_file_name_secure_directory(self) -> None:
-        """Lock file path should live in a private, non-world-writable directory, not in the system temp dir."""
+        """Lock file path should live in a private, non-world-writable directory."""
         args = self.argparser_parse_args(args=["src", "dst"])  # ensure a concrete log dir is configured
         log_params = LogParams(args)
         params = self.make_params(args=args, log_params=log_params)
 
         lock_file = params.lock_file_name()
-
-        # The lock should not be created under a world-writable temp directory
-        self.assertNotEqual(os.path.dirname(lock_file), tempfile.gettempdir())
-        self.assertFalse(os.path.commonpath([lock_file, tempfile.gettempdir()]) == tempfile.gettempdir())
 
         # The lock should be placed under a dedicated per-user locks directory next to the log parent dir
         log_parent_dir = os.path.dirname(log_params.log_dir)

@@ -20,7 +20,6 @@ from __future__ import (
 import json
 import logging
 import os
-import shutil
 import socket
 import sys
 import tempfile
@@ -66,7 +65,6 @@ from bzfs_main.utils import (
     LOG_STDERR,
     LOG_STDOUT,
     LOG_TRACE,
-    get_home_directory,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
@@ -88,18 +86,16 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_logdir_basename_prefix(self) -> None:
         """Basename of --log-dir must start with prefix 'bzfs-logs'."""
-        logdir = os.path.join(get_home_directory(), argparse_cli.LOG_DIR_DEFAULT + "-tmp")
-        try:
+        with tempfile.TemporaryDirectory(prefix="logdir_symlink_test") as tmp_rootdir:
+            logdir = os.path.join(tmp_rootdir, argparse_cli.LOG_DIR_DEFAULT + "-tmp")
             LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))
             self.assertTrue(os.path.exists(logdir))
-        finally:
-            shutil.rmtree(logdir, ignore_errors=True)
-
-        logdir = os.path.join(get_home_directory(), "bzfs-tmp")
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir])
-        with self.assertRaises(SystemExit):
-            LogParams(args)
-        self.assertFalse(os.path.exists(logdir))
+        with tempfile.TemporaryDirectory(prefix="logdir_symlink_test") as tmp_rootdir2:
+            logdir = os.path.join(tmp_rootdir2, "bzfs-tmp")
+            args = bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir])
+            with self.assertRaises(SystemExit):
+                LogParams(args)
+            self.assertFalse(os.path.exists(logdir))
 
     def test_logdir_must_not_be_symlink(self) -> None:
         with tempfile.TemporaryDirectory(prefix="logdir_symlink_test") as tmpdir:
