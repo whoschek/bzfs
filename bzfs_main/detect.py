@@ -22,9 +22,6 @@ import subprocess
 import sys
 import threading
 import time
-from concurrent.futures import (
-    ThreadPoolExecutor,
-)
 from dataclasses import (
     dataclass,
     field,
@@ -48,6 +45,7 @@ from bzfs_main.connection import (
 from bzfs_main.utils import (
     LOG_TRACE,
     PROG_NAME,
+    SynchronousExecutor,
     die,
     drain,
     list_formatter,
@@ -87,9 +85,8 @@ def detect_available_programs(job: Job) -> None:
     available_programs: dict[str, dict[str, str]] = params.available_programs
     if "local" not in available_programs:
         cmd: list[str] = [p.shell_program_local, "-c", _find_available_programs(p)]
-        available_programs["local"] = dict.fromkeys(
-            subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout.splitlines(), ""
-        )
+        stdout: str = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout
+        available_programs["local"] = dict.fromkeys(stdout.splitlines(), "")
         cmd = [p.shell_program_local, "-c", "exit"]
         if subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
             _disable_program(p, "sh", ["local"])
@@ -134,7 +131,7 @@ def detect_available_programs(job: Job) -> None:
                 f"dataset: {r.basis_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
             )
 
-    with ThreadPoolExecutor(max_workers=max(1, len(todo))) as executor:
+    with SynchronousExecutor.executor_for(max_workers=max(1, len(todo))) as executor:
         drain(executor.map(run_detect, todo))  # detect ZFS features + system capabilities on src+dst in parallel
 
     locations = ["src", "dst", "local"]
@@ -269,7 +266,8 @@ def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: s
     if p.shell_program != DISABLE_PRG:
         try:
             cmd: list[str] = [p.shell_program, "-c", _find_available_programs(p)]
-            available_programs.update(dict.fromkeys(run_ssh_command(job, remote, LOG_TRACE, cmd=cmd).splitlines(), ""))
+            stdout: str = run_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
+            available_programs.update(dict.fromkeys(stdout.splitlines(), ""))
             return available_programs
         except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
             if e.filename != p.shell_program:
@@ -336,7 +334,7 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
 
 def _validate_default_shell(path_to_default_shell: str, location: str, ssh_user_host: str) -> None:
     """Fails if the remote user uses csh or tcsh as the default shell."""
-    if path_to_default_shell in ["csh", "tcsh"] or path_to_default_shell.endswith(("/csh", "/tcsh")):
+    if path_to_default_shell in ("csh", "tcsh") or path_to_default_shell.endswith(("/csh", "/tcsh")):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
         die(
             f"Cowardly refusing to proceed because {PROG_NAME} is not compatible with csh-style quoting of special "

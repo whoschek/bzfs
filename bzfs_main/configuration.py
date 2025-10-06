@@ -646,7 +646,7 @@ class CreateSrcSnapshotConfig:
         # immutable variables:
         self.skip_create_src_snapshots: Final[bool] = not args.create_src_snapshots
         self.create_src_snapshots_even_if_not_due: Final[bool] = args.create_src_snapshots_even_if_not_due
-        tz_spec: Final[str | None] = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
+        tz_spec: str | None = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
         self.tz: tzinfo | None = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: Final[str] = args.create_src_snapshots_timeformat

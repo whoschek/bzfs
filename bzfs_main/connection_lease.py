@@ -177,7 +177,7 @@ class ConnectionLeaseManager:
         ns: str = sha256_urlsafe_base64(namespace, padding=False)
         assert NAMESPACE_DIR_LENGTH >= 22  # a minimum degree of safety: 22 URL-safe Base64 chars = 132 bits of entropy
         ns = ns[0:NAMESPACE_DIR_LENGTH]
-        namespace_dir: Final[str] = os.path.join(root_dir, ns)
+        namespace_dir: str = os.path.join(root_dir, ns)
         self._sockets_dir: Final[str] = os.path.join(namespace_dir, SOCKETS_DIR)
         self._free_dir: Final[str] = os.path.join(namespace_dir, FREE_DIR)
         self._used_dir: Final[str] = os.path.join(namespace_dir, USED_DIR)
