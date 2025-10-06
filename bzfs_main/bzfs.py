@@ -238,7 +238,7 @@ class Job:
 
     def __init__(self) -> None:
         self.params: Params
-        self.all_dst_dataset_exists: dict[str, dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
+        self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: dict[str, DatasetProperties] = {}
         self.dst_properties: dict[str, DatasetProperties] = {}
@@ -252,11 +252,11 @@ class Job:
         self.max_workers: dict[str, int] = {}
         self.control_persist_margin_secs: int = 2
         self.progress_reporter: ProgressReporter = cast(ProgressReporter, None)
-        self.is_first_replication_task: SynchronizedBool = SynchronizedBool(True)
+        self.is_first_replication_task: Final[SynchronizedBool] = SynchronizedBool(True)
         self.replication_start_time_nanos: int = time.monotonic_ns()
         self.timeout_nanos: int | None = None
         self.cache: SnapshotCache = SnapshotCache(self)
-        self.stats_lock: threading.Lock = threading.Lock()
+        self.stats_lock: Final[threading.Lock] = threading.Lock()
         self.num_cache_hits: int = 0
         self.num_cache_misses: int = 0
         self.num_snapshots_found: int = 0
@@ -336,22 +336,29 @@ class Job:
                             except BlockingIOError:
                                 msg = "Exiting as same previous periodic job is still running without completion yet per "
                                 die(msg + lock_file, STILL_RUNNING_STATUS)
+
+                            # xfinally unlink the lock_file while still holding the flock on its fd - it's correct and safe:
+                            # - Performing unlink() before close() avoids a race where a subsequent bzfs process could
+                            #   recreate and lock a fresh inode for the same path between our close() and a later unlink().
+                            #   In that case, a late unlink would delete the newer process's lock_file path.
+                            # - Here, critical work is complete when we reach unlink(); remaining steps are shutdown
+                            #   mechanics, so holding the flock until close() is correct, safe and simple.
                             with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # don't accumulate stale files
+
                                 # On CTRL-C and SIGTERM, send signal to descendant processes to also terminate descendants
                                 old_term_handler = signal.getsignal(signal.SIGTERM)
                                 signal.signal(signal.SIGTERM, lambda sig, f: self.terminate(old_term_handler))
                                 old_int_handler = signal.signal(signal.SIGINT, lambda s, f: self.terminate(old_term_handler))
+
                                 try:
-                                    self.run_tasks()
+                                    self.run_tasks()  # do the real work
                                 except BaseException:
                                     self.terminate(old_term_handler, except_current_process=True)
                                     raise
                                 finally:
                                     signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
                                     signal.signal(signal.SIGINT, old_int_handler)  # restore original signal handler
-                                for _ in range(2 if self.max_command_line_bytes else 1):
-                                    self.shutdown()
-                                print("", end="", file=sys.stderr)
+                                self.shutdown()
                                 with contextlib.suppress(BrokenPipeError):
                                     sys.stderr.flush()
             except subprocess.CalledProcessError as e:
