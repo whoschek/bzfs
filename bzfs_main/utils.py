@@ -611,7 +611,10 @@ def _get_descendant_processes(root_pid: int) -> list[int]:
     """Returns the list of all descendant process IDs for the given root PID, on POSIX systems."""
     procs: defaultdict[int, list[int]] = defaultdict(list)
     cmd: list[str] = ["ps", "-Ao", "pid,ppid"]
-    lines: list[str] = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()
+    try:
+        lines: list[str] = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()
+    except PermissionError:
+        return []  # degrade gracefully in sandbox environments that deny executing `ps` entirely
     for line in lines[1:]:  # all lines except the header line
         splits: list[str] = line.split()
         assert len(splits) == 2

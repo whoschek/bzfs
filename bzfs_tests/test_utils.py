@@ -52,6 +52,7 @@ from logging import (
     Logger,
 )
 from subprocess import (
+    DEVNULL,
     PIPE,
 )
 from typing import (
@@ -1234,13 +1235,29 @@ class TestTerminateProcessSubtree(unittest.TestCase):
         self.children = []
 
     def test_get_descendant_processes(self) -> None:
+        try:
+            subprocess.run(["ps", "-p", str(os.getpid()), "-o", "pid="], stdin=DEVNULL, stdout=PIPE, stderr=PIPE, check=True)
+        except PermissionError:
+            self.skipTest("ps not permitted/available in this sandboxed environment")
+
         child = subprocess.Popen(["sleep", "1"])
         self.children.append(child)
         time.sleep(0.1)
         descendants = _get_descendant_processes(os.getpid())
         self.assertIn(child.pid, descendants, "Child PID not found in descendants")
 
+    @patch("bzfs_main.utils.subprocess.run")
+    def test_get_descendant_processes_permission_denied_returns_empty(self, mock_run: MagicMock) -> None:
+        # Simulate PermissionError when trying to invoke 'ps' in restricted sandboxes
+        mock_run.side_effect = PermissionError(errno.EPERM, "Operation not permitted", "ps")
+        self.assertEqual([], _get_descendant_processes(os.getpid()))
+
     def test_terminate_process_subtree_excluding_current(self) -> None:
+        try:
+            subprocess.run(["ps", "-p", str(os.getpid()), "-o", "pid="], stdin=DEVNULL, stdout=PIPE, stderr=PIPE, check=True)
+        except PermissionError:
+            self.skipTest("ps not permitted/available in this sandboxed environment")
+
         child = subprocess.Popen(["sleep", "1"])
         self.children.append(child)
         time.sleep(0.1)
