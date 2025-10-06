@@ -18,6 +18,7 @@ from __future__ import (
     annotations,
 )
 import os
+import shutil
 import socket
 import stat
 import tempfile
@@ -769,3 +770,26 @@ class TestAdditionalHelpers(AbstractTestCase):
         args_valid = self.argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={valid_opts}"])
         params_valid = self.make_params(args=args_valid)
         self.assertIn("-q", params_valid.mbuffer_program_opts)
+
+    def test_logparams_handles_setup_cleanup_race(self) -> None:
+        """Simulates a race where another bzfs instance deletes a sibling '.current/<run-id>/' directory while this process
+        is still assembling its symlink set.
+
+        That can surface as FileNotFoundError during the temporary 'current' symlink setup. The expected behavior is robust
+        tolerance: no crash, proceed without updating the convenience 'current' pointer, and still produce a usable log file.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_parent_dir = os.path.join(tmpdir, "bzfs-logs")
+            os.makedirs(log_parent_dir, exist_ok=True)
+
+            def raise_and_remove_dir(src: str, dst_dir: str, dst: str) -> None:  # matches _create_symlink signature
+                # Simulate a race: directory was removed between creation and symlink placement
+                shutil.rmtree(dst_dir, ignore_errors=True)
+                raise FileNotFoundError("simulated race: directory removed")
+
+            args = self.argparser_parse_args(["src", "dst", "--log-dir", log_parent_dir])
+            with patch("bzfs_main.configuration._create_symlink", side_effect=raise_and_remove_dir):
+                lp = configuration.LogParams(args)  # must not raise
+
+            # The specific 'current' symlink may or may not exist; key expectation is no crash and log file created
+            self.assertTrue(os.path.isfile(lp.log_file))

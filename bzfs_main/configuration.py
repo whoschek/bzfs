@@ -167,15 +167,17 @@ class LogParams:
         current_dir: str = os.path.join(dot_current_dir, os.path.basename(self.log_file)[0 : -len(".log")])
         os.makedirs(dot_current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--log-dir: .current ", dot_current_dir)
-        os.makedirs(current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
-        validate_is_not_a_symlink("--log-dir: current ", current_dir)
-        _create_symlink(self.log_file, current_dir, f"{current}.log")
-        _create_symlink(self.pv_log_file, current_dir, f"{current}.pv")
-        _create_symlink(self.log_dir, current_dir, f"{current}.dir")
-        dst_file: str = os.path.join(current_dir, current)
-        os.symlink(os.path.relpath(current_dir, start=log_parent_dir), dst_file)
-        os.replace(dst_file, os.path.join(log_parent_dir, current))  # atomic rename
-        _delete_stale_files(dot_current_dir, prefix="", millis=10, dirs=True, exclude=os.path.basename(current_dir))
+        try:
+            os.makedirs(current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+            _create_symlink(self.log_file, current_dir, f"{current}.log")
+            _create_symlink(self.pv_log_file, current_dir, f"{current}.pv")
+            _create_symlink(self.log_dir, current_dir, f"{current}.dir")
+            dst_file: str = os.path.join(current_dir, current)
+            os.symlink(os.path.relpath(current_dir, start=log_parent_dir), dst_file)
+            os.replace(dst_file, os.path.join(log_parent_dir, current))  # atomic rename
+            _delete_stale_files(dot_current_dir, prefix="", millis=5000, dirs=True, exclude=os.path.basename(current_dir))
+        except FileNotFoundError:
+            pass  # harmless concurrent cleanup
         self.params: Params | None = None
 
     def __repr__(self) -> str:
