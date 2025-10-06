@@ -77,9 +77,6 @@ from bzfs_main.argparse_cli import (
     PROG_AUTHOR,
     SKIP_ON_ERROR_DEFAULT,
 )
-from bzfs_main.bzfs import (
-    has_siblings,
-)
 from bzfs_main.detect import (
     DUMMY_DATASET,
 )
@@ -95,6 +92,7 @@ from bzfs_main.utils import (
     LOG_TRACE,
     format_dict,
     format_obj,
+    has_siblings,
     human_readable_duration,
     percent,
     shuffle_dict,

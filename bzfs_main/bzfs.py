@@ -182,6 +182,7 @@ from bzfs_main.utils import (
     cut,
     die,
     has_duplicates,
+    has_siblings,
     human_readable_bytes,
     human_readable_duration,
     is_descendant,
@@ -1573,26 +1574,6 @@ class DatasetProperties:
 
         # mutable variables:
         self.snapshots_changed: int = snapshots_changed
-
-
-def has_siblings(sorted_datasets: list[str], is_test_mode: bool = False) -> bool:
-    """Returns whether the (sorted) list of input datasets contains any siblings."""
-    assert (not is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
-    assert (not is_test_mode) or not has_duplicates(sorted_datasets), "List contains duplicates"
-    skip_dataset: str = DONT_SKIP_DATASET
-    parents: set[str] = set()
-    for dataset in sorted_datasets:
-        assert dataset
-        parent = os.path.dirname(dataset)
-        if parent in parents:
-            return True  # I have a sibling if my parent already has another child
-        parents.add(parent)
-        if is_descendant(dataset, of_root_dataset=skip_dataset):
-            continue
-        if skip_dataset != DONT_SKIP_DATASET:
-            return True  # I have a sibling if I am a root dataset and another root dataset already exists
-        skip_dataset = dataset
-    return False
 
 
 def parse_dataset_locator(

@@ -69,6 +69,7 @@ from zoneinfo import (
     ZoneInfo,
 )
 
+import bzfs_main.utils
 from bzfs_main.utils import (
     DESCENDANTS_RE_SUFFIX,
     DIR_PERMISSIONS,
@@ -188,6 +189,23 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(is_descendant("", ""))
         self.assertFalse(is_descendant("pool/fs-backup", "pool/fs"))
         self.assertTrue(is_descendant("pool/fs", "pool"))
+
+    def test_has_siblings(self) -> None:
+        def has_siblings(sorted_datasets: list[str]) -> bool:
+            return bzfs_main.utils.has_siblings(sorted_datasets, is_test_mode=True)
+
+        self.assertFalse(has_siblings([]))
+        self.assertFalse(has_siblings(["a"]))
+        self.assertFalse(has_siblings(["a", "a/b"]))
+        self.assertFalse(has_siblings(["a", "a/b", "a/b/c"]))
+        self.assertTrue(has_siblings(["a", "b"]))
+        self.assertTrue(has_siblings(["a", "a/b", "a/d"]))
+        self.assertTrue(has_siblings(["a", "a/b", "a/b/c", "a/b/d"]))
+        self.assertTrue(has_siblings(["a/b/c", "d/e/f"]))  # multiple root datasets can be processed in parallel
+        self.assertFalse(has_siblings(["a", "a/b/c"]))
+        self.assertFalse(has_siblings(["a", "a/b/c/d"]))
+        self.assertTrue(has_siblings(["a", "a/b/c", "a/b/d"]))
+        self.assertTrue(has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
 
     def test_dataset_paths(self) -> None:
         self.assertEqual(list(dataset_paths("a")), ["a"])
