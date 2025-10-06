@@ -1640,9 +1640,9 @@ def validate_user_name(user: str, input_text: str) -> None:
         die(f"Invalid user name: '{user}' for: '{input_text}'")
 
 
-def validate_host_name(host: str, input_text: str, extra_invalid_chars: str = "") -> None:
+def validate_host_name(host: str, input_text: str) -> None:
     """Checks hostname for forbidden characters or patterns."""
-    invalid_chars: str = SHELL_CHARS + "/" + extra_invalid_chars
+    invalid_chars: str = SHELL_CHARS + "/"
     if host and (host.startswith("-") or ".." in host or any(c.isspace() or c in invalid_chars for c in host)):
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
