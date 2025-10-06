@@ -880,6 +880,21 @@ class TestValidateFilePermissions(unittest.TestCase):
         self.assertIn(f"{expected_mode:03o}", msg)
         self.assertIn("rwx------", msg)  # expected 0o700
 
+    def test_symlink_path_is_rejected(self) -> None:
+        """Validation must not follow symlinks; lstat should reject symlink path.
+
+        Creates a real directory and a symlink pointing to it. Validation on the symlink path must raise, because permissions
+        are checked on the symlink itself (lstat), not on the target.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            real_dir = os.path.join(tmpdir, "real")
+            os.mkdir(real_dir)
+            os.chmod(real_dir, DIR_PERMISSIONS)
+            link_dir = os.path.join(tmpdir, "link")
+            os.symlink(real_dir, link_dir)
+            with self.assertRaises(SystemExit):
+                validate_file_permissions(link_dir, mode=DIR_PERMISSIONS)
+
 
 #############################################################################
 class TestFindMatch(unittest.TestCase):

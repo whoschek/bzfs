@@ -702,7 +702,7 @@ def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentPars
 
 def validate_file_permissions(path: str, mode: int) -> None:
     """Verify permissions and that ownership is current effective UID."""
-    stats: os.stat_result = os.stat(path)
+    stats: os.stat_result = os.stat(path, follow_symlinks=False)
     st_uid: int = stats.st_uid
     if st_uid != os.geteuid():  # verify ownership is current effective UID
         die(f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}")
