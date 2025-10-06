@@ -47,8 +47,8 @@ repos:
           --no-sort-keys,               # Preserve original key order
           --top-keys="",                # No keys forced to the top
         ]
+      - id: check-shebang-scripts-are-executable
       - id: check-symlinks              # Check for symlinks that do not point to anything
-      - id: check-case-conflict         # Prevent filename clashes on case-insensitive filesystems
       - id: mixed-line-ending
         args: [--fix=lf]                # Replace line endings with linefeed
       - id: trailing-whitespace         # Remove whitespace from the end of lines
@@ -82,7 +82,7 @@ repos:
         additional_dependencies: [tomli]
         # config options like `wrap-summaries` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.3
+    rev: v0.14.0
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
@@ -105,7 +105,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.35.0']
+        additional_dependencies: ['pyrefly==0.36.2']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.18.2
