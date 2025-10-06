@@ -125,31 +125,44 @@ def parallel_iterator(
         process_ssh_result(result)
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        iterator: Iterator[Future[T]] = itertools.chain.from_iterable(iterator_builder(executor))
-        # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
-        fifo_buffer: deque[Future[T]] = deque(itertools.islice(iterator, max_workers))
-        sentinel: Future[T] = Future()
-        next_future: Future[T]
+        yield from parallel_iterator_results(
+            iterator=itertools.chain.from_iterable(iterator_builder(executor)),
+            max_workers=max_workers,
+            ordered=ordered,
+        )
 
-        if ordered:
-            while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
-                curr_future: Future[T] = fifo_buffer.popleft()
+
+def parallel_iterator_results(
+    iterator: Iterator[Future[T]],
+    max_workers: int,
+    ordered: bool,
+) -> Iterator[T]:
+    """Yield results from an iterator of Future[T] using sliding-window parallelism with optional ordered delivery."""
+    assert max_workers > 0
+    # Materialize the next N=max_workers futures into a buffer, causing submission + parallel execution of their CLI calls
+    fifo_buffer: deque[Future[T]] = deque(itertools.islice(iterator, max_workers))
+    sentinel: Future[T] = Future()
+    next_future: Future[T]
+
+    if ordered:
+        while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
+            curr_future: Future[T] = fifo_buffer.popleft()
+            next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
+            if next_future is not sentinel:
+                fifo_buffer.append(next_future)
+            yield curr_future.result()  # blocks until CLI returns
+    else:
+        todo_futures: set[Future[T]] = set(fifo_buffer)
+        fifo_buffer.clear()  # help gc
+        done_futures: set[Future[T]]
+        while todo_futures:
+            done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
+            while done_futures:  # submit the next CLI call whenever a CLI call returns
                 next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
                 if next_future is not sentinel:
-                    fifo_buffer.append(next_future)
-                yield curr_future.result()  # blocks until CLI returns
-        else:
-            todo_futures: set[Future[T]] = set(fifo_buffer)
-            fifo_buffer.clear()  # help gc
-            done_futures: set[Future[T]]
-            while todo_futures:
-                done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
-                while done_futures:  # submit the next CLI call whenever a CLI call returns
-                    next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
-                    if next_future is not sentinel:
-                        todo_futures.add(next_future)
-                    yield done_futures.pop().result()  # does not block as processing has already completed
-        assert next(iterator, sentinel) is sentinel
+                    todo_futures.add(next_future)
+                yield done_futures.pop().result()  # does not block as processing has already completed
+    assert next(iterator, sentinel) is sentinel
 
 
 K = TypeVar("K")

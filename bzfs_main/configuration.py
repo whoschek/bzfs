@@ -154,7 +154,7 @@ class LogParams:
             prefix=f"{self.log_file_prefix}{self.timestamp}{self.log_file_infix}{self.log_file_suffix}-",
             dir=self.log_dir,
         )
-        os.chmod(fd, mode=FILE_PERMISSIONS, follow_symlinks=False)
+        os.fchmod(fd, FILE_PERMISSIONS)
         os.close(fd)
         self.pv_log_file: str = self.log_file[0 : -len(".log")] + ".pv"
         self.last_modified_cache_dir: Final[str] = os.path.join(log_parent_dir, ".cache", "mods")
