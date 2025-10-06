@@ -160,13 +160,14 @@ Before committing any changes, you **must** follow this exact sequence:
   consequences to users in specific **realistic use cases**, and associated impact severity (`High`, `Medium`, `Low`).
   Describe known work-arounds and outline potential solutions. Finally, estimate the priority aka urgency of producing a
   fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
-- **Collect Context:** Also collect other information that assists a successful bug diagnosis, for example usage
-  pattern, env/config files, log files, version of software components, etc.
+- **Collect Context:** Also collect other information that assists a successful bug diagnosis, for example error
+  messages, usage pattern, env/config files, log files, version of software components, etc.
 
 ## How to Find and Fix Bugs
 
-- **Analyze:** If you are tasked to identify or fix a bug, collect, combine and analyze related issues, bug reports and
-  external data. Think harder to understand *why* the bug occurs, not just *what* it does.
+- **Analyze:** If you are tasked to identify or fix a bug, collect, combine and analyze related issues, bug reports,
+  recent changes, git diffs, and external data. Think harder to understand *why* the bug occurs, not just *what* it
+  does.
 - **Analyze Non-trivial Bugs:** Before claiming a non-trivial bug, meticulously cross-check and validate it against the
   existing unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug"
   covered by a passing test indicates a flawed analysis.
@@ -270,6 +271,6 @@ If asked to improve coverage:
 - Never run `rm -rf`.
 - Never run `git reset`.
 - Never operate on the `.git` directory with anything other than the `git` CLI.
-- Never delete, rename or push a branch, tag, or release unless the user explicitly requests it.
+- Never delete, rename or push a branch, tag or release unless the user explicitly requests it.
 - Never upload anything unless the user explicitly requests it.
 - Never download anything or install any software unless the user explicitly requests it.
