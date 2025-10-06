@@ -20,6 +20,9 @@ from __future__ import (
 import argparse
 import dataclasses
 import itertools
+from typing import (
+    Final,
+)
 
 from bzfs_main.argparse_actions import (
     CheckPercentRange,
@@ -52,16 +55,16 @@ from bzfs_main.utils import (
 )
 
 # constants:
-__version__: str = "1.13.0.dev0"
-PROG_AUTHOR: str = "Wolfgang Hoschek"
-EXCLUDE_DATASET_REGEXES_DEFAULT: str = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
-LOG_DIR_DEFAULT: str = PROG_NAME + "-logs"
-SKIP_ON_ERROR_DEFAULT: str = "dataset"
-CMP_CHOICES_ITEMS: tuple[str, str, str] = ("src", "dst", "all")
-ZFS_RECV_O: str = "zfs_recv_o"
-ZFS_RECV_X: str = "zfs_recv_x"
-ZFS_RECV_GROUPS: dict[str, str] = {ZFS_RECV_O: "-o", ZFS_RECV_X: "-x", "zfs_set": ""}
-ZFS_RECV_O_INCLUDE_REGEX_DEFAULT: str = "|".join(
+__version__: Final[str] = "1.13.0.dev0"
+PROG_AUTHOR: Final[str] = "Wolfgang Hoschek"
+EXCLUDE_DATASET_REGEXES_DEFAULT: Final[str] = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
+LOG_DIR_DEFAULT: Final[str] = PROG_NAME + "-logs"
+SKIP_ON_ERROR_DEFAULT: Final[str] = "dataset"
+CMP_CHOICES_ITEMS: Final[tuple[str, str, str]] = ("src", "dst", "all")
+ZFS_RECV_O: Final[str] = "zfs_recv_o"
+ZFS_RECV_X: Final[str] = "zfs_recv_x"
+ZFS_RECV_GROUPS: Final[dict[str, str]] = {ZFS_RECV_O: "-o", ZFS_RECV_X: "-x", "zfs_set": ""}
+ZFS_RECV_O_INCLUDE_REGEX_DEFAULT: Final[str] = "|".join(
     [
         "aclinherit",
         "aclmode",

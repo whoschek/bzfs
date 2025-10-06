@@ -37,6 +37,7 @@ from subprocess import (
 )
 from typing import (
     TYPE_CHECKING,
+    Final,
 )
 
 from bzfs_main.argparse_actions import (
@@ -109,8 +110,8 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 
 
 # constants:
-INJECT_DST_PIPE_FAIL_KBYTES: int = 400  # for testing only
-RIGHT_JUST: int = 7
+INJECT_DST_PIPE_FAIL_KBYTES: Final[int] = 400  # for testing only
+RIGHT_JUST: Final[int] = 7
 
 
 def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
@@ -853,7 +854,7 @@ def _decompress_cmd(p: Params, loc: str, size_estimate_bytes: int) -> str:
         return "cat"
 
 
-WORKER_THREAD_NUMBER_REGEX: re.Pattern = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
+WORKER_THREAD_NUMBER_REGEX: Final[re.Pattern[str]] = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
 
 
 def _pv_cmd(
@@ -1215,9 +1216,9 @@ def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send
         raise RetryableError("dst currently busy with zfs mutation op") from e
 
 
-ZFS_DATASET_BUSY_PREFIX: str = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
-ZFS_DATASET_BUSY_IF_MODS: re.Pattern[str] = re.compile((ZFS_DATASET_BUSY_PREFIX + ") .*").replace("(", "(?:"))
-ZFS_DATASET_BUSY_IF_SEND: re.Pattern[str] = re.compile((ZFS_DATASET_BUSY_PREFIX + "|send) .*").replace("(", "(?:"))
+ZFS_DATASET_BUSY_PREFIX: Final[str] = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
+ZFS_DATASET_BUSY_IF_MODS: Final[re.Pattern[str]] = re.compile((ZFS_DATASET_BUSY_PREFIX + ") .*").replace("(", "(?:"))
+ZFS_DATASET_BUSY_IF_SEND: Final[re.Pattern[str]] = re.compile((ZFS_DATASET_BUSY_PREFIX + "|send) .*").replace("(", "(?:"))
 
 
 def _is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> bool:

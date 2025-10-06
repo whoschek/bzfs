@@ -29,6 +29,7 @@ from datetime import (
 )
 from typing import (
     TYPE_CHECKING,
+    Final,
     Optional,
     Union,
 )
@@ -57,8 +58,8 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     )
 
 # constants:
-SNAPSHOT_REGEX_FILTER_NAME: str = "snapshot_regex"
-SNAPSHOT_REGEX_FILTER_NAMES: frozenset[str] = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
+SNAPSHOT_REGEX_FILTER_NAME: Final[str] = "snapshot_regex"
+SNAPSHOT_REGEX_FILTER_NAMES: Final[frozenset[str]] = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
 
 
 UnixTimeRange = Optional[tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias

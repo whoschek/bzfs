@@ -134,6 +134,7 @@ from subprocess import (
 )
 from typing import (
     TYPE_CHECKING,
+    Final,
 )
 
 from bzfs_main.connection import (
@@ -160,9 +161,9 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     )
 
 # constants:
-DATASET_CACHE_FILE_PREFIX: str = "="
-REPLICATION_CACHE_FILE_PREFIX: str = "=="
-MONITOR_CACHE_FILE_PREFIX: str = "==="
+DATASET_CACHE_FILE_PREFIX: Final[str] = "="
+REPLICATION_CACHE_FILE_PREFIX: Final[str] = "=="
+MONITOR_CACHE_FILE_PREFIX: Final[str] = "==="
 
 
 #############################################################################
@@ -171,7 +172,7 @@ class SnapshotCache:
 
     def __init__(self, job: Job) -> None:
         # immutable variables:
-        self.job: Job = job
+        self.job: Final[Job] = job
 
     def get_snapshots_changed(self, path: str) -> int:
         """Returns numeric timestamp from cached snapshots-changed file."""

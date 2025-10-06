@@ -85,22 +85,22 @@ from zoneinfo import (
 )
 
 # constants:
-PROG_NAME: str = "bzfs"
-ENV_VAR_PREFIX: str = PROG_NAME + "_"
-DIE_STATUS: int = 3
-DESCENDANTS_RE_SUFFIX: str = r"(?:/.*)?"  # also match descendants of a matching dataset
-LOG_STDERR: int = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
-LOG_STDOUT: int = (LOG_STDERR + logging.INFO) // 2  # custom log level is halfway in between
-LOG_DEBUG: int = logging.DEBUG
-LOG_TRACE: int = logging.DEBUG // 2  # custom log level is halfway in between
-SNAPSHOT_FILTERS_VAR: str = "snapshot_filters_var"
-YEAR_WITH_FOUR_DIGITS_REGEX: re.Pattern[str] = re.compile(r"[1-9][0-9][0-9][0-9]")  # empty shall not match non-empty target
-UNIX_TIME_INFINITY_SECS: int = 2**64  # billions of years and to be extra safe, larger than the largest ZFS GUID
-DONT_SKIP_DATASET: str = ""
-SHELL_CHARS: str = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
-FILE_PERMISSIONS: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
-DIR_PERMISSIONS: int = stat.S_IRWXU  # rwx------ (user read + write + execute)
-UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH: int = 107 if platform.system() == "Linux" else 103  # see Google for 'sun_path'
+PROG_NAME: Final[str] = "bzfs"
+ENV_VAR_PREFIX: Final[str] = PROG_NAME + "_"
+DIE_STATUS: Final[int] = 3
+DESCENDANTS_RE_SUFFIX: Final[str] = r"(?:/.*)?"  # also match descendants of a matching dataset
+LOG_STDERR: Final[int] = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
+LOG_STDOUT: Final[int] = (LOG_STDERR + logging.INFO) // 2  # custom log level is halfway in between
+LOG_DEBUG: Final[int] = logging.DEBUG
+LOG_TRACE: Final[int] = logging.DEBUG // 2  # custom log level is halfway in between
+SNAPSHOT_FILTERS_VAR: Final[str] = "snapshot_filters_var"
+YEAR_WITH_FOUR_DIGITS_REGEX: Final[re.Pattern] = re.compile(r"[1-9][0-9][0-9][0-9]")  # empty shall not match nonempty target
+UNIX_TIME_INFINITY_SECS: Final[int] = 2**64  # billions of years and to be extra safe, larger than the largest ZFS GUID
+DONT_SKIP_DATASET: Final[str] = ""
+SHELL_CHARS: Final[str] = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
+FILE_PERMISSIONS: Final[int] = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
+DIR_PERMISSIONS: Final[int] = stat.S_IRWXU  # rwx------ (user read + write + execute)
+UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH: Final[int] = 107 if platform.system() == "Linux" else 103  # see Google for 'sun_path'
 
 RegexList = list[tuple[re.Pattern, bool]]  # Type alias
 
@@ -164,7 +164,7 @@ def tail(file: str, n: int, errors: str | None = None) -> Sequence[str]:
         return deque(fd, maxlen=n)
 
 
-NAMED_CAPTURING_GROUP: re.Pattern[str] = re.compile(r"^" + re.escape("(?P<") + r"[^\W\d]\w*" + re.escape(">"))
+NAMED_CAPTURING_GROUP: Final[re.Pattern[str]] = re.compile(r"^" + re.escape("(?P<") + r"[^\W\d]\w*" + re.escape(">"))
 
 
 def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
@@ -792,7 +792,7 @@ class SnapshotPeriods:  # thread-safe
 
     def __init__(self) -> None:
         """Initialize lookup tables of suffixes and corresponding millis."""
-        self.suffix_milliseconds: Final = {
+        self.suffix_milliseconds: Final[dict[str, int]] = {
             "yearly": 365 * 86400 * 1000,
             "monthly": round(30.5 * 86400 * 1000),
             "weekly": 7 * 86400 * 1000,
@@ -802,7 +802,7 @@ class SnapshotPeriods:  # thread-safe
             "secondly": 1000,
             "millisecondly": 1,
         }
-        self.period_labels: Final = {
+        self.period_labels: Final[dict[str, str]] = {
             "yearly": "years",
             "monthly": "months",
             "weekly": "weeks",
@@ -812,8 +812,8 @@ class SnapshotPeriods:  # thread-safe
             "secondly": "seconds",
             "millisecondly": "milliseconds",
         }
-        self._suffix_regex0: Final = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
-        self._suffix_regex1: Final = re.compile("_" + self._suffix_regex0.pattern)
+        self._suffix_regex0: Final[re.Pattern] = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
+        self._suffix_regex1: Final[re.Pattern] = re.compile("_" + self._suffix_regex0.pattern)
 
     def suffix_to_duration0(self, suffix: str) -> tuple[int, str]:
         """Parse suffix like '10minutely' to (10, 'minutely')."""
@@ -869,8 +869,8 @@ class SmallPriorityQueue(Generic[T]):
 
     def __init__(self, reverse: bool = False) -> None:
         """Creates an empty queue; sort order flips when ``reverse`` is True."""
-        self._lst: list[T] = []
-        self._reverse: bool = reverse
+        self._lst: Final[list[T]] = []
+        self._reverse: Final[bool] = reverse
 
     def clear(self) -> None:
         """Removes all elements from the queue."""
@@ -921,7 +921,7 @@ class SortedInterner(Generic[T]):
     """Same as sys.intern() except that it isn't global and that it assumes the input list is sorted (for binary search)."""
 
     def __init__(self, sorted_list: list[T]) -> None:
-        self._lst: list[T] = sorted_list
+        self._lst: Final[list[T]] = sorted_list
 
     def interned(self, element: T) -> T:
         """Returns the interned (aka deduped) item if an equal item is contained, else returns the non-interned item."""
@@ -949,7 +949,7 @@ class Interner(Generic[S]):
     """Same as sys.intern() except that it isn't global and can also be used for types other than str."""
 
     def __init__(self, items: Iterable[S] = frozenset()) -> None:
-        self._items: dict[S, S] = {v: v for v in items}
+        self._items: Final[dict[S, S]] = {v: v for v in items}
 
     def intern(self, item: S) -> S:
         """Interns the given item."""
@@ -969,7 +969,7 @@ class SynchronizedBool:
 
     def __init__(self, val: bool) -> None:
         assert isinstance(val, bool)
-        self._lock: threading.Lock = threading.Lock()
+        self._lock: Final[threading.Lock] = threading.Lock()
         self._value: bool = val
 
     @property
@@ -1019,8 +1019,8 @@ class SynchronizedDict(Generic[K, V]):
 
     def __init__(self, val: dict[K, V]) -> None:
         assert isinstance(val, dict)
-        self._lock: threading.Lock = threading.Lock()
-        self._dict: dict[K, V] = val
+        self._lock: Final[threading.Lock] = threading.Lock()
+        self._dict: Final[dict[K, V]] = val
 
     def __getitem__(self, key: K) -> V:
         with self._lock:
@@ -1077,8 +1077,8 @@ class InterruptibleSleep:
 
     def __init__(self, lock: threading.Lock | None = None) -> None:
         self._is_stopping: bool = False
-        self._lock: threading.Lock = lock if lock is not None else threading.Lock()
-        self._condition: threading.Condition = threading.Condition(self._lock)
+        self._lock: Final[threading.Lock] = lock if lock is not None else threading.Lock()
+        self._condition: Final[threading.Condition] = threading.Condition(self._lock)
 
     def sleep(self, duration_nanos: int) -> bool:
         """Delays the current thread by the given number of nanoseconds; Returns True if the sleep got interrupted."""
@@ -1140,7 +1140,7 @@ class _XFinally(contextlib.AbstractContextManager):
 
     def __init__(self, cleanup: Callable[[], None]) -> None:
         """Records the callable to run upon exit."""
-        self._cleanup = cleanup  # Zero-argument callable executed after the `with` block exits.
+        self._cleanup: Final = cleanup  # Zero-argument callable executed after the `with` block exits.
 
     def __exit__(
         self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: types.TracebackType | None

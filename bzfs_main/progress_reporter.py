@@ -53,6 +53,7 @@ from pathlib import (
 from typing import (
     IO,
     Any,
+    Final,
     NamedTuple,
 )
 
@@ -64,9 +65,11 @@ from bzfs_main.utils import (
 )
 
 # constants
-PV_FILE_THREAD_SEPARATOR: str = "_"
-ARABIC_DECIMAL_SEPARATOR: str = "\u066b"  # "٫"  # noqa: RUF003
-PV_SIZE_TO_BYTES_REGEX: re.Pattern = re.compile(rf"(\d+[.,{ARABIC_DECIMAL_SEPARATOR}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)")
+PV_FILE_THREAD_SEPARATOR: Final[str] = "_"
+ARABIC_DECIMAL_SEPARATOR: Final[str] = "\u066b"  # "٫"  # noqa: RUF003
+PV_SIZE_TO_BYTES_REGEX: Final[re.Pattern[str]] = re.compile(
+    rf"(\d+[.,{ARABIC_DECIMAL_SEPARATOR}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)"
+)
 
 
 #############################################################################
@@ -101,19 +104,19 @@ class ProgressReporter:
     ) -> None:
         """Creates a reporter configured for ``pv`` log parsing."""
         # immutable variables:
-        self._log: Logger = log
-        self._pv_program_opts: list[str] = pv_program_opts
-        self._use_select: bool = use_select
-        self._progress_update_intervals: tuple[float, float] | None = progress_update_intervals
+        self._log: Final[Logger] = log
+        self._pv_program_opts: Final[list[str]] = pv_program_opts
+        self._use_select: Final[bool] = use_select
+        self._progress_update_intervals: Final[tuple[float, float] | None] = progress_update_intervals
         self._inject_error: bool = fail  # for testing only
 
         # mutable variables:
         self._thread: threading.Thread | None = None
         self._exception: BaseException | None = None
-        self._lock: threading.Lock = threading.Lock()
-        self._sleeper: InterruptibleSleep = InterruptibleSleep(self._lock)  # sleeper shares lock with reporter
+        self._lock: Final[threading.Lock] = threading.Lock()
+        self._sleeper: Final[InterruptibleSleep] = InterruptibleSleep(self._lock)  # sleeper shares lock with reporter
         self._file_name_queue: set[str] = set()
-        self._file_name_set: set[str] = set()
+        self._file_name_set: Final[set[str]] = set()
         self._is_stopping = False
         self._states: list[State] = [State.IS_RESETTING]
 

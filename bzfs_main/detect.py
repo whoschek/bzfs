@@ -35,6 +35,7 @@ from subprocess import (
 )
 from typing import (
     TYPE_CHECKING,
+    Final,
 )
 
 from bzfs_main.connection import (
@@ -62,10 +63,10 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     )
 
 # constants:
-DISABLE_PRG: str = "-"
-DUMMY_DATASET: str = "dummy"
-ZFS_VERSION_IS_AT_LEAST_2_1_0: str = "zfs>=2.1.0"
-ZFS_VERSION_IS_AT_LEAST_2_2_0: str = "zfs>=2.2.0"
+DISABLE_PRG: Final[str] = "-"
+DUMMY_DATASET: Final[str] = "dummy"
+ZFS_VERSION_IS_AT_LEAST_2_1_0: Final[str] = "zfs>=2.1.0"
+ZFS_VERSION_IS_AT_LEAST_2_2_0: Final[str] = "zfs>=2.2.0"
 
 
 #############################################################################

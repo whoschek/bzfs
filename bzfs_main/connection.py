@@ -42,6 +42,7 @@ from subprocess import (
 )
 from typing import (
     TYPE_CHECKING,
+    Final,
 )
 
 from bzfs_main.connection_lease import (
@@ -72,8 +73,8 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     )
 
 # constants:
-SHARED: str = "shared"
-DEDICATED: str = "dedicated"
+SHARED: Final[str] = "shared"
+DEDICATED: Final[str] = "dedicated"
 
 
 def run_ssh_command(
@@ -247,25 +248,26 @@ class Connection:
     ) -> None:
         assert pool_name
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
-        self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
+        self.capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
         self.free: int = max_concurrent_ssh_sessions_per_tcp_connection
         self.last_modified: int = 0  # monotonically increasing
-        self.cid: int = cid
+        self.cid: Final[int] = cid
         self.last_refresh_time: int = 0
-        self.lock: threading.Lock = threading.Lock()
-        self.reuse_ssh_connection: bool = remote.reuse_ssh_connection
-        self.connection_lease: ConnectionLease | None = None
+        self.lock: Final[threading.Lock] = threading.Lock()
+        self.reuse_ssh_connection: Final[bool] = remote.reuse_ssh_connection
+        connection_lease: ConnectionLease | None = None
         if remote.ssh_user_host and remote.reuse_ssh_connection and not remote.ssh_exit_on_shutdown:
-            self.connection_lease = ConnectionLeaseManager(
+            connection_lease = ConnectionLeaseManager(
                 root_dir=remote.ssh_socket_dir,
                 namespace=f"{remote.cache_namespace()}#{pool_name}",
                 ssh_control_persist_secs=max(90 * 60, 2 * remote.ssh_control_persist_secs + 2),
                 log=remote.params.log,
             ).acquire()
-        self.ssh_cmd: list[str] = remote.local_ssh_command(
+        self.connection_lease: Final[ConnectionLease | None] = connection_lease
+        self.ssh_cmd: Final[list[str]] = remote.local_ssh_command(
             None if self.connection_lease is None else self.connection_lease.socket_path
         )
-        self.ssh_cmd_quoted: list[str] = [shlex.quote(item) for item in self.ssh_cmd]
+        self.ssh_cmd_quoted: Final[list[str]] = [shlex.quote(item) for item in self.ssh_cmd]
 
     def __repr__(self) -> str:
         return str({"free": self.free, "cid": self.cid})
@@ -308,15 +310,15 @@ class ConnectionPool:
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, pool_name: str) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
-        self.remote: Remote = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
-        self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
-        self.pool_name: str = pool_name
-        self.priority_queue: SmallPriorityQueue[Connection] = SmallPriorityQueue(
+        self.remote: Final[Remote] = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
+        self.capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
+        self.pool_name: Final[str] = pool_name
+        self.priority_queue: Final[SmallPriorityQueue[Connection]] = SmallPriorityQueue(
             reverse=True  # sorted by #free slots and last_modified
         )
         self.last_modified: int = 0  # monotonically increasing sequence number
         self.cid: int = 0  # monotonically increasing connection number
-        self._lock: threading.Lock = threading.Lock()
+        self._lock: Final[threading.Lock] = threading.Lock()
 
     @contextlib.contextmanager
     def connection(self) -> Iterator[Connection]:
@@ -382,7 +384,7 @@ class ConnectionPools:
 
     def __init__(self, remote: Remote, capacities: dict[str, int]) -> None:
         """Creates one connection pool per name with the given capacities."""
-        self.pools: dict[str, ConnectionPool] = {
+        self.pools: Final[dict[str, ConnectionPool]] = {
             name: ConnectionPool(remote, capacity, name) for name, capacity in capacities.items()
         }
 

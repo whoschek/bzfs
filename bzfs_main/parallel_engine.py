@@ -38,6 +38,7 @@ from logging import (
 from typing import (
     Any,
     Callable,
+    Final,
     NamedTuple,
 )
 
@@ -59,7 +60,7 @@ from bzfs_main.utils import (
 )
 
 # constants:
-BARRIER_CHAR: str = "~"
+BARRIER_CHAR: Final[str] = "~"
 
 
 #############################################################################

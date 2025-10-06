@@ -61,6 +61,7 @@ from subprocess import (
 )
 from typing import (
     Any,
+    Final,
     NoReturn,
     TypeVar,
     Union,
@@ -102,10 +103,10 @@ from bzfs_main.utils import (
 from bzfs_main.utils import PROG_NAME as BZFS_PROG_NAME
 
 # constants:
-PROG_NAME: str = "bzfs_jobrunner"
-SRC_MAGIC_SUBSTITUTION_TOKEN: str = "^SRC_HOST"  # noqa: S105
-DST_MAGIC_SUBSTITUTION_TOKEN: str = "^DST_HOST"  # noqa: S105
-SEP: str = ","
+PROG_NAME: Final[str] = "bzfs_jobrunner"
+SRC_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^SRC_HOST"  # noqa: S105
+DST_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^DST_HOST"  # noqa: S105
+SEP: Final[str] = ","
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -1214,14 +1215,14 @@ class Stats:
     """Thread-safe counters summarizing subjob progress."""
 
     def __init__(self) -> None:
-        self.lock: threading.Lock = threading.Lock()
+        self.lock: Final[threading.Lock] = threading.Lock()
         self.jobs_all: int = 0
         self.jobs_started: int = 0
         self.jobs_completed: int = 0
         self.jobs_failed: int = 0
         self.jobs_running: int = 0
         self.sum_elapsed_nanos: int = 0
-        self.started_job_names: set[str] = set()
+        self.started_job_names: Final[set[str]] = set()
 
     def __repr__(self) -> str:
 

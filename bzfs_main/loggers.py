@@ -40,6 +40,7 @@ from typing import (
     IO,
     TYPE_CHECKING,
     Any,
+    Final,
 )
 
 from bzfs_main.utils import (
@@ -141,7 +142,7 @@ def _get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logg
     return log
 
 
-LOG_LEVEL_PREFIXES: dict[int, str] = {
+LOG_LEVEL_PREFIXES: Final[dict[int, str]] = {
     logging.CRITICAL: "[C] CRITICAL:",
     logging.ERROR: "[E] ERROR:",
     logging.WARNING: "[W]",
@@ -387,7 +388,7 @@ class Tee:
     """File-like object that duplicates writes to multiple streams."""
 
     def __init__(self, *files: IO[Any]) -> None:
-        self.files = files
+        self.files: Final = files
 
     def write(self, obj: str) -> None:
         """Write ``obj`` to all target files and flush immediately."""

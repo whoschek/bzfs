@@ -83,6 +83,7 @@ import pathlib
 import random
 import time
 from typing import (
+    Final,
     NamedTuple,
 )
 
@@ -99,11 +100,11 @@ from bzfs_main.utils import (
 )
 
 # constants:
-SOCKETS_DIR: str = "c"
-FREE_DIR: str = "free"
-USED_DIR: str = "used"
-SOCKET_PREFIX: str = "s"
-NAMESPACE_DIR_LENGTH: int = 43  # 43 Base64 chars contain the entire SHA-256 of the SSH endpoint
+SOCKETS_DIR: Final[str] = "c"
+FREE_DIR: Final[str] = "free"
+USED_DIR: Final[str] = "used"
+SOCKET_PREFIX: Final[str] = "s"
+NAMESPACE_DIR_LENGTH: Final[int] = 43  # 43 Base64 chars contain the entire SHA-256 of the SSH endpoint
 
 
 #############################################################################
@@ -171,16 +172,16 @@ class ConnectionLeaseManager:
         assert root_dir
         assert namespace
         assert ssh_control_persist_secs >= 1
-        self._ssh_control_persist_secs: int = ssh_control_persist_secs
-        self._log: logging.Logger = log
+        self._ssh_control_persist_secs: Final[int] = ssh_control_persist_secs
+        self._log: Final[logging.Logger] = log
         ns: str = sha256_urlsafe_base64(namespace, padding=False)
         assert NAMESPACE_DIR_LENGTH >= 22  # a minimum degree of safety: 22 URL-safe Base64 chars = 132 bits of entropy
         ns = ns[0:NAMESPACE_DIR_LENGTH]
-        namespace_dir: str = os.path.join(root_dir, ns)
-        self._sockets_dir: str = os.path.join(namespace_dir, SOCKETS_DIR)
-        self._free_dir: str = os.path.join(namespace_dir, FREE_DIR)
-        self._used_dir: str = os.path.join(namespace_dir, USED_DIR)
-        self._open_flags: int = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+        namespace_dir: Final[str] = os.path.join(root_dir, ns)
+        self._sockets_dir: Final[str] = os.path.join(namespace_dir, SOCKETS_DIR)
+        self._free_dir: Final[str] = os.path.join(namespace_dir, FREE_DIR)
+        self._used_dir: Final[str] = os.path.join(namespace_dir, USED_DIR)
+        self._open_flags: Final[int] = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
         os.makedirs(root_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("connection lease root_dir ", root_dir)
         validate_file_permissions(root_dir, mode=DIR_PERMISSIONS)

@@ -33,16 +33,19 @@ from datetime import (
     datetime,
     timedelta,
 )
+from typing import (
+    Final,
+)
 
 # constants:
-METADATA_MONTH = {"min": 1, "max": 12, "help": "The month within a year"}
-METADATA_WEEKDAY = {"min": 0, "max": 6, "help": "The weekday within a week: 0=Sunday, 1=Monday, ..., 6=Saturday"}
-METADATA_DAY = {"min": 1, "max": 31, "help": "The day within a month"}
-METADATA_HOUR = {"min": 0, "max": 23, "help": "The hour within a day"}
-METADATA_MINUTE = {"min": 0, "max": 59, "help": "The minute within an hour"}
-METADATA_SECOND = {"min": 0, "max": 59, "help": "The second within a minute"}
-METADATA_MILLISECOND = {"min": 0, "max": 999, "help": "The millisecond within a second"}
-METADATA_MICROSECOND = {"min": 0, "max": 999, "help": "The microsecond within a millisecond"}
+METADATA_MONTH: Final = {"min": 1, "max": 12, "help": "The month within a year"}
+METADATA_WEEKDAY: Final = {"min": 0, "max": 6, "help": "The weekday within a week: 0=Sunday, 1=Monday, ..., 6=Saturday"}
+METADATA_DAY: Final = {"min": 1, "max": 31, "help": "The day within a month"}
+METADATA_HOUR: Final = {"min": 0, "max": 23, "help": "The hour within a day"}
+METADATA_MINUTE: Final = {"min": 0, "max": 59, "help": "The minute within an hour"}
+METADATA_SECOND: Final = {"min": 0, "max": 59, "help": "The second within a minute"}
+METADATA_MILLISECOND: Final = {"min": 0, "max": 999, "help": "The millisecond within a second"}
+METADATA_MICROSECOND: Final = {"min": 0, "max": 999, "help": "The microsecond within a millisecond"}
 
 
 @dataclass(frozen=True)

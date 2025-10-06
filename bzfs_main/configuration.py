@@ -43,6 +43,7 @@ from logging import (
 )
 from typing import (
     TYPE_CHECKING,
+    Final,
     Literal,
     NamedTuple,
     cast,
@@ -119,33 +120,35 @@ class LogParams:
         """Reads from ArgumentParser via args."""
         # immutable variables:
         if args.quiet:
-            self.log_level: str = "ERROR"
+            log_level: str = "ERROR"
         elif args.verbose >= 2:
-            self.log_level = "TRACE"
+            log_level = "TRACE"
         elif args.verbose >= 1:
-            self.log_level = "DEBUG"
+            log_level = "DEBUG"
         else:
-            self.log_level = "INFO"
-        self.log_config_file: str = args.log_config_file
+            log_level = "INFO"
+        self.log_level: Final[str] = log_level
+        self.log_config_file: Final[str] = args.log_config_file
         if self.log_config_file and self.log_config_file.startswith("+"):
             validate_no_argument_file(self.log_config_file, args, err_prefix="--log-config-file: ")
-        self.log_config_vars: dict[str, str] = dict(var.split(":", 1) for var in args.log_config_var)
-        self.timestamp: str = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
-        self.home_dir: str = get_home_directory()
-        log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)
+        self.log_config_vars: Final[dict[str, str]] = dict(var.split(":", 1) for var in args.log_config_var)
+        self.timestamp: Final[str] = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
+        self.home_dir: Final[str] = get_home_directory()
+        log_parent_dir: Final[str] = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)
         if LOG_DIR_DEFAULT not in os.path.basename(log_parent_dir):
             die(f"Basename of --log-dir must contain the substring '{LOG_DIR_DEFAULT}', but got: {log_parent_dir}")
         sep: str = "_" if args.log_subdir == "daily" else ":"
         timestamp: str = self.timestamp
         subdir: str = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
-        self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
+        # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
+        self.log_dir: Final[str] = os.path.join(log_parent_dir, subdir)
         os.makedirs(log_parent_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--log-dir ", log_parent_dir)
         os.makedirs(self.log_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--log-dir subdir ", self.log_dir)
-        self.log_file_prefix: str = args.log_file_prefix
-        self.log_file_infix: str = args.log_file_infix
-        self.log_file_suffix: str = args.log_file_suffix
+        self.log_file_prefix: Final[str] = args.log_file_prefix
+        self.log_file_infix: Final[str] = args.log_file_infix
+        self.log_file_suffix: Final[str] = args.log_file_suffix
         fd, self.log_file = tempfile.mkstemp(
             suffix=".log",
             prefix=f"{self.log_file_prefix}{self.timestamp}{self.log_file_infix}{self.log_file_suffix}-",
@@ -154,7 +157,7 @@ class LogParams:
         os.chmod(fd, mode=FILE_PERMISSIONS, follow_symlinks=False)
         os.close(fd)
         self.pv_log_file: str = self.log_file[0 : -len(".log")] + ".pv"
-        self.last_modified_cache_dir: str = os.path.join(log_parent_dir, ".cache", "mods")
+        self.last_modified_cache_dir: Final[str] = os.path.join(log_parent_dir, ".cache", "mods")
         os.makedirs(os.path.dirname(self.last_modified_cache_dir), mode=DIR_PERMISSIONS, exist_ok=True)
 
         # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.
@@ -197,28 +200,28 @@ class Params:
         assert isinstance(sys_argv, list)
         assert log_params is not None
         assert log is not None
-        self.args: argparse.Namespace = args
-        self.sys_argv: list[str] = sys_argv
-        self.log_params: LogParams = log_params
-        self.log: Logger = log
-        self.inject_params: dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
-        self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
-        self.two_or_more_spaces_regex: re.Pattern = re.compile(r"  +")
+        self.args: Final[argparse.Namespace] = args
+        self.sys_argv: Final[list[str]] = sys_argv
+        self.log_params: Final[LogParams] = log_params
+        self.log: Final[Logger] = log
+        self.inject_params: Final[dict[str, bool]] = inject_params if inject_params is not None else {}  # for testing only
+        self.one_or_more_whitespace_regex: Final[re.Pattern[str]] = re.compile(r"\s+")
+        self.two_or_more_spaces_regex: Final[re.Pattern[str]] = re.compile(r"  +")
         self._unset_matching_env_vars(args)
-        self.xperiods: SnapshotPeriods = SnapshotPeriods()
+        self.xperiods: Final[SnapshotPeriods] = SnapshotPeriods()
 
         assert len(args.root_dataset_pairs) > 0
-        self.root_dataset_pairs: list[tuple[str, str]] = args.root_dataset_pairs
-        self.recursive: bool = args.recursive
-        self.recursive_flag: str = "-r" if args.recursive else ""
+        self.root_dataset_pairs: Final[list[tuple[str, str]]] = args.root_dataset_pairs
+        self.recursive: Final[bool] = args.recursive
+        self.recursive_flag: Final[str] = "-r" if args.recursive else ""
 
-        self.dry_run: bool = args.dryrun is not None
-        self.dry_run_recv: str = "-n" if self.dry_run else ""
-        self.dry_run_destroy: str = self.dry_run_recv
-        self.dry_run_no_send: bool = args.dryrun == "send"
-        self.verbose_zfs: bool = args.verbose >= 2
-        self.verbose_destroy: str = "" if args.quiet else "-v"
-        self.quiet: bool = args.quiet
+        self.dry_run: Final[bool] = args.dryrun is not None
+        self.dry_run_recv: Final[str] = "-n" if self.dry_run else ""
+        self.dry_run_destroy: Final[str] = self.dry_run_recv
+        self.dry_run_no_send: Final[bool] = args.dryrun == "send"
+        self.verbose_zfs: Final[bool] = args.verbose >= 2
+        self.verbose_destroy: Final[str] = "" if args.quiet else "-v"
+        self.quiet: Final[bool] = args.quiet
 
         self.zfs_send_program_opts: list[str] = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
         zfs_recv_program_opts: list[str] = self.split_args(args.zfs_recv_program_opts)
@@ -226,106 +229,108 @@ class Params:
             zfs_recv_program_opts.append(self.validate_arg_str(extra_opt, allow_all=True))
         preserve_properties = [validate_property_name(name, "--preserve-properties") for name in args.preserve_properties]
         zfs_recv_program_opts, zfs_recv_x_names = self._fix_recv_opts(zfs_recv_program_opts, frozenset(preserve_properties))
-        self.zfs_recv_program_opts: list[str] = zfs_recv_program_opts
+        self.zfs_recv_program_opts: Final[list[str]] = zfs_recv_program_opts
         self.zfs_recv_x_names: list[str] = zfs_recv_x_names
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
         # zfs_full_recv_opts: dataset-specific dynamic -o/-x property options are computed later per dataset in
         # replication._add_recv_property_options():
-        self.zfs_full_recv_opts: list[str] = self.zfs_recv_program_opts.copy()
+        self.zfs_full_recv_opts: Final[list[str]] = self.zfs_recv_program_opts.copy()
         cpconfigs = [CopyPropertiesConfig(group, flag, args, self) for group, flag in ZFS_RECV_GROUPS.items()]
         self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
 
-        self.force_rollback_to_latest_snapshot: bool = args.force_rollback_to_latest_snapshot
+        self.force_rollback_to_latest_snapshot: Final[bool] = args.force_rollback_to_latest_snapshot
         self.force_rollback_to_latest_common_snapshot = SynchronizedBool(args.force_rollback_to_latest_common_snapshot)
-        self.force: SynchronizedBool = SynchronizedBool(args.force)
-        self.force_once: bool = args.force_once
-        self.force_unmount: str = "-f" if args.force_unmount else ""
+        self.force: Final[SynchronizedBool] = SynchronizedBool(args.force)
+        self.force_once: Final[bool] = args.force_once
+        self.force_unmount: Final[str] = "-f" if args.force_unmount else ""
         force_hard: str = "-R" if args.force_destroy_dependents else ""
-        self.force_hard: str = "-R" if args.force_hard else force_hard  # --force-hard is deprecated
+        self.force_hard: Final[str] = "-R" if args.force_hard else force_hard  # --force-hard is deprecated
 
         self.skip_parent: bool = args.skip_parent
-        self.skip_missing_snapshots: str = args.skip_missing_snapshots
-        self.skip_on_error: str = args.skip_on_error
-        self.retry_policy: RetryPolicy = RetryPolicy(args)
-        self.skip_replication: bool = args.skip_replication
-        self.delete_dst_snapshots: bool = args.delete_dst_snapshots is not None
-        self.delete_dst_bookmarks: bool = args.delete_dst_snapshots == "bookmarks"
+        self.skip_missing_snapshots: Final[str] = args.skip_missing_snapshots
+        self.skip_on_error: Final[str] = args.skip_on_error
+        self.retry_policy: Final[RetryPolicy] = RetryPolicy(args)
+        self.skip_replication: Final[bool] = args.skip_replication
+        self.delete_dst_snapshots: Final[bool] = args.delete_dst_snapshots is not None
+        self.delete_dst_bookmarks: Final[bool] = args.delete_dst_snapshots == "bookmarks"
         self.delete_dst_snapshots_no_crosscheck: bool = args.delete_dst_snapshots_no_crosscheck
-        self.delete_dst_snapshots_except: bool = args.delete_dst_snapshots_except
-        self.delete_dst_datasets: bool = args.delete_dst_datasets
-        self.delete_empty_dst_datasets: bool = args.delete_empty_dst_datasets is not None
+        self.delete_dst_snapshots_except: Final[bool] = args.delete_dst_snapshots_except
+        self.delete_dst_datasets: Final[bool] = args.delete_dst_datasets
+        self.delete_empty_dst_datasets: Final[bool] = args.delete_empty_dst_datasets is not None
         self.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: bool = (
             args.delete_empty_dst_datasets == "snapshots+bookmarks"
         )
         self.compare_snapshot_lists: str = args.compare_snapshot_lists
-        self.daemon_lifetime_nanos: int = 1_000_000 * parse_duration_to_milliseconds(args.daemon_lifetime)
+        self.daemon_lifetime_nanos: Final[int] = 1_000_000 * parse_duration_to_milliseconds(args.daemon_lifetime)
         self.daemon_frequency: str = args.daemon_frequency
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
-        self.no_stream: bool = args.no_stream
-        self.resume_recv: bool = not args.no_resume_recv
-        self.create_bookmarks: str = "none" if args.no_create_bookmark else args.create_bookmarks  # no_create_bookmark depr
-        self.use_bookmark: bool = not args.no_use_bookmark
+        self.no_stream: Final[bool] = args.no_stream
+        self.resume_recv: Final[bool] = not args.no_resume_recv
+        self.create_bookmarks: Final[str] = (
+            "none" if args.no_create_bookmark else args.create_bookmarks
+        )  # no_create_bookmark depr
+        self.use_bookmark: Final[bool] = not args.no_use_bookmark
 
         self.src: Remote = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
-        self.create_src_snapshots_config: CreateSrcSnapshotConfig = CreateSrcSnapshotConfig(args, self)
-        self.monitor_snapshots_config: MonitorSnapshotsConfig = MonitorSnapshotsConfig(args, self)
-        self.is_caching_snapshots: bool = args.cache_snapshots == "true"
+        self.create_src_snapshots_config: Final[CreateSrcSnapshotConfig] = CreateSrcSnapshotConfig(args, self)
+        self.monitor_snapshots_config: Final[MonitorSnapshotsConfig] = MonitorSnapshotsConfig(args, self)
+        self.is_caching_snapshots: Final[bool] = args.cache_snapshots == "true"
 
-        self.compression_program: str = self._program_name(args.compression_program)
-        self.compression_program_opts: list[str] = self.split_args(args.compression_program_opts)
+        self.compression_program: Final[str] = self._program_name(args.compression_program)
+        self.compression_program_opts: Final[list[str]] = self.split_args(args.compression_program_opts)
         for opt in {"-o", "--output-file"}.intersection(self.compression_program_opts):
             die(f"--compression-program-opts: {opt} is disallowed for security reasons.")
-        self.getconf_program: str = self._program_name("getconf")  # print number of CPUs on POSIX
-        self.mbuffer_program: str = self._program_name(args.mbuffer_program)
-        self.mbuffer_program_opts: list[str] = self.split_args(args.mbuffer_program_opts)
+        self.getconf_program: Final[str] = self._program_name("getconf")  # print number of CPUs on POSIX
+        self.mbuffer_program: Final[str] = self._program_name(args.mbuffer_program)
+        self.mbuffer_program_opts: Final[list[str]] = self.split_args(args.mbuffer_program_opts)
         for opt in {"-i", "-I", "-o", "-O", "-l", "-L", "-t", "-T", "-a", "-A"}.intersection(self.mbuffer_program_opts):
             die(f"--mbuffer-program-opts: {opt} is disallowed for security reasons.")
-        self.ps_program: str = self._program_name(args.ps_program)
-        self.pv_program: str = self._program_name(args.pv_program)
-        self.pv_program_opts: list[str] = self.split_args(args.pv_program_opts)
+        self.ps_program: Final[str] = self._program_name(args.ps_program)
+        self.pv_program: Final[str] = self._program_name(args.pv_program)
+        self.pv_program_opts: Final[list[str]] = self.split_args(args.pv_program_opts)
         bad_pv_opts = {"-o", "--output", "-f", "--log-file", "-S", "--stop-at-size", "-Y", "--sync", "-X", "--discard",
                        "-U", "--store-and-forward", "-d", "--watchfd", "-R", "--remote", "-P", "--pidfile"}  # fmt: skip
         for opt in bad_pv_opts.intersection(self.pv_program_opts):
             die(f"--pv-program-opts: {opt} is disallowed for security reasons.")
-        self.isatty: bool = getenv_bool("isatty", True)
+        self.isatty: Final[bool] = getenv_bool("isatty", True)
         if args.bwlimit:
-            self.pv_program_opts += [f"--rate-limit={self.validate_arg_str(args.bwlimit)}"]
-        self.shell_program_local: str = "sh"
+            self.pv_program_opts.extend([f"--rate-limit={self.validate_arg_str(args.bwlimit)}"])
+        self.shell_program_local: Final[str] = "sh"
         self.shell_program: str = self._program_name(args.shell_program)
-        self.ssh_program: str = self._program_name(args.ssh_program)
+        self.ssh_program: Final[str] = self._program_name(args.ssh_program)
         self.sudo_program: str = self._program_name(args.sudo_program)
-        self.uname_program: str = self._program_name("uname")
-        self.zfs_program: str = self._program_name("zfs")
-        self.zpool_program: str = self._program_name(args.zpool_program)
+        self.uname_program: Final[str] = self._program_name("uname")
+        self.zfs_program: Final[str] = self._program_name("zfs")
+        self.zpool_program: Final[str] = self._program_name(args.zpool_program)
 
         # no point creating complex shell pipeline commands for tiny data transfers:
-        self.min_pipe_transfer_size: int = getenv_int("min_pipe_transfer_size", 1024 * 1024)
-        self.max_datasets_per_batch_on_list_snaps: int = getenv_int("max_datasets_per_batch_on_list_snaps", 1024)
+        self.min_pipe_transfer_size: Final[int] = getenv_int("min_pipe_transfer_size", 1024 * 1024)
+        self.max_datasets_per_batch_on_list_snaps: Final[int] = getenv_int("max_datasets_per_batch_on_list_snaps", 1024)
         self.max_datasets_per_minibatch_on_list_snaps: int = getenv_int("max_datasets_per_minibatch_on_list_snaps", -1)
         self.max_snapshots_per_minibatch_on_delete_snaps = getenv_int("max_snapshots_per_minibatch_on_delete_snaps", 2**29)
-        self.dedicated_tcp_connection_per_zfs_send: bool = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
+        self.dedicated_tcp_connection_per_zfs_send: Final[bool] = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
         # threads: with --force-once we intentionally coerce to a single-threaded run to ensure deterministic serial behavior
-        self.threads: tuple[int, bool] = (1, False) if self.force_once else args.threads
+        self.threads: Final[tuple[int, bool]] = (1, False) if self.force_once else args.threads
         timeout_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
         self.timeout_nanos: int | None = timeout_nanos
-        self.no_estimate_send_size: bool = args.no_estimate_send_size
+        self.no_estimate_send_size: Final[bool] = args.no_estimate_send_size
         self.remote_conf_cache_ttl_nanos: int = 1_000_000 * parse_duration_to_milliseconds(args.daemon_remote_conf_cache_ttl)
-        self.terminal_columns: int = (
+        self.terminal_columns: Final[int] = (
             getenv_int("terminal_columns", shutil.get_terminal_size(fallback=(120, 24)).columns)
             if self.isatty and self.pv_program != DISABLE_PRG and not self.quiet
             else 0
         )
 
-        self.os_cpu_count: int | None = os.cpu_count()
-        self.os_getuid: int = os.getuid()
-        self.os_geteuid: int = os.geteuid()
-        self.prog_version: str = __version__
-        self.python_version: str = sys.version
-        self.platform_version: str = platform.version()
-        self.platform_platform: str = platform.platform()
+        self.os_cpu_count: Final[int | None] = os.cpu_count()
+        self.os_getuid: Final[int] = os.getuid()
+        self.os_geteuid: Final[int] = os.geteuid()
+        self.prog_version: Final[str] = __version__
+        self.python_version: Final[str] = sys.version
+        self.platform_version: Final[str] = platform.version()
+        self.platform_platform: Final[str] = platform.platform()
 
         # mutable variables:
         snapshot_filters = args.snapshot_filters_var if hasattr(args, SNAPSHOT_FILTERS_VAR) else [[]]
@@ -465,40 +470,40 @@ class Remote:
         """Reads from ArgumentParser via args."""
         # immutable variables:
         assert loc == "src" or loc == "dst"
-        self.location: str = loc
-        self.params: Params = p
+        self.location: Final[str] = loc
+        self.params: Final[Params] = p
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: int | None = getattr(args, f"ssh_{loc}_port")
-        self.ssh_config_file: str | None = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
+        self.ssh_config_file: Final[str | None] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
         if self.ssh_config_file:
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
         self.ssh_config_file_hash: str = (
             sha256_urlsafe_base64(os.path.abspath(self.ssh_config_file), padding=False) if self.ssh_config_file else ""
         )
-        self.ssh_cipher: str = p.validate_arg_str(args.ssh_cipher)
+        self.ssh_cipher: Final[str] = p.validate_arg_str(args.ssh_cipher)
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
             ["-v"] if args.verbose >= 3 else []
         )
-        self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
-        self.ssh_exit_on_shutdown: bool = args.ssh_exit_on_shutdown
-        self.ssh_control_persist_secs: int = args.ssh_control_persist_secs
-        self.socket_prefix: str = "s"
+        self.max_concurrent_ssh_sessions_per_tcp_connection: Final[int] = args.max_concurrent_ssh_sessions_per_tcp_connection
+        self.ssh_exit_on_shutdown: Final[bool] = args.ssh_exit_on_shutdown
+        self.ssh_control_persist_secs: Final[int] = args.ssh_control_persist_secs
+        self.socket_prefix: Final[str] = "s"
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
             ssh_home_dir: str = os.path.join(get_home_directory(), ".ssh")
             os.makedirs(ssh_home_dir, mode=DIR_PERMISSIONS, exist_ok=True)
-            self.ssh_socket_dir: str = os.path.join(ssh_home_dir, "bzfs")
+            self.ssh_socket_dir: Final[str] = os.path.join(ssh_home_dir, "bzfs")
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             validate_file_permissions(self.ssh_socket_dir, mode=DIR_PERMISSIONS)
-            self.ssh_exit_on_shutdown_socket_dir: str = os.path.join(self.ssh_socket_dir, "x")
+            self.ssh_exit_on_shutdown_socket_dir: Final[str] = os.path.join(self.ssh_socket_dir, "x")
             os.makedirs(self.ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             validate_file_permissions(self.ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS)
             _delete_stale_files(self.ssh_exit_on_shutdown_socket_dir, self.socket_prefix, ssh=True)
-        self.sanitize1_regex: re.Pattern = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
-        self.sanitize2_regex: re.Pattern = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # Remove disallowed chars
+        self.sanitize1_regex: Final[re.Pattern[str]] = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with ~ char
+        self.sanitize2_regex: Final[re.Pattern[str]] = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # remove bad chars
 
         # mutable variables:
         self.root_dataset: str = ""  # deferred until run_main()
@@ -575,17 +580,17 @@ class CopyPropertiesConfig:
         assert group in ZFS_RECV_GROUPS
         # immutable variables:
         grup: str = group
-        self.group: str = group  # one of zfs_recv_o, zfs_recv_x
-        self.flag: str = flag  # one of -o or -x
+        self.group: Final[str] = group  # one of zfs_recv_o, zfs_recv_x
+        self.flag: Final[str] = flag  # one of -o or -x
         sources: str = p.validate_arg_str(getattr(args, f"{grup}_sources"))
-        self.sources: str = ",".join(sorted([s.strip() for s in sources.strip().split(",")]))  # canonicalize
-        self.targets: str = p.validate_arg_str(getattr(args, f"{grup}_targets"))
+        self.sources: Final[str] = ",".join(sorted([s.strip() for s in sources.strip().split(",")]))  # canonicalize
+        self.targets: Final[str] = p.validate_arg_str(getattr(args, f"{grup}_targets"))
         include_regexes: list[str] | None = getattr(args, f"{grup}_include_regex")
         assert ZFS_RECV_O in ZFS_RECV_GROUPS
         if include_regexes is None:
             include_regexes = [ZFS_RECV_O_INCLUDE_REGEX_DEFAULT] if grup == ZFS_RECV_O else []
-        self.include_regexes: RegexList = compile_regexes(include_regexes)
-        self.exclude_regexes: RegexList = compile_regexes(getattr(args, f"{grup}_exclude_regex"))
+        self.include_regexes: Final[RegexList] = compile_regexes(include_regexes)
+        self.exclude_regexes: Final[RegexList] = compile_regexes(getattr(args, f"{grup}_exclude_regex"))
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -635,13 +640,13 @@ class CreateSrcSnapshotConfig:
     def __init__(self, args: argparse.Namespace, p: Params) -> None:
         """Option values for --create-src-snapshots*; reads from ArgumentParser via args."""
         # immutable variables:
-        self.skip_create_src_snapshots: bool = not args.create_src_snapshots
-        self.create_src_snapshots_even_if_not_due: bool = args.create_src_snapshots_even_if_not_due
-        tz_spec: str | None = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
+        self.skip_create_src_snapshots: Final[bool] = not args.create_src_snapshots
+        self.create_src_snapshots_even_if_not_due: Final[bool] = args.create_src_snapshots_even_if_not_due
+        tz_spec: Final[str | None] = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
         self.tz: tzinfo | None = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
-        self.timeformat: str = args.create_src_snapshots_timeformat
-        self.anchors: PeriodAnchors = PeriodAnchors.parse(args)
+        self.timeformat: Final[str] = args.create_src_snapshots_timeformat
+        self.anchors: Final[PeriodAnchors] = PeriodAnchors.parse(args)
 
         # Compute the schedule for upcoming periodic time events (suffix_durations). This event schedule is also used in
         # daemon mode via sleep_until_next_daemon_iteration()
@@ -684,10 +689,10 @@ class CreateSrcSnapshotConfig:
             return duration_milliseconds, suffix
 
         suffixes = sorted(suffixes, key=suffix_key, reverse=True)  # take snapshots for dailies before hourlies, and so on
-        self.suffix_durations: dict[str, tuple[int, str]] = {suffix: suffix_durations[suffix] for suffix in suffixes}  # sort
+        self.suffix_durations: Final[dict[str, tuple[int, str]]] = {sfx: suffix_durations[sfx] for sfx in suffixes}  # sort
         suffix_indexes: dict[str, int] = {suffix: k for k, suffix in enumerate(suffixes)}
         labels.sort(key=lambda label: (suffix_indexes[label.suffix], label))  # take snapshots for dailies before hourlies
-        self._snapshot_labels: list[SnapshotLabel] = labels
+        self._snapshot_labels: Final[list[SnapshotLabel]] = labels
         for label in self.snapshot_labels():
             label.validate_label("--create-src-snapshots-plan ")
 
@@ -734,11 +739,11 @@ class MonitorSnapshotsConfig:
     def __init__(self, args: argparse.Namespace, p: Params) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
-        self.monitor_snapshots: dict = ast.literal_eval(args.monitor_snapshots)
-        self.dont_warn: bool = args.monitor_snapshots_dont_warn
-        self.dont_crit: bool = args.monitor_snapshots_dont_crit
-        self.no_latest_check: bool = args.monitor_snapshots_no_latest_check
-        self.no_oldest_check: bool = args.monitor_snapshots_no_oldest_check
+        self.monitor_snapshots: Final[dict] = ast.literal_eval(args.monitor_snapshots)
+        self.dont_warn: Final[bool] = args.monitor_snapshots_dont_warn
+        self.dont_crit: Final[bool] = args.monitor_snapshots_dont_crit
+        self.no_latest_check: Final[bool] = args.monitor_snapshots_no_latest_check
+        self.no_oldest_check: Final[bool] = args.monitor_snapshots_no_oldest_check
         alerts: list[MonitorSnapshotAlert] = []
         xperiods: SnapshotPeriods = p.xperiods
         for org, target_periods in self.monitor_snapshots.items():
@@ -789,8 +794,8 @@ class MonitorSnapshotsConfig:
             return duration_milliseconds, alert.label
 
         alerts.sort(key=alert_sort_key, reverse=True)  # check snapshots for dailies before hourlies, and so on
-        self.alerts: list[MonitorSnapshotAlert] = alerts
-        self.enable_monitor_snapshots: bool = len(alerts) > 0
+        self.alerts: Final[list[MonitorSnapshotAlert]] = alerts
+        self.enable_monitor_snapshots: Final[bool] = len(alerts) > 0
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -836,7 +841,7 @@ def _fix_send_recv_opts(
     return results, sorted(x_names)
 
 
-SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: re.Pattern[str] = re.compile(r"^[0-9]+")  # see socket_name in local_ssh_command()
+SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: Final[re.Pattern[str]] = re.compile(r"^[0-9]+")  # see local_ssh_command()
 
 
 def _delete_stale_files(

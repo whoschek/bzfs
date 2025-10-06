@@ -35,6 +35,7 @@ from concurrent.futures import (
 )
 from typing import (
     Callable,
+    Final,
     TypeVar,
 )
 
@@ -206,7 +207,7 @@ def get_max_command_line_bytes(os_name: str) -> int:
 
 
 # constants:
-MAX_CMDLINE_BYTES: dict[str, int] = {
+MAX_CMDLINE_BYTES: Final[dict[str, int]] = {
     "Linux": 2 * 1024 * 1024,
     "FreeBSD": 256 * 1024,
     "Darwin": 1 * 1024 * 1024,

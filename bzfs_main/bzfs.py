@@ -78,6 +78,7 @@ from typing import (
     IO,
     Any,
     Callable,
+    Final,
     cast,
 )
 
@@ -199,17 +200,17 @@ from bzfs_main.utils import (
 )
 
 # constants:
-__version__: str = bzfs_main.argparse_cli.__version__
-CRITICAL_STATUS: int = 2
-WARNING_STATUS: int = 1
-STILL_RUNNING_STATUS: int = 4
-MIN_PYTHON_VERSION: tuple[int, int] = (3, 9)
+__version__: Final[str] = bzfs_main.argparse_cli.__version__
+CRITICAL_STATUS: Final[int] = 2
+WARNING_STATUS: Final[int] = 1
+STILL_RUNNING_STATUS: Final[int] = 4
+MIN_PYTHON_VERSION: Final[tuple[int, int]] = (3, 9)
 if sys.version_info < MIN_PYTHON_VERSION:
     print(f"ERROR: {PROG_NAME} requires Python version >= {'.'.join(map(str, MIN_PYTHON_VERSION))}!")
     sys.exit(DIE_STATUS)
-CREATE_SRC_SNAPSHOTS_PREFIX_DFLT: str = PROG_NAME + "_"
-CREATE_SRC_SNAPSHOTS_SUFFIX_DFLT: str = "_adhoc"
-MATURITY_TIME_THRESHOLD_SECS: float = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
+CREATE_SRC_SNAPSHOTS_PREFIX_DFLT: Final[str] = PROG_NAME + "_"
+CREATE_SRC_SNAPSHOTS_SUFFIX_DFLT: Final[str] = "_adhoc"
+MATURITY_TIME_THRESHOLD_SECS: Final[float] = 1.1  # 1 sec ZFS creation time resolution + NTP clock skew is typically < 10ms
 
 
 #############################################################################
@@ -1561,7 +1562,7 @@ class DatasetProperties:
 
     def __init__(self, recordsize: int, snapshots_changed: int) -> None:
         # immutable variables:
-        self.recordsize: int = recordsize
+        self.recordsize: Final[int] = recordsize
 
         # mutable variables:
         self.snapshots_changed: int = snapshots_changed
