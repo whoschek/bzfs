@@ -259,7 +259,7 @@ class Connection:
         if remote.ssh_user_host and remote.reuse_ssh_connection and not remote.ssh_exit_on_shutdown:
             connection_lease = ConnectionLeaseManager(
                 root_dir=remote.ssh_socket_dir,
-                namespace=f"{remote.cache_namespace()}#{pool_name}",
+                namespace=f"{remote.location}#{remote.cache_namespace()}#{pool_name}",
                 ssh_control_persist_secs=max(90 * 60, 2 * remote.ssh_control_persist_secs + 2),
                 log=remote.params.log,
             ).acquire()
