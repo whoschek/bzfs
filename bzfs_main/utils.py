@@ -527,7 +527,7 @@ def pretty_print_formatter(obj_to_format: Any) -> Any:
 
 def stderr_to_str(stderr: Any) -> str:
     """Workaround for https://github.com/python/cpython/issues/87597."""
-    return str(stderr) if not isinstance(stderr, bytes) else stderr.decode("utf-8")
+    return str(stderr) if not isinstance(stderr, bytes) else stderr.decode("utf-8", errors="replace")
 
 
 def xprint(log: logging.Logger, value: Any, run: bool = True, end: str = "\n", file: TextIO | None = None) -> None:

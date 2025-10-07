@@ -586,14 +586,16 @@ class TestRefreshSshConnection(AbstractTestCase):
         mock_run.assert_called_once()
         self.assertGreater(self.conn.last_refresh_time, 0)
 
-    @patch("bzfs_main.connection.die", side_effect=SystemExit)
     @patch("bzfs_main.connection.subprocess_run")
-    def test_master_start_failure_dies(self, mock_run: MagicMock, mock_die: MagicMock) -> None:
-        mock_run.side_effect = [MagicMock(returncode=1), MagicMock(returncode=1, stderr="bad")]
-        with self.assertRaises(SystemExit):
+    def test_master_start_failure_is_retryable(self, mock_run: MagicMock) -> None:
+        # First call: '-O check' returns non-zero, indicating master not alive.
+        # Second call: starting master with check=True raises CalledProcessError.
+        mock_run.side_effect = [
+            MagicMock(returncode=1),
+            subprocess.CalledProcessError(returncode=1, cmd="ssh", stderr="bad"),
+        ]
+        with self.assertRaises(RetryableError):
             connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
-        self.assertEqual(2, mock_run.call_count)
-        mock_die.assert_called_once()
 
     @patch("bzfs_main.connection.subprocess_run")
     def test_verbose_option_limits_persist_time(self, mock_run: MagicMock) -> None:

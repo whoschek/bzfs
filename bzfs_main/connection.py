@@ -175,8 +175,7 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
         ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
         # extend lifetime of ssh master by $ssh_control_persist_secs via 'ssh -O check' if master is still running.
         # 'ssh -S /path/to/socket -O check' doesn't talk over the network, hence is still a low latency fast path.
-        t: float | None = timeout(job)
-        if subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=t).returncode == 0:
+        if subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, timeout=timeout(job)).returncode == 0:
             log.log(LOG_TRACE, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
         else:  # ssh master is not alive; start a new master:
             log.log(LOG_TRACE, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
@@ -188,13 +187,14 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
             ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
             ssh_socket_cmd += ["-M", f"-oControlPersist={ssh_control_persist_secs}s", remote.ssh_user_host, "exit"]
             log.log(LOG_TRACE, "Executing: %s", list_formatter(ssh_socket_cmd))
-            process = subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=timeout(job))
-            if process.returncode != 0:
-                log.error("%s", process.stderr.rstrip())
-                die(
+            try:
+                subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, check=True, timeout=timeout(job))
+            except subprocess.CalledProcessError as e:
+                log.error("%s", stderr_to_str(e.stderr).rstrip())
+                raise RetryableError(
                     f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
-                    f"first, considering diagnostic log file output from running {PROG_NAME} with: -v -v -v"
-                )
+                    f"first, considering diagnostic log file output from running {PROG_NAME} with -v -v -v."
+                ) from e
         conn.last_refresh_time = time.monotonic_ns()
         if conn.connection_lease is not None:
             conn.connection_lease.set_socket_mtime_to_now()

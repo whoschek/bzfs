@@ -5704,7 +5704,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         if self.param and self.param.get("ssh_mode") != "local":
             self.inject_unavailable_program("inject_unavailable_" + ssh_program, expected_error=DIE_STATUS)
             self.tearDownAndSetup()
-            self.inject_unavailable_program("inject_failing_" + ssh_program, expected_error=DIE_STATUS)
+            self.inject_unavailable_program("inject_failing_" + ssh_program, expected_error=1)
 
     def test_inject_unavailable_zfs(self) -> None:
         self.inject_unavailable_program("inject_unavailable_zfs", expected_error=DIE_STATUS)
