@@ -210,7 +210,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.11", "3.14t-dev"]
+        python-version: ["3.11", "3.14", "3.14t"]
       fail-fast: false
     timeout-minutes: 110
     steps:
