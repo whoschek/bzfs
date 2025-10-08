@@ -606,6 +606,15 @@ class TestAdditionalHelpers(AbstractTestCase):
             bzfs.main()
         self.assertEqual(5, ctx.exception.code)
 
+    @patch("bzfs_main.bzfs.argument_parser")
+    @patch("bzfs_main.bzfs.run_main")
+    def test_main_handles_calledprocesserror2(self, mock_run_main: MagicMock, mock_arg_parser: MagicMock) -> None:
+        mock_arg_parser.return_value.parse_args.return_value = self.argparser_parse_args(["src", "dst"])
+        mock_run_main.side_effect = subprocess.CalledProcessError(returncode=bzfs.WARNING_STATUS, cmd=["cmd"])
+        with self.assertRaises(SystemExit) as ctx:
+            bzfs.main()
+        self.assertEqual(DIE_STATUS, ctx.exception.code)
+
     @patch("bzfs_main.bzfs.Job.run_main")
     def test_run_main_delegates_to_job(self, mock_run_main: MagicMock) -> None:
         args = self.argparser_parse_args(["src", "dst"])

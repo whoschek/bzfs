@@ -224,7 +224,9 @@ def main() -> None:
     try:
         run_main(argument_parser().parse_args(), sys.argv)
     except subprocess.CalledProcessError as e:
-        sys.exit(e.returncode)
+        ret: int = e.returncode
+        ret = DIE_STATUS if isinstance(ret, int) and 1 <= ret <= STILL_RUNNING_STATUS else ret
+        sys.exit(ret)
 
 
 def run_main(args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
