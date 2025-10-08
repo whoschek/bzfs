@@ -144,8 +144,10 @@ class LogParams:
         self.log_dir: Final[str] = os.path.join(log_parent_dir, subdir)
         os.makedirs(log_parent_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--log-dir ", log_parent_dir)
+        validate_file_permissions(log_parent_dir, DIR_PERMISSIONS)
         os.makedirs(self.log_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--log-dir subdir ", self.log_dir)
+        validate_file_permissions(self.log_dir, DIR_PERMISSIONS)
         self.log_file_prefix: Final[str] = args.log_file_prefix
         self.log_file_infix: Final[str] = args.log_file_infix
         self.log_file_suffix: Final[str] = args.log_file_suffix
@@ -157,8 +159,10 @@ class LogParams:
         os.fchmod(fd, FILE_PERMISSIONS)
         os.close(fd)
         self.pv_log_file: str = self.log_file[0 : -len(".log")] + ".pv"
-        self.last_modified_cache_dir: Final[str] = os.path.join(log_parent_dir, ".cache", "mods")
-        os.makedirs(os.path.dirname(self.last_modified_cache_dir), mode=DIR_PERMISSIONS, exist_ok=True)
+        cache_root_dir: str = os.path.join(log_parent_dir, ".cache")
+        os.makedirs(cache_root_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        validate_file_permissions(cache_root_dir, DIR_PERMISSIONS)
+        self.last_modified_cache_dir: Final[str] = os.path.join(cache_root_dir, "mods")
 
         # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.
         # For parallel usage, ensures there is no time window when the symlinks are inconsistent or do not exist.
@@ -453,6 +457,7 @@ class Params:
         locks_dir: str = os.path.join(log_parent_dir, ".locks")
         os.makedirs(locks_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--locks-dir ", locks_dir)
+        validate_file_permissions(locks_dir, DIR_PERMISSIONS)
         return os.path.join(locks_dir, f"{PROG_NAME}-lockfile-{hash_code}.lock")
 
     def dry(self, msg: str) -> str:
