@@ -1725,9 +1725,9 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
                     f"tank/a@{label.suffix}": creation_time_a,
                 }
 
-            def last_modified_cache_file(self, remote: Remote, dataset: str, label_obj: SnapshotLabel | None = None) -> str:
+            def last_modified_cache_file(self, remote: Remote, dataset: str, label_obj: str | None = None) -> str:
                 if label_obj is not None:
-                    return f"{dataset}@{label_obj.suffix}"
+                    return f"{dataset}@{label.suffix}"
                 return dataset
 
             def get_snapshots_changed(self, cache_file: str) -> int:

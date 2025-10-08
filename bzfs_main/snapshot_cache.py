@@ -187,9 +187,9 @@ class SnapshotCache:
         except FileNotFoundError:
             return 0, 0  # harmless
 
-    def last_modified_cache_file(self, remote: Remote, dataset: str, label: SnapshotLabel | None = None) -> str:
+    def last_modified_cache_file(self, remote: Remote, dataset: str, label: str | None = None) -> str:
         """Returns the path of the cache file that is tracking last snapshot modification."""
-        cache_file: str = DATASET_CACHE_FILE_PREFIX if label is None else f"{label.prefix}{label.infix}{label.suffix}"
+        cache_file: str = DATASET_CACHE_FILE_PREFIX if label is None else label
         userhost_dir: str = sha256_urlsafe_base64(remote.cache_namespace(), padding=False)
         dataset_dir: str = sha256_urlsafe_base64(dataset, padding=False)
         return os.path.join(self.job.params.log_params.last_modified_cache_dir, userhost_dir, dataset_dir, cache_file)

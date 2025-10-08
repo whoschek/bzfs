@@ -1033,9 +1033,7 @@ class Job:
         is_caching: bool = False
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
-            cache_label = SnapshotLabel(
-                os.path.join(MONITOR_CACHE_FILE_PREFIX, alert_cfg.kind[0], label_hashes[label], alerts_hash), "", "", ""
-            )
+            cache_label: str = os.path.join(MONITOR_CACHE_FILE_PREFIX, alert_cfg.kind[0], label_hashes[label], alerts_hash)
             return self.cache.last_modified_cache_file(r, dataset, cache_label)
 
         def alert_msg(
@@ -1176,8 +1174,8 @@ class Job:
             for src_dataset in src_datasets:
                 dst_dataset: str = src2dst(src_dataset)  # cache is only valid for identical destination dataset
                 dst_dataset_dir: str = sha256_85_urlsafe_base64(dst_dataset)
-                cache_label: SnapshotLabel = SnapshotLabel(
-                    os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset_dir, filter_hash_code), "", "", ""
+                cache_label: str = os.path.join(
+                    REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset_dir, filter_hash_code
                 )
                 cache_file: str = self.cache.last_modified_cache_file(src, src_dataset, cache_label)
                 cache_files[src_dataset] = cache_file
@@ -1196,11 +1194,11 @@ class Job:
             dst_snapshots_changed_dict: dict[str, int] = self.cache.zfs_get_snapshots_changed(dst, maybe_stale_dst_datasets)
             for dst_dataset in maybe_stale_dst_datasets:
                 snapshots_changed = dst_snapshots_changed_dict.get(dst_dataset, 0)
-                cache_file = self.cache.last_modified_cache_file(dst, dst_dataset)
                 if (
                     snapshots_changed != 0
                     and time.time() > snapshots_changed + MATURITY_TIME_THRESHOLD_SECS
-                    and snapshots_changed == self.cache.get_snapshots_changed(cache_file)
+                    and snapshots_changed
+                    == self.cache.get_snapshots_changed(self.cache.last_modified_cache_file(dst, dst_dataset))
                 ):
                     log.info("Already up-to-date [cached]: %s", dst_dataset)
                 else:
@@ -1410,14 +1408,13 @@ class Job:
                 labels.append(label)
         if len(labels) == 0:
             return datasets_to_snapshot  # nothing more TBD
-        label_hashes: dict[SnapshotLabel, SnapshotLabel] = {
-            label: SnapshotLabel(sha256_128_urlsafe_base64(str(label)), "", "", "") for label in labels
-        }
+        label_hashes: dict[SnapshotLabel, str] = {label: sha256_128_urlsafe_base64(str(label)) for label in labels}
 
         # satisfy request from local cache as much as possible
         cached_datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         if is_caching_snapshots(p, src):
             sorted_datasets_todo: list[str] = []
+            label_strs: dict[SnapshotLabel, str] = {label: f"{label.prefix}{label.infix}{label.suffix}" for label in labels}
             time_threshold: float = time.time() - MATURITY_TIME_THRESHOLD_SECS
             for dataset in sorted_datasets:
                 cache: SnapshotCache = self.cache
@@ -1436,7 +1433,8 @@ class Job:
                 for label in labels:
                     # For per-label files, atime stores the latest matching snapshot's creation time, while mtime stores
                     # the dataset-level snapshots_changed observed when this label file was written.
-                    atime, mtime = cache.get_snapshots_changed2(cache.last_modified_cache_file(src, dataset, label))
+                    label_str: str = label_strs[label]
+                    atime, mtime = cache.get_snapshots_changed2(cache.last_modified_cache_file(src, dataset, label_str))
                     # Sanity check: trust the label cache only if its mtime matches the current dataset-level '=' cache,
                     # otherwise fall back to 'zfs list -t snapshot' to avoid stale creation times after newer changes.
                     # Trust per-label cache only if it encodes the same snapshots_changed as the dataset-level '=';

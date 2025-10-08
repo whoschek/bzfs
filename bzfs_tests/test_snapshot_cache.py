@@ -153,7 +153,7 @@ class TestSnapshotCache(AbstractTestCase):
         job.params = self.make_params(args=ns, log_params=log_params)
         return job
 
-    def replication_cache_label(self, job: Job, dst_dataset: str) -> SnapshotLabel:
+    def replication_cache_label(self, job: Job, dst_dataset: str) -> str:
         """Build the src-->dst replication-scoped cache label ("==").
 
         Purpose: Provide the canonical label used to key the "last replicated"
@@ -166,23 +166,22 @@ class TestSnapshotCache(AbstractTestCase):
         filter_hash_code: str = sha256_85_urlsafe_base64(str(filter_key))
         userhost_dir: str = sha256_85_urlsafe_base64(job.params.dst.cache_namespace())
         dst_dataset_hash: str = sha256_85_urlsafe_base64(dst_dataset)
-        return SnapshotLabel(
-            os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset_hash, filter_hash_code), "", "", ""
-        )
+        return os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset_hash, filter_hash_code)
 
-    def monitor_cache_label(self, cfg_kind: str, label: SnapshotLabel, alerts: list[MonitorSnapshotAlert]) -> SnapshotLabel:
+    def monitor_cache_label(self, cfg_kind: str, label: SnapshotLabel, alerts: list[MonitorSnapshotAlert]) -> str:
         assert cfg_kind
         assert label is not None
         assert len(alerts) > 0
         alerts_hash_code = sha256_128_urlsafe_base64(str(tuple(alerts)))
         label_hash_code = sha256_128_urlsafe_base64(str(label))
         kind_hash_code = cfg_kind[0]
-        return SnapshotLabel(
-            os.path.join(MONITOR_CACHE_FILE_PREFIX, kind_hash_code, label_hash_code, alerts_hash_code), "", "", ""
-        )
+        return os.path.join(MONITOR_CACHE_FILE_PREFIX, kind_hash_code, label_hash_code, alerts_hash_code)
 
-    def snapshot_cache_label(self, label: SnapshotLabel) -> SnapshotLabel:
-        return SnapshotLabel(os.path.join(sha256_128_urlsafe_base64(str(label))), "", "", "")
+    def snapshot_cache_label(self, label: SnapshotLabel) -> str:
+        return os.path.join(sha256_128_urlsafe_base64(str(label)))
+
+    def notime_label(self, label: SnapshotLabel) -> str:
+        return f"{label.prefix}{label.infix}{label.suffix}"
 
     def test_set_last_modification_time(self) -> None:
         for func in [set_last_modification_time, set_last_modification_time_old]:
@@ -522,7 +521,7 @@ class TestSnapshotCache(AbstractTestCase):
             cache = SnapshotCache(job)
 
             # Create a per-label cache file that records the creation time of the latest label snapshot
-            label_cache_file = cache.last_modified_cache_file(job.params.src, SRC_DATASET, label)
+            label_cache_file = cache.last_modified_cache_file(job.params.src, SRC_DATASET, self.notime_label(label))
             creation_time = 1_900_000_000  # older than snapshots_changed, simulating last daily snapshot time
             set_last_modification_time_safe(label_cache_file, unixtime_in_secs=creation_time, if_more_recent=True)
 
@@ -574,7 +573,7 @@ class TestSnapshotCache(AbstractTestCase):
             cache = SnapshotCache(job)
 
             # Create a per-label cache file with a known creation time
-            label_cache_file = cache.last_modified_cache_file(job.params.src, SRC_DATASET, label)
+            label_cache_file = cache.last_modified_cache_file(job.params.src, SRC_DATASET, self.notime_label(label))
             creation_time = 1_900_000_000
             set_last_modification_time_safe(label_cache_file, unixtime_in_secs=creation_time, if_more_recent=True)
 
@@ -1140,8 +1139,8 @@ class TestSnapshotCache(AbstractTestCase):
             # Labels and cache files for snapshot path
             labels = job_s.params.create_src_snapshots_config.snapshot_labels()
             lbl = labels[0]
-            lbl = self.snapshot_cache_label(lbl)
-            label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl)
+            lbl_str = self.snapshot_cache_label(lbl)
+            label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl_str)
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET)
 
             # Replicate cache files
@@ -1302,8 +1301,8 @@ class TestSnapshotCache(AbstractTestCase):
             mon_cache_file = SnapshotCache(job_m).last_modified_cache_file(job_m.params.src, SRC_DATASET, mon_cache_label)
 
             lbl_s = job_s.params.create_src_snapshots_config.snapshot_labels()[0]
-            lbl_s = self.snapshot_cache_label(lbl_s)
-            label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl_s)
+            lbl_str = self.snapshot_cache_label(lbl_s)
+            label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl_str)
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET)
 
             repl_cache_label = self.replication_cache_label(job_r, DST_DATASET)
@@ -1538,8 +1537,8 @@ class TestSnapshotCache(AbstractTestCase):
             # Resolve cache files
             labels = job_s.params.create_src_snapshots_config.snapshot_labels()
             lbl = labels[0]
-            lbl = self.snapshot_cache_label(lbl)
-            label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl)
+            lbl_str = self.snapshot_cache_label(lbl)
+            label_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET, lbl_str)
             src_cache_file = SnapshotCache(job_s).last_modified_cache_file(job_s.params.src, SRC_DATASET)
 
             repl_cache_label = self.replication_cache_label(job_r, DST_DATASET)
@@ -1701,7 +1700,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=snapshots_changed_new, if_more_recent=True)
 
             # Populate per-label cache file as monitor would: (atime=creation, mtime=snapshots_changed)
-            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, self.notime_label(label))
             set_last_modification_time_safe(
                 label_file, unixtime_in_secs=(creation_old, snapshots_changed_new), if_more_recent=True
             )
@@ -1785,8 +1784,8 @@ class TestSnapshotCache(AbstractTestCase):
             job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
 
             label = job.params.create_src_snapshots_config.snapshot_labels()[0]
-            label = self.snapshot_cache_label(label)
-            label_path = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+            label_str = self.snapshot_cache_label(label)
+            label_path = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label_str)
 
             # Force fallback by leaving dataset '=' cache empty and feed creation via handle_minmax
             def fake_handle_minmax_snapshots(
@@ -1863,7 +1862,7 @@ class TestSnapshotCache(AbstractTestCase):
             dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
             set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=t0, if_more_recent=True)
 
-            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, self.notime_label(label))
             set_last_modification_time_safe(label_file, unixtime_in_secs=(creation_old, t0), if_more_recent=True)
 
             received: list[str] = []
@@ -1956,7 +1955,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=t0, if_more_recent=True)
 
             # Seed per-label cache with mtime=0 (unknown) and some creation time
-            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, self.notime_label(label))
             set_last_modification_time_safe(label_file, unixtime_in_secs=(creation_old, 0), if_more_recent=True)
 
             received: list[str] = []
@@ -2036,7 +2035,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=t1, if_more_recent=True)
 
             # per-label cache has mtime=t0 (stale) and atime=creation_old
-            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, self.notime_label(label))
             set_last_modification_time_safe(label_file, unixtime_in_secs=(creation_old, t0), if_more_recent=True)
 
             received: list[str] = []
@@ -2418,7 +2417,7 @@ class TestSnapshotCache(AbstractTestCase):
                 # Per-label caches (atime=creation, mtime=sc)
                 for lbl in labels:
                     set_last_modification_time_safe(
-                        SnapshotCache(job).last_modified_cache_file(job.params.src, ds, lbl),
+                        SnapshotCache(job).last_modified_cache_file(job.params.src, ds, self.notime_label(lbl)),
                         unixtime_in_secs=(creation, sc),
                         if_more_recent=True,
                     )
@@ -2508,7 +2507,7 @@ class TestSnapshotCache(AbstractTestCase):
             dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
             set_last_modification_time_safe(dataset_eq_file, t_src_future, if_more_recent=True)
             label = job.params.create_src_snapshots_config.snapshot_labels()[0]
-            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label)
+            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, self.notime_label(label))
             set_last_modification_time_safe(label_file, (creation_old, t_src_future), if_more_recent=True)
 
             received: list[str] = []
@@ -2768,7 +2767,7 @@ class TestSnapshotCache(AbstractTestCase):
         prefix_10 = "".join(rng.choice(letters) for _ in range(9)) + "_"  # length 10
         infix_10 = "".join(rng.choice(letters) for _ in range(9)) + "_"  # length 10
         suffix_20 = "_" + "".join(rng.choice(letters) for _ in range(19))  # length 20; total label visible length = 40
-        label_40 = SnapshotLabel(prefix=prefix_10, infix=infix_10, timestamp="2025-01-01_12-34:56", suffix=suffix_20)
+        label_40 = str(SnapshotLabel(prefix=prefix_10, infix=infix_10, timestamp="2025-01-01_12-34:56", suffix=suffix_20))
 
         with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
             cache = SnapshotCache(job)
