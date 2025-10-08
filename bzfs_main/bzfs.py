@@ -1551,7 +1551,7 @@ class Job:
     @staticmethod
     def _cache_hits_msg(hits: int, misses: int) -> str:
         total = hits + misses
-        return f", cache hits: {hits}={percent(hits, total)}, misses: {misses}={percent(misses, total)}"
+        return f", cache hits: {percent(hits, total, print_total=True)}, misses: {percent(misses, total, print_total=True)}"
 
 
 #############################################################################
