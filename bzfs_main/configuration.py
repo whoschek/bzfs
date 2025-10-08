@@ -348,7 +348,7 @@ class Params:
         self.curr_zfs_send_program_opts: list[str] = []
         self.zfs_recv_ox_names: set[str] = set()
         self.available_programs: dict[str, dict[str, str]] = {}
-        self.zpool_features: dict[str, dict[str, str]] = {}
+        self.zpool_features: dict[str, dict[str, dict[str, str]]] = {r.location: {} for r in [self.src, self.dst]}
         self.connection_pools: dict[str, ConnectionPools] = {}
 
     def split_args(self, text: str, *items: str | Iterable[str], allow_all: bool = False) -> list[str]:
@@ -559,9 +559,9 @@ class Remote:
         ssh_cmd += [self.ssh_user_host]
         return ssh_cmd
 
-    def cache_key(self) -> tuple[str, str, str, int | None, str | None]:
+    def cache_key(self) -> tuple[str, str, int | None, str | None]:
         """Returns tuple uniquely identifying this Remote for caching."""
-        return self.location, self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file
+        return self.location, self.ssh_user_host, self.ssh_port, self.ssh_config_file
 
     def cache_namespace(self) -> str:
         """Returns cache namespace string which is a stable, unique directory component for snapshot caches that

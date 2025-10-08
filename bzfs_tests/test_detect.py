@@ -75,13 +75,15 @@ class TestRemoteConfCache(AbstractTestCase):
         job.params = p
         p.src = Remote("src", args, p)
         p.dst = Remote("dst", args, p)
+        p.src.pool = "tank"
         p.src.ssh_host = "host"
         p.src.ssh_user_host = "host"
+        p.dst.pool = "tank"
         p.dst.ssh_host = "host2"
         p.dst.ssh_user_host = "host2"
         job.params.available_programs["local"] = {"ssh": ""}
         pools = ConnectionPools(p.src, {SHARED: 1, DEDICATED: 1})
-        item = RemoteConfCacheItem(pools, {"os": "Linux", "ssh": ""}, {"feat": "on"}, time.monotonic_ns())
+        item = RemoteConfCacheItem(pools, {"os": "Linux", "ssh": ""}, {"tank": {"feat": "on"}}, time.monotonic_ns())
         job.remote_conf_cache[p.src.cache_key()] = item
         job.remote_conf_cache[p.dst.cache_key()] = item
         with (
@@ -99,14 +101,16 @@ class TestRemoteConfCache(AbstractTestCase):
         job.params = p
         p.src = Remote("src", args, p)
         p.dst = Remote("dst", args, p)
+        p.src.pool = "tank"
         p.src.ssh_host = "host"
         p.src.ssh_user_host = "host"
+        p.dst.pool = "tank"
         p.dst.ssh_host = "host2"
         p.dst.ssh_user_host = "host2"
         job.params.available_programs["local"] = {"ssh": ""}
         pools = ConnectionPools(p.src, {SHARED: 1, DEDICATED: 1})
         expired_ts = time.monotonic_ns() - p.remote_conf_cache_ttl_nanos - 1
-        item = RemoteConfCacheItem(pools, {"os": "Linux"}, {"feat": "on"}, expired_ts)
+        item = RemoteConfCacheItem(pools, {"os": "Linux"}, {"tank": {"feat": "on"}}, expired_ts)
         job.remote_conf_cache[p.src.cache_key()] = item
         job.remote_conf_cache[p.dst.cache_key()] = item
         # Create thread-safe wrappers around mocks so concurrent calls are counted reliably
@@ -281,7 +285,7 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         job = self._setup_job()
         p = job.params
         p.dst.use_zfs_delegation = True
-        p.zpool_features[p.dst.location] = {"delegation": "off"}
+        p.zpool_features[p.dst.location] = {"tank": {"delegation": "off"}}
         with (
             patch.object(bzfs_main.detect, "_detect_available_programs_remote", return_value={}),
             patch.object(

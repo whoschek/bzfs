@@ -76,7 +76,7 @@ class RemoteConfCacheItem:
 
     connection_pools: ConnectionPools
     available_programs: dict[str, str]
-    zpool_features: dict[str, str]
+    zpool_features: dict[str, dict[str, str]]
     timestamp_nanos: int = field(default_factory=time.monotonic_ns)
 
 
@@ -97,15 +97,18 @@ def detect_available_programs(job: Job) -> None:
     todo: list[Remote] = []
     for r in [p.dst, p.src]:
         loc: str = r.location
-        remote_conf_cache_key = r.cache_key()
+        remote_conf_cache_key: tuple = r.cache_key()
         cache_item: RemoteConfCacheItem | None = job.remote_conf_cache.get(remote_conf_cache_key)
         if cache_item is not None:
             # startup perf: cache avoids ssh connect setup and feature detection roundtrips on revisits to same site
             p.connection_pools[loc] = cache_item.connection_pools
+            p.available_programs[loc] = cache_item.available_programs
+            p.zpool_features[loc] = cache_item.zpool_features
             if time.monotonic_ns() - cache_item.timestamp_nanos < p.remote_conf_cache_ttl_nanos:
-                available_programs[loc] = cache_item.available_programs
-                p.zpool_features[loc] = cache_item.zpool_features
-                continue  # cache hit, skip remote detection
+                if r.pool in cache_item.zpool_features:
+                    continue  # cache hit, skip remote detection
+            else:
+                p.zpool_features[loc] = {}  # cache miss, invalidate features of zpools before refetching from remote
         else:
             p.connection_pools[loc] = ConnectionPools(
                 r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
@@ -116,14 +119,14 @@ def detect_available_programs(job: Job) -> None:
 
     def run_detect(r: Remote) -> None:  # thread-safe
         loc: str = r.location
-        remote_conf_cache_key = r.cache_key()
+        remote_conf_cache_key: tuple = r.cache_key()
         available_programs: dict[str, str] = _detect_available_programs_remote(job, r, r.ssh_user_host)
         zpool_features: dict[str, str] = _detect_zpool_features(job, r, available_programs)
         with lock:
             r.params.available_programs[loc] = available_programs
-            r.params.zpool_features[loc] = zpool_features
+            r.params.zpool_features[loc][r.pool] = zpool_features
             job.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
-                p.connection_pools[loc], available_programs, zpool_features
+                p.connection_pools[loc], available_programs, r.params.zpool_features[loc]
             )
         if r.use_zfs_delegation and zpool_features.get("delegation") == "off":
             die(
@@ -311,7 +314,7 @@ def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict) -
 
 def is_zpool_feature_enabled_or_active(p: Params, remote: Remote, feature: str) -> bool:
     """Returns True if the given zpool feature is active or enabled on ``remote``."""
-    return p.zpool_features[remote.location].get(feature) in ("active", "enabled")
+    return p.zpool_features[remote.location][remote.pool].get(feature) in ("active", "enabled")
 
 
 def are_bookmarks_enabled(p: Params, remote: Remote) -> bool:
