@@ -83,7 +83,8 @@ For a cache file to be trusted and used as a fast path, three conditions must ho
 2) Maturity: that live ``snapshots_changed`` is strictly older than ``now - MATURITY_TIME_THRESHOLD_SECS`` to avoid
    equal-second races and tame small clock skew between initiator and ZFS hosts.
 3) Internal consistency for per-label/monitor cache files: their mtime must equal the current dataset-level "=" value,
-   and their atime must be a plausible creation time (e.g., non-zero for the scheduler; for monitor, atime <= mtime).
+   and their atime must be a plausible creation time not later than mtime (atime <= mtime). A zero atime/mtime indicates
+   unknown provenance and must force fallback.
 
 If any condition fails, the code falls back to ``zfs list -t snapshot`` for just those datasets; upon completion it
 rewrites the relevant cache files, monotonically.

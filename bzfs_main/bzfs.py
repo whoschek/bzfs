@@ -1435,11 +1435,12 @@ class Job:
                     # the dataset-level snapshots_changed observed when this label file was written.
                     label_str: str = label_strs[label]
                     atime, mtime = cache.get_snapshots_changed2(cache.last_modified_cache_file(src, dataset, label_str))
-                    # Sanity check: trust the label cache only if its mtime matches the current dataset-level '=' cache,
-                    # otherwise fall back to 'zfs list -t snapshot' to avoid stale creation times after newer changes.
-                    # Trust per-label cache only if it encodes the same snapshots_changed as the dataset-level '=';
-                    # an mtime of 0 indicates unknown provenance and must force fallback to 'zfs list -t snapshot'.
-                    if atime == 0 or mtime == 0 or mtime != cached_snapshots_changed:
+                    # Sanity check: trust per-label cache only when:
+                    #  - mtime equals the dataset-level '=' cache (same snapshots_changed), and
+                    #  - atime is plausible and not later than mtime (creation <= snapshots_changed), and
+                    #  - neither atime nor mtime is zero (unknown provenance).
+                    # Otherwise fall back to 'zfs list -t snapshot' to avoid stale creation times after newer changes.
+                    if atime == 0 or mtime == 0 or mtime != cached_snapshots_changed or atime > mtime:
                         sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                         break
                     creation_unixtimes.append(atime)

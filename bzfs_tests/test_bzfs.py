@@ -1720,8 +1720,10 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
 
         class FakeCache:
             def __init__(self) -> None:
+                # Encode a realistic invariant: creation_atime <= snapshots_changed_mtime and
+                # dataset-level '=' cache equals the per-label mtime and job.src_properties.
                 self.mapping: dict[str, int] = {
-                    "tank/a": 123,
+                    "tank/a": creation_time_a,
                     f"tank/a@{label.suffix}": creation_time_a,
                 }
 
@@ -1748,7 +1750,7 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
 
         job.cache = cast(SnapshotCache, FakeCache())
         job.src_properties = {
-            "tank/a": bzfs.DatasetProperties(0, 123),
+            "tank/a": bzfs.DatasetProperties(0, creation_time_a),
             "tank/b": bzfs.DatasetProperties(0, 456),
         }
 
