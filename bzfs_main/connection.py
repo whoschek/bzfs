@@ -244,9 +244,9 @@ class Connection:
     _last_modified: int  # LIFO: tiebreaker favors latest returned conn as that's most alive and hot; also ensures no dupes
 
     def __init__(
-        self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int, pool_name: str
+        self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int, connpool_name: str
     ) -> None:
-        assert pool_name
+        assert connpool_name
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self._capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
         self._free: int = max_concurrent_ssh_sessions_per_tcp_connection
@@ -259,7 +259,7 @@ class Connection:
         if remote.ssh_user_host and remote.reuse_ssh_connection and not remote.ssh_exit_on_shutdown:
             connection_lease = ConnectionLeaseManager(
                 root_dir=remote.ssh_socket_dir,
-                namespace=f"{remote.location}#{remote.cache_namespace()}#{pool_name}",
+                namespace=f"{remote.location}#{remote.cache_namespace()}#{connpool_name}",
                 ssh_control_persist_secs=max(90 * 60, 2 * remote.ssh_control_persist_secs + 2),
                 log=remote.params.log,
             ).acquire()
@@ -308,11 +308,11 @@ class Connection:
 class ConnectionPool:
     """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse."""
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, pool_name: str) -> None:
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, connpool_name: str) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self._remote: Final[Remote] = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self._capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
-        self._pool_name: Final[str] = pool_name
+        self._connpool_name: Final[str] = connpool_name
         self._priority_queue: Final[SmallPriorityQueue[Connection]] = SmallPriorityQueue(
             reverse=True  # sorted by #free slots and last_modified
         )
@@ -343,7 +343,7 @@ class ConnectionPool:
             if conn is None or conn.is_full():
                 if conn is not None:
                     self._priority_queue.push(conn)
-                conn = Connection(self._remote, self._capacity, self._cid, self._pool_name)  # add a new connection
+                conn = Connection(self._remote, self._capacity, self._cid, self._connpool_name)  # add a new connection
                 self._last_modified += 1
                 conn.update_last_modified(self._last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
                 self._cid += 1
