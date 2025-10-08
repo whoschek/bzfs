@@ -1414,7 +1414,7 @@ class Job:
         cached_datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         if is_caching_snapshots(p, src):
             sorted_datasets_todo: list[str] = []
-            label_strs: dict[SnapshotLabel, str] = {label: f"{label.prefix}{label.infix}{label.suffix}" for label in labels}
+            notime_labels: list[str] = [label.notimestamp_str() for label in labels]
             time_threshold: float = time.time() - MATURITY_TIME_THRESHOLD_SECS
             for dataset in sorted_datasets:
                 cache: SnapshotCache = self.cache
@@ -1430,11 +1430,10 @@ class Job:
                     sorted_datasets_todo.append(dataset)  # cache entry isn't mature enough to be trusted; skip cache
                     continue
                 creation_unixtimes: list[int] = []
-                for label in labels:
+                for notime_label in notime_labels:
                     # For per-label files, atime stores the latest matching snapshot's creation time, while mtime stores
                     # the dataset-level snapshots_changed observed when this label file was written.
-                    label_str: str = label_strs[label]
-                    atime, mtime = cache.get_snapshots_changed2(cache.last_modified_cache_file(src, dataset, label_str))
+                    atime, mtime = cache.get_snapshots_changed2(cache.last_modified_cache_file(src, dataset, notime_label))
                     # Sanity check: trust per-label cache only when:
                     #  - mtime equals the dataset-level '=' cache (same snapshots_changed), and
                     #  - atime is plausible and not later than mtime (creation <= snapshots_changed), and

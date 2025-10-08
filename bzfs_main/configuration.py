@@ -612,6 +612,10 @@ class SnapshotLabel(NamedTuple):
     def __str__(self) -> str:  # bzfs_us-west-1_2024-11-06_08:30:05_hourly
         return f"{self.prefix}{self.infix}{self.timestamp}{self.suffix}"
 
+    def notimestamp_str(self) -> str:  # bzfs_us-west-1_hourly
+        """Returns the concatenation of all parts except for the timestamp part."""
+        return f"{self.prefix}{self.infix}{self.suffix}"
+
     def validate_label(self, input_text: str) -> None:
         """Validates that the composed snapshot label forms a legal name."""
         name: str = str(self)
