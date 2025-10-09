@@ -50,19 +50,24 @@ class RetryPolicy:
         # immutable variables:
         self.retries: int = args.retries
         self.min_sleep_secs: float = args.retry_min_sleep_secs
+        self.initial_max_sleep_secs: float = args.retry_initial_max_sleep_secs
         self.max_sleep_secs: float = args.retry_max_sleep_secs
         self.max_elapsed_secs: float = args.retry_max_elapsed_secs
         self.min_sleep_nanos: int = int(self.min_sleep_secs * 1_000_000_000)
+        self.initial_max_sleep_nanos: int = int(self.initial_max_sleep_secs * 1_000_000_000)
         self.max_sleep_nanos: int = int(self.max_sleep_secs * 1_000_000_000)
         self.max_elapsed_nanos: int = int(self.max_elapsed_secs * 1_000_000_000)
         self.min_sleep_nanos = max(1, self.min_sleep_nanos)
         self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
+        self.initial_max_sleep_nanos = min(self.max_sleep_nanos, max(self.min_sleep_nanos, self.initial_max_sleep_nanos))
+        assert self.min_sleep_nanos <= self.initial_max_sleep_nanos <= self.max_sleep_nanos
 
     def __repr__(self) -> str:
         """Return debug representation of retry parameters."""
         return (
             f"retries: {self.retries}, min_sleep_secs: {self.min_sleep_secs}, "
-            f"max_sleep_secs: {self.max_sleep_secs}, max_elapsed_secs: {self.max_elapsed_secs}"
+            f"initial_max_sleep_secs: {self.initial_max_sleep_secs}, max_sleep_secs: {self.max_sleep_secs}, "
+            f"max_elapsed_secs: {self.max_elapsed_secs}"
         )
 
 
@@ -72,7 +77,7 @@ T = TypeVar("T")
 
 def run_with_retries(log: Logger, policy: RetryPolicy, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
-    c_max_sleep_nanos: int = policy.min_sleep_nanos
+    c_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     retry_count: int = 0
     sysrandom: random.SystemRandom | None = None
     start_time_nanos: int = time.monotonic_ns()

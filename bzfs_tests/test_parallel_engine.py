@@ -234,7 +234,11 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                     self.log.isEnabledFor.side_effect = lambda level: level >= logging.DEBUG
                     self.default_kwargs["retry_policy"] = RetryPolicy(
                         argparse.Namespace(
-                            retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=0
+                            retries=0,
+                            retry_min_sleep_secs=0,
+                            retry_max_sleep_secs=0,
+                            retry_initial_max_sleep_secs=0,
+                            retry_max_elapsed_secs=0,
                         )
                     )
                 failed = process_datasets_in_parallel_and_fault_tolerant(

@@ -243,7 +243,13 @@ def process_datasets_in_parallel_and_fault_tolerant(
     assert callable(append_exception)
     if retry_policy is None:
         retry_policy = RetryPolicy(  # no retries
-            argparse.Namespace(retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=0)
+            argparse.Namespace(
+                retries=0,
+                retry_min_sleep_secs=0,
+                retry_initial_max_sleep_secs=0,
+                retry_max_sleep_secs=0,
+                retry_max_elapsed_secs=0,
+            )
         )
     is_debug: bool = log.isEnabledFor(logging.DEBUG)
 

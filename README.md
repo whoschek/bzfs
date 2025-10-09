@@ -610,6 +610,7 @@ usage: bzfs [-h] [--recursive]
             [--force-once] [--skip-parent]
             [--skip-missing-snapshots [{fail,dataset,continue}]]
             [--retries INT] [--retry-min-sleep-secs FLOAT]
+            [--retry-initial-max-sleep-secs FLOAT]
             [--retry-max-sleep-secs FLOAT]
             [--retry-max-elapsed-secs FLOAT]
             [--skip-on-error {fail,tree,dataset}] [--skip-replication]
@@ -1343,7 +1344,15 @@ usage: bzfs [-h] [--recursive]
 
 **--retry-min-sleep-secs** *FLOAT*
 
-*  The minimum duration to sleep between retries (default: 0.125).
+*  The minimum duration to sleep between retries (default: 0).
+
+<!-- -->
+
+<div id="--retry-initial-max-sleep-secs"></div>
+
+**--retry-initial-max-sleep-secs** *FLOAT*
+
+*  The initial maximum duration to sleep between retries (default: 0.125).
 
 <!-- -->
 
@@ -1351,10 +1360,11 @@ usage: bzfs [-h] [--recursive]
 
 **--retry-max-sleep-secs** *FLOAT*
 
-*  The maximum duration to sleep between retries initially starts with --retry-min-sleep-secs
-    (see above), and doubles on each retry, up to the final maximum of --retry-max-sleep-secs
-    (default: 300). On each retry a random sleep time in the [--retry-min-sleep-secs, current
-    max] range is picked. The timer resets after each operation.
+*  The maximum duration to sleep between retries initially starts with
+    --retry-initial-max-sleep-secs (see above), and doubles on each retry, up to the final
+    maximum of --retry-max-sleep-secs (default: 300). On each retry a random sleep time in the
+    [--retry-min-sleep-secs, current max] range is picked. In a nutshell: retry-min-sleep-secs
+    ≤ retry-initial-max-sleep-secs ≤ retry-max-sleep-secs. The timer resets after each operation.
 
 <!-- -->
 

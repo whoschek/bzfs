@@ -312,7 +312,8 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 # extra_args += ["--skip-missing-snapshots=fail"]
 # extra_args += ["--skip-missing-snapshots=continue"]
 # extra_args += ["--retries=2"]
-# extra_args += ["--retry-min-sleep-secs=0.125"]
+# extra_args += ["--retry-min-sleep-secs=0.0"]
+# extra_args += ["--retry-initial-max-sleep-secs=0.125"]
 # extra_args += ["--retry-max-sleep-secs=300"]
 # extra_args += ["--retry-max-elapsed-secs=3600"]
 # extra_args += ["--skip-on-error=dataset"]  # this is already the default anyway

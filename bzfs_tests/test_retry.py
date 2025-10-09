@@ -47,14 +47,26 @@ def suite() -> unittest.TestSuite:
 class TestRunWithRetries(unittest.TestCase):
 
     def test_retry_policy_repr(self) -> None:
-        args = argparse.Namespace(retries=2, retry_min_sleep_secs=0.1, retry_max_sleep_secs=0.5, retry_max_elapsed_secs=1)
+        args = argparse.Namespace(
+            retries=2,
+            retry_min_sleep_secs=0.1,
+            retry_initial_max_sleep_secs=0.1,
+            retry_max_sleep_secs=0.5,
+            retry_max_elapsed_secs=1,
+        )
         rp = RetryPolicy(args)
         self.assertIn("retries: 2", repr(rp))
 
     @patch("time.sleep")
     def test_run_with_retries_success(self, mock_sleep: MagicMock) -> None:
         calls: list[int] = []
-        args = argparse.Namespace(retries=2, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=1)
+        args = argparse.Namespace(
+            retries=2,
+            retry_min_sleep_secs=0,
+            retry_initial_max_sleep_secs=0,
+            retry_max_sleep_secs=0,
+            retry_max_elapsed_secs=1,
+        )
         retry_policy = RetryPolicy(args)
 
         def fn(*, retry: Retry) -> str:
@@ -68,7 +80,13 @@ class TestRunWithRetries(unittest.TestCase):
 
     @patch("time.sleep")
     def test_run_with_retries_gives_up(self, mock_sleep: MagicMock) -> None:
-        args = argparse.Namespace(retries=1, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=1)
+        args = argparse.Namespace(
+            retries=1,
+            retry_min_sleep_secs=0,
+            retry_initial_max_sleep_secs=0,
+            retry_max_sleep_secs=0,
+            retry_max_elapsed_secs=1,
+        )
         retry_policy = RetryPolicy(args)
 
         def fn(*, retry: Retry) -> None:
@@ -79,7 +97,13 @@ class TestRunWithRetries(unittest.TestCase):
 
     @patch("time.sleep")
     def test_run_with_retries_no_retries(self, mock_sleep: MagicMock) -> None:
-        args = argparse.Namespace(retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=0)
+        args = argparse.Namespace(
+            retries=0,
+            retry_min_sleep_secs=0,
+            retry_initial_max_sleep_secs=0,
+            retry_max_sleep_secs=0,
+            retry_max_elapsed_secs=0,
+        )
         retry_policy = RetryPolicy(args)
         mock_log = MagicMock(spec=Logger)
 
@@ -93,7 +117,13 @@ class TestRunWithRetries(unittest.TestCase):
 
     @patch("time.sleep")
     def test_run_with_retries_elapsed_time(self, mock_sleep: MagicMock) -> None:
-        args = argparse.Namespace(retries=5, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=0)
+        args = argparse.Namespace(
+            retries=5,
+            retry_min_sleep_secs=0,
+            retry_initial_max_sleep_secs=0,
+            retry_max_sleep_secs=0,
+            retry_max_elapsed_secs=0,
+        )
         retry_policy = RetryPolicy(args)
         mock_log = MagicMock(spec=Logger)
         max_elapsed = retry_policy.max_elapsed_nanos

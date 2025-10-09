@@ -804,14 +804,18 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
              f"snapshot or bookmark while {PROG_NAME} is running and attempting to access it.\n\n")
     parser.add_argument(
-        "--retry-min-sleep-secs", type=float, min=0, default=0.125, action=CheckRange, metavar="FLOAT",
+        "--retry-min-sleep-secs", type=float, min=0, default=0, action=CheckRange, metavar="FLOAT",
         help="The minimum duration to sleep between retries (default: %(default)s).\n\n")
     parser.add_argument(
+        "--retry-initial-max-sleep-secs", type=float, min=0, default=0.125, action=CheckRange, metavar="FLOAT",
+        help="The initial maximum duration to sleep between retries (default: %(default)s).\n\n")
+    parser.add_argument(
         "--retry-max-sleep-secs", type=float, min=0, default=5 * 60, action=CheckRange, metavar="FLOAT",
-        help="The maximum duration to sleep between retries initially starts with --retry-min-sleep-secs (see above), "
-             "and doubles on each retry, up to the final maximum of --retry-max-sleep-secs "
-             "(default: %(default)s). On each retry a random sleep time in the "
-             "[--retry-min-sleep-secs, current max] range is picked. The timer resets after each operation.\n\n")
+        help="The maximum duration to sleep between retries initially starts with --retry-initial-max-sleep-secs "
+             "(see above), and doubles on each retry, up to the final maximum of --retry-max-sleep-secs "
+             "(default: %(default)s). On each retry a random sleep time in the [--retry-min-sleep-secs, current max] range "
+             "is picked. In a nutshell: retry-min-sleep-secs ≤ retry-initial-max-sleep-secs ≤ retry-max-sleep-secs. "
+             "The timer resets after each operation.\n\n")
     parser.add_argument(
         "--retry-max-elapsed-secs", type=float, min=0, default=60 * 60, action=CheckRange, metavar="FLOAT",
         help="A single operation (e.g. 'zfs send/receive' of the current dataset, or deletion of a list of snapshots "
