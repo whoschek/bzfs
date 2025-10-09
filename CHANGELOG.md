@@ -4,10 +4,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [1.13.0] - TBD
 
-- [bzfs] [perf] Reduce SSH startup latency on bzfs process startup even more
-- [bzfs] Make snapshot cache file paths shorter
-- [bzfs] Remove support for python-3.8 as it has been officially EOL'd since Oct 10, 2024
-- [bzfs] Remove support for Solaris (legacy)
+- [bzfs] [perf] Reuse SSH connections across zpools to improve latency.
+- [bzfs] [perf] Reuse SSH connections on bzfs process startup to improve latency.
+- [bzfs] Retry connecting to SSH server before giving up.
+- [bzfs] Add `--retry-initial-max-sleep-secs` CLI option.
+- [bzfs] Swallow repeated internal `Broken Pipe` logging messages when the user terminates a shell pipe prematurely.
+- [bzfs] Normalize status codes.
+- [bzfs] `--cache-snapshots`: exclude label timestamp from hash function.
+- [bzfs] Make snapshot cache file paths shorter.
+- [bzfs] [security] Enhance validation of file permissions.
+- [bzfs] Also run nightly tests on production releases of python-3.14.
+- [bzfs] Remove support for python-3.8 as it has been officially EOL'd since Oct 10, 2024.
+- [bzfs] Remove support for Solaris (legacy).
 
 ## [1.12.0] - September 17, 2025
 
