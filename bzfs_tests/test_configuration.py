@@ -54,10 +54,56 @@ from bzfs_tests.abstract_testcase import (
 #############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
+        TestSnapshotLabel,
         TestHelperFunctions,
         TestAdditionalHelpers,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
+
+
+#############################################################################
+class TestSnapshotLabel(AbstractTestCase):
+
+    def test_notimestamp_str_full_parts(self) -> None:
+        """Concatenates prefix + infix + suffix; ignores timestamp.
+
+        With non-empty infix (ending with '_') and non-empty suffix (starting with '_'), the result naturally contains a
+        double underscore at the junction.
+        """
+        label = SnapshotLabel(prefix="bzfs_", infix="us-west-1_", timestamp="2025-01-01_12-00-00", suffix="_hourly")
+        self.assertEqual("bzfs_us-west-1__hourly", label.notimestamp_str())
+
+    def test_notimestamp_str_empty_infix(self) -> None:
+        """Empty infix still yields valid concatenation of prefix and suffix."""
+        label = SnapshotLabel(prefix="bzfs_", infix="", timestamp="2025-01-01_12-00-00", suffix="_daily")
+        self.assertEqual("bzfs__daily", label.notimestamp_str())
+
+    def test_notimestamp_str_empty_suffix(self) -> None:
+        """Empty suffix preserves trailing underscore from prefix/infix."""
+        label = SnapshotLabel(prefix="bzfs_", infix="us_", timestamp="2025-01-01_12-00-00", suffix="")
+        self.assertEqual("bzfs_us_", label.notimestamp_str())
+
+    def test_notimestamp_str_hash_stability_across_timestamps(self) -> None:
+        """Hash over notimestamp_str() must be identical for labels differing only in timestamp."""
+        a = SnapshotLabel(prefix="bzfs_", infix="us_", timestamp="2025-01-01_00-00-00", suffix="_hourly")
+        b = SnapshotLabel(prefix="bzfs_", infix="us_", timestamp="2025-01-01_00-00-01", suffix="_hourly")
+        self.assertEqual(a.notimestamp_str(), b.notimestamp_str())
+
+    def test_str_full_parts(self) -> None:
+        label = SnapshotLabel(prefix="bzfs_", infix="us-west-1_", timestamp="2025-01-01_12-00-00", suffix="_hourly")
+        self.assertEqual("bzfs_us-west-1_2025-01-01_12-00-00_hourly", str(label))
+
+    def test_str_empty_infix(self) -> None:
+        label = SnapshotLabel(prefix="bzfs_", infix="", timestamp="2025-01-01_12-00-00", suffix="_daily")
+        self.assertEqual("bzfs_2025-01-01_12-00-00_daily", str(label))
+
+    def test_str_empty_suffix(self) -> None:
+        label = SnapshotLabel(prefix="bzfs_", infix="us_", timestamp="2025-01-01_12-00-00", suffix="")
+        self.assertEqual("bzfs_us_2025-01-01_12-00-00", str(label))
+
+    def test_str_empty_timestamp(self) -> None:
+        label = SnapshotLabel(prefix="bzfs_", infix="us_", timestamp="", suffix="_daily")
+        self.assertEqual("bzfs_us__daily", str(label))
 
 
 #############################################################################

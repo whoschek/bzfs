@@ -62,7 +62,7 @@ The cache consists of four families:
    - Used by: replicate - to cheaply decide "src unchanged since last successful run to this dst+filters".
 
 3) Monitor ("===") per dataset and label (Latest/Oldest); for --monitor-snapshots
-   - Path: ``<cache_root>/<hash(user@host[#port])>/<hash(dataset)>/===/<kind>/<hash(label)>/<hash(alert_plan)>``
+   - Path: ``<cache_root>/<hash(user@host[#port])>/<hash(dataset)>/===/<kind>/<hash(notimestamp_label)>/<hash(alert_plan)>``
      - ``kind``: alert check mode; either "L" (Latest) or "O" (Oldest).
      - ``hash(alert_plan)``: stable digest over the monitor alert plan to scope caches per plan.
    - atime: creation time of the relevant latest/oldest snapshot.
@@ -70,7 +70,7 @@ The cache consists of four families:
    - Used by: monitor - to alert on stale snapshots without listing them every time.
 
 4) Snapshot scheduler per-label files (under the source dataset); for --create-src-snapshots
-   - Path: ``<cache_root>/<hash(src_user@host[#port])>/<hash(src_dataset)>/<hash(label)>``
+   - Path: ``<cache_root>/<hash(src_user@host[#port])>/<hash(src_dataset)>/<hash(notimestamp_label)>``
    - atime: creation time of the latest snapshot matching that label.
    - mtime: the dataset-level "=" value at the time of the write (i.e., the then-current ``snapshots_changed``).
    - Used by: ``--create-src-snapshots`` - to cheaply decide whether a label is due without ``zfs list -t snapshot``.

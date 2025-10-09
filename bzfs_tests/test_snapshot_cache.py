@@ -87,6 +87,7 @@ from bzfs_main.bzfs import (
     Job,
 )
 from bzfs_main.configuration import (
+    AlertConfig,
     MonitorSnapshotAlert,
     Remote,
     SnapshotLabel,
@@ -173,12 +174,12 @@ class TestSnapshotCache(AbstractTestCase):
         assert label is not None
         assert len(alerts) > 0
         alerts_hash_code = sha256_128_urlsafe_base64(str(tuple(alerts)))
-        label_hash_code = sha256_128_urlsafe_base64(str(label))
+        label_hash_code = sha256_128_urlsafe_base64(label.notimestamp_str())
         kind_hash_code = cfg_kind[0]
         return os.path.join(MONITOR_CACHE_FILE_PREFIX, kind_hash_code, label_hash_code, alerts_hash_code)
 
     def snapshot_cache_label(self, label: SnapshotLabel) -> str:
-        return os.path.join(sha256_128_urlsafe_base64(str(label)))
+        return sha256_128_urlsafe_base64(label.notimestamp_str())
 
     def test_set_last_modification_time(self) -> None:
         for func in [set_last_modification_time, set_last_modification_time_old]:
@@ -518,7 +519,7 @@ class TestSnapshotCache(AbstractTestCase):
             cache = SnapshotCache(job)
 
             # Create a per-label cache file that records the creation time of the latest label snapshot
-            label_cache_file = cache.last_modified_cache_file(job.params.src, SRC_DATASET, label.notimestamp_str())
+            label_cache_file = cache.last_modified_cache_file(job.params.src, SRC_DATASET, self.snapshot_cache_label(label))
             creation_time = 1_900_000_000  # older than snapshots_changed, simulating last daily snapshot time
             set_last_modification_time_safe(label_cache_file, unixtime_in_secs=creation_time, if_more_recent=True)
 
@@ -570,7 +571,7 @@ class TestSnapshotCache(AbstractTestCase):
             cache = SnapshotCache(job)
 
             # Create a per-label cache file with a known creation time
-            label_cache_file = cache.last_modified_cache_file(job.params.src, SRC_DATASET, label.notimestamp_str())
+            label_cache_file = cache.last_modified_cache_file(job.params.src, SRC_DATASET, self.snapshot_cache_label(label))
             creation_time = 1_900_000_000
             set_last_modification_time_safe(label_cache_file, unixtime_in_secs=creation_time, if_more_recent=True)
 
@@ -1697,7 +1698,9 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=snapshots_changed_new, if_more_recent=True)
 
             # Populate per-label cache file as monitor would: (atime=creation, mtime=snapshots_changed)
-            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label.notimestamp_str())
+            label_file = SnapshotCache(job).last_modified_cache_file(
+                job.params.src, dataset, self.snapshot_cache_label(label)
+            )
             set_last_modification_time_safe(
                 label_file, unixtime_in_secs=(creation_old, snapshots_changed_new), if_more_recent=True
             )
@@ -1730,8 +1733,139 @@ class TestSnapshotCache(AbstractTestCase):
             # And we should not have needed to fall back to handle_minmax
             self.assertListEqual([], called)
 
-    def test_scheduler_populates_label_cache_with_snapshots_changed_mtime(self) -> None:
-        """Scheduler must persist per-label caches as (atime=creation, mtime=snapshots_changed).
+    def test_snapshot_scheduler_label_cache_atime_greater_than_mtime_is_untrusted(self) -> None:
+        """Snapshot scheduler must treat per-label caches with atime > mtime as untrusted and fall back.
+
+        We seed the dataset-level '=' cache with a matured snapshots_changed (t0) and create a per-label cache file whose
+        atime is later than its mtime (creation > snapshots_changed). With caching enabled and current time matured,
+        find_datasets_to_snapshot() must invoke the fallback handler for the dataset.
+        """
+
+        with self.job_context(
+            [
+                "--create-src-snapshots",
+                "--create-src-snapshots-plan",
+                str({"bzfs": {"onsite": {"hourly": 1}}}),
+                SRC_DATASET,
+                DST_DATASET,
+            ]
+        ) as (job, _tmpdir):
+            job.params.src.root_dataset = SRC_DATASET
+
+            dataset = SRC_DATASET
+            label = job.params.create_src_snapshots_config.snapshot_labels()[0]
+            label_hash = self.snapshot_cache_label(label)
+            t0 = 2_000_000_000
+            creation_after = t0 + 1
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t0)
+
+            # Seed dataset '=' with matured t0
+            dataset_eq = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
+            set_last_modification_time_safe(dataset_eq, unixtime_in_secs=t0, if_more_recent=True)
+
+            # Seed per-label file with atime > mtime (untrusted)
+            label_path = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label_hash)
+            set_last_modification_time_safe(label_path, unixtime_in_secs=(creation_after, t0), if_more_recent=True)
+
+            received: list[str] = []
+
+            def record_fallback(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                received.extend(datasets)
+                return []
+
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=record_fallback),
+                patch("time.time", return_value=t0 + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.5),
+            ):
+                job.find_datasets_to_snapshot([dataset])
+
+            self.assertListEqual([dataset], received)
+
+    def test_snapshot_scheduler_reads_written_label_cache_and_avoids_fallback(self) -> None:
+        """End-to-end: first run writes per-label cache; second run reads it and avoids fallback.
+
+        The first run forces fallback (dataset '=' absent), writes (creation, snapshots_changed) per-label cache and marks
+        the dataset '=' in on_finish. The second run advances time to satisfy maturity and asserts no fallback.
+        """
+
+        with self.job_context(
+            [
+                "--create-src-snapshots",
+                "--create-src-snapshots-plan",
+                str({"bzfs": {"onsite": {"hourly": 1}}}),
+                SRC_DATASET,
+                DST_DATASET,
+            ]
+        ) as (job, _tmpdir):
+            job.params.src.root_dataset = SRC_DATASET
+
+            dataset = SRC_DATASET
+            creation = 2_000_000_000
+            snapshots_changed = 2_000_000_050
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
+
+            # First run: force fallback (dataset '=' missing); supply creation and mark dataset '=' via on_finish
+            fallback1: list[str] = []
+
+            def provide_creation_then_mark(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                fallback1.extend(datasets)
+                for ds in datasets:
+                    fn_latest(0, creation, ds, "")
+                    if fn_on_finish_dataset:
+                        fn_on_finish_dataset(ds)
+                return []
+
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=provide_creation_then_mark),
+            ):
+                job.find_datasets_to_snapshot([dataset])
+
+            self.assertListEqual([dataset], fallback1)
+
+            # Second run: matured time; should read cache and avoid fallback
+            fallback2: list[str] = []
+
+            def record_any_fallback(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                fallback2.extend(datasets)
+                return []
+
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch.object(Job, "handle_minmax_snapshots", new=record_any_fallback),
+                patch("time.time", return_value=snapshots_changed + bzfs.MATURITY_TIME_THRESHOLD_SECS + 0.5),
+            ):
+                job.find_datasets_to_snapshot([dataset])
+
+            self.assertListEqual([], fallback2)
+
+    def test_snapshot_scheduler_populates_label_cache_with_snapshots_changed_mtime(self) -> None:
+        """Snapshot scheduler must persist per-label caches as (atime=creation, mtime=snapshots_changed).
 
         Purpose: Lock in the intended contract for the snapshot scheduler's per-label cache format under
         ``--cache-snapshots``. The cache for each label must encode two distinct signals that downstream logic relies
@@ -1811,8 +1945,8 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(creation, atime)
             self.assertEqual(snapshots_changed, mtime)
 
-    def test_scheduler_threshold_controls_cache_trust(self) -> None:
-        """Validates the scheduler's time-threshold gating for cache trust and clarifies the safety contract.
+    def test_snapshot_scheduler_threshold_controls_cache_trust(self) -> None:
+        """Validates the snapshot scheduler's time-threshold gating for cache trust and clarifies the safety contract.
 
         Purpose and context: Under ``--cache-snapshots``, the scheduler attempts a fast path that avoids
         ``zfs list -t snapshot`` by reading two local cache files: the dataset-level "=" file
@@ -1859,7 +1993,9 @@ class TestSnapshotCache(AbstractTestCase):
             dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
             set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=t0, if_more_recent=True)
 
-            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label.notimestamp_str())
+            label_file = SnapshotCache(job).last_modified_cache_file(
+                job.params.src, dataset, self.snapshot_cache_label(label)
+            )
             set_last_modification_time_safe(label_file, unixtime_in_secs=(creation_old, t0), if_more_recent=True)
 
             received: list[str] = []
@@ -1896,8 +2032,8 @@ class TestSnapshotCache(AbstractTestCase):
                 job.find_datasets_to_snapshot([dataset])
             self.assertListEqual([], received)
 
-    def test_scheduler_label_cache_mtime_zero_is_untrusted(self) -> None:
-        """Scheduler must not trust per-label caches when label.mtime == 0.
+    def test_snapshot_scheduler_label_cache_mtime_zero_is_untrusted(self) -> None:
+        """Snapshot scheduler must not trust per-label caches when label.mtime == 0.
 
         This test formalizes a critical safety rule for the snapshot scheduler's fast path when
         ``--cache-snapshots`` is enabled. Our cache model separates two pieces of state per dataset:
@@ -1952,7 +2088,9 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=t0, if_more_recent=True)
 
             # Seed per-label cache with mtime=0 (unknown) and some creation time
-            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label.notimestamp_str())
+            label_file = SnapshotCache(job).last_modified_cache_file(
+                job.params.src, dataset, self.snapshot_cache_label(label)
+            )
             set_last_modification_time_safe(label_file, unixtime_in_secs=(creation_old, 0), if_more_recent=True)
 
             received: list[str] = []
@@ -1980,7 +2118,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Correct behavior: fallback invoked due to label.mtime==0 (untrusted)
             self.assertListEqual([dataset], received)
 
-    def test_scheduler_label_cache_mtime_must_match_dataset_cache(self) -> None:
+    def test_snapshot_scheduler_label_cache_mtime_must_match_dataset_cache(self) -> None:
         """Validates the scheduler's staleness guard for per-label cache files: trust the label's atime (latest matching
         snapshot creation) only if the label file's mtime equals the dataset-level "=" file's ``snapshots_changed`` value at
         the moment of scheduling. Otherwise, fall back to probing via ``handle_minmax_snapshots``.
@@ -2032,7 +2170,9 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=t1, if_more_recent=True)
 
             # per-label cache has mtime=t0 (stale) and atime=creation_old
-            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label.notimestamp_str())
+            label_file = SnapshotCache(job).last_modified_cache_file(
+                job.params.src, dataset, self.snapshot_cache_label(label)
+            )
             set_last_modification_time_safe(label_file, unixtime_in_secs=(creation_old, t0), if_more_recent=True)
 
             received: list[str] = []
@@ -2414,7 +2554,7 @@ class TestSnapshotCache(AbstractTestCase):
                 # Per-label caches (atime=creation, mtime=sc)
                 for lbl in labels:
                     set_last_modification_time_safe(
-                        SnapshotCache(job).last_modified_cache_file(job.params.src, ds, lbl.notimestamp_str()),
+                        SnapshotCache(job).last_modified_cache_file(job.params.src, ds, self.snapshot_cache_label(lbl)),
                         unixtime_in_secs=(creation, sc),
                         if_more_recent=True,
                     )
@@ -2504,7 +2644,9 @@ class TestSnapshotCache(AbstractTestCase):
             dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
             set_last_modification_time_safe(dataset_eq_file, t_src_future, if_more_recent=True)
             label = job.params.create_src_snapshots_config.snapshot_labels()[0]
-            label_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, label.notimestamp_str())
+            label_file = SnapshotCache(job).last_modified_cache_file(
+                job.params.src, dataset, self.snapshot_cache_label(label)
+            )
             set_last_modification_time_safe(label_file, (creation_old, t_src_future), if_more_recent=True)
 
             received: list[str] = []
@@ -2754,6 +2896,129 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(2, job.num_cache_hits)
             self.assertEqual(0, job.num_cache_misses)
 
+    def test_replication_cache_must_not_collide_across_dst_ssh_config_file(self) -> None:
+        """Replication cache ("==") must namespace by dst ssh_config_file to avoid collisions.
+
+        Purpose: Ensure different `--ssh-dst-config-file` values yield distinct replication-scoped cache labels.
+        Assumptions: Label construction includes `dst.cache_namespace()` which hashes ssh_config_file path when present.
+        Design Rationale: Prevents cross-environment conflation when multiple ssh configs target same host/port.
+        """
+
+        cfg_a = "/tmp/bzfs_ssh_config_a"  # only the basename constraint matters; file need not exist
+        cfg_b = "/tmp/bzfs_ssh_config_b"
+        with (
+            self.job_context(
+                [
+                    "--ssh-src-host",
+                    "127.0.0.1",
+                    "--ssh-dst-host",
+                    "127.0.0.1",
+                    "--ssh-dst-config-file",
+                    cfg_a,
+                    SRC_DATASET,
+                    DST_DATASET,
+                ]
+            ) as (job_a, _tmp_a),
+            self.job_context(
+                [
+                    "--ssh-src-host",
+                    "127.0.0.1",
+                    "--ssh-dst-host",
+                    "127.0.0.1",
+                    "--ssh-dst-config-file",
+                    cfg_b,
+                    SRC_DATASET,
+                    DST_DATASET,
+                ]
+            ) as (job_b, _tmp_b),
+        ):
+            job_a.params.dst.ssh_user_host = "u@h"
+            job_b.params.dst.ssh_user_host = "u@h"
+            label_a = self.replication_cache_label(job_a, DST_DATASET)
+            label_b = self.replication_cache_label(job_b, DST_DATASET)
+            self.assertNotEqual(label_a, label_b)
+
+    def test_dataset_cache_namespace_prevents_collision_across_src_ssh_config_file(self) -> None:
+        """Dataset-level '=' cache paths must differ across src ssh_config_file values.
+
+        Purpose: Ensure per-dataset '=' files are segregated by `src.cache_namespace()` including ssh_config_file hash.
+        Assumptions: Remotes with same host but different ssh config must not share cache directories.
+        Design Rationale: Avoids stale or incorrect cache reuse across distinct SSH configurations.
+        """
+
+        cfg_a = "/tmp/bzfs_ssh_config_src_a"
+        cfg_b = "/tmp/bzfs_ssh_config_src_b"
+        dataset = SRC_DATASET
+        with (
+            self.job_context(
+                [
+                    "--ssh-src-host",
+                    "127.0.0.1",
+                    "--ssh-src-config-file",
+                    cfg_a,
+                    dataset,
+                    DST_DATASET,
+                ]
+            ) as (job_a, _tmp_a),
+            self.job_context(
+                [
+                    "--ssh-src-host",
+                    "127.0.0.1",
+                    "--ssh-src-config-file",
+                    cfg_b,
+                    dataset,
+                    DST_DATASET,
+                ]
+            ) as (job_b, _tmp_b),
+        ):
+            job_a.params.src.ssh_user_host = "u@h"
+            job_b.params.src.ssh_user_host = "u@h"
+            cache = SnapshotCache(job_a)
+            path_a = cache.last_modified_cache_file(job_a.params.src, dataset)
+            cache = SnapshotCache(job_b)
+            path_b = cache.last_modified_cache_file(job_b.params.src, dataset)
+            self.assertNotEqual(path_a, path_b)
+
+    def test_monitor_cache_scoped_by_alert_plan(self) -> None:
+        """Monitor cache ("===") must be scoped by alert plan hash.
+
+        Purpose: Distinct monitor plans (e.g., cycles) should produce different cache subdirectories.
+        Assumptions: monitor label uses hash(notimestamp_label); final segment hashes the tuple(alerts).
+        Design Rationale: Prevents mixing state across incompatible alerting thresholds.
+        """
+
+        lbl = SnapshotLabel(prefix="bzfs_", infix="us_", timestamp="", suffix="_hourly")
+        alerts_a = [
+            MonitorSnapshotAlert(
+                label=lbl,
+                latest=AlertConfig("Latest", warning_millis=3600_000, critical_millis=7200_000),
+                oldest=None,
+            )
+        ]
+        alerts_b = [
+            MonitorSnapshotAlert(
+                label=lbl,
+                latest=AlertConfig("Latest", warning_millis=2 * 3600_000, critical_millis=3 * 3600_000),
+                oldest=None,
+            )
+        ]
+        cache_label_a = self.monitor_cache_label("Latest", lbl, alerts_a)
+        cache_label_b = self.monitor_cache_label("Latest", lbl, alerts_b)
+        self.assertNotEqual(cache_label_a, cache_label_b)
+
+    def test_scheduler_label_hash_excludes_timestamp(self) -> None:
+        """Scheduler per-label cache key must ignore the timestamp field.
+
+        Purpose: Two labels differing only in timestamp must map to the same per-label cache file name.
+        Assumptions: snapshot_cache_label() digests label.notimestamp_str().
+        Design Rationale: Ensures stable cache reuse across runs and avoids ephemeral paths.
+        """
+
+        base = {"prefix": "bzfs_", "infix": "us_", "suffix": "_hourly"}
+        a = SnapshotLabel(**base, timestamp="2025-01-01_00-00-00")
+        b = SnapshotLabel(**base, timestamp="2025-01-01_00-00-01")
+        self.assertEqual(self.snapshot_cache_label(a), self.snapshot_cache_label(b))
+
     @unittest.skip("benchmark; enable for performance measurements")
     def test_benchmark_last_modified_cache_file(self) -> None:
         """Benchmark: Measure calls/sec for last_modified_cache_file() with large inputs."""
@@ -2764,7 +3029,9 @@ class TestSnapshotCache(AbstractTestCase):
         prefix_10 = "".join(rng.choice(letters) for _ in range(9)) + "_"  # length 10
         infix_10 = "".join(rng.choice(letters) for _ in range(9)) + "_"  # length 10
         suffix_20 = "_" + "".join(rng.choice(letters) for _ in range(19))  # length 20; total label visible length = 40
-        label_40 = str(SnapshotLabel(prefix=prefix_10, infix=infix_10, timestamp="2025-01-01_12-34:56", suffix=suffix_20))
+        label_40 = self.snapshot_cache_label(
+            SnapshotLabel(prefix=prefix_10, infix=infix_10, timestamp="2025-01-01_12-34:56", suffix=suffix_20)
+        )
 
         with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
             cache = SnapshotCache(job)

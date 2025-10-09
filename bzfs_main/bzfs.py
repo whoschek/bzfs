@@ -1029,7 +1029,9 @@ class Job:
             props: dict[str, DatasetProperties] = self.dst_properties if remote is p.dst else self.src_properties
             snapshots_changed_dict: dict[str, int] = {dataset: vals.snapshots_changed for dataset, vals in props.items()}
             alerts_hash: str = sha256_128_urlsafe_base64(str(tuple(alerts)))
-            label_hashes: dict[SnapshotLabel, str] = {label: sha256_128_urlsafe_base64(str(label)) for label in labels}
+            label_hashes: dict[SnapshotLabel, str] = {
+                label: sha256_128_urlsafe_base64(label.notimestamp_str()) for label in labels
+            }
         is_caching: bool = False
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
@@ -1393,7 +1395,7 @@ class Job:
             msgs.append((next_event_dt, dataset, label, msg))
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
                 # Per-label cache stores (atime=creation, mtime=snapshots_changed) so later runs can safely trust creation
-                # only when the label's mtime matches the current dataset-level '=' cache value.
+                # only when the label's mtime matches the current dataset-level '=' cache value. Excludes timestamp of label.
                 cache_file: str = self.cache.last_modified_cache_file(src, dataset, label_hashes[label])
                 unixtimes: tuple[int, int] = (creation_unixtime, self.src_properties[dataset].snapshots_changed)
                 set_last_modification_time_safe(cache_file, unixtime_in_secs=unixtimes, if_more_recent=True)
@@ -1408,13 +1410,14 @@ class Job:
                 labels.append(label)
         if len(labels) == 0:
             return datasets_to_snapshot  # nothing more TBD
-        label_hashes: dict[SnapshotLabel, str] = {label: sha256_128_urlsafe_base64(str(label)) for label in labels}
+        label_hashes: dict[SnapshotLabel, str] = {
+            label: sha256_128_urlsafe_base64(label.notimestamp_str()) for label in labels
+        }
 
         # satisfy request from local cache as much as possible
         cached_datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         if is_caching_snapshots(p, src):
             sorted_datasets_todo: list[str] = []
-            notime_labels: list[str] = [label.notimestamp_str() for label in labels]
             time_threshold: float = time.time() - MATURITY_TIME_THRESHOLD_SECS
             for dataset in sorted_datasets:
                 cache: SnapshotCache = self.cache
@@ -1430,10 +1433,10 @@ class Job:
                     sorted_datasets_todo.append(dataset)  # cache entry isn't mature enough to be trusted; skip cache
                     continue
                 creation_unixtimes: list[int] = []
-                for notime_label in notime_labels:
+                for label_hash in label_hashes.values():
                     # For per-label files, atime stores the latest matching snapshot's creation time, while mtime stores
                     # the dataset-level snapshots_changed observed when this label file was written.
-                    atime, mtime = cache.get_snapshots_changed2(cache.last_modified_cache_file(src, dataset, notime_label))
+                    atime, mtime = cache.get_snapshots_changed2(cache.last_modified_cache_file(src, dataset, label_hash))
                     # Sanity check: trust per-label cache only when:
                     #  - mtime equals the dataset-level '=' cache (same snapshots_changed), and
                     #  - atime is plausible and not later than mtime (creation <= snapshots_changed), and
