@@ -815,7 +815,7 @@ def _mbuffer_cmd(p: Params, loc: str, size_estimate_bytes: int, recordsize: int)
     """If mbuffer command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to smooth out
     the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation."""
     if (
-        size_estimate_bytes >= p.min_pipe_transfer_size
+        (p.no_estimate_send_size or size_estimate_bytes >= p.min_pipe_transfer_size)
         and (
             (loc == "src" and (p.src.is_nonlocal or p.dst.is_nonlocal))
             or (loc == "dst" and (p.src.is_nonlocal or p.dst.is_nonlocal))
@@ -833,7 +833,7 @@ def _compress_cmd(p: Params, loc: str, size_estimate_bytes: int) -> str:
     """If zstd command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to reduce network
     bottlenecks by sending compressed data."""
     if (
-        size_estimate_bytes >= p.min_pipe_transfer_size
+        (p.no_estimate_send_size or size_estimate_bytes >= p.min_pipe_transfer_size)
         and (p.src.is_nonlocal or p.dst.is_nonlocal)
         and p.is_program_available("zstd", loc)
     ):
@@ -845,7 +845,7 @@ def _compress_cmd(p: Params, loc: str, size_estimate_bytes: int) -> str:
 def _decompress_cmd(p: Params, loc: str, size_estimate_bytes: int) -> str:
     """Returns decompression command for network pipe if remote supports it."""
     if (
-        size_estimate_bytes >= p.min_pipe_transfer_size
+        (p.no_estimate_send_size or size_estimate_bytes >= p.min_pipe_transfer_size)
         and (p.src.is_nonlocal or p.dst.is_nonlocal)
         and p.is_program_available("zstd", loc)
     ):
@@ -865,7 +865,7 @@ def _pv_cmd(
     p = job.params
     if p.is_program_available("pv", loc):
         size: str = f"--size={size_estimate_bytes}"
-        if disable_progress_bar or size_estimate_bytes == 0:
+        if disable_progress_bar or p.no_estimate_send_size:
             size = ""
         pv_log_file: str = p.log_params.pv_log_file
         thread_name: str = threading.current_thread().name

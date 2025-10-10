@@ -337,6 +337,7 @@ class TestReplication(AbstractTestCase):
             is_program_available=MagicMock(return_value=False),
             mbuffer_program="mbuffer",
             mbuffer_program_opts=["-O", "localhost:0"],
+            no_estimate_send_size=False,
         )
         self.assertEqual("cat", _mbuffer_cmd(p, "src", 2, 1024))
 
@@ -348,6 +349,7 @@ class TestReplication(AbstractTestCase):
             is_program_available=MagicMock(return_value=True),
             mbuffer_program="mbuffer",
             mbuffer_program_opts=["-O", "localhost:0"],
+            no_estimate_send_size=False,
         )
         self.assertEqual("mbuffer -s 2097152 -O localhost:0", _mbuffer_cmd(p, "src", 2, 4096))
 
@@ -359,6 +361,7 @@ class TestReplication(AbstractTestCase):
             is_program_available=MagicMock(return_value=False),
             compression_program="zstd",
             compression_program_opts=["-3"],
+            no_estimate_send_size=False,
         )
         self.assertEqual("cat", _compress_cmd(p, "src", 20))
 
@@ -370,6 +373,7 @@ class TestReplication(AbstractTestCase):
             is_program_available=MagicMock(return_value=True),
             compression_program="zstd",
             compression_program_opts=["-3"],
+            no_estimate_send_size=False,
         )
         self.assertEqual("zstd -c -3", _compress_cmd(p, "src", 20))
 
@@ -380,6 +384,7 @@ class TestReplication(AbstractTestCase):
             dst=MagicMock(is_nonlocal=False),
             is_program_available=MagicMock(return_value=False),
             compression_program="zstd",
+            no_estimate_send_size=False,
         )
         self.assertEqual("cat", _decompress_cmd(p, "src", 20))
 
@@ -390,6 +395,7 @@ class TestReplication(AbstractTestCase):
             dst=MagicMock(is_nonlocal=False),
             is_program_available=MagicMock(return_value=True),
             compression_program="zstd",
+            no_estimate_send_size=False,
         )
         self.assertEqual("zstd -dc", _decompress_cmd(p, "src", 20))
 
@@ -401,6 +407,7 @@ class TestReplication(AbstractTestCase):
             pv_program_opts=["-L1"],
             log_params=log_params,
             quiet=True,
+            no_estimate_send_size=False,
         )
         job = MagicMock(
             params=p,
@@ -413,7 +420,7 @@ class TestReplication(AbstractTestCase):
         self.assertEqual("LC_ALL=C pv -L1 --force --name=1MB --size=1048576 2>> /tmp/pv.log", result)
 
     def test_pv_cmd_returns_cat_when_missing(self) -> None:
-        p = _make_params(is_program_available=MagicMock(return_value=False))
+        p = _make_params(is_program_available=MagicMock(return_value=False), no_estimate_send_size=False)
         job = MagicMock(params=p)
         self.assertEqual("cat", _pv_cmd(job, "src", 1, "1B"))
 
