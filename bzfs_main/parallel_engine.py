@@ -299,22 +299,27 @@ def process_datasets_in_parallel_and_fault_tolerant(
             for done_future in done_futures:
                 done_node: TreeNode = future_to_node.pop(done_future)
                 dataset: str = done_node.dataset
-                try:
-                    no_skip: bool = done_future.result()  # does not block as processing has already completed
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                    nonlocal failed
-                    failed = True
-                    if skip_on_error == "fail":
-                        [todo_future.cancel() for todo_future in todo_futures]
-                        terminate_process_subtree(except_current_process=True)
-                        raise
-                    no_skip = not (skip_on_error == "tree" or skip_tree_on_error(dataset))
-                    log.error("%s", e)
-                    append_exception(e, task_name, dataset)
+                no_skip: bool = complete_dataset(dataset, done_future)
                 if barriers_enabled:  # This barrier-based algorithm is for more general job scheduling, as in bzfs_jobrunner
                     _complete_job_with_barriers(done_node, no_skip, priority_queue, datasets_set, immutable_empty_barrier)
                 elif no_skip:  # This simple algorithm is sufficient for almost all use cases
                     _simple_enqueue_children(done_node, priority_queue, datasets_set)
+
+        def complete_dataset(dataset: str, done_future: Future[bool]) -> bool:
+            """Processes results and errors."""
+            try:
+                no_skip: bool = done_future.result()  # does not block as processing has already completed
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                nonlocal failed
+                failed = True
+                if skip_on_error == "fail":
+                    [todo_future.cancel() for todo_future in todo_futures]
+                    terminate_process_subtree(except_current_process=True)
+                    raise
+                no_skip = not (skip_on_error == "tree" or skip_tree_on_error(dataset))
+                log.error("%s", e)
+                append_exception(e, task_name, dataset)
+            return no_skip
 
         # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
         while submit_datasets():
