@@ -18,7 +18,6 @@ synchronization."""
 from __future__ import (
     annotations,
 )
-import argparse
 import logging
 import os
 import random
@@ -232,15 +231,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                 src_datasets = ["a1", "a1/b1", "a2"]
                 if i > 0:
                     self.log.isEnabledFor.side_effect = lambda level: level >= logging.DEBUG
-                    self.default_kwargs["retry_policy"] = RetryPolicy(
-                        argparse.Namespace(
-                            retries=0,
-                            retry_min_sleep_secs=0,
-                            retry_max_sleep_secs=0,
-                            retry_initial_max_sleep_secs=0,
-                            retry_max_elapsed_secs=0,
-                        )
-                    )
+                    self.default_kwargs["retry_policy"] = RetryPolicy.no_retries()
                 failed = process_datasets_in_parallel_and_fault_tolerant(
                     datasets=src_datasets,
                     process_dataset=submit_no_skiptree,  # lambda

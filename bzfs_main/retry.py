@@ -70,6 +70,19 @@ class RetryPolicy:
             f"max_elapsed_secs: {self.max_elapsed_secs}"
         )
 
+    @classmethod
+    def no_retries(cls) -> RetryPolicy:
+        """Returns a policy that never retries."""
+        return cls(
+            argparse.Namespace(
+                retries=0,
+                retry_min_sleep_secs=0,
+                retry_initial_max_sleep_secs=0,
+                retry_max_sleep_secs=0,
+                retry_max_elapsed_secs=0,
+            )
+        )
+
 
 #############################################################################
 T = TypeVar("T")

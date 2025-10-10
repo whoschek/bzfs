@@ -19,7 +19,6 @@ snapshot deletion."""
 from __future__ import (
     annotations,
 )
-import argparse
 import concurrent
 import heapq
 import logging
@@ -241,16 +240,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     assert (enable_barriers is not False) or not has_barrier, "Barriers seen in datasets but barriers explicitly disabled"
     barriers_enabled: bool = bool(has_barrier or enable_barriers)
     assert callable(append_exception)
-    if retry_policy is None:
-        retry_policy = RetryPolicy(  # no retries
-            argparse.Namespace(
-                retries=0,
-                retry_min_sleep_secs=0,
-                retry_initial_max_sleep_secs=0,
-                retry_max_sleep_secs=0,
-                retry_max_elapsed_secs=0,
-            )
-        )
+    retry_policy = RetryPolicy.no_retries() if retry_policy is None else retry_policy
     is_debug: bool = log.isEnabledFor(logging.DEBUG)
 
     def _process_dataset(dataset: str, tid: str) -> bool:
