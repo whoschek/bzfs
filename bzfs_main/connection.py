@@ -87,7 +87,7 @@ def run_ssh_command(
     print_stderr: bool = True,
     cmd: list[str] | None = None,
 ) -> str:
-    """Runs the given cmd via ssh on the given remote, and returns stdout.
+    """Runs the given CLI cmd via ssh on the given remote, and returns stdout.
 
     The full command is the concatenation of both the command to run on the localhost in order to talk to the remote host
     ($remote.local_ssh_command()) and the command to run on the given remote host ($cmd).
