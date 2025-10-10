@@ -1278,8 +1278,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help=argparse.SUPPRESS)
     parser.add_argument(
         "--no-estimate-send-size", action="store_true",
-        # help="Skip 'zfs send -n -v'. This may improve performance if replicating small snapshots at high frequency.\n\n")
-        help=argparse.SUPPRESS)
+        help="Skip 'zfs send -n -v'. This can improve performance if replicating small snapshots at high frequency.\n\n")
 
     def hlp(program: str) -> str:
         return f"The name of the '{program}' executable (optional). Default is '{program}'. "

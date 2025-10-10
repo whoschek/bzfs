@@ -636,7 +636,7 @@ usage: bzfs [-h] [--recursive]
             [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
             [--threads INT[%]]
             [--max-concurrent-ssh-sessions-per-tcp-connection INT]
-            [--bwlimit STRING]
+            [--bwlimit STRING] [--no-estimate-send-size]
             [--compression-program {zstd,lz4,pzstd,pigz,gzip,-}]
             [--compression-program-opts STRING]
             [--mbuffer-program {mbuffer,-}]
@@ -2017,6 +2017,15 @@ usage: bzfs [-h] [--recursive]
 *  Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example:
     `100m` to cap throughput at 100 MB/sec. Default is unlimited. Also see
     https://manpages.ubuntu.com/manpages/man1/pv.1.html
+
+<!-- -->
+
+<div id="--no-estimate-send-size"></div>
+
+**--no-estimate-send-size**
+
+*  Skip 'zfs send -n -v'. This can improve performance if replicating small snapshots at high
+    frequency.
 
 <!-- -->
 
