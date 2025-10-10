@@ -160,8 +160,8 @@ Before committing any changes, you **must** follow this exact sequence:
   consequences to users in specific **realistic use cases**, and associated impact severity (`High`, `Medium`, `Low`).
   Describe known work-arounds and outline potential solutions. Finally, estimate the priority aka urgency of producing a
   fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
-- **Collect Context:** Also collect other information that assists a successful bug diagnosis, for example error
-  messages, usage pattern, env/config files, log files, version of software components, etc.
+- **Collect Context:** Also collect other information that assists a successful bug diagnosis, for example usage
+  pattern, error messages, stack traces, log files, env/config files, version of software components, etc.
 
 ## How to Find and Fix Bugs
 
