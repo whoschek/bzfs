@@ -102,7 +102,7 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
             self._priority_queue.sort()
             conn = self._priority_queue[-1] if self._priority_queue else None
             if conn is None or conn.is_full():
-                conn = Connection(self._remote, self._capacity, self._cid, SHARED)
+                conn = Connection(self._remote, self._capacity, self._cid)
                 self._last_modified += 1
                 conn.update_last_modified(self._last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
                 self._cid += 1
@@ -211,6 +211,32 @@ class TestConnectionPool(AbstractTestCase):
             cpool.return_connection(conn3)
         cpool.shutdown("bar")
         cpool.return_connection(conn3)
+
+    def test_pool_acquires_lease_when_reuse_enabled(self) -> None:
+        """When SSH reuse is enabled, the pool creates a single manager and acquires a lease for new connections."""
+        with get_tmpdir() as ssh_socket_dir:
+            args = self.argparser_parse_args(["src", "dst"])  # do not set --ssh-exit-on-shutdown
+            p = self.make_params(args=args)
+            remote = cast(
+                Remote,
+                _FakeRemote(
+                    params=p,
+                    location="dst",
+                    ssh_user_host="host",
+                    reuse_ssh_connection=True,
+                    ssh_exit_on_shutdown=False,
+                    ssh_control_persist_secs=90,
+                    ssh_extra_opts=[],
+                    ssh_socket_dir=ssh_socket_dir,
+                ),
+            )
+            cpool = ConnectionPool(remote, 1, SHARED)
+            try:
+                conn = cpool.get_connection()
+                self.assertIsNotNone(cpool._lease_mgr)
+                self.assertIsNotNone(conn.connection_lease)
+            finally:
+                conn.shutdown("test", p)
 
     def test_multiple_tcp_connections(self) -> None:
         capacity = 2
@@ -551,7 +577,7 @@ class TestRefreshSshConnection(AbstractTestCase):
                 ssh_extra_opts=[],
             ),
         )
-        self.conn = connection.Connection(self.remote, 1, 0, SHARED)
+        self.conn = connection.Connection(self.remote, 1, 0)
         self.conn.last_refresh_time = 0
 
     @patch("bzfs_main.connection.subprocess_run")
@@ -628,7 +654,8 @@ class TestRefreshSshConnection(AbstractTestCase):
                     ssh_socket_dir=ssh_socket_dir,
                 ),
             )
-            conn = connection.Connection(remote, 1, 0, SHARED)
+            cpool = ConnectionPool(remote, 1, SHARED)
+            conn = cpool.get_connection()
             try:
                 conn.last_refresh_time = 0  # avoid fast return
                 connection.refresh_ssh_connection_if_necessary(self.job, remote, conn)
@@ -753,7 +780,7 @@ class TestSshExitOnShutdown(AbstractTestCase):
                 ssh_extra_opts=[],
             ),
         )
-        conn: Connection = Connection(r, 1, 0, SHARED)
+        conn: Connection = Connection(r, 1, 0)
         conn.shutdown("test", p)
         self.assertTrue(mock_run.called)
         argv = mock_run.call_args[0][0]
@@ -791,7 +818,8 @@ class TestSshExitOnShutdown(AbstractTestCase):
                     ssh_socket_dir=ssh_socket_dir,
                 ),
             )
-            conn: Connection = Connection(r, 1, 0, SHARED)
+            cpool = ConnectionPool(r, 1, SHARED)
+            conn: Connection = cpool.get_connection()
             conn.shutdown("test", p)
             # No call to run expected when immediate exit is false
             self.assertFalse(mock_run.called)

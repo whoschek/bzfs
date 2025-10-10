@@ -244,9 +244,12 @@ class Connection:
     _last_modified: int  # LIFO: tiebreaker favors latest returned conn as that's most alive and hot; also ensures no dupes
 
     def __init__(
-        self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int, connpool_name: str
+        self,
+        remote: Remote,
+        max_concurrent_ssh_sessions_per_tcp_connection: int,
+        cid: int,
+        lease: ConnectionLease | None = None,
     ) -> None:
-        assert connpool_name
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self._capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
         self._free: int = max_concurrent_ssh_sessions_per_tcp_connection
@@ -255,15 +258,7 @@ class Connection:
         self.last_refresh_time: int = 0
         self.lock: Final[threading.Lock] = threading.Lock()
         self._reuse_ssh_connection: Final[bool] = remote.reuse_ssh_connection
-        connection_lease: ConnectionLease | None = None
-        if remote.ssh_user_host and remote.reuse_ssh_connection and not remote.ssh_exit_on_shutdown:
-            connection_lease = ConnectionLeaseManager(
-                root_dir=remote.ssh_socket_dir,
-                namespace=f"{remote.location}#{remote.cache_namespace()}#{connpool_name}",
-                ssh_control_persist_secs=max(90 * 60, 2 * remote.ssh_control_persist_secs + 2),
-                log=remote.params.log,
-            ).acquire()
-        self.connection_lease: Final[ConnectionLease | None] = connection_lease
+        self.connection_lease: Final[ConnectionLease | None] = lease
         self.ssh_cmd: Final[list[str]] = remote.local_ssh_command(
             None if self.connection_lease is None else self.connection_lease.socket_path
         )
@@ -319,6 +314,15 @@ class ConnectionPool:
         self._last_modified: int = 0  # monotonically increasing sequence number
         self._cid: int = 0  # monotonically increasing connection number
         self._lock: Final[threading.Lock] = threading.Lock()
+        lease_mgr: ConnectionLeaseManager | None = None
+        if self._remote.ssh_user_host and self._remote.reuse_ssh_connection and not self._remote.ssh_exit_on_shutdown:
+            lease_mgr = ConnectionLeaseManager(
+                root_dir=self._remote.ssh_socket_dir,
+                namespace=f"{self._remote.location}#{self._remote.cache_namespace()}#{self._connpool_name}",
+                ssh_control_persist_secs=max(90 * 60, 2 * self._remote.ssh_control_persist_secs + 2),
+                log=self._remote.params.log,
+            )
+        self._lease_mgr: Final[ConnectionLeaseManager | None] = lease_mgr
 
     @contextlib.contextmanager
     def connection(self) -> Iterator[Connection]:
@@ -343,7 +347,8 @@ class ConnectionPool:
             if conn is None or conn.is_full():
                 if conn is not None:
                     self._priority_queue.push(conn)
-                conn = Connection(self._remote, self._capacity, self._cid, self._connpool_name)  # add a new connection
+                lease: ConnectionLease | None = None if self._lease_mgr is None else self._lease_mgr.acquire()
+                conn = Connection(self._remote, self._capacity, self._cid, lease=lease)  # add a new connection
                 self._last_modified += 1
                 conn.update_last_modified(self._last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
                 self._cid += 1
