@@ -464,13 +464,11 @@ class Job:
     """Coordinates subjobs per the CLI flags; Each subjob handles one host pair and may run in its own process or thread."""
 
     def __init__(self, log: Logger | None = None) -> None:
-        """Initialize caches, parsers and logger shared across subjobs."""
+        """Initialize caches and logger shared across subjobs."""
         # immutable variables:
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
         self.log: Logger = log if log is not None else get_simple_logger(PROG_NAME)
-        self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
-        self.argument_parser: argparse.ArgumentParser = argument_parser()
         self.loopback_address: str = _detect_loopback_address()
 
         # mutable variables:
@@ -487,7 +485,7 @@ class Job:
         log: Logger = self.log
         log.info("CLI arguments: %s", " ".join(sys_argv))
         nsp = argparse.Namespace(no_argument_file=True)  # disable --root-dataset-pairs='+file' option in DatasetPairsAction
-        args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:], nsp)  # forward all unknown args to `bzfs`
+        args, unknown_args = argument_parser().parse_known_args(sys_argv[1:], nsp)  # forward all unknown args to `bzfs`
         log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
         assert len(args.root_dataset_pairs) > 0
@@ -1028,7 +1026,7 @@ class Job:
         """Delegates execution to :mod:`bzfs` using parsed arguments."""
         bzfs_job = bzfs.Job()
         bzfs_job.is_test_mode = self.is_test_mode
-        bzfs_job.run_main(self.bzfs_argument_parser.parse_args(cmd[1:]), cmd)
+        bzfs_job.run_main(bzfs.argument_parser().parse_args(cmd[1:]), cmd)
 
     def run_worker_job_spawn_process_per_job(self, cmd: list[str], timeout_secs: float | None) -> int | None:
         """Spawns a subprocess for the worker job and waits for completion."""

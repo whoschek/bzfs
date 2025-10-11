@@ -32,6 +32,7 @@ from subprocess import (
     CalledProcessError,
 )
 from typing import (
+    Any,
     Union,
     cast,
 )
@@ -68,6 +69,7 @@ def suite() -> unittest.TestSuite:
         TestErrorPropagation,
         TestValidateSnapshotPlan,
         TestValidateMonitorSnapshotPlan,
+        TestParserIsolationAcrossSubjobs,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -1061,3 +1063,78 @@ class TestValidateMonitorSnapshotPlan(AbstractTestCase):
         plan: dict[str, dict[str, dict[str, dict[str, object]]]] = {"org": {"tgt": {"hour": {"warn": object()}}}}
         with self.assertRaises(SystemExit):
             self.job.validate_monitor_snapshot_plan(plan)  # type: ignore[arg-type]
+
+
+#############################################################################
+class TestParserIsolationAcrossSubjobs(AbstractTestCase):
+
+    def test_replicate_subjobs_do_not_leak_snapshot_filters(self) -> None:
+        """Multiple replicate subjobs in one process must not leak include-snapshot-regex between parses.
+
+        We capture the '--include-snapshot-regex=...' tokens produced by --include-snapshot-plan during the initial
+        parse inside Job._bzfs_run_main (before bzfs re-parses aux args). With a reused parser, the list accumulates
+        across subjobs and we would see both regexes in the second subjob.
+        """
+        job = bzfs_jobrunner.Job()
+        job.log = MagicMock()
+        job.is_test_mode = True
+
+        # Build argv that yields two separate replicate subjobs, one per dst host with distinct targets.
+        # Host A replicates empty-target daily; Host B replicates 'onsite' hourly.
+        argv: list[str] = [
+            bzfs_jobrunner.PROG_NAME,
+            "--job-id=test",
+            "--root-dataset-pairs",
+            "tank/src",
+            "pool/dst",
+            "--include-dataset-regex=^pool/dst$",  # forwarded unknown arg to bzfs; has default list in parser
+            "--src-hosts=['src1']",
+            "--dst-hosts={'dstA': [''], 'dstB': ['onsite']}",
+            "--retain-dst-targets={'dstA': [''], 'dstB': ['onsite']}",
+            "--dst-root-datasets={'dstA': 'pool/backup', 'dstB': 'pool/backup'}",
+            "--dst-snapshot-plan={'org': {'': {'daily': 1}, 'onsite': {'hourly': 1}}}",
+            "--replicate",
+        ]
+
+        # Capture subjobs produced by run_main without executing them.
+        captured: dict[str, list[str]] = {}
+
+        def fake_run_subjobs(subjobs: dict[str, list[str]], *_: object, **__: object) -> None:
+            captured.update(subjobs)
+
+        with patch.object(job, "run_subjobs", side_effect=fake_run_subjobs):
+            with patch("sys.argv", argv):
+                job.run_main(argv)
+
+        # In this test we only emit replicate subjobs; assert count and take them in deterministic order.
+        self.assertEqual(2, len(captured), f"unexpected subjobs: {sorted(captured.keys())}")
+        replicate_cmds: list[list[str]] = [captured[name] for name in sorted(captured)]
+
+        # Patch bzfs.Job.run_main to capture the parsed args as delivered by jobrunner's parser
+        captured_regex_tokens: list[list[str]] = []
+        captured_include_dataset_regex_values: list[list[str]] = []
+
+        def fake_bzfs_run_main(
+            self: Any, args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None
+        ) -> None:
+            tokens = [t for t in cast(list[str], args.include_snapshot_plan) if t.startswith("--include-snapshot-regex=")]
+            captured_regex_tokens.append(tokens)
+            captured_include_dataset_regex_values.append(list(cast(list[str], args.include_dataset_regex)))
+
+        with patch("bzfs_main.bzfs.Job.run_main", new=fake_bzfs_run_main):
+            job.stats.jobs_all = len(replicate_cmds)
+            for idx, cmd in enumerate(replicate_cmds):
+                with suppress_output():
+                    result = job.run_subjob(cmd=cmd, name=f"replicate{idx}", timeout_secs=None, spawn_process_per_job=False)
+                self.assertEqual(0, result)
+
+        # Each subjob must specify exactly the expected include-snapshot-regex token (no extras),
+        # compared as nested lists to preserve the per-subjob boundary (no tokens[0] needed).
+        expected_tokens_nested = [
+            ["--include-snapshot-regex=org_[1-9][0-9][0-9][0-9].*_daily"],
+            ["--include-snapshot-regex=org_onsite_.*_hourly"],
+        ]
+        self.assertListEqual(expected_tokens_nested, captured_regex_tokens)
+
+        # Critically: include_dataset_regex must equal the exact forwarded value for each subjob (no accumulation)
+        self.assertListEqual([["^pool/dst$"], ["^pool/dst$"]], captured_include_dataset_regex_values)

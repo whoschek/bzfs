@@ -4,6 +4,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [1.13.0] - TBD
 
+- [bzfs_jobrunner] Prevent leakage of argument parser options across subjobs.
 - [bzfs] [perf] Reuse SSH connections across zpools to improve latency.
 - [bzfs] [perf] Reuse SSH connections on bzfs process startup to improve latency.
 - [bzfs] [perf] Estimate num bytes to transfer via 'zfs send' in parallel to improve latency.
