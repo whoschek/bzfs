@@ -30,6 +30,7 @@ from collections.abc import (
 )
 from concurrent.futures import (
     FIRST_COMPLETED,
+    Executor,
     Future,
     ThreadPoolExecutor,
 )
@@ -39,11 +40,15 @@ from typing import (
     TypeVar,
 )
 
+from bzfs_main.utils import (
+    SynchronousExecutor,
+)
+
 T = TypeVar("T")
 
 
 def parallel_iterator(
-    iterator_builder: Callable[[ThreadPoolExecutor], Iterable[Iterable[Future[T]]]],
+    iterator_builder: Callable[[Executor], Iterable[Iterable[Future[T]]]],
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
 ) -> Iterator[T]:
@@ -124,7 +129,7 @@ def parallel_iterator(
     for result in parallel_iterator(build_ssh_commands, max_workers=4, ordered=True):
         process_ssh_result(result)
     """
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with SynchronousExecutor.executor_for(max_workers=max_workers) as executor:
         yield from parallel_iterator_results(
             iterator=itertools.chain.from_iterable(iterator_builder(executor)),
             max_workers=max_workers,
@@ -138,7 +143,8 @@ def parallel_iterator_results(
     ordered: bool,
 ) -> Iterator[T]:
     """Yield results from an iterator of Future[T] using sliding-window parallelism with optional ordered delivery."""
-    assert max_workers > 0
+    assert max_workers >= 0
+    max_workers = max(1, max_workers)
     # Materialize the next N=max_workers futures into a buffer, causing submission + parallel execution of their CLI calls
     fifo_buffer: deque[Future[T]] = deque(itertools.islice(iterator, max_workers))
     sentinel: Future[T] = Future()

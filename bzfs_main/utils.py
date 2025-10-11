@@ -1155,7 +1155,7 @@ class SynchronousExecutor(Executor):
     @classmethod
     def executor_for(cls, max_workers: int) -> Executor:
         """Factory returning a SynchronousExecutor if max_workers == 1; else a ThreadPoolExecutor."""
-        return cls() if max_workers == 1 else ThreadPoolExecutor(max_workers=max_workers)
+        return cls() if 0 <= max_workers <= 1 else ThreadPoolExecutor(max_workers=max_workers)
 
 
 #############################################################################

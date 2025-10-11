@@ -1597,7 +1597,7 @@ class TestSynchronousExecutor(unittest.TestCase):
 
     def test_factory_invalid_raises(self) -> None:
         with self.assertRaises(ValueError):
-            _ = SynchronousExecutor.executor_for(0)
+            _ = SynchronousExecutor.executor_for(-1)
 
 
 #############################################################################

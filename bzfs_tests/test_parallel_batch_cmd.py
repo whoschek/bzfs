@@ -22,6 +22,10 @@ import time
 import unittest
 from collections.abc import (
     Iterable,
+    Iterator,
+)
+from concurrent.futures import (
+    Future,
 )
 
 from bzfs_main import (
@@ -38,6 +42,10 @@ from bzfs_main.connection import (
 from bzfs_main.parallel_batch_cmd import (
     itr_ssh_cmd_parallel,
 )
+from bzfs_main.parallel_iterator import (
+    parallel_iterator,
+    parallel_iterator_results,
+)
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
@@ -46,9 +54,28 @@ from bzfs_tests.abstract_testcase import (
 #############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
+        TestParallelIterator,
         TestItrSshCmdParallel,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
+
+
+#############################################################################
+class TestParallelIterator(unittest.TestCase):
+    """Covers edge cases for parallel_iterator_results()."""
+
+    def test_zero_workers_empty_iterator_returns_empty(self) -> None:
+        """When max_workers==0, function should accept an empty iterator and yield nothing."""
+        self.assertEqual([], list(parallel_iterator_results(iter([]), max_workers=0, ordered=True)))
+
+    def test_parallel_iterator_zero_workers_empty_builder(self) -> None:
+        """parallel_iterator with max_workers==0 yields nothing when builder produces no tasks."""
+
+        def builder(_executor: object) -> list[Iterator[Future[int]]]:
+            return []  # no task iterators
+
+        result = list(parallel_iterator(builder, max_workers=0, ordered=True))
+        self.assertEqual([], result)
 
 
 def dummy_fn_ordered(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
