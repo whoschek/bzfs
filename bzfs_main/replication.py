@@ -730,6 +730,9 @@ def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr:
         return True
 
     p, log = job.params, job.params.log
+    # No i18n needed here. OpenZFS ships no translation catalogs, so gettext falls back to English msgids and locale settings
+    # have no effect. If translations ever appear, revisit this or inject LC_ALL=C.
+
     # "cannot resume send: 'wb_src/tmp/src@s1' is no longer the same snapshot used in the initial send"
     # "cannot resume send: 'wb_src/tmp/src@s1' used in the initial send no longer exists"
     # "cannot resume send: incremental source 0xa000000000000000 no longer exists"
