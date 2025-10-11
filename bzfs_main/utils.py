@@ -80,9 +80,6 @@ from typing import (
     TypeVar,
     cast,
 )
-from zoneinfo import (
-    ZoneInfo,
-)
 
 # constants:
 PROG_NAME: Final[str] = "bzfs"
@@ -519,7 +516,7 @@ def pretty_print_formatter(obj_to_format: Any) -> Any:
         """Formatter that pretty-prints the object on conversion to ``str``."""
 
         def __str__(self) -> str:
-            import pprint
+            import pprint  # lazy import for startup perf
 
             return pprint.pformat(vars(obj_to_format))
 
@@ -804,6 +801,8 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
             offset = -offset if sign == "-" else offset
             tz = timezone(timedelta(minutes=offset))
         elif "/" in tz_spec:
+            from zoneinfo import ZoneInfo  # lazy import for startup perf
+
             tz = ZoneInfo(tz_spec)
         else:
             raise ValueError(f"Invalid timezone specification: {tz_spec}")

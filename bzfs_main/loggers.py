@@ -21,11 +21,8 @@ from __future__ import (
 import argparse
 import contextlib
 import logging
-import logging.config
-import logging.handlers
 import os
 import re
-import socket
 import sys
 from datetime import (
     datetime,
@@ -120,9 +117,11 @@ def _get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logg
 
     address = args.log_syslog_address
     if address:  # optionally, also log to local or remote syslog
+        from logging import handlers  # lazy import for startup perf
+
         address, socktype = _get_syslog_address(address, args.log_syslog_socktype)
         log_syslog_prefix = str(args.log_syslog_prefix).strip().replace("%", "")  # sanitize
-        handler = logging.handlers.SysLogHandler(address=address, facility=args.log_syslog_facility, socktype=socktype)
+        handler = handlers.SysLogHandler(address=address, facility=args.log_syslog_facility, socktype=socktype)
         handler.setFormatter(get_default_log_formatter(prefix=log_syslog_prefix + " "))
         handler.setLevel(args.log_syslog_level)
         log.addHandler(handler)
@@ -237,8 +236,10 @@ def _add_trace_loglevel() -> None:
     logging.addLevelName(LOG_TRACE, "TRACE")
 
 
-def _get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tuple[str, int], socket.SocketKind | None]:
+def _get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tuple[str, int], Any]:
     """Normalizes syslog address to tuple form and returns socket type."""
+    import socket  # lazy import for startup perf
+
     address = address.strip()
     socktype: socket.SocketKind | None = None
     if ":" in address:
@@ -270,7 +271,8 @@ def _remove_json_comments(config_str: str) -> str:
 
 def _get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
     """Creates a logger from a JSON config file with variable substitution."""
-    import json
+    import json  # lazy import for startup perf
+    from logging import config  # lazy import for startup perf
 
     prefix: str = PROG_NAME + "."
     log_config_vars: dict[str, str] = {
@@ -327,7 +329,7 @@ def _get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> 
     #     print("[T] Substituted log_config_file_str:\n" + log_config_file_str, flush=True)
     log_config_dict: dict = json.loads(log_config_file_str)
     _validate_log_config_dict(log_config_dict)
-    logging.config.dictConfig(log_config_dict)
+    config.dictConfig(log_config_dict)
     return logging.getLogger(get_logger_subname())
 
 
