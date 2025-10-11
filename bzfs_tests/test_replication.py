@@ -48,6 +48,7 @@ from bzfs_main.replication import (
     _delete_snapshot_cmd,
     _dquote,
     _estimate_send_size,
+    _estimate_send_sizes_in_parallel,
     _format_size,
     _incremental_send_steps_wrapper,
     _is_zfs_dataset_busy,
@@ -107,6 +108,7 @@ def _make_job(**params_kwargs: object) -> MagicMock:
     """Returns a Job mock with its Params configured for testing."""
     job = MagicMock()
     job.params = _make_params(**params_kwargs)
+    job.max_workers = {"src": 1, "dst": 1, "local": 1}
     return job
 
 
@@ -557,6 +559,19 @@ class TestReplication(AbstractTestCase):
             _estimate_send_size(job, remote, "pool/ds", "token", "src@snap")
         self.assertTrue(ctx.exception.no_sleep)
         clear.assert_called_once_with(job, "pool/ds", cp_error.stderr)
+
+    @patch("bzfs_main.replication._estimate_send_size")
+    def test_estimate_send_sizes_parallel_respects_no_estimate(self, est: MagicMock) -> None:
+        """When p.no_estimate_send_size is True, sizes should be zeros and no calls made."""
+        job = _make_job(no_estimate_send_size=True)
+        remote = MagicMock(location="src")
+        steps = [
+            ("-i", "pool/src@s1", "pool/src@s2", ["pool/src@s2"]),
+            ("-i", "pool/src@s2", "pool/src@s3", ["pool/src@s3"]),
+        ]
+        sizes = _estimate_send_sizes_in_parallel(job, remote, "pool/ds", None, steps)
+        self.assertEqual([0, 0], sizes)
+        est.assert_not_called()
 
     @patch("bzfs_main.replication.run_ssh_cmd_batched")
     def test_zfs_set_batches_properties(self, batched: MagicMock) -> None:

@@ -6,6 +6,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - [bzfs] [perf] Reuse SSH connections across zpools to improve latency.
 - [bzfs] [perf] Reuse SSH connections on bzfs process startup to improve latency.
+- [bzfs] [perf] Estimate num bytes to transfer via 'zfs send' in parallel to improve latency.
 - [bzfs] Retry connecting to `sshd` before giving up.
 - [bzfs] Add `--retry-initial-max-sleep-secs` CLI option.
 - [bzfs] Swallow repeated internal `Broken Pipe` logging messages when the user terminates a shell pipe prematurely.

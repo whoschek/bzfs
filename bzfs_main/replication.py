@@ -31,6 +31,10 @@ import time
 from collections.abc import (
     Iterable,
 )
+from concurrent.futures import (
+    Executor,
+    Future,
+)
 from subprocess import (
     DEVNULL,
     PIPE,
@@ -71,6 +75,7 @@ from bzfs_main.parallel_batch_cmd import (
     run_ssh_cmd_parallel,
 )
 from bzfs_main.parallel_iterator import (
+    parallel_iterator,
     run_in_parallel,
 )
 from bzfs_main.progress_reporter import (
@@ -504,10 +509,7 @@ def _replicate_dataset_incrementally(
             p, cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
         )
     log.log(LOG_TRACE, "steps_todo: %s", list_formatter(steps_todo, "; "))
-    estimate_send_sizes: list[int] = [
-        _estimate_send_size(job, src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap)
-        for i, (incr_flag, from_snap, to_snap, _to_snapshots) in enumerate(steps_todo)
-    ]
+    estimate_send_sizes: list[int] = _estimate_send_sizes_in_parallel(job, src, dst_dataset, recv_resume_token, steps_todo)
     total_size: int = sum(estimate_send_sizes)
     total_num: int = sum(len(to_snapshots) for incr_flag, from_snap, to_snap, to_snapshots in steps_todo)
     done_size: int = 0
@@ -1040,7 +1042,7 @@ def _create_zfs_bookmarks(job: Job, remote: Remote, dataset: str, snapshots: lis
 
 
 def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_token: str | None, *items: str) -> int:
-    """Estimates num bytes to transfer via 'zfs send'."""
+    """Estimates num bytes to transfer via 'zfs send -nvP'; Thread-safe."""
     p = job.params
     if p.no_estimate_send_size:
         return 0
@@ -1065,6 +1067,33 @@ def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_
     size: str = lines.splitlines()[-1]
     assert size.startswith("size")
     return int(size[size.index("\t") + 1 :])
+
+
+def _estimate_send_sizes_in_parallel(
+    job: Job,
+    r: Remote,
+    dst_dataset: str,
+    recv_resume_token: str | None,
+    steps_todo: list[tuple[str, str, str, list[str]]],
+) -> list[int]:
+    """Estimates num bytes to transfer for multiple send steps; in parallel to reduce latency."""
+    p = job.params
+    if p.no_estimate_send_size:
+        return [0 for _ in steps_todo]
+
+    def iterator_builder(executor: Executor) -> list[Iterable[Future[int]]]:
+        resume_token: str | None = recv_resume_token
+        return [
+            (
+                executor.submit(
+                    _estimate_send_size, job, r, dst_dataset, resume_token if i == 0 else None, incr_flag, from_snap, to_snap
+                )
+                for i, (incr_flag, from_snap, to_snap, _to_snapshots) in enumerate(steps_todo)
+            )
+        ]
+
+    max_workers: int = min(len(steps_todo), job.max_workers[r.location])
+    return list(parallel_iterator(iterator_builder, max_workers=max_workers, ordered=True))
 
 
 def _zfs_set(job: Job, properties: list[str], remote: Remote, dataset: str) -> None:

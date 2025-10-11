@@ -1218,6 +1218,8 @@ class TestJobMethods(AbstractTestCase):
         # Arrange a job with snapshot filters: include dailies, exclude hourlies
         job = self.make_job(["pool/src", "pool/dst", "--include-snapshot-regex", "d.*", "--exclude-snapshot-regex", "h.*"])
         job.validate_once()
+        job.max_workers.setdefault("src", 1)
+        job.max_workers.setdefault("dst", 1)
 
         # Craft synthetic zfs list outputs (guid\tname) for src and dst
         src_dataset = "pool/src"
