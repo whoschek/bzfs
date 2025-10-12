@@ -30,6 +30,7 @@ import threading
 import time
 from collections.abc import (
     Iterable,
+    Iterator,
 )
 from concurrent.futures import (
     Executor,
@@ -464,7 +465,7 @@ def _replicate_dataset_incrementally(
         result_snapshots: list[str] = []
         result_guids: list[str] = []
         last_appended_guid: str = ""
-        snapshot_itr = reversed(basis_src_snapshots_with_guids)
+        snapshot_itr: Iterator[str] = reversed(basis_src_snapshots_with_guids)
         while True:
             guid, snapshot = next(snapshot_itr).split("\t", 1)
             if "@" in snapshot:
@@ -1081,7 +1082,7 @@ def _estimate_send_sizes_in_parallel(
     if p.no_estimate_send_size:
         return [0 for _ in steps_todo]
 
-    def iterator_builder(executor: Executor) -> list[Iterable[Future[int]]]:
+    def iterator_builder(executor: Executor) -> Iterable[Iterable[Future[int]]]:
         resume_token: str | None = recv_resume_token
         return [
             (

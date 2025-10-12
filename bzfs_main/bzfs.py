@@ -1538,7 +1538,7 @@ class Job:
                         for j, snapshot_name in enumerate(reversed(snapshot_names) if is_reverse else snapshot_names):
                             if (
                                 endswith(snapshot_name, end)  # aka snapshot_name.endswith(end)
-                                and startswith(snapshot_name, start)  # aka snapshot_name.startswith(end)
+                                and startswith(snapshot_name, start)  # aka snapshot_name.startswith(start)
                                 and len(snapshot_name) >= minlen
                                 and (infix or year_with_4_digits_regex.fullmatch(snapshot_name, startlen, startlen_4))
                             ):
