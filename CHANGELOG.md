@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.13.0] - TBD
+## [1.13.0] - October 11, 2025
 
 - [bzfs_jobrunner] Prevent leakage of argument parser options across subjobs.
 - [bzfs] [perf] Reuse SSH connections across zpools to improve latency.
@@ -19,6 +19,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Also run nightly tests on production releases of python-3.14.
 - [bzfs] Remove support for python-3.8 as it has been officially EOL'd since Oct 10, 2024.
 - [bzfs] Remove support for Solaris (legacy).
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.12.0...v1.13.0
 
 ## [1.12.0] - September 17, 2025
 

@@ -90,7 +90,7 @@ bzfs-test = "bzfs_tests.test_all:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-exclude = ["bzfs_docs", "bash_completion_d"]
+exclude = ["bzfs_docs", "bzfs_tmp", "bash_completion_d"]
 
 [tool.setuptools.package-data]
 bzfs_tests = ["*.json"]
