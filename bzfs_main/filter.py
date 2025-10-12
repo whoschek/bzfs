@@ -20,7 +20,6 @@ from __future__ import (
 import math
 import os
 import re
-import socket
 from collections.abc import (
     Iterable,
 )
@@ -132,6 +131,8 @@ def _filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_datase
             elif property_value.lower() == "false":
                 sync = False
             else:
+                import socket  # lazy import for startup perf
+
                 localhostname = localhostname or socket.gethostname()
                 sync = any(localhostname == hostname.strip() for hostname in property_value.split(","))
                 reason = f", localhostname: {localhostname}, hostnames: {property_value}"
