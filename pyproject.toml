@@ -68,7 +68,7 @@ dev = [  # for development only
   "docformatter==1.7.7",            # see https://github.com/PyCQA/docformatter
   "mdformat==0.7.22",               # see https://github.com/hukkin/mdformat
   "codespell==2.4.1",               # see https://github.com/codespell-project/codespell
-  "pylint==3.3.9",                  # see https://github.com/pylint-dev/pylint
+  "pylint==4.0.0",                  # see https://github.com/pylint-dev/pylint
   "shellcheck-py==0.11.0.1",        # see https://github.com/shellcheck-py/shellcheck-py
   "pyrefly==0.36.2",                # see https://github.com/facebook/pyrefly
   "ast-grep-cli==0.39.6",           # see https://github.com/ast-grep/ast-grep
@@ -279,6 +279,9 @@ split_on_trailing_comma = true
 include_trailing_comma = true
 use_parentheses = true
 force_grid_wrap = 1
+
+[tool.pylint.main]
+py-version = "3.9"
 
 [tool.pylint."MESSAGES CONTROL"]  # see https://pylint.readthedocs.io/en/latest/user_guide/messages/messages_overview.html
 # Preferably only include checks that are not yet supported by ruff or mypy; see https://github.com/astral-sh/ruff/issues/970

@@ -59,7 +59,7 @@ repos:
       - id: shellcheck                  # Validate syntax of shell scripts
         exclude: '^\.github-workflow-scripts'
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.34.0
+    rev: 0.34.1
     hooks:
       - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
@@ -91,7 +91,7 @@ repos:
   #   hooks:
   #     - id: isort                     # Reformat imports more precisely
   - repo: https://github.com/pycqa/pylint
-    rev: v3.3.9
+    rev: v4.0.0
     hooks:
       - id: pylint                      # Run `pylint` linter to check if there are problems in the Python source code
         name: pylint (cyclic imports, etc)
