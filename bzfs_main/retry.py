@@ -118,7 +118,7 @@ def run_with_retries(log: Logger, policy: RetryPolicy, fn: Callable[..., T], *ar
                     )
                 cause: BaseException | None = retryable_error.__cause__
                 assert cause is not None
-                raise cause.with_traceback(cause.__traceback__) from getattr(cause, "__cause__", None)
+                raise cause.with_traceback(cause.__traceback__)  # noqa: B904 intentional re-raise of cause without chaining
 
 
 #############################################################################
