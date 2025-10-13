@@ -151,7 +151,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
     datasets: list[str],  # (sorted) list of datasets to process
     process_dataset: Callable[[str, int], CompletionCallback],  # lambda: dataset, tid; must be thread-safe
     max_workers: int = os.cpu_count() or 1,
-    interval_nanos: Callable[[str, int], int] = lambda dataset, submitted: 0,  # spread tasks out over time; e.g. for jitter
+    interval_nanos: Callable[
+        [int, str, int], int
+    ] = lambda last_update_nanos, dataset, submitted: 0,  # optionally spread tasks out over time; e.g. for jitter
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     is_test_mode: bool = False,
 ) -> bool:  # returns True if any dataset processing failed, False if all succeeded
@@ -264,7 +266,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 node: TreeNode = heapq.heappop(priority_queue)  # pick "smallest" dataset (wrt. sort order)
                 nonlocal submitted
                 submitted += 1
-                next_update_nanos = max(0, interval_nanos(node.dataset, submitted))
+                next_update_nanos += max(0, interval_nanos(next_update_nanos, node.dataset, submitted))
                 future: Future[CompletionCallback] = executor.submit(process_dataset, node.dataset, submitted)
                 future_to_node[future] = node
                 todo_futures.add(future)
