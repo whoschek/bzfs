@@ -41,6 +41,8 @@ from bzfs_main.parallel_engine import (
     Tree,
     _build_dataset_tree,
     _make_tree_node,
+)
+from bzfs_main.parallel_engine_wrapper import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
 from bzfs_main.retry import (
@@ -237,7 +239,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                     process_dataset=submit_no_skiptree,  # lambda
                     skip_tree_on_error=lambda dataset: False,
                     max_workers=1 if i > 0 else 8,
-                    interval_nanos=lambda dataset: time.monotonic_ns() + 10_000_000,
+                    interval_nanos=lambda dataset, submitted: time.monotonic_ns() + 10_000_000,
                     task_name="mytask",
                     enable_barriers=i > 0,
                     **self.default_kwargs,

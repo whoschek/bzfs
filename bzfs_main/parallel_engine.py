@@ -14,16 +14,18 @@
 #
 """Fault-tolerant, dependency-aware scheduling and execution of parallel operations, ensuring that ancestor datasets finish
 before descendants start; The design maximizes throughput while preventing inconsistent dataset states during replication or
-snapshot deletion."""
+snapshot deletion.
+
+This module contains only generic scheduling and coordination (the "algorithm"). Error handling, retries, and skip policies
+are customizable and implemented by callers via the CompletionCallback API or wrappers such as ``parallel_engine_wrapper``.
+"""
 
 from __future__ import (
     annotations,
 )
 import concurrent
 import heapq
-import logging
 import os
-import subprocess
 import time
 from concurrent.futures import (
     FIRST_COMPLETED,
@@ -41,21 +43,13 @@ from typing import (
     NamedTuple,
 )
 
-from bzfs_main.retry import (
-    Retry,
-    RetryPolicy,
-    run_with_retries,
-)
 from bzfs_main.utils import (
     DONT_SKIP_DATASET,
     Interner,
     SortedInterner,
     SynchronousExecutor,
-    dry,
     has_duplicates,
-    human_readable_duration,
     is_descendant,
-    terminate_process_subtree,
 )
 
 # constants:
@@ -139,21 +133,26 @@ def _make_tree_node(dataset: str, children: Tree, parent: TreeNode | None = None
     return TreeNode(dataset, children, parent, TreeNodeMutableAttributes())
 
 
+#############################################################################
+CompletionCallback = Callable[[set[Future["CompletionCallback"]]], tuple[bool, bool]]  # Type alias
+"""Callable that is run by the main thread upon task completion.
+
+Purpose: Decide follow-up scheduling after a worker finished. Returns (no_skip, failed):
+- no_skip=True enqueues descendants, False skips the subtree.
+- failed=True marks overall run as failed; exceptions may be raised here.
+
+Assumptions: Called in the single coordination thread. It may inspect and cancel in-flight futures if implementing fail-fast
+semantics.
+"""
+
+
 def process_datasets_in_parallel_and_fault_tolerant(
     log: Logger,
     datasets: list[str],  # (sorted) list of datasets to process
-    process_dataset: Callable[
-        [str, str, Retry], bool  # lambda: dataset, tid, Retry; return False to skip subtree; must be thread-safe
-    ],
-    skip_tree_on_error: Callable[[str], bool],  # lambda: dataset # called on error; return True to skip subtree on error
-    skip_on_error: str = "fail",
+    process_dataset: Callable[[str, int], CompletionCallback],  # lambda: dataset, tid; must be thread-safe
     max_workers: int = os.cpu_count() or 1,
-    interval_nanos: Callable[[str], int] = lambda dataset: 0,  # optionally, spread tasks out over time; e.g. for jitter
-    task_name: str = "Task",
+    interval_nanos: Callable[[str, int], int] = lambda dataset, submitted: 0,  # spread tasks out over time; e.g. for jitter
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
-    append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error
-    retry_policy: RetryPolicy | None = None,
-    dry_run: bool = False,
     is_test_mode: bool = False,
 ) -> bool:  # returns True if any dataset processing failed, False if all succeeded
     """Executes dataset processing operations in parallel with dependency-aware scheduling and fault tolerance.
@@ -165,7 +164,8 @@ def process_datasets_in_parallel_and_fault_tolerant(
     Purpose:
     --------
     - Process hierarchical datasets in parallel while respecting parent-child dependencies
-    - Provide fault tolerance with configurable error handling and retry mechanisms
+    - Provide dependency-aware scheduling; error handling and retries are implemented by callers via
+      ``CompletionCallback`` or thin wrappers
     - Maximize throughput by processing independent dataset subtrees in parallel
     - Support complex job scheduling patterns via optional barrier synchronization
 
@@ -199,12 +199,6 @@ def process_datasets_in_parallel_and_fault_tolerant(
         names (~400 bytes per dataset name), and easily scale to millions of datasets. Time complexity is O(N log N),
         where N is the number of datasets.
 
-    Error Handling Strategy:
-    ------------------------
-    - "fail": Immediately terminate all processing on first error (fail-fast)
-    - "dataset": Skip failed dataset but continue processing others
-    - "tree": Skip entire subtree rooted at failed dataset, determined by `skip_tree_on_error`
-
     Concurrency Design:
     -------------------
     Uses ThreadPoolExecutor with configurable worker limits to balance parallelism against resource consumption. The
@@ -213,8 +207,10 @@ def process_datasets_in_parallel_and_fault_tolerant(
     Params:
     -------
     - datasets: Sorted list of dataset names to process (must not contain duplicates)
-    - process_dataset: Thread-safe function to execute on each dataset
-    - skip_tree_on_error: Function determining whether to skip subtree on error
+    - process_dataset: Thread-safe Callback function to execute on each dataset; returns a CompletionCallback determining if
+      to fail or skip subtree on error; CompletionCallback runs in the (single) main thread as part of the coordination loop.
+    - interval_nanos: Callback that returns a non-negative delay (ns) to add to ``next_update_nanos`` for
+      jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submitted)``
     - max_workers: Maximum number of parallel worker threads
     - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
 
@@ -225,52 +221,35 @@ def process_datasets_in_parallel_and_fault_tolerant(
     Raises:
     -------
         AssertionError: If input validation fails (sorted order, no duplicates, etc.)
-        Various exceptions: Propagated from process_dataset when skip_on_error="fail"
+        Various exceptions: Propagated from process_dataset and its CompletionCallback
     """
     assert log is not None
     assert (not is_test_mode) or datasets == sorted(datasets), "List is not sorted"
     assert (not is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
     assert callable(process_dataset)
-    assert callable(skip_tree_on_error)
-    assert skip_on_error in ("fail", "dataset", "tree")
     assert max_workers > 0
     assert callable(interval_nanos)
-    assert "%" not in task_name
     has_barrier: bool = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
     assert (enable_barriers is not False) or not has_barrier, "Barriers seen in datasets but barriers explicitly disabled"
     barriers_enabled: bool = bool(has_barrier or enable_barriers)
-    assert callable(append_exception)
-    retry_policy = RetryPolicy.no_retries() if retry_policy is None else retry_policy
-    is_debug: bool = log.isEnabledFor(logging.DEBUG)
-
-    def _process_dataset(dataset: str, tid: str) -> bool:
-        """Runs ``process_dataset`` with retries and logs duration."""
-        start_time_nanos: int = time.monotonic_ns()
-        try:
-            return run_with_retries(log, retry_policy, process_dataset, dataset, tid)
-        finally:
-            if is_debug:
-                elapsed_duration: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
-                log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, elapsed_duration)
 
     immutable_empty_barrier: TreeNode = _make_tree_node("immutable_empty_barrier", {})
-    len_datasets: int = len(datasets)
     datasets_set: SortedInterner[str] = SortedInterner(datasets)  # reduces memory footprint
     priority_queue: list[TreeNode] = _build_dataset_tree_and_find_roots(datasets)
     heapq.heapify(priority_queue)  # same order as sorted()
-    executor: Executor = ThreadPoolExecutor(max_workers) if max_workers != 1 and len_datasets > 1 else SynchronousExecutor()
+    executor: Executor = ThreadPoolExecutor(max_workers) if max_workers != 1 and len(datasets) > 1 else SynchronousExecutor()
     with executor:
-        todo_futures: set[Future[bool]] = set()
-        future_to_node: dict[Future[bool], TreeNode] = {}
+        todo_futures: set[Future[CompletionCallback]] = set()
+        future_to_node: dict[Future[CompletionCallback], TreeNode] = {}
         submitted: int = 0
         next_update_nanos: int = time.monotonic_ns()
-        fw_timeout: float | None = None
+        wait_timeout: float | None = None
         failed: bool = False
 
         def submit_datasets() -> bool:
             """Submits available datasets to worker threads and returns False if all tasks have been completed."""
-            nonlocal fw_timeout
-            fw_timeout = None  # indicates to use blocking flavor of concurrent.futures.wait()
+            nonlocal wait_timeout
+            wait_timeout = None  # indicates to use blocking flavor of concurrent.futures.wait()
             while len(priority_queue) > 0 and len(todo_futures) < max_workers:
                 # pick "smallest" dataset (wrt. sort order) available for start of processing; submit to thread pool
                 nonlocal next_update_nanos
@@ -278,48 +257,36 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 if sleep_nanos > 0:
                     time.sleep(sleep_nanos / 1_000_000_000)  # seconds
                 if sleep_nanos > 0 and len(todo_futures) > 0:
-                    fw_timeout = 0  # indicates to use non-blocking flavor of concurrent.futures.wait()
+                    wait_timeout = 0  # indicates to use non-blocking flavor of concurrent.futures.wait()
                     # It's possible an even "smaller" dataset (wrt. sort order) has become available while we slept.
                     # If so it's preferable to submit to the thread pool the smaller one first.
                     break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
                 node: TreeNode = heapq.heappop(priority_queue)  # pick "smallest" dataset (wrt. sort order)
-                next_update_nanos = max(0, interval_nanos(node.dataset))
                 nonlocal submitted
                 submitted += 1
-                future: Future[bool] = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
+                next_update_nanos = max(0, interval_nanos(node.dataset, submitted))
+                future: Future[CompletionCallback] = executor.submit(process_dataset, node.dataset, submitted)
                 future_to_node[future] = node
                 todo_futures.add(future)
             return len(todo_futures) > 0
 
         def complete_datasets() -> None:
             """Waits for completed futures, processes results and errors, then enqueues follow-up tasks per policy."""
+            nonlocal failed
             nonlocal todo_futures
-            done_futures: set[Future[bool]]
-            done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
+            done_futures: set[Future[CompletionCallback]]
+            done_futures, todo_futures = concurrent.futures.wait(todo_futures, wait_timeout, return_when=FIRST_COMPLETED)
             for done_future in done_futures:
                 done_node: TreeNode = future_to_node.pop(done_future)
-                dataset: str = done_node.dataset
-                no_skip: bool = complete_dataset(dataset, done_future)
+                c_callback: CompletionCallback = done_future.result()  # does not block as processing has already completed
+                no_skip: bool
+                fail: bool
+                no_skip, fail = c_callback(todo_futures)
+                failed = failed or fail
                 if barriers_enabled:  # This barrier-based algorithm is for more general job scheduling, as in bzfs_jobrunner
                     _complete_job_with_barriers(done_node, no_skip, priority_queue, datasets_set, immutable_empty_barrier)
                 elif no_skip:  # This simple algorithm is sufficient for almost all use cases
                     _simple_enqueue_children(done_node, priority_queue, datasets_set)
-
-        def complete_dataset(dataset: str, done_future: Future[bool]) -> bool:
-            """Processes results and errors."""
-            try:
-                no_skip: bool = done_future.result()  # does not block as processing has already completed
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                nonlocal failed
-                failed = True
-                if skip_on_error == "fail":
-                    [todo_future.cancel() for todo_future in todo_futures]
-                    terminate_process_subtree(except_current_process=True)
-                    raise
-                no_skip = not (skip_on_error == "tree" or skip_tree_on_error(dataset))
-                log.error("%s", e)
-                append_exception(e, task_name, dataset)
-            return no_skip
 
         # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
         while submit_datasets():

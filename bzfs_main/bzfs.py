@@ -134,7 +134,7 @@ from bzfs_main.parallel_batch_cmd import (
     run_ssh_cmd_parallel,
     zfs_list_snapshots_in_parallel,
 )
-from bzfs_main.parallel_engine import (
+from bzfs_main.parallel_engine_wrapper import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
 from bzfs_main.parallel_iterator import (

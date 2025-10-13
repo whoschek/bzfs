@@ -85,6 +85,8 @@ from bzfs_main.loggers import (
 )
 from bzfs_main.parallel_engine import (
     BARRIER_CHAR,
+)
+from bzfs_main.parallel_engine_wrapper import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
 from bzfs_main.utils import (
@@ -908,7 +910,7 @@ class Job:
         assert interval_nanos >= 0
         next_update_nanos: int = time.monotonic_ns()
 
-        def interval_nanos_fn(subjob_: str) -> int:
+        def interval_nanos_fn(subjob_: str, submitted: int) -> int:
             nonlocal next_update_nanos
             next_update_nanos += interval_nanos
             return next_update_nanos
