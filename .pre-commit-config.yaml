@@ -91,7 +91,7 @@ repos:
   #   hooks:
   #     - id: isort                     # Reformat imports more precisely
   - repo: https://github.com/pycqa/pylint
-    rev: v4.0.0
+    rev: v4.0.1
     hooks:
       - id: pylint                      # Run `pylint` linter to check if there are problems in the Python source code
         name: pylint (cyclic imports, etc)
@@ -105,7 +105,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.36.2']
+        additional_dependencies: ['pyrefly==0.37.0']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.18.2

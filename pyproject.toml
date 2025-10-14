@@ -65,14 +65,8 @@ dev = [  # for development only
   "ruff==0.14.0",                   # see https://github.com/astral-sh/ruff
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
   "mypy==1.18.2",                   # see https://github.com/python/mypy
-  "docformatter==1.7.7",            # see https://github.com/PyCQA/docformatter
-  "mdformat==0.7.22",               # see https://github.com/hukkin/mdformat
-  "codespell==2.4.1",               # see https://github.com/codespell-project/codespell
-  "pylint==4.0.0",                  # see https://github.com/pylint-dev/pylint
   "shellcheck-py==0.11.0.1",        # see https://github.com/shellcheck-py/shellcheck-py
-  "pyrefly==0.36.2",                # see https://github.com/facebook/pyrefly
   "ast-grep-cli==0.39.6",           # see https://github.com/ast-grep/ast-grep
-  # "rope==1.14.0",                   # see https://github.com/python-rope/rope
 ]
 # Example that installs the optional python development dependencies (see above) into a venv:
 # cd ~/devel/bzfs
@@ -90,7 +84,7 @@ bzfs-test = "bzfs_tests.test_all:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-exclude = ["bzfs_docs", "bzfs_tmp", "bash_completion_d"]
+exclude = ["bzfs_docs", "bash_completion_d", "lab"]
 
 [tool.setuptools.package-data]
 bzfs_tests = ["*.json"]
