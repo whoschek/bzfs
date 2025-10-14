@@ -239,7 +239,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                     process_dataset=submit_no_skiptree,  # lambda
                     skip_tree_on_error=lambda dataset: False,
                     max_workers=1 if i > 0 else 8,
-                    interval_nanos=lambda last_update_nanos, dataset, submitted: 10_000_000,
+                    interval_nanos=lambda last_update_nanos, dataset, submitted_count: 10_000_000,
                     task_name="mytask",
                     enable_barriers=i > 0,
                     **self.default_kwargs,

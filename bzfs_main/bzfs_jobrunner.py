@@ -925,7 +925,7 @@ class Job:
             skip_tree_on_error=lambda subjob: True,
             skip_on_error=SKIP_ON_ERROR_DEFAULT,
             max_workers=max_workers if spawn_process_per_job else 1,
-            interval_nanos=lambda last_update_nanos, dataset, submitted: interval_nanos,
+            interval_nanos=lambda last_update_nanos, dataset, submitted_count: interval_nanos,
             task_name="Subjob",
             retry_policy=None,  # no retries
             dry_run=False,

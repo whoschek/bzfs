@@ -37,7 +37,6 @@ from logging import (
     Logger,
 )
 from typing import (
-    Any,
     Callable,
     Final,
     NamedTuple,
@@ -120,7 +119,7 @@ class TreeNode(NamedTuple):
 
     dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
     children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
-    parent: Any  # aka TreeNode
+    parent: TreeNode | None
     mut: TreeNodeMutableAttributes
 
     def __repr__(self) -> str:
@@ -135,14 +134,20 @@ def _make_tree_node(dataset: str, children: Tree, parent: TreeNode | None = None
 
 #############################################################################
 CompletionCallback = Callable[[set[Future["CompletionCallback"]]], tuple[bool, bool]]  # Type alias
-"""Callable that is run by the main thread upon task completion.
+"""Callable that is run by the main coordination thread after a ``process_dataset()`` task finishes.
 
-Purpose: Decide follow-up scheduling after a worker finished. Returns (no_skip, failed):
-- no_skip=True enqueues descendants, False skips the subtree.
-- failed=True marks overall run as failed; exceptions may be raised here.
+Purpose:
+- Decide follow-up scheduling after a ``process_dataset()`` task finished. Returns ``(no_skip: bool, failed: bool)``:
+  - ``no_skip`` True enqueues descendants, False skips the subtree.
+  - ``failed`` True marks overall run as failed; exceptions may be raised here.
 
-Assumptions: Called in the single coordination thread. It may inspect and cancel in-flight futures if implementing fail-fast
-semantics.
+Assumptions:
+- Runs in the single coordination thread.
+- May inspect and cancel in-flight futures to implement fail-fast semantics.
+- If cancelling in-flight futures for tasks that spawn subprocesses (e.g. via subprocess.run()), callers should also
+consider terminating the corresponding process subtree to avoid child processes lingering longer than desired. Skipping
+termination will not hang the scheduler (workers will complete naturally), but those subprocesses may outlive cancellation
+until they exit or time out.
 """
 
 
@@ -153,21 +158,21 @@ def process_datasets_in_parallel_and_fault_tolerant(
     max_workers: int = os.cpu_count() or 1,
     interval_nanos: Callable[
         [int, str, int], int
-    ] = lambda last_update_nanos, dataset, submitted: 0,  # optionally spread tasks out over time; e.g. for jitter
+    ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     is_test_mode: bool = False,
 ) -> bool:  # returns True if any dataset processing failed, False if all succeeded
     """Executes dataset processing operations in parallel with dependency-aware scheduling and fault tolerance.
 
-    This function orchestrates parallel execution of dataset operations while maintaining strict hierarchical
-    dependencies. Processing of a dataset only starts after processing of all its ancestor datasets has completed,
-    ensuring data consistency during operations like ZFS replication or snapshot deletion.
+    This function orchestrates parallel execution of dataset operations while maintaining strict hierarchical dependencies.
+    Processing of a dataset only starts after processing of all its ancestor datasets has completed, ensuring data
+    consistency during operations like ZFS replication or snapshot deletion.
 
     Purpose:
     --------
     - Process hierarchical datasets in parallel while respecting parent-child dependencies
-    - Provide dependency-aware scheduling; error handling and retries are implemented by callers via
-      ``CompletionCallback`` or thin wrappers
+    - Provide dependency-aware scheduling; error handling and retries are implemented by callers via ``CompletionCallback``
+      or thin wrappers
     - Maximize throughput by processing independent dataset subtrees in parallel
     - Support complex job scheduling patterns via optional barrier synchronization
 
@@ -212,7 +217,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     - process_dataset: Thread-safe Callback function to execute on each dataset; returns a CompletionCallback determining if
       to fail or skip subtree on error; CompletionCallback runs in the (single) main thread as part of the coordination loop.
     - interval_nanos: Callback that returns a non-negative delay (ns) to add to ``next_update_nanos`` for
-      jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submitted)``
+      jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submitted_count)``
     - max_workers: Maximum number of parallel worker threads
     - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
 
@@ -243,7 +248,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     with executor:
         todo_futures: set[Future[CompletionCallback]] = set()
         future_to_node: dict[Future[CompletionCallback], TreeNode] = {}
-        submitted: int = 0
+        submitted_count: int = 0
         next_update_nanos: int = time.monotonic_ns()
         wait_timeout: float | None = None
         failed: bool = False
@@ -264,10 +269,10 @@ def process_datasets_in_parallel_and_fault_tolerant(
                     # If so it's preferable to submit to the thread pool the smaller one first.
                     break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
                 node: TreeNode = heapq.heappop(priority_queue)  # pick "smallest" dataset (wrt. sort order)
-                nonlocal submitted
-                submitted += 1
-                next_update_nanos += max(0, interval_nanos(next_update_nanos, node.dataset, submitted))
-                future: Future[CompletionCallback] = executor.submit(process_dataset, node.dataset, submitted)
+                nonlocal submitted_count
+                submitted_count += 1
+                next_update_nanos += max(0, interval_nanos(next_update_nanos, node.dataset, submitted_count))
+                future: Future[CompletionCallback] = executor.submit(process_dataset, node.dataset, submitted_count)
                 future_to_node[future] = node
                 todo_futures.add(future)
             return len(todo_futures) > 0

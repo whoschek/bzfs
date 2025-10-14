@@ -65,7 +65,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     max_workers: int = os.cpu_count() or 1,
     interval_nanos: Callable[
         [int, str, int], int
-    ] = lambda last_update_nanos, dataset, submitted: 0,  # optionally spread tasks out over time; e.g. for jitter
+    ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
     task_name: str = "Task",
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error
@@ -92,9 +92,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
     len_datasets: int = len(datasets)
     is_debug: bool = log.isEnabledFor(logging.DEBUG)
 
-    def _process_dataset(dataset: str, submitted: int) -> bzfs_main.parallel_engine.CompletionCallback:
+    def _process_dataset(dataset: str, submitted_count: int) -> bzfs_main.parallel_engine.CompletionCallback:
         """Wrapper function around process_dataset(); adds a callback determining if to fail or skip subtree on error."""
-        tid: str = f"{submitted}/{len_datasets}"
+        tid: str = f"{submitted_count}/{len_datasets}"
         start_time_nanos: int = time.monotonic_ns()
         exception = None
         no_skip: bool = False
