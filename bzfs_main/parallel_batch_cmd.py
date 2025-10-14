@@ -182,7 +182,7 @@ def _max_batch_bytes(job: Job, r: Remote, cmd: list[str], sep: str) -> int:
     assert isinstance(sep, str)
     max_bytes: int = min(_get_max_command_line_bytes(job, "local"), _get_max_command_line_bytes(job, r.location))
     # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html
-    max_bytes = max_bytes if sep == " " else min(max_bytes, 131071)  # e.g. 'zfs destroy foo@s1,s2,...,sN'
+    max_bytes = max_bytes if sep == " " else min(max_bytes, 128 * 1024 - 1)  # e.g. 'zfs destroy foo@s1,s2,...,sN'
     conn_pool: ConnectionPool = job.params.connection_pools[r.location].pool(SHARED)
     with conn_pool.connection() as conn:
         cmd = conn.ssh_cmd + cmd

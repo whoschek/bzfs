@@ -1521,6 +1521,7 @@ class Job:
                 datasets_with_snapshots.add(dataset)
                 snapshot_names: list[str] = [snapshot[-1] for snapshot in snapshots]
                 year_with_4_digits_regex: re.Pattern[str] = YEAR_WITH_FOUR_DIGITS_REGEX
+                year_with_4_digits_regex_fullmatch = year_with_4_digits_regex.fullmatch
                 startswith = str.startswith
                 endswith = str.endswith
                 fns = ((fn_latest, True),) if fn_oldest is None else ((fn_latest, True), (fn_oldest, False))
@@ -1540,7 +1541,7 @@ class Job:
                                 endswith(snapshot_name, end)  # aka snapshot_name.endswith(end)
                                 and startswith(snapshot_name, start)  # aka snapshot_name.startswith(start)
                                 and len(snapshot_name) >= minlen
-                                and (infix or year_with_4_digits_regex.fullmatch(snapshot_name, startlen, startlen_4))
+                                and (infix or year_with_4_digits_regex_fullmatch(snapshot_name, startlen, startlen_4))
                             ):
                                 k: int = len(snapshots) - j - 1 if is_reverse else j
                                 creation_unixtime_secs = snapshots[k][1]
@@ -1571,6 +1572,11 @@ class DatasetProperties:
         self.snapshots_changed: int = snapshots_changed
 
 
+# Input format is [[user@]host:]dataset
+#                                                      1234         5          6
+DATASET_LOCATOR_REGEX: Final[re.Pattern[str]] = re.compile(r"(((([^@]*)@)?([^:]+)):)?(.*)", flags=re.DOTALL)
+
+
 def parse_dataset_locator(
     input_text: str, validate: bool = True, user: str | None = None, host: str | None = None, port: int | None = None
 ) -> tuple[str, str, str, str, str]:
@@ -1588,9 +1594,7 @@ def parse_dataset_locator(
     host = convert_ipv6(host)
     user_host, dataset, pool = "", "", ""
 
-    # Input format is [[user@]host:]dataset
-    #                          1234         5          6
-    if match := re.fullmatch(r"(((([^@]*)@)?([^:]+)):)?(.*)", input_text, re.DOTALL):
+    if match := DATASET_LOCATOR_REGEX.fullmatch(input_text):
         if user_undefined:
             user = match.group(4) or ""
         if host_undefined:
