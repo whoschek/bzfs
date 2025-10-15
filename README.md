@@ -89,7 +89,7 @@ granted corresponding ZFS permissions by administrators via 'zfs allow' delegati
 
 bzfs is written in Python and continuously runs a wide set of unit tests and integration tests to
 ensure coverage and compatibility with old and new versions of ZFS on Linux and FreeBSD, on all
-Python versions ≥ 3.9 (including latest stable which is currently python-3.13).
+Python versions ≥ 3.9 (including latest stable which is currently python-3.14).
 
 bzfs is a stand-alone program with zero required dependencies, akin to a stand-alone shell script
 or binary executable. It is designed to be able to run in restricted barebones server
