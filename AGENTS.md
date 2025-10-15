@@ -70,10 +70,10 @@ To understand the system's architecture and features, follow these steps:
 - In each response, carefully analyze your own previous responses in the light of new information, and advise on any
   corrections noticed without needing to be prompted.
 - Maintain a task list where you list the status of prior tasks and action items, and planned actions needed for the
-  project.
-- For non-trivial tasks, maintain a visible task list (via the `update_plan` tool if available) with exactly one
-  `in_progress` step; mark completed steps before starting a new step, and avoid repeating the full plan in messages.
-  Summarize the change and highlight the next step instead.
+  project. Skip this for simple Q&A.
+- For non-trivial multi-step tasks, maintain a visible task list (via the `update_plan` tool if available) with exactly
+  one `in_progress` step; mark completed steps promptly before starting a new step, and avoid repeating the full plan in
+  messages. Summarize the change and highlight the next step instead.
 
 # Change Validation Workflow
 
@@ -90,8 +90,9 @@ To validate your changes, you **must** follow this exact sequence:
    pass (or fail if test failure is indeed the expected behavior) before proceeding.
 
 4. **Stage Your Own Untracked Files (if any):** Run `git add <paths>` on the files you added or renamed **yourself**,
-   but exclude the files the user or a third party added or renamed. This ensures that subsequent `pre-commit` checks
-   only see relevant files. Note: `pre-commit` processes only tracked files, even with `--all-files`.
+   but exclude the files in `lab/` and `_tmp/` and the files the user or a third party added or renamed. This ensures
+   that subsequent `pre-commit` checks only see relevant files. Note: `pre-commit` processes only tracked files, even
+   with `--all-files`.
 
 5. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run the `pre-commit` hooks specified in
    `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting (with `ruff`), formatting (with
@@ -189,8 +190,9 @@ Before committing any changes, you **must** follow this exact sequence:
 
 ## How to Write Code
 
-- **docstrings:** For every module, class, function, or method you **add or modify**, attach a docstring ≤ 80 words that
-  concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this implementation was chosen).
+- **docstrings:** For every module, class, function, or method you **add or semantically modify**, attach a docstring ≤
+  80 words that concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this implementation was
+  chosen).
 - **Linter Suppressions: Last Resort Only:**
   - Do not add `# noqa:`, `# type:` annotations, etc, unless the linter cannot be satisfied in a reasonable way, in
     which case keep the annotation on the specific line and append a brief comment explaining the reason (≤ 10 words).
@@ -268,9 +270,10 @@ If asked to improve coverage:
 
 ## Safety Rules
 
-- Never run `rm -rf`.
+- Never run `rm -rf`, except to delete things in the ephemeral `_tmp/` directory tree.
 - Never run `git reset`.
 - Never operate on the `.git` directory with anything other than the `git` CLI.
 - Never delete, rename or push a branch, tag or release unless the user explicitly requests it.
 - Never upload anything unless the user explicitly requests it.
-- Never download anything or install any software unless the user explicitly requests it.
+- Never download anything or install any software unless the user explicitly requests it, except as permitted in
+  [How to Set up the Environment](#how-to-set-up-the-environment).
