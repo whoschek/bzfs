@@ -114,23 +114,24 @@ To validate your changes, you **must** follow this exact sequence:
 
 For software development, you **must** follow this exact sequence:
 
-1. **Stop on Success:** Stop this development workflow if all of the user's explicitly stated success criteria are
+1. **Stop when Done:** Stop this development workflow if all of the user's explicitly stated success criteria are
    already met.
 
-2. **Use TDD:** Restate task, purpose, assumptions and constraints. Then identify and specify documentation changes.
-   Then specify tests, without writing code in this phase.
+2. **Use TDD:** Restate task, purpose, assumptions and constraints. Then specify tests, without writing code in this
+   phase.
 
 3. **Split complex jobs into doable assignments:** Before starting to implement code, estimate the size of the effort
    including the time you'll need to get the job done, to avoid biting off too much in any given iteration. Break down
    the job into subtasks if necessary. Choose the scope of the first subtask such that it is challenging but doable in
-   about 5 minutes. Pick the first subtask and defer the remaining tasks to the next iteration. For quality, show deep,
-   artisanal attention to detail.
+   about 5-10 minutes. Pick the first subtask and defer the remaining tasks to the next iteration. For quality, show
+   deep, artisanal attention to detail.
 
-4. **Write documentation:** Translate the specified documentation changes to file updates.
-
-5. **Use TDD: Write tests before implementation:** First, translate test specifications to test code. Run to see red,
+4. **Use TDD: Write tests before implementation:** First, translate test specifications to test code. Run to see red,
    using the [Change Validation Workflow](#change-validation-workflow). Finally implement minimal code to reach green,
-   run the **entire** [Change Validation Workflow](#change-validation-workflow), then refactor.
+   complete the **entire** [Change Validation Workflow](#change-validation-workflow), then refactor.
+
+5. **Write documentation:** Specify documentation changes and translate them to file updates, including running
+   `./update_readme.sh` if necessary.
 
 6. **Iterate:** Repeat the entire workflow from step 1 to gain additional tests, an incrementally better design
    rationale (≤ 200 words), and a corresponding better implementation.
