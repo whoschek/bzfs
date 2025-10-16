@@ -161,7 +161,7 @@ ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
 {PROG_NAME} is written in Python and continuously runs a wide set of unit tests and integration tests to ensure
 coverage and compatibility with old and new versions of ZFS on Linux and FreeBSD, on all Python
-versions ≥ 3.9 (including latest stable which is currently python-3.13).
+versions ≥ 3.9 (including latest stable which is currently python-3.14).
 
 {PROG_NAME} is a stand-alone program with zero required dependencies, akin to a
 stand-alone shell script or binary executable. It is designed to be able to run in restricted barebones server
@@ -1113,19 +1113,19 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "need not be retransmitted regardless of the --no-resume-recv flag, as these snapshots have already "
              "been successfully received at the destination either way.\n\n")
     parser.add_argument(
-        "--create-bookmarks", choices=["all", "hourly", "minutely", "secondly", "none"], default="hourly",
+        "--create-bookmarks", choices=["all", "hourly", "minutely", "secondly", "none"], default="all",
         help=f"For increased safety, {PROG_NAME} replication behaves as follows wrt. ZFS bookmark creation, if it is "
              "autodetected that the source ZFS pool support bookmarks:\n\n"
-             "* `hourly` (default): Whenever it has successfully completed replication of the most recent source snapshot, "
+             "* `all` (default): Whenever it has successfully completed a 'zfs send' operation, "
+             f"{PROG_NAME} creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send' operation, "
+             "and attaches it to the source dataset. This increases safety at the expense of some performance.\n\n"
+             "* `hourly`: Whenever it has successfully completed replication of the most recent source snapshot, "
              f"{PROG_NAME} creates a ZFS bookmark of that snapshot, and attaches it to the source dataset. In addition, "
              f"whenever it has successfully completed a 'zfs send' operation, {PROG_NAME} creates a ZFS bookmark of each "
              f"hourly, daily, weekly, monthly and yearly source snapshot that was sent during that 'zfs send' operation, "
              "and attaches it to the source dataset.\n\n"
              "* `minutely` and `secondly`: Same as `hourly` except that it also creates ZFS bookmarks for minutely and "
              "secondly snapshots, respectively.\n\n"
-             "* `all`: Whenever it has successfully completed a 'zfs send' operation, "
-             f"{PROG_NAME} creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send' operation, "
-             "and attaches it to the source dataset. This increases safety at the expense of some performance.\n\n"
              "* `none`: No bookmark is created.\n\n"
              "Bookmarks exist so an incremental stream can continue to be sent from the source dataset without having "
              "to keep the already replicated snapshot around on the source dataset until the next upcoming snapshot "

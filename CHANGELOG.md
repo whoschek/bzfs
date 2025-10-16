@@ -2,6 +2,10 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - TBD
+
+- [bzfs] Change default of `--create-bookmarks` from `hourly` to `all` to improve safety.
+
 ## [1.13.0] - October 11, 2025
 
 - [bzfs_jobrunner] Prevent leakage of argument parser options across subjobs.

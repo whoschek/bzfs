@@ -3317,6 +3317,7 @@ class LocalTestCase(IntegrationTestCase):
     def test_complex_replication_flat_use_bookmarks(self, volume: bool = False) -> None:
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
+        xtra = ["--create-bookmarks=hourly"]
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.setup_basic()
         src_foo = build(src_root_dataset + "/foo")
@@ -3329,7 +3330,7 @@ class LocalTestCase(IntegrationTestCase):
 
         for i in range(3):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
+                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", *xtra, dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
@@ -3345,7 +3346,7 @@ class LocalTestCase(IntegrationTestCase):
         take_snapshot(src_foo, fix("t5"))
         for i in range(3):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
+                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", *xtra, dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
@@ -3360,7 +3361,7 @@ class LocalTestCase(IntegrationTestCase):
         take_snapshot(src_foo, fix("t6"))
         for i in range(3):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
+                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", *xtra, dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assert_snapshots(dst_root_dataset + "/foo", 5, "t")
@@ -3377,7 +3378,7 @@ class LocalTestCase(IntegrationTestCase):
         for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
-                    src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), expected_status=DIE_STATUS
+                    src_root_dataset + "/foo", dst_root_dataset + "/foo", *xtra, dry_run=(i == 0), expected_status=DIE_STATUS
                 )
                 self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
                 self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
@@ -3390,6 +3391,7 @@ class LocalTestCase(IntegrationTestCase):
                     dst_root_dataset + "/foo",
                     "--force-rollback-to-latest-common-snapshot",
                     "--force-once",
+                    *xtra,
                     dry_run=(i == 0),
                 )
                 self.assert_snapshots(dst_root_dataset, 0)
@@ -3410,7 +3412,7 @@ class LocalTestCase(IntegrationTestCase):
         for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
-                    src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), expected_status=DIE_STATUS
+                    src_root_dataset + "/foo", dst_root_dataset + "/foo", *xtra, dry_run=(i == 0), expected_status=DIE_STATUS
                 )
                 self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
                 self.assertEqual(
@@ -3426,6 +3428,7 @@ class LocalTestCase(IntegrationTestCase):
                     dst_root_dataset + "/foo",
                     "--force-rollback-to-latest-common-snapshot",
                     "--force-once",
+                    *xtra,
                     dry_run=(i == 0),
                 )  # resolve conflict via dst rollback
                 self.assert_snapshots(dst_root_dataset, 0)
@@ -3447,14 +3450,14 @@ class LocalTestCase(IntegrationTestCase):
         destroy(snapshots(src_foo)[2])
         for i in range(2):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
+                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", *xtra, dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset, 0)
                 self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")
                 self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
 
         # replicate a child dataset
         if not volume:
-            self.run_bzfs(src_root_dataset + "/foo/a", dst_root_dataset + "/foo/a")
+            self.run_bzfs(src_root_dataset + "/foo/a", dst_root_dataset + "/foo/a", *xtra)
             self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
             self.assert_bookmark_names(src_root_dataset + "/foo/a", ["u1", "u3"])
             self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")
@@ -3467,7 +3470,7 @@ class LocalTestCase(IntegrationTestCase):
         # so replication is a noop and won't fail:
         for i in range(2):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
+                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", *xtra, dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")  # nothing has changed on dst
                 self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
                 if not volume:
@@ -3482,7 +3485,7 @@ class LocalTestCase(IntegrationTestCase):
         # so replication will succeed:
         for i in range(2):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
+                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", *xtra, dry_run=(i == 0))
                 if not volume:
                     self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
                 if i == 0:
@@ -3497,7 +3500,7 @@ class LocalTestCase(IntegrationTestCase):
         # no change on src means replication is a noop:
         for i in range(2):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
+                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", *xtra, dry_run=(i == 0))
                 self.assert_snapshot_names(
                     dst_root_dataset + "/foo", ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t9", "t10", "t11"]
                 )
@@ -3512,7 +3515,7 @@ class LocalTestCase(IntegrationTestCase):
         for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
-                    src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), expected_status=DIE_STATUS
+                    src_root_dataset + "/foo", dst_root_dataset + "/foo", *xtra, dry_run=(i == 0), expected_status=DIE_STATUS
                 )
                 self.assert_snapshot_names(
                     dst_root_dataset + "/foo", ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t9", "t10", "t11"]
@@ -3527,6 +3530,7 @@ class LocalTestCase(IntegrationTestCase):
                     src_root_dataset + "/foo",
                     dst_root_dataset + "/foo",
                     "--force-rollback-to-latest-common-snapshot",
+                    *xtra,
                     dry_run=(i == 0),
                 )
                 if not volume:
@@ -3773,13 +3777,15 @@ class LocalTestCase(IntegrationTestCase):
 
         k = -1
         for i in range(2):
-            for j in range(2):
+            for j in range(3):
                 k += 1
                 with stop_on_failure_subtest(i=k):
                     if k > 0:
                         self.tearDownAndSetup()
                     no_use_bookmark = j == 0
                     xtra = ["--no-use-bookmark"] if no_use_bookmark else []
+                    # For j==2 we rely on the new default --create-bookmarks=all (no explicit flag needed)
+                    xtra += ["--create-bookmarks=hourly"] if j <= 1 else []
                     param_name = ENV_VAR_PREFIX + "max_datasets_per_batch_on_list_snaps"
                     old_value = os.environ.get(param_name)
                     try:
@@ -3999,8 +4005,13 @@ class LocalTestCase(IntegrationTestCase):
                         )
                         n_src, n_dst, n_all = stats(job)
                         self.assertEqual(3, n_src)
-                        self.assertEqual(3 if no_use_bookmark else 3 - 1, n_dst)
-                        self.assertEqual(3 if no_use_bookmark else 3 + 1, n_all)
+                        # With default --create-bookmarks=all (j==2), two bookmarks (#t2, #t3) remain on src after
+                        # deleting all src snapshots of /foo (we already deleted #t1 above), so only one dst-only entry
+                        # remains. For j<=1 (explicit --create-bookmarks=hourly), only the latest snapshot (#t3) is
+                        # bookmarked, hence two dst-only entries remain. When --no-use-bookmark is set, bookmarks are
+                        # ignored and all three appear only on dst.
+                        self.assertEqual(3 if no_use_bookmark else 3 - (2 if j == 2 else 1), n_dst)
+                        self.assertEqual(3 if no_use_bookmark else 3 + (2 if j == 2 else 1), n_all)
 
                         for bookmark in bookmarks(src_foo):
                             destroy(bookmark)
@@ -4334,6 +4345,7 @@ class LocalTestCase(IntegrationTestCase):
 
     def test_delete_dst_snapshots_flat_with_replication_with_crosscheck(self) -> None:
         self.setup_basic()
+        xtra = ["--create-bookmarks=hourly"]
         for j in range(2):
             for i in range(3):
                 with stop_on_failure_subtest(i=j * 3 + i):
@@ -4345,7 +4357,7 @@ class LocalTestCase(IntegrationTestCase):
                     take_snapshot(src_root_dataset, fix("s1"))
                     take_snapshot(src_root_dataset, fix("s2"))
                     take_snapshot(src_root_dataset, fix("s3"))
-                    self.run_bzfs(src_root_dataset, dst_root_dataset)
+                    self.run_bzfs(src_root_dataset, dst_root_dataset, *xtra)
                     self.assert_snapshots(dst_root_dataset, 3, "s")
                     if i > 0:
                         destroy_snapshots(src_root_dataset, snapshots(src_root_dataset))
@@ -4354,7 +4366,12 @@ class LocalTestCase(IntegrationTestCase):
                             destroy(bookmark)
                     crosscheck = [] if j == 0 else ["--delete-dst-snapshots-no-crosscheck"]
                     self.run_bzfs(
-                        src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots", *crosscheck
+                        src_root_dataset,
+                        dst_root_dataset,
+                        "--skip-replication",
+                        "--delete-dst-snapshots",
+                        *crosscheck,
+                        *xtra,
                     )
                     if i == 0:
                         self.assert_snapshots(dst_root_dataset, 3, "s")
@@ -4416,12 +4433,13 @@ class LocalTestCase(IntegrationTestCase):
     def test_delete_dst_bookmarks_flat(self) -> None:
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
+        xtra = ["--create-bookmarks=hourly"]
         for i in range(1):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
                 self.setup_basic()
-                self.run_bzfs(src_root_dataset, dst_root_dataset)
+                self.run_bzfs(src_root_dataset, dst_root_dataset, *xtra)
                 tag0 = snapshot_name(snapshots(src_root_dataset)[0])
                 create_bookmark(dst_root_dataset, tag0, tag0)
                 tag1 = snapshot_name(snapshots(src_root_dataset)[1])
@@ -4432,10 +4450,14 @@ class LocalTestCase(IntegrationTestCase):
                 self.assert_bookmark_names(dst_root_dataset, ["s1", "s2", "s3"])
                 for snapshot in snapshots(src_root_dataset) + snapshots(dst_root_dataset):
                     destroy(snapshot)
-                self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks")
+                self.run_bzfs(
+                    src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks", *xtra
+                )
                 self.assert_bookmark_names(dst_root_dataset, ["s1", "s3"])
 
-                self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks")
+                self.run_bzfs(
+                    src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks", *xtra
+                )
                 self.assert_bookmark_names(dst_root_dataset, ["s1", "s3"])
 
                 for bookmark in bookmarks(src_root_dataset):
@@ -4446,6 +4468,7 @@ class LocalTestCase(IntegrationTestCase):
                     "--skip-replication",
                     "--delete-dst-snapshots=bookmarks",
                     "--delete-empty-dst-datasets",
+                    *xtra,
                 )
                 self.assert_bookmark_names(dst_root_dataset, [])
                 self.assertTrue(dataset_exists(dst_root_dataset))
@@ -4456,6 +4479,7 @@ class LocalTestCase(IntegrationTestCase):
                     "--skip-replication",
                     "--delete-empty-dst-datasets",
                     "--recursive",
+                    *xtra,
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
 

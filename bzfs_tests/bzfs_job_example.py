@@ -324,7 +324,7 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 # extra_args += ["--verbose"]
 # extra_args += ["--quiet"]
 # extra_args += ["--no-privilege-elevation"]
-# extra_args += ["--create-bookmarks=all"]
+# extra_args += ["--create-bookmarks=all"]  # this is already the default anyway
 # ... and so on (include all other options from bzfs --help here too)
 # extra_args += ["--daily_hour=23"]  # take daily snapshots at 23:59
 # extra_args += ["--daily_minute=59"]
