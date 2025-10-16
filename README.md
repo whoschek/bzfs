@@ -420,7 +420,7 @@ cd bzfs/bzfs_main
 ./bzfs --help  # Run the CLI
 ./bzfs_jobrunner --help
 sudo ln -sf $(pwd)/bzfs /usr/local/bin/bzfs  # Optional system installation
-sudo ln -sf $(pwd)/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner  # Optional system installation
+sudo ln -sf $(pwd)/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner # Optional system installation
 
 # Alternatively, install a release via pip:
 pip install bzfs
