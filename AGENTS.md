@@ -117,13 +117,13 @@ For software development, you **must** follow this exact sequence:
 1. **Stop if Already Done:** Determine if the acceptance criteria are already satisfied. If so, stop.
 
 2. **Use TDD:** Restate task, purpose, assumptions, constraints and explicit acceptance criteria. Define a test plan
-   without writing code in this phase. Formulate numbered acceptance criteria.
+   without writing code in this phase.
 
-3. **Split complex jobs into doable assignments:** Before starting to implement code, estimate the size of the effort
-   including the time you'll need to get the job done, to avoid biting off too much in any given iteration. If
-   necessary, break down the job into subtasks with bounded scope. Choose the scope of the first subtask such that it is
-   challenging but doable in about 5-10 minutes. Pick the first subtask. Defer the remaining tasks to the next iteration
-   by putting them into the backlog. Output the backlog and the chosen (first) subtask.
+3. **Split complex tasks into doable assignments:** Before starting to implement code, estimate the size of the effort
+   including the time you'll need to get the task done, to avoid biting off too much in any given iteration. If
+   necessary, break down the task into subtasks with bounded scope. Choose the scope of the first subtask such that it
+   is challenging but doable in about 5-10 minutes. Pick the first subtask. Defer the remaining tasks to the next
+   iteration by putting them into the backlog. Output the backlog and the chosen (first) subtask.
 
 4. **Use TDD: Write tests before implementation:** Translate the chosen subtask's test specs into test code, then run to
    see red using the [Change Validation Workflow](#change-validation-workflow) with `bzfs_test_mode=unit` by default.
@@ -143,7 +143,7 @@ Before committing any changes, you **must** follow this exact sequence:
 
 1. Stop this Commit Workflow unless the user explicitly requests to commit.
 
-2. Run the [Change Validation Workflow](#change-validation-workflow). Iterate until it passes before proceeding.
+2. Run the [Change Validation Workflow](#change-validation-workflow). Stop if it didn't pass.
 
 3. **Commit:**
 
