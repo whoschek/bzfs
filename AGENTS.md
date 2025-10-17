@@ -129,7 +129,7 @@ For software development, you **must** follow this exact sequence:
    see red using the [Change Validation Workflow](#change-validation-workflow) with `bzfs_test_mode=unit` by default.
    Implement minimal code to reach green. Then re-run the [Change Validation Workflow](#change-validation-workflow).
 
-5. **Refactor:** Improve the design of the code changes while keeping tests green, then re-run
+5. **Refactor:** Improve the design and quality of the code changes while keeping tests green, then re-run
    [Change Validation Workflow](#change-validation-workflow).
 
 6. **Write User Documentation:** Specify and apply user-facing doc changes, then re-run the
@@ -209,8 +209,8 @@ Your goal is to improve quality with zero functional regressions.
 
 - **Tree of Thought with Verbalized Sampling:** Simultaneously explore five completely distinct promising approaches,
   with their corresponding numeric probabilities, sampled from the full distribution. Explain and evaluate the pros/cons
-  of each approach. Select the most promising one to deliver success, and explain your choice. Perform a thorough root
-  cause analysis.
+  of each approach. Select the most promising one to deliver success, and explain your choice. Then methodically execute
+  each step of your plan.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
