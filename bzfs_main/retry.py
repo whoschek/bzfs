@@ -88,7 +88,7 @@ class RetryPolicy:
 T = TypeVar("T")
 
 
-def run_with_retries(log: Logger, policy: RetryPolicy, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+def run_with_retries(log: Logger, policy: RetryPolicy, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:  # thread-safe
     """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
     c_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     retry_count: int = 0

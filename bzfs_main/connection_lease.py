@@ -196,7 +196,7 @@ class ConnectionLeaseManager:
             validate_is_not_a_symlink("connection lease dir ", _dir)
             validate_file_permissions(_dir, mode=DIR_PERMISSIONS)
 
-    def acquire(self) -> ConnectionLease:
+    def acquire(self) -> ConnectionLease:  # thread-safe
         """Acquires and returns a ConnectionLease with an open, flocked fd and the SSH ControlPath aka socket file path."""
         self._validate_dirs()
         lease = self._find_and_acquire(self._free_dir)  # fast path: find free aka unlocked socket name in O(1) expected time

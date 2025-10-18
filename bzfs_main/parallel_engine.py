@@ -161,7 +161,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     is_test_mode: bool = False,
-) -> bool:  # returns True if any dataset processing failed, False if all succeeded
+) -> bool:  # returns True if any dataset processing failed, False if all succeeded; thread-safe
     """Executes dataset processing operations in parallel with dependency-aware scheduling and fault tolerance.
 
     This function orchestrates parallel execution of dataset operations while maintaining strict hierarchical dependencies.

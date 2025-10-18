@@ -260,8 +260,8 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     log.debug("%s", f"Temporary TSV output file comparing {task} is: {tmp_tsv_file}")
     with open_nofollow(tmp_tsv_file, "w", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
         # streaming group by rel_dataset (consumes constant memory only); entry is a Tuple[str, ComparableSnapshot]
-        group = itertools.groupby(merge_itr, key=lambda entry: entry[1].key[0])
-        _print_datasets(group, lambda rel_ds, entries: print_dataset(rel_ds, entries), rel_src_or_dst)
+        groups = itertools.groupby(merge_itr, key=lambda entry: entry[1].key[0])
+        _print_datasets(groups, lambda rel_ds, entries: print_dataset(rel_ds, entries), rel_src_or_dst)
     os.rename(tmp_tsv_file, tsv_file)
     log.info("%s", f"Final TSV output file comparing {task} is: {tsv_file}")
 
@@ -282,12 +282,12 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     os.rename(tmp_tsv_file, tsv_file)
 
 
-def _print_datasets(group: itertools.groupby, fn: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
+def _print_datasets(groups: itertools.groupby, fn: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
     """Iterate over grouped datasets and apply fn, adding gaps for missing ones."""
     rel_datasets = sorted(rel_datasets)
     n = len(rel_datasets)
     i = 0
-    for rel_dataset, entries in group:
+    for rel_dataset, entries in groups:
         while i < n and rel_datasets[i] < rel_dataset:
             fn(rel_datasets[i], [])  # Also print summary stats for datasets whose snapshot stream is empty
             i += 1
