@@ -83,10 +83,10 @@ from bzfs_main.detect import (
 from bzfs_main.loggers import (
     get_simple_logger,
 )
-from bzfs_main.parallel_engine import (
+from bzfs_main.parallel_tasktree import (
     BARRIER_CHAR,
 )
-from bzfs_main.parallel_engine_wrapper import (
+from bzfs_main.parallel_tasktree_policy import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
 from bzfs_main.utils import (

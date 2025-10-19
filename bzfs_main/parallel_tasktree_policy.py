@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Policy layer for the generic parallel engine algorithm.
+"""Policy layer for the generic parallel task tree scheduling algorithm.
 
-Purpose: Provide bzfs-specific behavior on top of the policy-free generic ``parallel_engine`` algorithm: retries,
-skip-on-error modes (fail/dataset/tree), and logging.
+Purpose: Provide bzfs-specific behavior on top of the policy-free generic ``parallel_tasktree`` scheduling algorithm:
+retries, skip-on-error modes (fail/dataset/tree), and logging.
 
 Assumptions: Callers provide a thread-safe ``process_dataset(dataset, tid, Retry) -> bool``. Dataset list is sorted and
 unique (enforced by tests).
@@ -41,7 +41,7 @@ from typing import (
     Callable,
 )
 
-from bzfs_main.parallel_engine import (
+from bzfs_main.parallel_tasktree import (
     CompletionCallback,
     process_datasets_in_parallel,
 )
@@ -78,8 +78,8 @@ def process_datasets_in_parallel_and_fault_tolerant(
 ) -> bool:  # returns True if any dataset processing failed, False if all succeeded
     """Runs datasets in parallel with retries and skip policy.
 
-    Purpose: Adapt the generic engine to bzfs needs by wrapping the worker in retries and determining skip/fail behavior on
-    completion.
+    Purpose: Adapt the generic engine to bzfs needs by wrapping the worker function with retries and determining skip/fail
+    behavior on completion.
 
     Assumptions: ``skip_on_error`` is one of {"fail","dataset","tree"}. ``skip_tree_on_error(dataset)`` returns True if
     subtree should be skipped.
