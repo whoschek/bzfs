@@ -364,7 +364,7 @@ def find_match(
 
 
 def is_descendant(dataset: str, of_root_dataset: str) -> bool:
-    """Returns True if ``dataset`` lies under ``of_root_dataset`` in the dataset hierarchy, or is the same."""
+    """Returns True if ZFS ``dataset`` lies under ``of_root_dataset`` in the dataset hierarchy, or is the same."""
     return dataset == of_root_dataset or dataset.startswith(of_root_dataset + "/")
 
 
@@ -374,7 +374,7 @@ def has_duplicates(sorted_list: list[Any]) -> bool:
 
 
 def has_siblings(sorted_datasets: list[str], is_test_mode: bool = False) -> bool:
-    """Returns whether the (sorted) list of input datasets contains any siblings."""
+    """Returns whether the (sorted) list of ZFS input datasets contains any siblings."""
     assert (not is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
     assert (not is_test_mode) or not has_duplicates(sorted_datasets), "List contains duplicates"
     skip_dataset: str = DONT_SKIP_DATASET

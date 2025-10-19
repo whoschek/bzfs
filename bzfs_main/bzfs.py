@@ -1053,7 +1053,7 @@ class Job:
 
         def check_alert(
             label: SnapshotLabel, alert_cfg: AlertConfig | None, creation_unixtime_secs: int, dataset: str, snapshot: str
-        ) -> None:
+        ) -> None:  # thread-safe
             if alert_cfg is None:
                 return
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
@@ -1379,7 +1379,7 @@ class Job:
 
         def create_snapshot_if_latest_is_too_old(
             datasets_to_snapshot: dict[SnapshotLabel, list[str]], dataset: str, label: SnapshotLabel, creation_unixtime: int
-        ) -> None:
+        ) -> None:  # thread-safe
             """Schedules creation of a snapshot for the given label if the label's existing latest snapshot is too old."""
             creation_dt: datetime = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
             log.log(LOG_TRACE, "Latest snapshot creation: %s for %s", creation_dt, label)

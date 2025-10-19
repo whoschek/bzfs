@@ -151,7 +151,7 @@ until they exit or time out.
 """
 
 
-def process_datasets_in_parallel_and_fault_tolerant(
+def process_datasets_in_parallel(
     log: Logger,
     datasets: list[str],  # (sorted) list of datasets to process
     process_dataset: Callable[[str, int], CompletionCallback],  # lambda: dataset, tid; must be thread-safe

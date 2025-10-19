@@ -41,7 +41,10 @@ from typing import (
     Callable,
 )
 
-import bzfs_main.parallel_engine
+from bzfs_main.parallel_engine import (
+    CompletionCallback,
+    process_datasets_in_parallel,
+)
 from bzfs_main.retry import (
     Retry,
     RetryPolicy,
@@ -92,7 +95,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     len_datasets: int = len(datasets)
     is_debug: bool = log.isEnabledFor(logging.DEBUG)
 
-    def _process_dataset(dataset: str, submitted_count: int) -> bzfs_main.parallel_engine.CompletionCallback:
+    def _process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
         """Wrapper function around process_dataset(); adds a callback determining if to fail or skip subtree on error."""
         tid: str = f"{submitted_count}/{len_datasets}"
         start_time_nanos: int = time.monotonic_ns()
@@ -108,7 +111,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, elapsed_duration)
 
         def _completion_callback(
-            todo_futures: set[Future[bzfs_main.parallel_engine.CompletionCallback]],
+            todo_futures: set[Future[CompletionCallback]],
         ) -> tuple[bool, bool]:
             """CompletionCallback determining if to fail or skip subtree on error; Runs in the (single) main thread as part
             of the coordination loop."""
@@ -127,7 +130,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
 
         return _completion_callback
 
-    return bzfs_main.parallel_engine.process_datasets_in_parallel_and_fault_tolerant(
+    return process_datasets_in_parallel(
         log=log,
         datasets=datasets,
         process_dataset=_process_dataset,

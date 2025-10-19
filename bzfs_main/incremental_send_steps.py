@@ -55,13 +55,13 @@ def incremental_send_steps(
     Example C where h0 is the latest common snapshot:
     src = [h0, m0] (d is daily, h is hourly) --> dst = [h0] via returning an empty list
 
-    * The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
+    * The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394.
     * The 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
-    src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
-    is a bookmark we convert a -I step to a -i step followed by zero or more -i/-I steps.
-    * The is_resume param is necessary as 'zfs send -t' does not support sending more than a single snapshot
-    on resuming a previously interrupted 'zfs receive -s'. Thus, here too, we convert a -I step to a -i step
-    followed by zero or more -i/-I steps.
+      src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
+      is a bookmark we convert a -I step to a -i step followed by zero or more -i/-I steps.
+    * The is_resume param is necessary as 'zfs send -t' does not support sending more than a single snapshot on
+      resuming a previously interrupted 'zfs receive -s'; for example, see https://github.com/openzfs/zfs/issues/16764.
+      Thus, here too, we convert a -I step to a -i step followed by zero or more -i/-I steps.
     """
 
     def append_run(i: int, label: str) -> int:
