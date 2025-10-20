@@ -327,17 +327,17 @@ def _complete_job_with_barriers(
 
     The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner. Here, a "dataset" string is
     treated as an identifier for any kind of job rather than a reference to a concrete ZFS object. An example "dataset" job
-    string is "src_host1/createsnapshot/push/prune". Jobs can depend on another job via a parent/child relationship formed by
-    '/' directory separators within the dataset string, and multiple "datasets" form a job dependency tree by way of common
-    dataset directory prefixes. Jobs that do not depend on each other can be executed in parallel, and jobs can be told to
-    first wait for other jobs to complete successfully. The algorithm is based on a barrier primitive and is typically
-    disabled. It is only required for rare jobrunner configs.
+    string is "src_host1/createsnapshots/replicate_to_host1". Jobs can depend on another job via a parent/child relationship
+    formed by '/' directory separators within the dataset string, and multiple "datasets" form a job dependency tree by way
+    of common dataset directory prefixes. Jobs that do not depend on each other can be executed in parallel, and jobs can be
+    told to first wait for other jobs to complete successfully. The algorithm is based on a barrier primitive and is
+    typically disabled. It is only required for rare jobrunner configs.
 
-    For example, a job scheduler can specify that all parallel push replications jobs to multiple destinations must succeed
-    before the jobs of the pruning phase can start. More generally, with this algo, a job scheduler can specify that all jobs
-    within a given job subtree (containing any nested combination of sequential and/or parallel jobs) must successfully
-    complete before a certain other job within the job tree is started. This is specified via the barrier directory named
-    '~'. An example is "src_host1/createsnapshot/~/prune".
+    For example, a job scheduler can specify that all parallel replications jobs to multiple destinations must succeed before
+    the jobs of the pruning phase can start. More generally, with this algo, a job scheduler can specify that all jobs within
+    a given job subtree (containing any nested combination of sequential and/or parallel jobs) must successfully complete
+    before a certain other job within the job tree is started. This is specified via the barrier directory named '~'. An
+    example is "src_host1/createsnapshots/~/prune".
 
     Note that '~' is unambiguous as it is not a valid ZFS dataset name component per the naming rules enforced by the 'zfs
     create', 'zfs snapshot' and 'zfs bookmark' CLIs.
