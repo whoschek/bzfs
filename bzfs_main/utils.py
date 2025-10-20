@@ -99,7 +99,7 @@ FILE_PERMISSIONS: Final[int] = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user re
 DIR_PERMISSIONS: Final[int] = stat.S_IRWXU  # rwx------ (user read + write + execute)
 UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH: Final[int] = 107 if platform.system() == "Linux" else 103  # see Google for 'sun_path'
 
-RegexList = list[tuple[re.Pattern, bool]]  # Type alias
+RegexList = list[tuple[re.Pattern[str], bool]]  # Type alias
 
 
 def getenv_any(key: str, default: str | None = None) -> str | None:

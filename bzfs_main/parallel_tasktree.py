@@ -327,7 +327,7 @@ def _complete_job_with_barriers(
 
     The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner. Here, a "dataset" string is
     treated as an identifier for any kind of job rather than a reference to a concrete ZFS object. An example "dataset" job
-    string is "src_host1/createsnapshots/replicate_to_host1". Jobs can depend on another job via a parent/child relationship
+    string is "src_host1/createsnapshots/replicate_to_hostA". Jobs can depend on another job via a parent/child relationship
     formed by '/' directory separators within the dataset string, and multiple "datasets" form a job dependency tree by way
     of common dataset directory prefixes. Jobs that do not depend on each other can be executed in parallel, and jobs can be
     told to first wait for other jobs to complete successfully. The algorithm is based on a barrier primitive and is

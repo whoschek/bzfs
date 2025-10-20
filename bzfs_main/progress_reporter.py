@@ -117,7 +117,7 @@ class ProgressReporter:
         self._sleeper: Final[InterruptibleSleep] = InterruptibleSleep(self._lock)  # sleeper shares lock with reporter
         self._file_name_queue: set[str] = set()
         self._file_name_set: Final[set[str]] = set()
-        self._is_stopping = False
+        self._is_stopping: bool = False
         self._states: list[State] = [State.IS_RESETTING]
 
     def start(self) -> None:

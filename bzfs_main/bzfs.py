@@ -416,7 +416,7 @@ class Job:
                             maybe_inject_error(self, cmd=[], error_trigger="retryable_run_tasks")
                             timeout(self)
                             self.validate_task()
-                            self.run_task()
+                            self.run_task()  # do the real work
                         except RetryableError as retryable_error:
                             cause: BaseException | None = retryable_error.__cause__
                             assert cause is not None
@@ -448,7 +448,7 @@ class Job:
         self.params.log.error(f"#{self.all_exceptions_count}: Done with %s: %s", task_name, task_description)
 
     def sleep_until_next_daemon_iteration(self, daemon_stoptime_nanos: int) -> bool:
-        """Pauses until the next scheduled snapshot time or daemon stop."""
+        """Pauses until next scheduled snapshot time or daemon stop; Returns True to continue daemon loop; False to stop."""
         sleep_nanos: int = daemon_stoptime_nanos - time.monotonic_ns()
         if sleep_nanos <= 0:
             return False
@@ -469,7 +469,7 @@ class Job:
         log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), f" ... [Log {p.log_params.log_file}]")
         time.sleep(sleep_nanos / 1_000_000_000)
         config.current_datetime = datetime.now(config.tz)
-        return daemon_stoptime_nanos - time.monotonic_ns() > 0
+        return time.monotonic_ns() < daemon_stoptime_nanos
 
     def print_replication_stats(self, start_time_nanos: int) -> None:
         """Logs overall replication statistics after a job cycle completes."""

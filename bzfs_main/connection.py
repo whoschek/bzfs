@@ -168,7 +168,7 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
     # and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
     control_persist_limit_nanos: int = (remote.ssh_control_persist_secs - job.control_persist_margin_secs) * 1_000_000_000
     with conn.lock:
-        if time.monotonic_ns() - conn.last_refresh_time < control_persist_limit_nanos:
+        if time.monotonic_ns() < conn.last_refresh_time + control_persist_limit_nanos:
             return  # ssh master is alive, reuse its TCP connection (this is the common case and the ultra-fast path)
         ssh_cmd: list[str] = conn.ssh_cmd
         ssh_socket_cmd: list[str] = ssh_cmd[0:-1]  # omit trailing ssh_user_host

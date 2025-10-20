@@ -33,6 +33,7 @@ from logging import (
 from typing import (
     Any,
     Callable,
+    Final,
     TypeVar,
 )
 
@@ -43,24 +44,27 @@ from bzfs_main.utils import (
 
 #############################################################################
 class RetryPolicy:
-    """Configuration controlling retry counts and backoff delays."""
+    """Configuration controlling retry counts and backoff delays; Immutable."""
 
     def __init__(self, args: argparse.Namespace) -> None:
         """Option values for retries; reads from ArgumentParser via args."""
         # immutable variables:
-        self.retries: int = args.retries
-        self.min_sleep_secs: float = args.retry_min_sleep_secs
-        self.initial_max_sleep_secs: float = args.retry_initial_max_sleep_secs
-        self.max_sleep_secs: float = args.retry_max_sleep_secs
-        self.max_elapsed_secs: float = args.retry_max_elapsed_secs
-        self.min_sleep_nanos: int = int(self.min_sleep_secs * 1_000_000_000)
-        self.initial_max_sleep_nanos: int = int(self.initial_max_sleep_secs * 1_000_000_000)
-        self.max_sleep_nanos: int = int(self.max_sleep_secs * 1_000_000_000)
-        self.max_elapsed_nanos: int = int(self.max_elapsed_secs * 1_000_000_000)
-        self.min_sleep_nanos = max(1, self.min_sleep_nanos)
-        self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
-        self.initial_max_sleep_nanos = min(self.max_sleep_nanos, max(self.min_sleep_nanos, self.initial_max_sleep_nanos))
-        assert self.min_sleep_nanos <= self.initial_max_sleep_nanos <= self.max_sleep_nanos
+        self.retries: Final[int] = args.retries
+        self.min_sleep_secs: Final[float] = args.retry_min_sleep_secs
+        self.initial_max_sleep_secs: Final[float] = args.retry_initial_max_sleep_secs
+        self.max_sleep_secs: Final[float] = args.retry_max_sleep_secs
+        self.max_elapsed_secs: Final[float] = args.retry_max_elapsed_secs
+        self.max_elapsed_nanos: Final[int] = int(self.max_elapsed_secs * 1_000_000_000)
+        min_sleep_nanos: int = int(self.min_sleep_secs * 1_000_000_000)
+        initial_max_sleep_nanos: int = int(self.initial_max_sleep_secs * 1_000_000_000)
+        max_sleep_nanos: int = int(self.max_sleep_secs * 1_000_000_000)
+        min_sleep_nanos = max(1, min_sleep_nanos)
+        max_sleep_nanos = max(min_sleep_nanos, max_sleep_nanos)
+        initial_max_sleep_nanos = min(max_sleep_nanos, max(min_sleep_nanos, initial_max_sleep_nanos))
+        self.min_sleep_nanos: Final[int] = min_sleep_nanos
+        self.initial_max_sleep_nanos: Final[int] = initial_max_sleep_nanos
+        self.max_sleep_nanos: Final[int] = max_sleep_nanos
+        assert 1 <= self.min_sleep_nanos <= self.initial_max_sleep_nanos <= self.max_sleep_nanos
 
     def __repr__(self) -> str:
         """Return debug representation of retry parameters."""

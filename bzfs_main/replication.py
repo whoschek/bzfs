@@ -1223,10 +1223,10 @@ def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send
     parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use cases where A replicates to B,
     and B replicates to C.
 
-    check_zfs_dataset_busy() offers no guarantees, it merely proactively avoids likely collisions. In other words, even if
+    _check_zfs_dataset_busy() offers no guarantees, it merely proactively avoids likely collisions. In other words, even if
     the process check below passes there is no guarantee that the destination dataset won't be busy by the time we actually
     execute the 'zfs send' operation. In such an event ZFS will reject the operation, we'll detect that, and we'll simply
-    retry, after some delay. check_zfs_dataset_busy() can be disabled via --ps-program=-.
+    retry, after some delay. _check_zfs_dataset_busy() can be disabled via --ps-program=-.
 
     TLDR: As is common for long-running operations in distributed systems, we use coordination-free optimistic concurrency
     control where the parties simply retry on collision detection (rather than coordinate concurrency via a remote lock
