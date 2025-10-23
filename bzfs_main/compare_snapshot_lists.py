@@ -74,7 +74,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 
 
 @dataclass(order=True, frozen=True)
-class ComparableSnapshot:
+class _ComparableSnapshot:
     """Snapshot entry comparable by rel_dataset and GUID for sorting and merging."""
 
     key: tuple[str, str]  # rel_dataset, guid
@@ -118,7 +118,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         for lines in zfs_list_snapshots_in_parallel(job, r, cmd, sorted_datasets):
             yield from lines
 
-    def snapshot_iterator(root_dataset: str, sorted_itr: Iterator[str]) -> Iterator[ComparableSnapshot]:
+    def snapshot_iterator(root_dataset: str, sorted_itr: Iterator[str]) -> Iterator[_ComparableSnapshot]:
         """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that any two snapshots
         with the same GUID will lie adjacent to each other during the upcoming phase that merges src snapshots and dst
         snapshots."""
@@ -139,9 +139,9 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
                     continue  # ignore bookmarks whose snapshot still exists. also ignore dupes of bookmarks
                 last_guid = guid
                 key = (rel_dataset, guid)  # ensures src snapshots and dst snapshots with the same GUID will be adjacent
-                yield ComparableSnapshot(key, cols)
+                yield _ComparableSnapshot(key, cols)
 
-    def print_dataset(rel_dataset: str, entries: Iterable[tuple[str, ComparableSnapshot]]) -> None:
+    def print_dataset(rel_dataset: str, entries: Iterable[tuple[str, _ComparableSnapshot]]) -> None:
         entries = sorted(  # fetch all snapshots of current dataset and sort em by creation, createtxg, snapshot_tag
             entries,
             key=lambda entry: (

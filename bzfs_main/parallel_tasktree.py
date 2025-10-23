@@ -56,26 +56,26 @@ BARRIER_CHAR: Final[str] = "~"
 
 
 #############################################################################
-Tree = dict[str, "Tree"]  # Type alias
+_Tree = dict[str, "_Tree"]  # Type alias
 
 
-def _build_dataset_tree(sorted_datasets: list[str]) -> Tree:
+def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
     """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names, in the
     form of nested dicts."""
-    tree: Tree = {}
+    tree: _Tree = {}
     interner: Interner[str] = Interner()  # reduces memory footprint
     for dataset in sorted_datasets:
-        current: Tree = tree
+        current: _Tree = tree
         for component in dataset.split("/"):
-            child: Tree | None = current.get(component)
+            child: _Tree | None = current.get(component)
             if child is None:
                 child = {}
                 component = interner.intern(component)
                 current[component] = child
             current = child
-    shared_empty_leaf: Tree = {}
+    shared_empty_leaf: _Tree = {}
 
-    def compact(node: Tree) -> None:
+    def compact(node: _Tree) -> None:
         """Tree with shared empty leaf nodes has some 30% lower memory footprint than the non-compacted version."""
         for key, child_node in node.items():
             if len(child_node) == 0:
@@ -87,49 +87,49 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> Tree:
     return tree
 
 
-def _build_dataset_tree_and_find_roots(sorted_datasets: list[str]) -> list[TreeNode]:
+def _build_dataset_tree_and_find_roots(sorted_datasets: list[str]) -> list[_TreeNode]:
     """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
-    tree: Tree = _build_dataset_tree(sorted_datasets)  # tree consists of nested dictionaries
+    tree: _Tree = _build_dataset_tree(sorted_datasets)  # tree consists of nested dictionaries
     skip_dataset: str = DONT_SKIP_DATASET
-    roots: list[TreeNode] = []
+    roots: list[_TreeNode] = []
     for dataset in sorted_datasets:
         if is_descendant(dataset, of_root_dataset=skip_dataset):
             continue
         skip_dataset = dataset
-        children: Tree = tree
+        children: _Tree = tree
         for component in dataset.split("/"):
             children = children[component]
         roots.append(_make_tree_node(dataset, children))
     return roots
 
 
-class TreeNodeMutableAttributes:
+class _TreeNodeMutableAttributes:
     """Container for mutable attributes, stored space efficiently."""
 
     __slots__ = ("barrier", "pending")  # uses more compact memory layout than __dict__
 
     def __init__(self) -> None:
-        self.barrier: TreeNode | None = None  # zero or one barrier TreeNode waiting for this node to complete
+        self.barrier: _TreeNode | None = None  # zero or one barrier TreeNode waiting for this node to complete
         self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
 
 
-class TreeNode(NamedTuple):
+class _TreeNode(NamedTuple):
     """Node in dataset dependency tree used by the scheduler; TreeNodes are ordered by dataset name within a priority queue
     via __lt__ comparisons."""
 
     dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
-    children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
-    parent: TreeNode | None
-    mut: TreeNodeMutableAttributes
+    children: _Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
+    parent: _TreeNode | None
+    mut: _TreeNodeMutableAttributes
 
     def __repr__(self) -> str:
         dataset, pending, barrier, nchildren = self.dataset, self.mut.pending, self.mut.barrier, len(self.children)
         return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
 
 
-def _make_tree_node(dataset: str, children: Tree, parent: TreeNode | None = None) -> TreeNode:
+def _make_tree_node(dataset: str, children: _Tree, parent: _TreeNode | None = None) -> _TreeNode:
     """Creates a TreeNode with mutable state container."""
-    return TreeNode(dataset, children, parent, TreeNodeMutableAttributes())
+    return _TreeNode(dataset, children, parent, _TreeNodeMutableAttributes())
 
 
 #############################################################################
@@ -240,14 +240,14 @@ def process_datasets_in_parallel(
     assert (enable_barriers is not False) or not has_barrier, "Barriers seen in datasets but barriers explicitly disabled"
     barriers_enabled: bool = bool(has_barrier or enable_barriers)
 
-    immutable_empty_barrier: TreeNode = _make_tree_node("immutable_empty_barrier", {})
+    immutable_empty_barrier: _TreeNode = _make_tree_node("immutable_empty_barrier", {})
     datasets_set: SortedInterner[str] = SortedInterner(datasets)  # reduces memory footprint
-    priority_queue: list[TreeNode] = _build_dataset_tree_and_find_roots(datasets)
+    priority_queue: list[_TreeNode] = _build_dataset_tree_and_find_roots(datasets)
     heapq.heapify(priority_queue)  # same order as sorted()
     executor: Executor = ThreadPoolExecutor(max_workers) if max_workers != 1 and len(datasets) > 1 else SynchronousExecutor()
     with executor:
         todo_futures: set[Future[CompletionCallback]] = set()
-        future_to_node: dict[Future[CompletionCallback], TreeNode] = {}
+        future_to_node: dict[Future[CompletionCallback], _TreeNode] = {}
         submitted_count: int = 0
         next_update_nanos: int = time.monotonic_ns()
         wait_timeout: float | None = None
@@ -268,7 +268,7 @@ def process_datasets_in_parallel(
                     # It's possible an even "smaller" dataset (wrt. sort order) has become available while we slept.
                     # If so it's preferable to submit to the thread pool the smaller one first.
                     break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
-                node: TreeNode = heapq.heappop(priority_queue)  # pick "smallest" dataset (wrt. sort order)
+                node: _TreeNode = heapq.heappop(priority_queue)  # pick "smallest" dataset (wrt. sort order)
                 nonlocal submitted_count
                 submitted_count += 1
                 next_update_nanos += max(0, interval_nanos(next_update_nanos, node.dataset, submitted_count))
@@ -284,7 +284,7 @@ def process_datasets_in_parallel(
             done_futures: set[Future[CompletionCallback]]
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, wait_timeout, return_when=FIRST_COMPLETED)
             for done_future in done_futures:
-                done_node: TreeNode = future_to_node.pop(done_future)
+                done_node: _TreeNode = future_to_node.pop(done_future)
                 c_callback: CompletionCallback = done_future.result()  # does not block as processing has already completed
                 no_skip: bool
                 fail: bool
@@ -305,11 +305,11 @@ def process_datasets_in_parallel(
         return failed
 
 
-def _simple_enqueue_children(node: TreeNode, priority_queue: list[TreeNode], datasets_set: SortedInterner[str]) -> None:
+def _simple_enqueue_children(node: _TreeNode, priority_queue: list[_TreeNode], datasets_set: SortedInterner[str]) -> None:
     """Enqueues child nodes for start of processing."""
     for child, grandchildren in node.children.items():  # as processing of parent has now completed
         child_abs_dataset: str = datasets_set.interned(f"{node.dataset}/{child}")
-        child_node: TreeNode = _make_tree_node(child_abs_dataset, grandchildren)
+        child_node: _TreeNode = _make_tree_node(child_abs_dataset, grandchildren)
         if child_abs_dataset in datasets_set:
             heapq.heappush(priority_queue, child_node)  # make it available for start of processing
         else:  # it's an intermediate node that has no job attached; pass the enqueue operation
@@ -317,11 +317,11 @@ def _simple_enqueue_children(node: TreeNode, priority_queue: list[TreeNode], dat
 
 
 def _complete_job_with_barriers(
-    node: TreeNode,
+    node: _TreeNode,
     no_skip: bool,
-    priority_queue: list[TreeNode],
+    priority_queue: list[_TreeNode],
     datasets_set: SortedInterner[str],
-    immutable_empty_barrier: TreeNode,
+    immutable_empty_barrier: _TreeNode,
 ) -> None:
     """After successful completion, enqueues children, opens barriers, and propagates completion upwards.
 
@@ -343,13 +343,13 @@ def _complete_job_with_barriers(
     create', 'zfs snapshot' and 'zfs bookmark' CLIs.
     """
 
-    def enqueue_children(node: TreeNode) -> int:
+    def enqueue_children(node: _TreeNode) -> int:
         """Returns number of jobs that were added to priority_queue for immediate start of processing."""
         n: int = 0
-        children: Tree = node.children
+        children: _Tree = node.children
         for child, grandchildren in children.items():
             child_abs_dataset: str = datasets_set.interned(f"{node.dataset}/{child}")
-            child_node: TreeNode = _make_tree_node(child_abs_dataset, grandchildren, parent=node)
+            child_node: _TreeNode = _make_tree_node(child_abs_dataset, grandchildren, parent=node)
             k: int
             if child != BARRIER_CHAR:
                 if child_abs_dataset in datasets_set:
@@ -372,7 +372,7 @@ def _complete_job_with_barriers(
     if no_skip:
         enqueue_children(node)  # make child datasets available for start of processing
     else:  # job completed without success
-        tmp: TreeNode | None = node
+        tmp: _TreeNode | None = node
         while tmp is not None:  # ... thus, opening the barrier shall always do nothing in node and its ancestors
             tmp.mut.barrier = immutable_empty_barrier
             tmp = tmp.parent
