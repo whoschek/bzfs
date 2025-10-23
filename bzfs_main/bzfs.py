@@ -140,9 +140,6 @@ from bzfs_main.parallel_iterator import (
 from bzfs_main.parallel_tasktree_policy import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
-from bzfs_main.period_anchors import (
-    round_datetime_up_to_duration_multiple,
-)
 from bzfs_main.progress_reporter import (
     ProgressReporter,
     count_num_bytes_transferred_by_zfs_send,
@@ -458,7 +455,7 @@ class Job:
         curr_datetime: datetime = config.current_datetime + timedelta(microseconds=1)
         next_snapshotting_event_dt: datetime = min(
             (
-                round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit, config.anchors)
+                config.anchors.round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit)
                 for duration_amount, duration_unit in config.suffix_durations.values()
             ),
             default=curr_datetime + timedelta(days=10 * 365),  # infinity
@@ -1384,8 +1381,8 @@ class Job:
             creation_dt: datetime = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
             log.log(LOG_TRACE, "Latest snapshot creation: %s for %s", creation_dt, label)
             duration_amount, duration_unit = config.suffix_durations[label.suffix]
-            next_event_dt: datetime = round_datetime_up_to_duration_multiple(
-                creation_dt + timedelta(microseconds=1), duration_amount, duration_unit, config.anchors
+            next_event_dt: datetime = config.anchors.round_datetime_up_to_duration_multiple(
+                creation_dt + timedelta(microseconds=1), duration_amount, duration_unit
             )
             msg: str = ""
             if config.current_datetime >= next_event_dt:

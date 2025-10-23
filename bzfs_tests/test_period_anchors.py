@@ -27,7 +27,6 @@ from zoneinfo import (
     ZoneInfo,
 )
 
-import bzfs_main.period_anchors
 from bzfs_main.period_anchors import (
     PeriodAnchors,
 )
@@ -46,9 +45,7 @@ def round_datetime_up_to_duration_multiple(
     dt: datetime, duration_amount: int, duration_unit: str, anchors: PeriodAnchors | None = None
 ) -> datetime:
     anchors = PeriodAnchors() if anchors is None else anchors
-    return bzfs_main.period_anchors.round_datetime_up_to_duration_multiple(
-        dt, duration_amount, duration_unit, anchors=anchors
-    )
+    return anchors.round_datetime_up_to_duration_multiple(dt, duration_amount, duration_unit)
 
 
 class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
