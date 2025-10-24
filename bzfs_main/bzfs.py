@@ -163,6 +163,9 @@ from bzfs_main.snapshot_cache import (
     SnapshotCache,
     set_last_modification_time_safe,
 )
+from bzfs_main.prometheus_exporter import (
+    write_prometheus_metrics,
+)
 from bzfs_main.utils import (
     DESCENDANTS_RE_SUFFIX,
     DIE_STATUS,
@@ -291,6 +294,19 @@ class Job:
         with xfinally(post_shutdown):
             self.shutdown()
 
+    def _write_prometheus_metrics_on_error(self, exit_code: int) -> None:
+        """Helper to write Prometheus metrics when an error occurs."""
+        try:
+            if hasattr(self, "params") and hasattr(self, "replication_start_time_nanos"):
+                p = self.params
+                elapsed_nanos = time.monotonic_ns() - self.replication_start_time_nanos
+                sent_bytes = 0
+                if p.is_program_available("pv", "local"):
+                    sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
+                write_prometheus_metrics(self, exit_code=exit_code, elapsed_nanos=elapsed_nanos, sent_bytes=sent_bytes)
+        except Exception:
+            pass  # Silently ignore errors during error handling
+
     def run_main(self, args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
         """Parses CLI arguments, sets up logging, and executes main job loop."""
         assert isinstance(self.error_injection_triggers, dict)
@@ -364,20 +380,34 @@ class Job:
                                     sys.stderr.flush()
             except subprocess.CalledProcessError as e:
                 log_error_on_exit(e, e.returncode)
+                self._write_prometheus_metrics_on_error(e.returncode)
                 raise
             except SystemExit as e:
                 log_error_on_exit(e, e.code)
+                self._write_prometheus_metrics_on_error(e.code if isinstance(e.code, int) else DIE_STATUS)
                 raise
             except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 log_error_on_exit(e, DIE_STATUS)
+                self._write_prometheus_metrics_on_error(DIE_STATUS)
                 raise SystemExit(DIE_STATUS) from e
             except re.error as e:
                 log_error_on_exit(f"{e} within regex {e.pattern!r}", DIE_STATUS)
+                self._write_prometheus_metrics_on_error(DIE_STATUS)
                 raise SystemExit(DIE_STATUS) from e
             except BaseException as e:
                 log_error_on_exit(e, DIE_STATUS, exc_info=True)
+                self._write_prometheus_metrics_on_error(DIE_STATUS)
                 raise SystemExit(DIE_STATUS) from e
             finally:
+                # Write Prometheus metrics on exit (success or failure)
+                try:
+                    elapsed_nanos = time.monotonic_ns() - self.replication_start_time_nanos
+                    sent_bytes = 0
+                    if p.is_program_available("pv", "local"):
+                        sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
+                    write_prometheus_metrics(self, exit_code=0, elapsed_nanos=elapsed_nanos, sent_bytes=sent_bytes)
+                except Exception as prom_err:
+                    log.warning("Failed to write Prometheus metrics: %s", prom_err)
                 log.info("%s", f"Log file was: {log_params.log_file}")
             log.info("Success. Goodbye!")
             with contextlib.suppress(BrokenPipeError):

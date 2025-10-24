@@ -1,0 +1,222 @@
+# Copyright 2025 Wolfgang Hoschek AT mac DOT com
+# Written in 2025 by Orsiris de Jong - ozy AT netpower DOT fr
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+"""Prometheus metrics exporter for bzfs; outputs metrics in text format for node_exporter textfile collector."""
+
+from __future__ import (
+    annotations,
+)
+import os
+import tempfile
+import time
+from pathlib import (
+    Path,
+)
+from typing import (
+    TYPE_CHECKING,
+    Final,
+)
+
+from bzfs_main.utils import (
+    FILE_PERMISSIONS,
+    sha256_hex,
+)
+
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
+    from bzfs_main.bzfs import (
+        Job,
+    )
+
+
+def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_bytes: int = 0) -> None:
+    """Write Prometheus metrics to a .prom file for node_exporter textfile collector.
+
+    Metrics are written atomically by writing to a temporary file first, then renaming it.
+    The metrics file is placed in the directory specified by --prometheus-textfile-dir if provided,
+    otherwise this function does nothing.
+
+    Args:
+        job: The Job instance containing execution state and parameters.
+        exit_code: The exit code of the bzfs run (0 for success, non-zero for failure).
+        elapsed_nanos: Elapsed time in nanoseconds for the job execution.
+        sent_bytes: Total bytes transferred via zfs send (0 if not available).
+    """
+    p = job.params
+    if not hasattr(p, "prometheus_textfile_dir") or not p.prometheus_textfile_dir:
+        return  # Feature not enabled
+
+    textfile_dir: str = p.prometheus_textfile_dir
+    os.makedirs(textfile_dir, mode=0o755, exist_ok=True)
+
+    # Generate a unique job_id from the job configuration
+    job_id: str = _generate_job_id(job)
+
+    # Compute elapsed time in seconds
+    elapsed_secs: float = elapsed_nanos / 1_000_000_000
+
+    # Compute throughput if bytes were sent
+    throughput_bytes_per_sec: float = sent_bytes / elapsed_secs if elapsed_secs > 0 and sent_bytes > 0 else 0
+
+    # Extract source and destination info
+    src_root: str = p.src.basis_root_dataset
+    dst_root: str = p.dst.basis_root_dataset
+    src_host: str = p.src.ssh_host or "localhost"
+    dst_host: str = p.dst.ssh_host or "localhost"
+
+    # Build metrics in Prometheus text format
+    metrics: list[str] = []
+    timestamp_ms: int = int(time.time() * 1000)  # milliseconds since epoch
+
+    # Common labels for all metrics
+    labels: str = (
+        f'job_id="{_escape_label(job_id)}",'
+        f'src_dataset="{_escape_label(src_root)}",'
+        f'dst_dataset="{_escape_label(dst_root)}",'
+        f'src_host="{_escape_label(src_host)}",'
+        f'dst_host="{_escape_label(dst_host)}"'
+    )
+
+    # Add metrics with HELP and TYPE declarations
+    metrics.append("# HELP bzfs_job_status Indicates if the bzfs job completed successfully (0=success, anything else is the exit code)")
+    metrics.append("# TYPE bzfs_job_status gauge")
+    metrics.append(f"bzfs_job_status{{{labels}}} {exit_code} {timestamp_ms}")
+    metrics.append("")
+
+    metrics.append("# HELP bzfs_job_duration_seconds Duration of the bzfs job in seconds")
+    metrics.append("# TYPE bzfs_job_duration_seconds gauge")
+    metrics.append(f"bzfs_job_duration_seconds{{{labels}}} {elapsed_secs:.3f} {timestamp_ms}")
+    metrics.append("")
+
+    metrics.append("# HELP bzfs_job_last_run_timestamp_seconds Unix timestamp when the bzfs job last ran")
+    metrics.append("# TYPE bzfs_job_last_run_timestamp_seconds gauge")
+    metrics.append(f"bzfs_job_last_run_timestamp_seconds{{{labels}}} {timestamp_ms / 1000:.3f} {timestamp_ms}")
+    metrics.append("")
+
+    metrics.append("# HELP bzfs_snapshots_found_total Total number of snapshots found during the job")
+    metrics.append("# TYPE bzfs_snapshots_found_total counter")
+    metrics.append(f"bzfs_snapshots_found_total{{{labels}}} {job.num_snapshots_found} {timestamp_ms}")
+    metrics.append("")
+
+    metrics.append("# HELP bzfs_snapshots_replicated_total Total number of snapshots replicated during the job")
+    metrics.append("# TYPE bzfs_snapshots_replicated_total counter")
+    metrics.append(f"bzfs_snapshots_replicated_total{{{labels}}} {job.num_snapshots_replicated} {timestamp_ms}")
+    metrics.append("")
+
+    if sent_bytes > 0:
+        metrics.append("# HELP bzfs_bytes_sent_total Total bytes sent via zfs send")
+        metrics.append("# TYPE bzfs_bytes_sent_total counter")
+        metrics.append(f"bzfs_bytes_sent_total{{{labels}}} {sent_bytes} {timestamp_ms}")
+        metrics.append("")
+
+        metrics.append("# HELP bzfs_throughput_bytes_per_second Average throughput in bytes per second")
+        metrics.append("# TYPE bzfs_throughput_bytes_per_second gauge")
+        metrics.append(f"bzfs_throughput_bytes_per_second{{{labels}}} {throughput_bytes_per_sec:.2f} {timestamp_ms}")
+        metrics.append("")
+
+    if hasattr(job, "num_cache_hits") and hasattr(job, "num_cache_misses"):
+        metrics.append("# HELP bzfs_cache_hits_total Total number of cache hits")
+        metrics.append("# TYPE bzfs_cache_hits_total counter")
+        metrics.append(f"bzfs_cache_hits_total{{{labels}}} {job.num_cache_hits} {timestamp_ms}")
+        metrics.append("")
+
+        metrics.append("# HELP bzfs_cache_misses_total Total number of cache misses")
+        metrics.append("# TYPE bzfs_cache_misses_total counter")
+        metrics.append(f"bzfs_cache_misses_total{{{labels}}} {job.num_cache_misses} {timestamp_ms}")
+        metrics.append("")
+
+    # Write metrics atomically to a .prom file
+    prom_filename: str = f"bzfs_{job_id}.prom"
+    prom_filepath: str = os.path.join(textfile_dir, prom_filename)
+
+    try:
+        # Write to a temporary file in the same directory
+        fd, temp_path = tempfile.mkstemp(
+            suffix=".prom.tmp", prefix=f"bzfs_{job_id}_", dir=textfile_dir, text=True
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write("\n".join(metrics))
+                f.write("\n")  # Final newline
+            os.chmod(temp_path, FILE_PERMISSIONS)
+            # Atomic rename
+            os.replace(temp_path, prom_filepath)
+            p.log.info("Prometheus metrics written to: %s", prom_filepath)
+        except Exception:
+            # Clean up temp file on error
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+            raise
+    except Exception as e:
+        p.log.warning("Failed to write Prometheus metrics: %s", e)
+
+
+def _generate_job_id(job: Job) -> str:
+    """Generate a unique, deterministic job ID based on the job configuration.
+
+    The job ID is a hash of key configuration parameters that uniquely identify the job.
+    This allows Prometheus to track the same job across multiple runs.
+
+    If bzfs was invoked with an explicit job_id (via bzfs_jobrunner's --job-id argument),
+    that will be extracted from log_file_infix and used instead of generating a hash.
+
+    Args:
+        job: The Job instance.
+
+    Returns:
+        A short hash string suitable for use as a job identifier.
+    """
+    p = job.params
+    
+    # Check if log_file_infix contains a job_id from bzfs_jobrunner
+    # bzfs_jobrunner sets log_file_infix to something like "_jobid_" or "_myjobname_"
+    log_infix = p.args.log_file_infix or ""
+    if log_infix:
+        # Extract job_id from infix by removing leading/trailing underscores
+        extracted_id = log_infix.strip("_")
+        # Only use if it looks like a valid job_id (non-empty, not just whitespace)
+        if extracted_id and not extracted_id.isspace():
+            # Sanitize to ensure it's safe for use in filenames
+            safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in extracted_id)
+            if safe_id:
+                return safe_id[:64]  # Limit length to avoid overly long filenames
+    
+    # Fallback: Generate hash-based job_id from configuration
+    key_parts: list[str] = [
+        p.src.basis_root_dataset,
+        p.dst.basis_root_dataset,
+        p.src.ssh_host or "localhost",
+        p.dst.ssh_host or "localhost",
+        str(p.args.recursive),
+        log_infix,
+    ]
+    key_str: str = "_".join(key_parts)
+    # Use first 12 characters of hash for brevity
+    return sha256_hex(key_str)[:12]
+
+
+def _escape_label(value: str) -> str:
+    """Escape a Prometheus label value according to the text format spec.
+
+    Backslashes, double quotes, and newlines must be escaped.
+
+    Args:
+        value: The label value to escape.
+
+    Returns:
+        The escaped label value.
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
