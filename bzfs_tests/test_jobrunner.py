@@ -18,6 +18,7 @@ from __future__ import (
     annotations,
 )
 import argparse
+import platform
 import shutil
 import signal
 import subprocess
@@ -209,7 +210,7 @@ class TestHelperFunctions(AbstractTestCase):
     def test_convert_ipv6(self) -> None:
         self.assertEqual("fe80||1", bzfs_jobrunner.convert_ipv6("fe80::1"))
 
-    @unittest.skipIf(sys.platform != "linux", "This test is designed for Linux only")
+    @unittest.skipIf(platform.system() != "Linux", "This test is designed for Linux only")
     def test_get_localhost_ips(self) -> None:
         job = bzfs_jobrunner.Job()
         ips: set[str] = job.get_localhost_ips()
@@ -218,7 +219,7 @@ class TestHelperFunctions(AbstractTestCase):
     @patch("subprocess.run", side_effect=RuntimeError("fail"))
     def test_get_localhost_ips_failure_logs_warning(self, mock_run: MagicMock) -> None:
         job = bzfs_jobrunner.Job()
-        with patch.object(sys, "platform", "linux"), patch.object(job.log, "warning") as mock_warn:
+        with patch("platform.system", return_value="Linux"), patch.object(job.log, "warning") as mock_warn:
             ips = job.get_localhost_ips()
         self.assertEqual(set(), ips)
         mock_warn.assert_called_once()

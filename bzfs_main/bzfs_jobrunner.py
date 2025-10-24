@@ -38,6 +38,7 @@ from __future__ import (
 import argparse
 import contextlib
 import os
+import platform
 import pwd
 import random
 import socket
@@ -107,6 +108,7 @@ PROG_NAME: Final[str] = "bzfs_jobrunner"
 SRC_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^SRC_HOST"  # noqa: S105
 DST_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^DST_HOST"  # noqa: S105
 SEP: Final[str] = ","
+POSIX_END_OF_OPTIONS_MARKER: Final[str] = "--"  # args following -- are treated as operands, even if they begin with a hyphen
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -575,9 +577,9 @@ class Job:
             """Returns ``tag`` prefixed with slash and zero padded index."""
             return "/" + zero_pad(jj) + tag
 
-        def npad() -> str:
+        def runpad() -> str:
             """Returns standardized subjob count suffix."""
-            return SEP + zero_pad(len(subjobs))
+            return job_run + SEP + zero_pad(len(subjobs))
 
         def update_subjob_name(tag: str) -> str:
             """Derives next subjob name based on ``tag`` and index ``j``."""
@@ -616,24 +618,23 @@ class Job:
             assert src_host
         for dst_hostname in dst_hosts:
             assert dst_hostname
-        dummy: str = DUMMY_DATASET
-        lhn: str = localhostname
-        bzfs_prog_header: list[str] = [BZFS_PROG_NAME, "--no-argument-file"] + unknown_args
+        dummy: Final[str] = DUMMY_DATASET
+        lhn: Final[str] = localhostname
+        bzfs_prog_header: Final[list[str]] = [BZFS_PROG_NAME, "--no-argument-file"] + unknown_args
         subjobs: dict[str, list[str]] = {}
         for i, src_host in enumerate(src_hosts):
             subjob_name: str = zero_pad(i) + "src-host"
+            src_log_suffix: str = _log_suffix(localhostname, src_host, "")
             j: int = 0
             opts: list[str]
 
             if args.create_src_snapshots:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
-                opts += [f"--log-file-prefix={PROG_NAME}{SEP}create-src-snapshots{SEP}"]
-                opts += [f"--log-file-infix={SEP}{job_id}"]
-                opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{_log_suffix(lhn, src_host, '')}{SEP}"]
+                self.add_log_file_opts(opts, "create-src-snapshots", job_id, runpad(), src_log_suffix)
                 self.add_ssh_opts(
                     opts, ssh_src_user=ssh_src_user, ssh_src_port=ssh_src_port, ssh_src_config_file=ssh_src_config_file
                 )
-                opts += ["--"]
+                opts += [POSIX_END_OF_OPTIONS_MARKER]
                 opts += _flatten(_dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/create-src-snapshots"
                 subjobs[subjob_name] = bzfs_prog_header + opts
@@ -643,7 +644,7 @@ class Job:
                 marker: str = "replicate"
                 for dst_hostname, targets in dst_hosts.items():
                     opts = self.replication_opts(
-                        dst_snapshot_plan, set(targets), lhn, src_host, dst_hostname, marker, job_id, job_run + npad()
+                        dst_snapshot_plan, set(targets), lhn, src_host, dst_hostname, marker, job_id, runpad()
                     )
                     if len(opts) > 0:
                         opts += [f"--daemon-frequency={args.daemon_replication_frequency}"]
@@ -656,7 +657,7 @@ class Job:
                             ssh_src_config_file=ssh_src_config_file,
                             ssh_dst_config_file=ssh_dst_config_file,
                         )
-                        opts += ["--"]
+                        opts += [POSIX_END_OF_OPTIONS_MARKER]
                         dataset_pairs: list[tuple[str, str]] = [
                             (resolve_dataset(src_host, src), resolve_dst_dataset(dst_hostname, dst))
                             for src, dst in args.root_dataset_pairs
@@ -667,20 +668,17 @@ class Job:
                             j += 1
                 subjob_name = update_subjob_name(marker)
 
-            def prune_src(opts: list[str], retention_plan: dict, tag: str, src_host: str = src_host) -> None:
+            def prune_src(
+                opts: list[str], retention_plan: dict, tag: str, src_host: str = src_host, logsuffix: str = src_log_suffix
+            ) -> None:
                 """Creates prune subjob options for ``tag`` using ``retention_plan``."""
-                opts += [
-                    "--skip-replication",
-                    f"--delete-dst-snapshots-except-plan={retention_plan}",
-                    f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}",
-                    f"--log-file-infix={SEP}{job_id}",
-                    f"--log-file-suffix={SEP}{job_run}{npad()}{_log_suffix(lhn, src_host, '')}{SEP}",
-                    f"--daemon-frequency={args.daemon_prune_src_frequency}",
-                ]
+                opts += ["--skip-replication", f"--delete-dst-snapshots-except-plan={retention_plan}"]
+                opts += [f"--daemon-frequency={args.daemon_prune_src_frequency}"]
+                self.add_log_file_opts(opts, tag, job_id, runpad(), logsuffix)
                 self.add_ssh_opts(  # i.e. dst=src, src=dummy
                     opts, ssh_dst_user=ssh_src_user, ssh_dst_port=ssh_src_port, ssh_dst_config_file=ssh_src_config_file
                 )
-                opts += ["--"]
+                opts += [POSIX_END_OF_OPTIONS_MARKER]
                 opts += _flatten(_dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 nonlocal subjob_name
                 subjob_name += f"/{tag}"
@@ -706,14 +704,12 @@ class Job:
                     }
                     opts = ["--delete-dst-snapshots", "--skip-replication"]
                     opts += [f"--delete-dst-snapshots-except-plan={curr_dst_snapshot_plan}"]
-                    opts += [f"--log-file-prefix={PROG_NAME}{SEP}{marker}{SEP}"]
-                    opts += [f"--log-file-infix={SEP}{job_id}"]
-                    opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{_log_suffix(lhn, src_host, dst_hostname)}{SEP}"]
                     opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
+                    self.add_log_file_opts(opts, marker, job_id, runpad(), _log_suffix(lhn, src_host, dst_hostname))
                     self.add_ssh_opts(
                         opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
                     )
-                    opts += ["--"]
+                    opts += [POSIX_END_OF_OPTIONS_MARKER]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = _dedupe(dataset_pairs)
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs, worker_timeout_seconds)
@@ -725,10 +721,8 @@ class Job:
             def monitor_snapshots_opts(tag: str, monitor_plan: dict, logsuffix: str) -> list[str]:
                 """Returns monitor subjob options for ``tag`` and ``monitor_plan``."""
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
-                opts += [f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}"]
-                opts += [f"--log-file-infix={SEP}{job_id}"]
-                opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{logsuffix}{SEP}"]
                 opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
+                self.add_log_file_opts(opts, tag, job_id, runpad(), logsuffix)
                 return opts
 
             def build_monitor_plan(monitor_plan: dict, snapshot_plan: dict, cycles_prefix: str) -> dict:
@@ -757,11 +751,11 @@ class Job:
             if args.monitor_src_snapshots:
                 marker = "monitor-src-snapshots"
                 monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan, "src_snapshot_")
-                opts = monitor_snapshots_opts(marker, monitor_plan, _log_suffix(lhn, src_host, ""))
+                opts = monitor_snapshots_opts(marker, monitor_plan, src_log_suffix)
                 self.add_ssh_opts(  # i.e. dst=src, src=dummy
                     opts, ssh_dst_user=ssh_src_user, ssh_dst_port=ssh_src_port, ssh_dst_config_file=ssh_src_config_file
                 )
-                opts += ["--"]
+                opts += [POSIX_END_OF_OPTIONS_MARKER]
                 opts += _flatten(_dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/" + marker
                 subjobs[subjob_name] = bzfs_prog_header + opts
@@ -780,7 +774,7 @@ class Job:
                     self.add_ssh_opts(
                         opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
                     )
-                    opts += ["--"]
+                    opts += [POSIX_END_OF_OPTIONS_MARKER]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = _dedupe(dataset_pairs)
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs, worker_timeout_seconds)
@@ -836,9 +830,7 @@ class Job:
         opts: list[str] = []
         if len(include_snapshot_plan) > 0:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
-            opts += [f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}"]
-            opts += [f"--log-file-infix={SEP}{job_id}"]
-            opts += [f"--log-file-suffix={SEP}{job_run}{_log_suffix(localhostname, src_hostname, dst_hostname)}{SEP}"]
+            self.add_log_file_opts(opts, tag, job_id, job_run, _log_suffix(localhostname, src_hostname, dst_hostname))
         return opts
 
     def skip_nonexisting_local_dst_pools(
@@ -894,6 +886,13 @@ class Job:
         opts += [f"--ssh-dst-port={ssh_dst_port}"] if ssh_dst_port is not None else []
         opts += [f"--ssh-src-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
         opts += [f"--ssh-dst-config-file={ssh_dst_config_file}"] if ssh_dst_config_file else []
+
+    @staticmethod
+    def add_log_file_opts(opts: list[str], tag: str, job_id: str, job_run: str, logsuffix: str) -> None:
+        """Appends standard log-file CLI options to ``opts``."""
+        opts += [f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}"]
+        opts += [f"--log-file-infix={SEP}{job_id}"]
+        opts += [f"--log-file-suffix={SEP}{job_run}{logsuffix}{SEP}"]
 
     def run_subjobs(
         self,
@@ -1191,7 +1190,7 @@ class Job:
         """Returns all network addresses of the local host, i.e. all configured addresses on all network interfaces, without
         depending on name resolution."""
         ips: set[str] = set()
-        if sys.platform == "linux":
+        if platform.system() == "Linux":
             try:
                 proc = subprocess.run(["hostname", "-I"], stdin=DEVNULL, stdout=PIPE, text=True, check=True)  # noqa: S607
             except Exception as e:
