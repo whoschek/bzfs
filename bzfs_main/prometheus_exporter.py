@@ -95,49 +95,49 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
     # Add metrics with HELP and TYPE declarations
     metrics.append("# HELP bzfs_job_status Indicates if the bzfs job completed successfully (0=success, anything else is the exit code)")
     metrics.append("# TYPE bzfs_job_status gauge")
-    metrics.append(f"bzfs_job_status{{{labels}}} {exit_code} {timestamp_ms}")
+    metrics.append(f"bzfs_job_status{{{labels}}} {exit_code}")
     metrics.append("")
 
     metrics.append("# HELP bzfs_job_duration_seconds Duration of the bzfs job in seconds")
     metrics.append("# TYPE bzfs_job_duration_seconds gauge")
-    metrics.append(f"bzfs_job_duration_seconds{{{labels}}} {elapsed_secs:.3f} {timestamp_ms}")
+    metrics.append(f"bzfs_job_duration_seconds{{{labels}}} {elapsed_secs:.3f}")
     metrics.append("")
 
     metrics.append("# HELP bzfs_job_last_run_timestamp_seconds Unix timestamp when the bzfs job last ran")
     metrics.append("# TYPE bzfs_job_last_run_timestamp_seconds gauge")
-    metrics.append(f"bzfs_job_last_run_timestamp_seconds{{{labels}}} {timestamp_ms / 1000:.3f} {timestamp_ms}")
+    metrics.append(f"bzfs_job_last_run_timestamp_seconds{{{labels}}} {timestamp_ms / 1000:.3f}")
     metrics.append("")
 
     metrics.append("# HELP bzfs_snapshots_found_total Total number of snapshots found during the job")
     metrics.append("# TYPE bzfs_snapshots_found_total counter")
-    metrics.append(f"bzfs_snapshots_found_total{{{labels}}} {job.num_snapshots_found} {timestamp_ms}")
+    metrics.append(f"bzfs_snapshots_found_total{{{labels}}} {job.num_snapshots_found}")
     metrics.append("")
 
     metrics.append("# HELP bzfs_snapshots_replicated_total Total number of snapshots replicated during the job")
     metrics.append("# TYPE bzfs_snapshots_replicated_total counter")
-    metrics.append(f"bzfs_snapshots_replicated_total{{{labels}}} {job.num_snapshots_replicated} {timestamp_ms}")
+    metrics.append(f"bzfs_snapshots_replicated_total{{{labels}}} {job.num_snapshots_replicated}")
     metrics.append("")
 
     if sent_bytes > 0:
         metrics.append("# HELP bzfs_bytes_sent_total Total bytes sent via zfs send")
         metrics.append("# TYPE bzfs_bytes_sent_total counter")
-        metrics.append(f"bzfs_bytes_sent_total{{{labels}}} {sent_bytes} {timestamp_ms}")
+        metrics.append(f"bzfs_bytes_sent_total{{{labels}}} {sent_bytes}")
         metrics.append("")
 
         metrics.append("# HELP bzfs_throughput_bytes_per_second Average throughput in bytes per second")
         metrics.append("# TYPE bzfs_throughput_bytes_per_second gauge")
-        metrics.append(f"bzfs_throughput_bytes_per_second{{{labels}}} {throughput_bytes_per_sec:.2f} {timestamp_ms}")
+        metrics.append(f"bzfs_throughput_bytes_per_second{{{labels}}} {throughput_bytes_per_sec:.2f}")
         metrics.append("")
 
     if hasattr(job, "num_cache_hits") and hasattr(job, "num_cache_misses"):
         metrics.append("# HELP bzfs_cache_hits_total Total number of cache hits")
         metrics.append("# TYPE bzfs_cache_hits_total counter")
-        metrics.append(f"bzfs_cache_hits_total{{{labels}}} {job.num_cache_hits} {timestamp_ms}")
+        metrics.append(f"bzfs_cache_hits_total{{{labels}}} {job.num_cache_hits}")
         metrics.append("")
 
         metrics.append("# HELP bzfs_cache_misses_total Total number of cache misses")
         metrics.append("# TYPE bzfs_cache_misses_total counter")
-        metrics.append(f"bzfs_cache_misses_total{{{labels}}} {job.num_cache_misses} {timestamp_ms}")
+        metrics.append(f"bzfs_cache_misses_total{{{labels}}} {job.num_cache_misses}")
         metrics.append("")
 
     # Write metrics atomically to a .prom file
