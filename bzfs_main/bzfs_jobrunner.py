@@ -715,6 +715,7 @@ class Job:
                     )
                     opts += ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
+                    dataset_pairs = _dedupe(dataset_pairs)
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs, worker_timeout_seconds)
                     if len(dataset_pairs) > 0:
                         subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + _flatten(dataset_pairs)
@@ -781,6 +782,7 @@ class Job:
                     )
                     opts += ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
+                    dataset_pairs = _dedupe(dataset_pairs)
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs, worker_timeout_seconds)
                     if len(dataset_pairs) > 0:
                         subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + _flatten(dataset_pairs)
