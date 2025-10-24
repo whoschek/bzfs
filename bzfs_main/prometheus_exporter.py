@@ -228,7 +228,7 @@ def _determine_action(p) -> str:
     actions: list[str] = []
 
     # Check for snapshot creation
-    if p.create_src_snapshots_config.is_enabled:
+    if not p.create_src_snapshots_config.skip_create_src_snapshots:
         actions.append("create_snapshots")
 
     # Check for replication (default unless explicitly skipped)
@@ -248,7 +248,7 @@ def _determine_action(p) -> str:
         actions.append("compare")
 
     # Check for monitoring mode
-    if p.monitor_snapshots_config.is_enabled:
+    if p.monitor_snapshots_config.enable_monitor_snapshots:
         actions.append("monitor")
 
     # If no specific actions detected, default to 'replicate' (the main bzfs operation)

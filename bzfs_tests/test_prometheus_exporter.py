@@ -45,17 +45,17 @@ class TestPrometheusExporter(unittest.TestCase):
         """Test action determination from CLI parameters."""
         # Test 1: Default replication
         params = MagicMock()
-        params.create_src_snapshots_config.is_enabled = False
+        params.create_src_snapshots_config.skip_create_src_snapshots = True
         params.skip_replication = False
         params.delete_dst_snapshots = False
         params.delete_dst_datasets = False
         params.delete_empty_dst_datasets = False
         params.compare_snapshot_lists = False
-        params.monitor_snapshots_config.is_enabled = False
+        params.monitor_snapshots_config.enable_monitor_snapshots = False
         self.assertEqual(_determine_action(params), "replicate")
 
         # Test 2: Create snapshots + replicate
-        params.create_src_snapshots_config.is_enabled = True
+        params.create_src_snapshots_config.skip_create_src_snapshots = False
         self.assertEqual(_determine_action(params), "create_snapshots+replicate")
 
         # Test 3: Create snapshots only (skip replication)
@@ -63,7 +63,7 @@ class TestPrometheusExporter(unittest.TestCase):
         self.assertEqual(_determine_action(params), "create_snapshots")
 
         # Test 4: Replication with deletion
-        params.create_src_snapshots_config.is_enabled = False
+        params.create_src_snapshots_config.skip_create_src_snapshots = True
         params.skip_replication = False
         params.delete_dst_snapshots = True
         self.assertEqual(_determine_action(params), "replicate+del_snapshots")
@@ -76,16 +76,16 @@ class TestPrometheusExporter(unittest.TestCase):
 
         # Test 6: Monitor mode
         params.compare_snapshot_lists = False
-        params.monitor_snapshots_config.is_enabled = True
+        params.monitor_snapshots_config.enable_monitor_snapshots = True
         self.assertEqual(_determine_action(params), "monitor")
 
         # Test 7: Multiple actions combined
-        params.create_src_snapshots_config.is_enabled = True
+        params.create_src_snapshots_config.skip_create_src_snapshots = False
         params.skip_replication = False
         params.delete_dst_snapshots = True
         params.delete_dst_datasets = True
         params.compare_snapshot_lists = False
-        params.monitor_snapshots_config.is_enabled = False
+        params.monitor_snapshots_config.enable_monitor_snapshots = False
         action = _determine_action(params)
         self.assertIn("create_snapshots", action)
         self.assertIn("replicate", action)
@@ -164,13 +164,13 @@ class TestPrometheusExporter(unittest.TestCase):
             job.params.dst.ssh_host = "dsthost"
             job.params.args.recursive = True
             job.params.args.log_file_infix = ""
-            job.params.create_src_snapshots_config.is_enabled = False
+            job.params.create_src_snapshots_config.skip_create_src_snapshots = True
             job.params.skip_replication = False
             job.params.delete_dst_snapshots = False
             job.params.delete_dst_datasets = False
             job.params.delete_empty_dst_datasets = False
             job.params.compare_snapshot_lists = False
-            job.params.monitor_snapshots_config.is_enabled = False
+            job.params.monitor_snapshots_config.enable_monitor_snapshots = False
             job.params.log.info = MagicMock()
             job.num_snapshots_found = 10
             job.num_snapshots_replicated = 8
@@ -227,13 +227,13 @@ class TestPrometheusExporter(unittest.TestCase):
             job.params.dst.ssh_host = "dsthost"
             job.params.args.recursive = False
             job.params.args.log_file_infix = "_daily_"
-            job.params.create_src_snapshots_config.is_enabled = True
+            job.params.create_src_snapshots_config.skip_create_src_snapshots = False
             job.params.skip_replication = True
             job.params.delete_dst_snapshots = False
             job.params.delete_dst_datasets = False
             job.params.delete_empty_dst_datasets = False
             job.params.compare_snapshot_lists = False
-            job.params.monitor_snapshots_config.is_enabled = False
+            job.params.monitor_snapshots_config.enable_monitor_snapshots = False
             job.params.log.info = MagicMock()
             job.num_snapshots_found = 0
             job.num_snapshots_replicated = 0
