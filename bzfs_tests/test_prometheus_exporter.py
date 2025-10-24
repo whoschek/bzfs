@@ -23,6 +23,7 @@ from unittest.mock import (
 )
 
 from bzfs_main.prometheus_exporter import (
+    _determine_action,
     _escape_label,
     _generate_job_id,
     write_prometheus_metrics,
@@ -39,6 +40,57 @@ class TestPrometheusExporter(unittest.TestCase):
         self.assertEqual(_escape_label('with\\backslash'), 'with\\\\backslash')
         self.assertEqual(_escape_label('with\nnewline'), 'with\\nnewline')
         self.assertEqual(_escape_label('mixed"\\n'), 'mixed\\"\\\\\\n')
+
+    def test_determine_action(self) -> None:
+        """Test action determination from CLI parameters."""
+        # Test 1: Default replication
+        params = MagicMock()
+        params.create_src_snapshots_config.is_enabled = False
+        params.skip_replication = False
+        params.delete_dst_snapshots = False
+        params.delete_dst_datasets = False
+        params.delete_empty_dst_datasets = False
+        params.compare_snapshot_lists = False
+        params.monitor_snapshots_config.is_enabled = False
+        self.assertEqual(_determine_action(params), "replicate")
+
+        # Test 2: Create snapshots + replicate
+        params.create_src_snapshots_config.is_enabled = True
+        self.assertEqual(_determine_action(params), "create_snapshots+replicate")
+
+        # Test 3: Create snapshots only (skip replication)
+        params.skip_replication = True
+        self.assertEqual(_determine_action(params), "create_snapshots")
+
+        # Test 4: Replication with deletion
+        params.create_src_snapshots_config.is_enabled = False
+        params.skip_replication = False
+        params.delete_dst_snapshots = True
+        self.assertEqual(_determine_action(params), "replicate+del_snapshots")
+
+        # Test 5: Compare mode
+        params.delete_dst_snapshots = False
+        params.skip_replication = True
+        params.compare_snapshot_lists = True
+        self.assertEqual(_determine_action(params), "compare")
+
+        # Test 6: Monitor mode
+        params.compare_snapshot_lists = False
+        params.monitor_snapshots_config.is_enabled = True
+        self.assertEqual(_determine_action(params), "monitor")
+
+        # Test 7: Multiple actions combined
+        params.create_src_snapshots_config.is_enabled = True
+        params.skip_replication = False
+        params.delete_dst_snapshots = True
+        params.delete_dst_datasets = True
+        params.compare_snapshot_lists = False
+        params.monitor_snapshots_config.is_enabled = False
+        action = _determine_action(params)
+        self.assertIn("create_snapshots", action)
+        self.assertIn("replicate", action)
+        self.assertIn("del_snapshots", action)
+        self.assertIn("del_datasets", action)
 
     def test_generate_job_id(self) -> None:
         """Test job ID generation is deterministic."""
@@ -112,6 +164,13 @@ class TestPrometheusExporter(unittest.TestCase):
             job.params.dst.ssh_host = "dsthost"
             job.params.args.recursive = True
             job.params.args.log_file_infix = ""
+            job.params.create_src_snapshots_config.is_enabled = False
+            job.params.skip_replication = False
+            job.params.delete_dst_snapshots = False
+            job.params.delete_dst_datasets = False
+            job.params.delete_empty_dst_datasets = False
+            job.params.compare_snapshot_lists = False
+            job.params.monitor_snapshots_config.is_enabled = False
             job.params.log.info = MagicMock()
             job.num_snapshots_found = 10
             job.num_snapshots_replicated = 8
@@ -146,6 +205,7 @@ class TestPrometheusExporter(unittest.TestCase):
             self.assertIn("bzfs_cache_misses_total", content)
 
             # Verify label values
+            self.assertIn('action="replicate"', content)
             self.assertIn('src_dataset="tank1/src"', content)
             self.assertIn('dst_dataset="tank2/dst"', content)
             self.assertIn('src_host="srchost"', content)
@@ -167,6 +227,13 @@ class TestPrometheusExporter(unittest.TestCase):
             job.params.dst.ssh_host = "dsthost"
             job.params.args.recursive = False
             job.params.args.log_file_infix = "_daily_"
+            job.params.create_src_snapshots_config.is_enabled = True
+            job.params.skip_replication = True
+            job.params.delete_dst_snapshots = False
+            job.params.delete_dst_datasets = False
+            job.params.delete_empty_dst_datasets = False
+            job.params.compare_snapshot_lists = False
+            job.params.monitor_snapshots_config.is_enabled = False
             job.params.log.info = MagicMock()
             job.num_snapshots_found = 0
             job.num_snapshots_replicated = 0

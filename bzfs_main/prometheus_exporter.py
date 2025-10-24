@@ -75,6 +75,9 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
     src_host: str = p.src.ssh_host or "localhost"
     dst_host: str = p.dst.ssh_host or "localhost"
 
+    # Determine the primary action(s) being performed
+    action: str = _determine_action(p)
+
     # Build metrics in Prometheus text format
     metrics: list[str] = []
     timestamp_ms: int = int(time.time() * 1000)  # milliseconds since epoch
@@ -82,6 +85,7 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
     # Common labels for all metrics
     labels: str = (
         f'job_id="{_escape_label(job_id)}",'
+        f'action="{_escape_label(action)}",'
         f'src_dataset="{_escape_label(src_root)}",'
         f'dst_dataset="{_escape_label(dst_root)}",'
         f'src_host="{_escape_label(src_host)}",'
@@ -208,13 +212,60 @@ def _generate_job_id(job: Job) -> str:
     return sha256_hex(key_str)[:12]
 
 
-def _escape_label(value: str) -> str:
-    """Escape a Prometheus label value according to the text format spec.
+def _determine_action(p) -> str:
+    """Determine the primary action(s) being performed by bzfs.
 
-    Backslashes, double quotes, and newlines must be escaped.
+    This analyzes CLI parameters to identify what operation is being executed.
+    Multiple actions may be combined with '+' if they occur together.
 
     Args:
-        value: The label value to escape.
+        p: The Params instance containing CLI arguments.
+
+    Returns:
+        A string describing the action(s): 'replicate', 'create_snapshots', 'delete_snapshots',
+        'delete_datasets', 'compare', 'monitor', or combinations like 'create+replicate'.
+    """
+    actions: list[str] = []
+
+    # Check for snapshot creation
+    if p.create_src_snapshots_config.is_enabled:
+        actions.append("create_snapshots")
+
+    # Check for replication (default unless explicitly skipped)
+    if not p.skip_replication:
+        actions.append("replicate")
+
+    # Check for snapshot deletion
+    if p.delete_dst_snapshots:
+        actions.append("del_snapshots")
+
+    # Check for dataset deletion
+    if p.delete_dst_datasets or p.delete_empty_dst_datasets:
+        actions.append("del_datasets")
+
+    # Check for comparison mode
+    if p.compare_snapshot_lists:
+        actions.append("compare")
+
+    # Check for monitoring mode
+    if p.monitor_snapshots_config.is_enabled:
+        actions.append("monitor")
+
+    # If no specific actions detected, default to 'replicate' (the main bzfs operation)
+    if not actions:
+        return "replicate"
+
+    # Join multiple actions with '+'
+    return "+".join(actions)
+
+
+def _escape_label(value: str) -> str:
+    """Escape Prometheus label value according to text format spec.
+
+    Backslashes, double quotes, and line feeds must be escaped.
+
+    Args:
+        value: The raw label value.
 
     Returns:
         The escaped label value.
