@@ -306,6 +306,7 @@ class Job:
                 write_prometheus_metrics(self, exit_code=exit_code, elapsed_nanos=elapsed_nanos, sent_bytes=sent_bytes)
         except Exception:
             pass  # Silently ignore errors during error handling
+            # TODO: WOLFGANG: How do I call log here ?
 
     def run_main(self, args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
         """Parses CLI arguments, sets up logging, and executes main job loop."""
@@ -398,16 +399,18 @@ class Job:
                 log_error_on_exit(e, DIE_STATUS, exc_info=True)
                 self._write_prometheus_metrics_on_error(DIE_STATUS)
                 raise SystemExit(DIE_STATUS) from e
-            finally:
-                # Write Prometheus metrics on exit (success or failure)
+            else:
+                # Write Prometheus metrics on successful completion only
                 try:
                     elapsed_nanos = time.monotonic_ns() - self.replication_start_time_nanos
                     sent_bytes = 0
                     if p.is_program_available("pv", "local"):
                         sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
+                    # We consider that exit code is 0 since there were no errors reported
                     write_prometheus_metrics(self, exit_code=0, elapsed_nanos=elapsed_nanos, sent_bytes=sent_bytes)
                 except Exception as prom_err:
                     log.warning("Failed to write Prometheus metrics: %s", prom_err)
+            finally:
                 log.info("%s", f"Log file was: {log_params.log_file}")
             log.info("Success. Goodbye!")
             with contextlib.suppress(BrokenPipeError):
