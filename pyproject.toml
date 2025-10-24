@@ -229,7 +229,9 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
 
 [tool.ruff.lint.flake8-copyright]
 notice-rgx = """Copyright (\\(c\\) )?\\d{4}([-,]\\d{4})* Wolfgang Hoschek AT mac DOT com\
-\\s+#\\s+# Licensed under the Apache License, Version 2\\.0"""
+(\\s#.*){0,2}\\s\
+#\\s\
+# Licensed under the Apache License, Version 2\\.0"""
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
