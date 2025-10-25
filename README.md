@@ -28,9 +28,9 @@
 - [Quickstart](#Quickstart)
 - [Installation](#Installation)
 - [Design Aspects](#Design-Aspects)
-- [Continuous Testing](#Continuous-Testing)
-- [Unit Testing on GitHub](#Unit-Testing-on-GitHub)
-- [Unit Testing Locally](#Unit-Testing-Locally)
+- [Continuous Integration Testing](#Continuous-Integration-Testing)
+- [Testing on GitHub Runners](#Testing-on-GitHub-Runners)
+- [Testing Locally](#Testing-Locally)
 - [Man Page](#Man-Page)
 # Introduction
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
@@ -508,9 +508,9 @@ Chances are that CI tests will catch changes that have unintended side effects.
 * It's fast!
 
 
-# Continuous Testing
+# Continuous Integration Testing
 
-Results of continuous test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD are
+Results of continuous integration test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD are
 [here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
 by [this script](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml).
 The script also demonstrates functioning installation steps on Ubuntu and FreeBSD, etc.
@@ -521,7 +521,7 @@ The gist is that it should work on any platform, with python (3.9 or higher, no 
 only needed on the initiator host.
 
 
-# Unit Testing on GitHub
+# Testing on GitHub Runners
 
 * First, on the GitHub page of this repo, click on "Fork/Create a new fork".
 * Click the 'Actions' menu on your repo, and then enable GitHub Actions on your fork.
@@ -546,7 +546,7 @@ Click on any run and browse to the bottom of the resulting run page to find the 
 coverage report that merges all jobs of the run.
 
 
-# Unit Testing Locally
+# Testing Locally
 ```bash
 # Check prerequisites
 zfs --version                      # verify ZFS is installed
