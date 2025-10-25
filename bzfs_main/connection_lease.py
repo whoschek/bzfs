@@ -64,7 +64,7 @@ Design Rationale
   path-unfriendly characters. This reduces collision probability and helps with human diagnostics.
 - Security is prioritized: the root, sockets, and lease directories are created with explicit permissions, and symlinks are
   rejected to avoid redirection attacks. Open flags include ``O_NOFOLLOW`` and ``O_CLOEXEC`` to remove common foot-guns.
-  Foreign file ownership and overly permissive file permissions are rejected to avoid sockets being used by third parties.
+  Foreign file ownership and overly permissive file permissions are rejected to prevent sockets being used by third parties.
 - The public API is intentionally tiny and ergonomic. ``ConnectionLeaseManager.acquire()`` never blocks: it either returns
   a lease for an existing name or a new name, ensuring predictable low latency under contention. The ``ConnectionLease``
   is immutable and simple to reason about, with an explicit ``release()`` to return capacity to the pool.

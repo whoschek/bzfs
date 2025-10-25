@@ -293,8 +293,8 @@ def open_nofollow(
     }.get(mode[0])
     if flags is None:
         raise ValueError(f"invalid mode {mode!r}")
-    if "+" in mode:
-        flags = (flags & ~os.O_WRONLY) | os.O_RDWR
+    if "+" in mode:  # enable read-write access for r+, w+, a+, x+
+        flags = (flags & ~os.O_WRONLY) | os.O_RDWR  # clear os.O_WRONLY and set os.O_RDWR while preserving all other flags
     flags |= os.O_NOFOLLOW | os.O_CLOEXEC
     fd: int = os.open(path, flags=flags, mode=perm)
     try:
