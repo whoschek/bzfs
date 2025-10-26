@@ -169,6 +169,7 @@ from bzfs_main.utils import (
     LOG_TRACE,
     PROG_NAME,
     SHELL_CHARS,
+    UMASK,
     YEAR_WITH_FOUR_DIGITS_REGEX,
     Interner,
     SortedInterner,
@@ -294,6 +295,7 @@ class Job:
         assert isinstance(self.delete_injection_triggers, dict)
         assert isinstance(self.inject_params, dict)
         with xfinally(reset_logger):  # runs reset_logger() on exit, without masking exception raised in body of `with` block
+            prev_os_umask: int = os.umask(UMASK)
             try:
                 log_params: LogParams = LogParams(args)
                 log = bzfs_main.loggers.get_logger(log_params=log_params, args=args, log=log)
@@ -301,6 +303,8 @@ class Job:
             except BaseException as e:
                 get_simple_logger(PROG_NAME).error("Log init: %s", e, exc_info=not isinstance(e, SystemExit))
                 raise
+            finally:
+                os.umask(prev_os_umask)  # restore prior state
 
             aux_args: list[str] = []
             if getattr(args, "include_snapshot_plan", None):
@@ -314,6 +318,7 @@ class Job:
             def log_error_on_exit(error: Any, status_code: Any, exc_info: bool = False) -> None:
                 log.error("%s%s", f"Exiting {PROG_NAME} with status code {status_code}. Cause: ", error, exc_info=exc_info)
 
+            prev_os_umask = os.umask(UMASK)
             try:
                 log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[uid: {os.getuid()}, euid: {os.geteuid()}]")
                 if self.is_test_mode:
@@ -375,6 +380,7 @@ class Job:
                 log_error_on_exit(e, DIE_STATUS, exc_info=True)
                 raise SystemExit(DIE_STATUS) from e
             finally:
+                os.umask(prev_os_umask)  # restore prior state
                 log.info("%s", f"Log file was: {log_params.log_file}")
             log.info("Success. Goodbye!")
             with contextlib.suppress(BrokenPipeError):
