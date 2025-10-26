@@ -169,6 +169,7 @@ from bzfs_main.utils import (
     LOG_TRACE,
     PROG_NAME,
     SHELL_CHARS,
+    UMASK,
     YEAR_WITH_FOUR_DIGITS_REGEX,
     Interner,
     SortedInterner,
@@ -218,12 +219,15 @@ def argument_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     """API for command line clients."""
+    prev_umask: int = os.umask(UMASK)
     try:
         run_main(argument_parser().parse_args(), sys.argv)
     except subprocess.CalledProcessError as e:
         ret: int = e.returncode
         ret = DIE_STATUS if isinstance(ret, int) and 1 <= ret <= STILL_RUNNING_STATUS else ret
         sys.exit(ret)
+    finally:
+        os.umask(prev_umask)  # restore prior global state
 
 
 def run_main(args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:

@@ -5,6 +5,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [1.14.0] - TBD
 
 - [bzfs] Change default of `--create-bookmarks` from `hourly` to `all` to improve safety.
+- [bzfs] [security] Set the umask so intermediate directories created by `os.makedirs()` have stricter permissions.
+- [bzfs] Also run nightly tests on python-3.15-dev.
 
 ## [1.13.0] - October 11, 2025
 

@@ -93,6 +93,7 @@ from bzfs_main.parallel_tasktree_policy import (
 from bzfs_main.utils import (
     DIE_STATUS,
     LOG_TRACE,
+    UMASK,
     format_dict,
     format_obj,
     has_siblings,
@@ -460,7 +461,11 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 #############################################################################
 def main() -> None:
     """API for command line clients."""
-    Job().run_main(sys.argv)
+    prev_umask: int = os.umask(UMASK)
+    try:
+        Job().run_main(sys.argv)
+    finally:
+        os.umask(prev_umask)  # restore prior global state
 
 
 #############################################################################
