@@ -38,10 +38,9 @@
 *bzfs is a backup command line tool that reliably replicates ZFS snapshots from a (local or
 remote) source ZFS dataset (ZFS filesystem or ZFS volume) and its descendant datasets to a (local
 or remote) destination ZFS dataset to make the destination dataset a recursively synchronized copy
-of the source dataset, using zfs send/receive/rollback/destroy and ssh tunnel as directed. For
-example, bzfs can be used to incrementally replicate all ZFS snapshots since the most recent
-common snapshot from source to destination, in order to help protect against data loss or
-ransomware.*
+of the source dataset, using zfs send/receive/rollback/destroy and ssh as directed. For example,
+bzfs can be used to incrementally replicate all ZFS snapshots since the most recent common
+snapshot from source to destination, in order to help protect against data loss or ransomware.*
 
 When run for the first time, bzfs replicates the dataset and all its snapshots from the source to
 the destination. On subsequent runs, bzfs transfers only the data that has changed since the
