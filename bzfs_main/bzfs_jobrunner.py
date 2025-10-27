@@ -564,10 +564,10 @@ class Job:
         self.spawn_process_per_job = args.spawn_process_per_job
         username: str = pwd.getpwuid(os.getuid()).pw_name
         assert username
-        localhost_ids: set[str] = {"localhost", "127.0.0.1", "::1", socket.gethostname()}  # ::1 is IPv6 loopback address
-        localhost_ids.update(self.get_localhost_ips())  # union
-        localhost_ids.add(localhostname)
-        log.log(LOG_TRACE, "localhost_ids: %s", sorted(localhost_ids))
+        loopback_ids: set[str] = {"localhost", "127.0.0.1", "::1", socket.gethostname()}  # ::1 is IPv6 loopback address
+        loopback_ids.update(self.get_localhost_ips())  # union
+        loopback_ids.add(localhostname)
+        log.log(LOG_TRACE, "loopback_ids: %s", sorted(loopback_ids))
 
         def zero_pad(number: int, width: int = 6) -> str:
             """Pads number with leading '0' chars to the given width."""
@@ -597,8 +597,8 @@ class Job:
             ssh_user = ssh_src_user if is_src else ssh_dst_user
             ssh_user = ssh_user if ssh_user else username
             lb: str = self.loopback_address
-            local_ids: set[str] = localhost_ids
-            hostname = hostname if hostname not in local_ids else (lb if lb else hostname) if username != ssh_user else "-"
+            loopbck_ids: set[str] = loopback_ids
+            hostname = hostname if hostname not in loopbck_ids else (lb if lb else hostname) if username != ssh_user else "-"
             hostname = convert_ipv6(hostname)
             return f"{hostname}:{dataset}"
 
@@ -1261,8 +1261,7 @@ def _sanitize(filename: str) -> str:
 
 def _log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
     """Returns a log file suffix in a format that contains the given hostnames."""
-    sanitized_dst_hostname = _sanitize(dst_hostname) if dst_hostname else ""
-    return f"{SEP}{_sanitize(localhostname)}{SEP}{_sanitize(src_hostname)}{SEP}{sanitized_dst_hostname}"
+    return f"{SEP}{_sanitize(localhostname)}{SEP}{_sanitize(src_hostname)}{SEP}{_sanitize(dst_hostname)}"
 
 
 def _pretty_print_formatter(dictionary: dict[str, Any]) -> Any:
