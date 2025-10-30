@@ -202,9 +202,9 @@ def process_datasets_in_parallel(
         synchronization scenarios where jobs must wait for completion of entire subtrees before proceeding. Essential
         for advanced job scheduling patterns like "complete all parallel replications before starting pruning phase."
 
-    - Both algorithms are CPU and memory efficient. They require main memory proportional to the number of dataset
-        names (~400 bytes per dataset name), and easily scale to millions of datasets. Time complexity is O(N log N),
-        where N is the number of datasets.
+    - Both algorithms are CPU and memory efficient. They require main memory proportional to the number of datasets
+        (~400 bytes per dataset), and easily scale to millions of datasets. Time complexity is O(N log N), where
+        N is the number of datasets.
 
     Concurrency Design:
     -------------------

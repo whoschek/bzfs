@@ -1097,7 +1097,7 @@ class SynchronizedDict(Generic[K, V]):
 
 #############################################################################
 class InterruptibleSleep:
-    """Provides a sleep(timeout) function that can be interrupted by another thread."""
+    """Provides a sleep(timeout) function that can be interrupted by another thread; The underlying lock is configurable."""
 
     def __init__(self, lock: threading.Lock | None = None) -> None:
         self._is_stopping: bool = False
@@ -1105,7 +1105,8 @@ class InterruptibleSleep:
         self._condition: Final[threading.Condition] = threading.Condition(self._lock)
 
     def sleep(self, duration_nanos: int) -> bool:
-        """Delays the current thread by the given number of nanoseconds; Returns True if the sleep got interrupted."""
+        """Delays the current thread by the given number of nanoseconds; Returns True if the sleep got interrupted;
+        Equivalent to threading.Event.wait()."""
         end_time_nanos: int = time.monotonic_ns() + duration_nanos
         with self._lock:
             while not self._is_stopping:
@@ -1116,14 +1117,14 @@ class InterruptibleSleep:
         return True
 
     def interrupt(self) -> None:
-        """Wakes sleeping threads and makes any future sleep()s a no-op."""
+        """Wakes sleeping threads and makes any future sleep()s a no-op; Equivalent to threading.Event.set()."""
         with self._lock:
             if not self._is_stopping:
                 self._is_stopping = True
                 self._condition.notify_all()
 
     def reset(self) -> None:
-        """Makes any future sleep()s no longer a no-op."""
+        """Makes any future sleep()s no longer a no-op; Equivalent to threading.Event.clear()."""
         with self._lock:
             self._is_stopping = False
 

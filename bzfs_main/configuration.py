@@ -261,7 +261,7 @@ class Params:
         self.skip_replication: Final[bool] = args.skip_replication
         self.delete_dst_snapshots: Final[bool] = args.delete_dst_snapshots is not None
         self.delete_dst_bookmarks: Final[bool] = args.delete_dst_snapshots == "bookmarks"
-        self.delete_dst_snapshots_no_crosscheck: bool = args.delete_dst_snapshots_no_crosscheck
+        self.delete_dst_snapshots_no_crosscheck: Final[bool] = args.delete_dst_snapshots_no_crosscheck
         self.delete_dst_snapshots_except: Final[bool] = args.delete_dst_snapshots_except
         self.delete_dst_datasets: Final[bool] = args.delete_dst_datasets
         self.delete_empty_dst_datasets: Final[bool] = args.delete_empty_dst_datasets is not None
@@ -427,7 +427,7 @@ class Params:
         """Unset environment variables matching regex filters."""
         exclude_envvar_regexes: RegexList = compile_regexes(args.exclude_envvar_regex)
         include_envvar_regexes: RegexList = compile_regexes(args.include_envvar_regex)
-        for envvar_name in list(os.environ.keys()):
+        for envvar_name in list(os.environ):
             if is_included(envvar_name, exclude_envvar_regexes, include_envvar_regexes):
                 os.environ.pop(envvar_name, None)
                 self.log.debug("Unsetting b/c envvar regex: %s", envvar_name)

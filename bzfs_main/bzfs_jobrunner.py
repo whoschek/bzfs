@@ -1246,7 +1246,7 @@ class RejectArgumentAction(argparse.Action):
 #############################################################################
 def _dedupe(root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """Returns a list with duplicate dataset pairs removed while preserving order."""
-    return list(dict.fromkeys(root_dataset_pairs).keys())
+    return list(dict.fromkeys(root_dataset_pairs))
 
 
 T = TypeVar("T")
