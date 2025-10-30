@@ -112,8 +112,9 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
         ConnectionPools,
     )
 
-# constants
-_GLOBAL_LOCK: Final[threading.Lock] = threading.Lock()
+# constants:
+_UNSET_ENV_VARS_LOCK: Final[threading.Lock] = threading.Lock()
+_UNSET_ENV_VARS_LATCH: Final[SynchronizedBool] = SynchronizedBool(True)
 
 
 #############################################################################
@@ -162,11 +163,11 @@ class LogParams:
         )
         os.fchmod(fd, FILE_PERMISSIONS)
         os.close(fd)
+        self.pv_log_file: str = self.log_file[0 : -len(".log")] + ".pv"
         log_file_stem: str = os.path.basename(self.log_file)[0 : -len(".log")]
         # Python's standard logger naming API interprets chars such as '.', '-', ':', spaces, etc in special ways, e.g.
         # logging.getLogger("foo.bar") vs logging.getLogger("foo-bar"). Thus, we sanitize the Python logger name via a regex:
         self.logger_name_suffix: Final[str] = re.sub(r"[^A-Za-z0-9_]", "_", log_file_stem)
-        self.pv_log_file: str = self.log_file[0 : -len(".log")] + ".pv"
         cache_root_dir: str = os.path.join(log_parent_dir, ".cache")
         os.makedirs(cache_root_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_file_permissions(cache_root_dir, DIR_PERMISSIONS)
@@ -433,15 +434,21 @@ class Params:
 
     def _unset_matching_env_vars(self, args: argparse.Namespace) -> None:
         """Unset environment variables matching regex filters."""
+        if len(args.exclude_envvar_regex) == 0 and len(args.include_envvar_regex) == 0:
+            return  # fast path
         exclude_envvar_regexes: RegexList = compile_regexes(args.exclude_envvar_regex)
         include_envvar_regexes: RegexList = compile_regexes(args.include_envvar_regex)
-        if len(exclude_envvar_regexes) == 0 and len(include_envvar_regexes) == 0:
-            return  # fast path
-        with _GLOBAL_LOCK:
-            for envvar_name in list(os.environ):
-                if is_included(envvar_name, exclude_envvar_regexes, include_envvar_regexes):
-                    os.environ.pop(envvar_name, None)
-                    self.log.debug("Unsetting b/c envvar regex: %s", envvar_name)
+        # Mutate global state at most once, atomically. First thread wins. The latch isn't strictly necessary for
+        # correctness as all concurrent bzfs.Job instances in bzfs_jobrunner have identical include/exclude_envvar_regex
+        # anyway. It's just for reduced latency.
+        with _UNSET_ENV_VARS_LOCK:
+            if _UNSET_ENV_VARS_LATCH.get_and_set(False):
+                for envvar_name in list(os.environ):
+                    # order of include vs exclude is intentionally reversed to correctly implement semantics:
+                    # "unset env var iff excluded and not included (include takes precedence)."
+                    if is_included(envvar_name, exclude_envvar_regexes, include_envvar_regexes):
+                        os.environ.pop(envvar_name, None)
+                        self.log.debug("Unsetting b/c envvar regex: %s", envvar_name)
 
     def lock_file_name(self) -> str:
         """Returns unique path used to detect concurrently running jobs.
@@ -459,7 +466,6 @@ class Params:
                self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_dst_snapshots_except,
                self.args.delete_empty_dst_datasets,
                self.args.compare_snapshot_lists, self.args.monitor_snapshots,
-               self.args.log_file_infix,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
         # fmt: on
