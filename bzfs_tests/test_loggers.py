@@ -50,12 +50,12 @@ from bzfs_main.loggers import (
     Tee,
     _get_default_logger,
     _get_dict_config_logger,
+    _get_logger_subname,
     _get_syslog_address,
     _remove_json_comments,
     _validate_log_config_dict,
     get_default_log_formatter,
     get_logger,
-    get_logger_subname,
     get_simple_logger,
     reset_logger,
     validate_log_config_variable,
@@ -125,7 +125,7 @@ class TestHelperFunctions(AbstractTestCase):
         args = self.argparser_parse_args(args=["src", "dst"])
         root_logger = logging.getLogger()
         log_params = LogParams(args)
-        log = get_logger(log_params, args, root_logger)
+        log = get_logger(log_params, args, root_logger, logger_name_suffix="")
         self.assertTrue(log is root_logger)
         log.info(f"{prefix}aaa1")
 
@@ -206,7 +206,7 @@ class TestLogging(AbstractTestCase):
     def test_get_default_logger(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         lp = LogParams(args)
-        logging.getLogger(get_logger_subname()).handlers.clear()
+        logging.getLogger(_get_logger_subname()).handlers.clear()
         logging.getLogger(bzfs.__name__).handlers.clear()
         log = _get_default_logger(lp, args)
         self.assertTrue(any(isinstance(h, logging.StreamHandler) for h in log.handlers))
@@ -215,26 +215,24 @@ class TestLogging(AbstractTestCase):
     def test_get_default_logger_considers_existing_sublog_handlers(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         lp = LogParams(args)
-        sublog = logging.getLogger(get_logger_subname())
-        sublog.handlers.clear()
-        log = logging.getLogger(bzfs.__name__)
-        log.handlers.clear()
+        logger = logging.getLogger(f"{bzfs.__name__}.{lp.logger_name_suffix}")
+        logger.handlers.clear()
         stream_h: logging.StreamHandler | None = None
         file_h: logging.FileHandler | None = None
         try:
             stream_h = logging.StreamHandler(stream=sys.stdout)
             file_h = logging.FileHandler(lp.log_file, encoding="utf-8")
-            sublog.addHandler(stream_h)
-            sublog.addHandler(file_h)
-            log_result = _get_default_logger(lp, args)
-            self.assertEqual([], log_result.handlers)
+            logger.addHandler(stream_h)
+            logger.addHandler(file_h)
+            log_result = _get_default_logger(lp, args, logger_name_suffix=lp.logger_name_suffix)
+            self.assertEqual([stream_h, file_h], log_result.handlers)
         finally:
             if stream_h is not None:
                 stream_h.close()
             if file_h is not None:
                 file_h.close()
-            sublog.handlers.clear()
-            reset_logger()
+            logger.handlers.clear()
+            reset_logger(logger_name_suffix=lp.logger_name_suffix)
 
     @patch("logging.handlers.SysLogHandler")
     def test_get_default_logger_syslog_warning(self, mock_syslog: MagicMock) -> None:
@@ -253,7 +251,7 @@ class TestLogging(AbstractTestCase):
         self.assertEqual("UDP", args.log_syslog_socktype)
         self.assertEqual(1, args.log_syslog_facility)
         self.assertEqual("DEBUG", args.log_syslog_level)
-        logging.getLogger(get_logger_subname()).handlers.clear()
+        logging.getLogger(_get_logger_subname()).handlers.clear()
         logger = logging.getLogger(bzfs.__name__)
         logger.handlers.clear()
         handler = logging.Handler()
@@ -321,6 +319,34 @@ class TestLogging(AbstractTestCase):
             formatted = formatter.format(record)
         self.assertIn("Go start", formatted)
         self.assertNotIn("%s", formatted)
+
+    def test_scoped_loggers_teardown_is_isolated(self) -> None:
+        """reset_logger(logger_name_suffix=...) only removes handlers for the targeted suffix-specific logger."""
+        args1 = self.argparser_parse_args(["src", "dst"])
+        lp1 = LogParams(args1)
+        log1 = get_logger(lp1, args1, logger_name_suffix=lp1.logger_name_suffix)
+
+        args2 = self.argparser_parse_args(["src", "dst", "--quiet"])
+        lp2 = LogParams(args2)
+        log2 = get_logger(lp2, args2, logger_name_suffix=lp2.logger_name_suffix)
+
+        def file_paths(log: Logger) -> set[str]:
+            return {
+                os.path.abspath(handler.baseFilename) for handler in log.handlers if isinstance(handler, logging.FileHandler)
+            }
+
+        self.assertNotEqual(log1.name, log2.name)
+        self.assertEqual({os.path.abspath(lp1.log_file)}, file_paths(log1))
+        self.assertEqual({os.path.abspath(lp2.log_file)}, file_paths(log2))
+
+        reset_logger(logger_name_suffix=lp1.logger_name_suffix)
+        self.assertEqual([], logging.getLogger(log1.name).handlers)
+        remaining = logging.getLogger(log2.name)
+        self.assertNotEqual([], remaining.handlers)
+        self.assertEqual({os.path.abspath(lp2.log_file)}, file_paths(remaining))
+
+        reset_logger(logger_name_suffix=lp2.logger_name_suffix)
+        self.assertEqual([], logging.getLogger(log2.name).handlers)
 
     def test_level_formatter_injects_fields(self) -> None:
         """LevelFormatter attaches level prefix and program name to records."""

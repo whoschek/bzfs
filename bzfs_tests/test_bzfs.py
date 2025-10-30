@@ -17,9 +17,11 @@
 from __future__ import (
     annotations,
 )
+import contextlib
 import logging
 import re
 import subprocess
+import threading
 import time
 import unittest
 from collections.abc import (
@@ -66,10 +68,17 @@ from bzfs_main.detect import (
 from bzfs_main.filter import (
     SNAPSHOT_REGEX_FILTER_NAME,
 )
+from bzfs_main.progress_reporter import (
+    ProgressReporter,
+)
 from bzfs_main.replication import (
     _add_recv_property_options,
     _is_zfs_dataset_busy,
     _pv_cmd,
+    replicate_dataset,
+)
+from bzfs_main.retry import (
+    Retry,
 )
 from bzfs_main.snapshot_cache import (
     SnapshotCache,
@@ -106,6 +115,8 @@ def suite() -> unittest.TestSuite:
         TestDeleteEmptyDstDatasetsTask,
         TestHandleMinMaxSnapshots,
         TestFindDatasetsToSnapshot,
+        TestTerminationEventBehavior,
+        TestPerJobTermination,
         TestPythonVersionCheck,
         TestPerformance,
     ]
@@ -1267,13 +1278,6 @@ class TestJobMethods(AbstractTestCase):
             mock_run.return_value = None
 
             # Act: Should complete without conflict and run a single incremental send based on h1->d2.
-            from bzfs_main.replication import (
-                replicate_dataset,
-            )
-            from bzfs_main.retry import (
-                Retry,
-            )
-
             replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0))
             # Assert: incremental planning was invoked (found common base -> incremental)
             mock_steps.assert_called_once()
@@ -1783,6 +1787,123 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
 
         self.assertListEqual(["tank/b"], received)
         self.assertDictEqual({label: ["tank/a"]}, result)
+
+
+#############################################################################
+class TestTerminationEventBehavior(AbstractTestCase):
+    """Covers termination_event branches in bzfs.Job, including early loop break and daemon sleep wake-up."""
+
+    class _DummyPR:
+        def __init__(self, *args: object, **kwargs: object) -> None:  # pragma: no cover - trivial
+            pass
+
+        def reset(self) -> None:  # pragma: no cover - trivial
+            pass
+
+        def pause(self) -> None:  # pragma: no cover - trivial
+            pass
+
+        def stop(self) -> None:  # pragma: no cover - trivial
+            pass
+
+    def make_job(self, args: list[str]) -> bzfs.Job:
+        parsed = self.argparser_parse_args(args=args)
+        job = bzfs.Job()
+        job.params = self.make_params(args=parsed)
+        job.is_test_mode = True
+        return job
+
+    def test_run_tasks_terminates_when_event_pre_set(self) -> None:
+        """If termination_event is already set at task loop start, terminate() is called and no task runs."""
+        job = self.make_job(["src1", "dst1", "src2", "dst2"])
+        job.termination_event.set()
+
+        with (
+            patch.object(job, "validate_once", return_value=None),
+            patch.object(bzfs, "ProgressReporter", self._DummyPR),
+            patch.object(job, "validate_task", side_effect=AssertionError("validate_task must not be called")),
+            patch.object(job, "run_task", side_effect=AssertionError("run_task must not be called")),
+            patch.object(job, "sleep_until_next_daemon_iteration", return_value=False) as sleep_mock,
+            patch.object(job, "terminate") as term_mock,
+        ):
+            job.run_tasks()
+            term_mock.assert_called_once()
+            # Ensure early break: sleep called exactly once after breaking out of inner loop
+            sleep_mock.assert_called_once()
+
+    def test_run_tasks_terminates_after_first_task_when_event_set_mid_loop(self) -> None:
+        """When termination_event is set between task iterations, terminate() is called and subsequent tasks are skipped."""
+        job = self.make_job(["s1", "d1", "s2", "d2", "s3", "d3"])
+        run_calls: list[str] = []
+
+        def run_task_side_effect() -> None:
+            run_calls.append("run_task")
+            if len(run_calls) == 1:
+                job.termination_event.set()  # simulate external termination after first task
+
+        with (
+            patch.object(job, "validate_once", return_value=None),
+            patch.object(bzfs, "ProgressReporter", self._DummyPR),
+            patch.object(job, "validate_task", return_value=None),
+            patch.object(job, "run_task", side_effect=run_task_side_effect),
+            patch.object(job, "sleep_until_next_daemon_iteration", return_value=False),
+            patch.object(job, "terminate") as term_mock,
+        ):
+            job.run_tasks()
+            self.assertEqual(1, len(run_calls), f"Expected exactly one task to run, got {len(run_calls)}")
+            term_mock.assert_called_once()
+
+    def test_sleep_until_next_daemon_iteration_wakes_on_termination(self) -> None:
+        """sleep_until_next_daemon_iteration returns False when termination_event is set during wait."""
+        job = self.make_job(["src", "dst"])
+
+        job.progress_reporter = cast(ProgressReporter, self._DummyPR())
+        # Provide required log file attribute for logging in sleep_until_next_daemon_iteration
+        job.params.log_params.log_file = "dummy.log"
+
+        # Stop time far in the future to ensure we rely on termination_event for wake-up
+        stoptime_nanos = time.monotonic_ns() + 500_000_000  # 0.5s
+
+        def trigger() -> None:
+            time.sleep(0.02)
+            job.termination_event.set()
+
+        thread = threading.Thread(target=trigger)
+        thread.start()
+        result = job.sleep_until_next_daemon_iteration(stoptime_nanos)
+        thread.join(timeout=1)
+
+        self.assertFalse(result, "Expected False when termination_event is set during daemon sleep")
+
+
+#############################################################################
+class TestPerJobTermination(AbstractTestCase):
+    """Verifies that Job.terminate() can be scoped to only kill the Job's own child processes."""
+
+    def test_scoped_termination_kills_only_registered_children(self) -> None:
+        job = bzfs.Job()
+        # Start two child processes; register only one with the job
+        p1 = subprocess.Popen(["sleep", "1"])
+        p2 = subprocess.Popen(["sleep", "1"])
+        try:
+            job.subprocesses.register_child_pid(p1.pid)
+            time.sleep(0.05)
+            self.assertIsNone(p1.poll())
+            self.assertIsNone(p2.poll())
+
+            # Enable job-scoped termination and invoke terminate()
+            job.terminate_only_job_processes = True
+            job.terminate()
+            time.sleep(0.1)
+
+            # Registered child should be terminated; unregistered should still be running
+            self.assertIsNotNone(p1.poll(), "Registered child should be terminated")
+            self.assertIsNone(p2.poll(), "Unregistered child should remain running")
+        finally:
+            with contextlib.suppress(Exception):
+                p1.kill()
+            with contextlib.suppress(Exception):
+                p2.kill()
 
 
 #############################################################################

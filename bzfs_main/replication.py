@@ -91,6 +91,7 @@ from bzfs_main.utils import (
     FILE_PERMISSIONS,
     LOG_DEBUG,
     LOG_TRACE,
+    Subprocesses,
     append_if_absent,
     cut,
     die,
@@ -101,7 +102,6 @@ from bzfs_main.utils import (
     open_nofollow,
     replace_prefix,
     stderr_to_str,
-    subprocess_run,
     xprint,
 )
 
@@ -705,7 +705,8 @@ def _run_zfs_send_receive(
         if not dry_run_no_send:
             try:
                 maybe_inject_error(job, cmd=cmd, error_trigger=error_trigger)
-                process = subprocess_run(
+                sp: Subprocesses = job.subprocesses
+                process = sp.subprocess_run(
                     cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=True
                 )
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
@@ -1094,7 +1095,9 @@ def _estimate_send_sizes_in_parallel(
         ]
 
     max_workers: int = min(len(steps_todo), job.max_workers[r.location])
-    return list(parallel_iterator(iterator_builder, max_workers=max_workers, ordered=True))
+    return list(
+        parallel_iterator(iterator_builder, max_workers=max_workers, ordered=True, termination_event=job.termination_event)
+    )
 
 
 def _zfs_set(job: Job, properties: list[str], remote: Remote, dataset: str) -> None:

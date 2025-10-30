@@ -19,7 +19,6 @@ from __future__ import (
 )
 import re
 import subprocess
-import sys
 import threading
 import time
 from dataclasses import (
@@ -49,6 +48,8 @@ from bzfs_main.utils import (
     die,
     drain,
     list_formatter,
+    stderr_to_str,
+    xprint,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
@@ -85,10 +86,15 @@ def detect_available_programs(job: Job) -> None:
     available_programs: dict[str, dict[str, str]] = params.available_programs
     if "local" not in available_programs:
         cmd: list[str] = [p.shell_program_local, "-c", _find_available_programs(p)]
-        stdout: str = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout
+        sp = job.subprocesses
+        proc = sp.subprocess_run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+        xprint(log=log, value=stderr_to_str(proc.stderr), end="")
+        stdout: str = proc.stdout
         available_programs["local"] = dict.fromkeys(stdout.splitlines(), "")
         cmd = [p.shell_program_local, "-c", "exit"]
-        if subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
+        proc = sp.subprocess_run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+        xprint(log=log, value=stderr_to_str(proc.stderr), end="")
+        if proc.returncode != 0:
             _disable_program(p, "sh", ["local"])
 
     todo: list[Remote] = []

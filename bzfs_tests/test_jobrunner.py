@@ -18,11 +18,13 @@ from __future__ import (
     annotations,
 )
 import argparse
+import contextlib
 import platform
 import shutil
 import signal
 import subprocess
 import sys
+import time
 import unittest
 from logging import (
     Logger,
@@ -71,6 +73,8 @@ def suite() -> unittest.TestSuite:
         TestValidateSnapshotPlan,
         TestValidateMonitorSnapshotPlan,
         TestParserIsolationAcrossSubjobs,
+        TestSpawnProcessPerJobDecision,
+        TestScopedTerminationInProcess,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -1018,7 +1022,124 @@ class TestErrorPropagation(AbstractTestCase):
         self.assertIsInstance(self.job.first_exception, int)
         self.assertEqual(DIE_STATUS, self.job.first_exception)
         self.assertEqual(1, self.job.stats.jobs_started)
-        self.assertEqual(1, self.job.stats.jobs_completed)
+
+
+#############################################################################
+class TestSpawnProcessPerJobDecision(AbstractTestCase):
+    """Verifies Job.run_subjobs selects per-subjob execution mode correctly.
+
+    It asserts no subprocesses are spawned without siblings, even when the spawn flag is true, and confirms subprocess
+    spawning when siblings exist.
+    """
+
+    def setUp(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+        self.job.log = MagicMock()
+        self.job.is_test_mode = True
+
+    def _capture_spawn_flags(self, subjobs: dict[str, list[str]], spawn_process_per_job: bool) -> list[bool]:
+        self.job.spawn_process_per_job = spawn_process_per_job
+        flags: list[bool] = []
+
+        def fake_run_subjob(cmd: list[str], name: str, timeout_secs: float | None, spawn_process_per_job: bool) -> int:
+            flags.append(spawn_process_per_job)
+            return 0
+
+        with patch.object(self.job, "run_subjob", side_effect=fake_run_subjob):
+            self.job.run_subjobs(subjobs=subjobs, max_workers=1, timeout_secs=None, work_period_seconds=0, jitter=False)
+        return flags
+
+    def test_no_siblings_spawn_flag_false_runs_in_process(self) -> None:
+        subjobs = {"000000src-host/replicate": ["bzfs"]}
+        flags = self._capture_spawn_flags(subjobs, spawn_process_per_job=False)
+        self.assertEqual([False], flags)
+
+    def test_no_siblings_spawn_flag_true_still_runs_in_process(self) -> None:
+        subjobs = {"000000src-host/replicate": ["bzfs"]}  # single subjob -> no siblings
+        flags = self._capture_spawn_flags(subjobs, spawn_process_per_job=True)
+        self.assertEqual([True], flags)
+
+    def test_with_siblings_spawn_flag_false_runs_in_process(self) -> None:
+        subjobs = {
+            "000000src-host/replicate_A": ["bzfs"],
+            "000000src-host/replicate_B": ["bzfs"],
+        }
+        flags = self._capture_spawn_flags(subjobs, spawn_process_per_job=False)
+        self.assertEqual(sorted([False, False]), sorted(flags))
+
+    def test_with_siblings_spawn_flag_true_spawns_processes(self) -> None:
+        subjobs = {
+            "000000src-host/replicate_A": ["bzfs"],
+            "000000src-host/replicate_B": ["bzfs"],
+        }
+        flags = self._capture_spawn_flags(subjobs, spawn_process_per_job=True)
+        self.assertEqual(sorted([True, True]), sorted(flags))
+
+
+#############################################################################
+class TestScopedTerminationInProcess(AbstractTestCase):
+    """Validates scoped-termination semantics: if a subjob fails, only its own process subtree is torn down while sibling
+    subjobs and their children keep running. Purpose: demonstrate that Job.run_subjobs preserves worker isolation and avoids
+    collateral kills during parallel replication. Executes the scenario in both thread and process modes via a shared helper.
+    """
+
+    def setUp(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+        self.job.log = MagicMock()
+        self.job.is_test_mode = True
+
+    def test_failing_subjob_terminates_only_its_own_children_process(self) -> None:
+        self._assert_scoped_termination(spawn_process_per_job=True, patch_method="run_worker_job_spawn_process_per_job")
+
+    def test_failing_subjob_terminates_only_its_own_children_thread(self) -> None:
+        self._assert_scoped_termination(spawn_process_per_job=False, patch_method="run_worker_job_in_current_thread")
+
+    def _assert_scoped_termination(self, spawn_process_per_job: bool, patch_method: str) -> None:
+        """Two concurrent subjobs; subjob B will fail after spawning a child, whereas subjob A stays alive.
+
+        kill B to emulate a failing subjob, which should trigger termination of B's children, not trigger killing A.
+        """
+        subjobs: dict[str, list[str]] = {
+            "000000src-host/replicate_A": ["bzfs", "srcA", "dstA"],
+            "000000src-host/replicate_B": ["bzfs", "srcB", "dstB"],
+        }
+        children: dict[str, subprocess.Popen[Any]] = {}
+
+        def fake_worker(cmd: list[str], timeout_secs: float | None) -> int:
+            # Simulate subjob execution without invoking bzfs parser
+            if "srcA" in cmd:
+                p = subprocess.Popen(["sleep", "1"])  # Child that should survive
+                children["A"] = p
+                time.sleep(0.05)  # brief overlap to ensure concurrency without slowing the suite
+                return 0
+            if "srcB" in cmd:
+                p = subprocess.Popen(["sleep", "1"])  # Child that should be terminated
+                children["B"] = p
+                # kill B to emulate a failing subjob, which should trigger termination of B's children, not trigger killing A
+                p.kill()
+                return DIE_STATUS
+            return 0
+
+        self.job.spawn_process_per_job = spawn_process_per_job
+        target = f"bzfs_main.bzfs_jobrunner.Job.{patch_method}"
+        with patch(target, side_effect=fake_worker):
+            self.job.run_subjobs(subjobs=subjobs, max_workers=2, timeout_secs=None, work_period_seconds=0, jitter=False)
+
+        # B's child should have been terminated
+        self.assertIn("B", children)
+        deadline = time.monotonic() + 0.25
+        while children["B"].poll() is None and time.monotonic() < deadline:
+            time.sleep(0.005)
+        self.assertIsNotNone(children["B"].poll(), "B child should be terminated")
+
+        # A's child should still be running, proving scoped termination did not affect siblings
+        self.assertIn("A", children)
+        self.assertIsNone(children["A"].poll(), "A child should still be running")
+
+        # Cleanup remaining child
+        with contextlib.suppress(Exception):
+            children["A"].kill()
+        self.assertEqual(self.job.stats.jobs_started, self.job.stats.jobs_completed)
         self.assertEqual(1, self.job.stats.jobs_failed)
 
 

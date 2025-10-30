@@ -26,6 +26,7 @@ from __future__ import (
 import concurrent
 import heapq
 import os
+import threading
 import time
 from concurrent.futures import (
     FIRST_COMPLETED,
@@ -159,6 +160,7 @@ def process_datasets_in_parallel(
     interval_nanos: Callable[
         [int, str, int], int
     ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
+    termination_event: threading.Event | None = None,  # optional event to request early async termination
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     is_test_mode: bool = False,
 ) -> bool:  # returns True if any dataset processing failed, False if all succeeded; thread-safe
@@ -220,6 +222,7 @@ def process_datasets_in_parallel(
       jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submitted_count)``
     - max_workers: Maximum number of parallel worker threads
     - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
+    - termination_event: Optional event to request early async termination; stops new submissions and cancels in-flight tasks
 
     Returns:
     --------
@@ -236,6 +239,7 @@ def process_datasets_in_parallel(
     assert callable(process_dataset)
     assert max_workers > 0
     assert callable(interval_nanos)
+    termination_event = threading.Event() if termination_event is None else termination_event
     has_barrier: bool = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
     assert (enable_barriers is not False) or not has_barrier, "Barriers seen in datasets but barriers explicitly disabled"
     barriers_enabled: bool = bool(has_barrier or enable_barriers)
@@ -262,7 +266,9 @@ def process_datasets_in_parallel(
                 nonlocal next_update_nanos
                 sleep_nanos: int = next_update_nanos - time.monotonic_ns()
                 if sleep_nanos > 0:
-                    time.sleep(sleep_nanos / 1_000_000_000)  # seconds
+                    termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
+                if termination_event.is_set():
+                    break
                 if sleep_nanos > 0 and len(todo_futures) > 0:
                     wait_timeout = 0  # indicates to use non-blocking flavor of concurrent.futures.wait()
                     # It's possible an even "smaller" dataset (wrt. sort order) has become available while we slept.
@@ -275,7 +281,7 @@ def process_datasets_in_parallel(
                 future: Future[CompletionCallback] = executor.submit(process_dataset, node.dataset, submitted_count)
                 future_to_node[future] = node
                 todo_futures.add(future)
-            return len(todo_futures) > 0
+            return len(todo_futures) > 0 and not termination_event.is_set()
 
         def complete_datasets() -> None:
             """Waits for completed futures, processes results and errors, then enqueues follow-up tasks per policy."""
@@ -299,6 +305,13 @@ def process_datasets_in_parallel(
         while submit_datasets():
             complete_datasets()
 
+        if termination_event.is_set():
+            for todo_future in todo_futures:
+                todo_future.cancel()
+            priority_queue.clear()
+            todo_futures.clear()
+            future_to_node.clear()
+            failed = True
         assert len(priority_queue) == 0
         assert len(todo_futures) == 0
         assert len(future_to_node) == 0
