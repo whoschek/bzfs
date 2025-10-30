@@ -19,13 +19,17 @@ from __future__ import (
     annotations,
 )
 import contextlib
+import inspect
 import io
 import logging
+import types
+import unittest
 from collections.abc import (
     Iterator,
 )
 from typing import (
     Any,
+    Callable,
 )
 
 
@@ -56,3 +60,52 @@ def capture_stderr() -> Iterator[io.StringIO]:
     buf = io.StringIO()
     with contextlib.redirect_stderr(buf):
         yield buf
+
+
+#############################################################################
+class TestSuiteCompleteness(unittest.TestCase):
+    """Verifies each test module's suite() includes all locally defined test classes to avoid accidentally orphaned tests."""
+
+    def __init__(
+        self,
+        method_name: str = "runTest",
+        modules: list[types.ModuleType] | None = None,
+        class_predicate: Callable[[type[unittest.TestCase]], bool] | None = None,
+    ) -> None:
+        """Assumes each module in ``modules`` expose a ``suite()`` function and ``class_predicate`` returns True for classes
+        that must appear in that suite."""
+        super().__init__(method_name)
+        self.modules = modules or []
+        self.class_predicate = class_predicate or (lambda _cls: False)
+
+    def test_all_modules_have_a_complete_suite(self) -> None:
+        failures: list[str] = []
+        for module in self.modules:
+            # Discover locally defined TestCase classes starting with 'Test'
+            local_classes: set[str] = set()
+            for _, obj in inspect.getmembers(module, inspect.isclass):
+                if issubclass(obj, unittest.TestCase) and obj.__module__ == module.__name__ and self.class_predicate(obj):
+                    local_classes.add(obj.__name__)
+
+            # Collect classes actually included by the module's suite() into a flattened set
+            included_classes: set[str] = set()
+            stack: list[unittest.TestSuite] = [module.suite()]
+            while stack:
+                suite = stack.pop()
+                for testcase in suite:  # may contain nested suites
+                    if isinstance(testcase, unittest.TestSuite):
+                        stack.append(testcase)
+                    else:
+                        included_classes.add(testcase.__class__.__name__)
+
+            missing_classes = sorted(local_classes.difference(included_classes))
+            if missing_classes:
+                pretty = ", ".join(missing_classes)
+                location = getattr(module, "__file__", module.__name__)
+                failures.append(
+                    f"- {module.__name__} ({location}): missing from suite(): {pretty}.\n"
+                    "  Fix: add these TestCase classes to the module's suite() or adjust class_predicate()."
+                )
+        if failures:
+            message = "Found test classes not included in their module suite():\n" + "\n".join(failures)
+            self.fail(message)

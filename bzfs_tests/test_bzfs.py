@@ -107,7 +107,7 @@ def suite() -> unittest.TestSuite:
         TestHandleMinMaxSnapshots,
         TestFindDatasetsToSnapshot,
         TestPythonVersionCheck,
-        # TestPerformance,
+        TestPerformance,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -1786,6 +1786,7 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
 
 
 #############################################################################
+@unittest.skip("benchmark; enable for performance comparison")
 class TestPerformance(AbstractTestCase):
 
     def test_close_fds(self) -> None:
