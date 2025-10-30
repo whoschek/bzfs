@@ -21,6 +21,7 @@ import concurrent
 import itertools
 import os
 import sys
+import threading
 from collections import (
     deque,
 )
@@ -51,6 +52,7 @@ def parallel_iterator(
     iterator_builder: Callable[[Executor], Iterable[Iterable[Future[T]]]],
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
+    termination_event: threading.Event | None = None,  # optional event to request early async termination
 ) -> Iterator[T]:
     """Executes multiple iterators in parallel/concurrently, with explicit backpressure and configurable result ordering;
     avoids pre-submitting the entire workload.
@@ -134,6 +136,7 @@ def parallel_iterator(
             iterator=itertools.chain.from_iterable(iterator_builder(executor)),
             max_workers=max_workers,
             ordered=ordered,
+            termination_event=termination_event,
         )
 
 
@@ -141,10 +144,14 @@ def parallel_iterator_results(
     iterator: Iterator[Future[T]],
     max_workers: int,
     ordered: bool,
+    termination_event: threading.Event | None = None,
 ) -> Iterator[T]:
     """Yield results from an iterator of Future[T] using sliding-window parallelism with optional ordered delivery."""
     assert max_workers >= 0
     max_workers = max(1, max_workers)
+    termination_event = threading.Event() if termination_event is None else termination_event
+    if termination_event.is_set():
+        return
     # Materialize the next N=max_workers futures into a buffer, causing submission + parallel execution of their CLI calls
     fifo_buffer: deque[Future[T]] = deque(itertools.islice(iterator, max_workers))
     sentinel: Future[T] = Future()
@@ -152,6 +159,8 @@ def parallel_iterator_results(
 
     if ordered:
         while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
+            if termination_event.is_set():
+                return
             curr_future: Future[T] = fifo_buffer.popleft()
             next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
             if next_future is not sentinel:
@@ -164,6 +173,8 @@ def parallel_iterator_results(
         while todo_futures:
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
             while done_futures:  # submit the next CLI call whenever a CLI call returns
+                if termination_event.is_set():
+                    return
                 next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
                 if next_future is not sentinel:
                     todo_futures.add(next_future)

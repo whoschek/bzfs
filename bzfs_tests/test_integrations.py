@@ -483,7 +483,7 @@ class IntegrationTestCase(ParametrizedTestCase):
             job = bzfs_jobrunner.Job()
             job.is_test_mode = True
             if spawn_process_per_job:
-                args += ["--spawn_process_per_job"]
+                args += ["--spawn-process-per-job"]
         else:
             job = bzfs.Job()
             job.is_test_mode = True

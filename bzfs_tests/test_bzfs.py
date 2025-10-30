@@ -17,6 +17,7 @@
 from __future__ import (
     annotations,
 )
+import contextlib
 import logging
 import re
 import subprocess
@@ -66,10 +67,17 @@ from bzfs_main.detect import (
 from bzfs_main.filter import (
     SNAPSHOT_REGEX_FILTER_NAME,
 )
+from bzfs_main.progress_reporter import (
+    ProgressReporter,
+)
 from bzfs_main.replication import (
     _add_recv_property_options,
     _is_zfs_dataset_busy,
     _pv_cmd,
+    replicate_dataset,
+)
+from bzfs_main.retry import (
+    Retry,
 )
 from bzfs_main.snapshot_cache import (
     SnapshotCache,
@@ -106,6 +114,8 @@ def suite() -> unittest.TestSuite:
         TestDeleteEmptyDstDatasetsTask,
         TestHandleMinMaxSnapshots,
         TestFindDatasetsToSnapshot,
+        TestTerminationEventBehavior,
+        TestPerJobTermination,
         TestPythonVersionCheck,
         TestPerformance,
     ]
@@ -515,67 +525,103 @@ class TestHelperFunctions(AbstractTestCase):
             ["root", "root/a", "root/b", "root/c", "root/d", "root/e", "root/f", "root/g", "root/h", "root/i"],
             ["r1", "r1/a", "r1/a/b", "r1/a/b/c", "r1/a/b/c/d", "r2", "r2/a", "r2/a/b", "r2/a/b/c", "r2/a/b/c/d"],
             ["a", "ab", "ab/c", "abc", "abc/d", "abcd", "abcd/e", "abcde", "abcde/f", "a/b"],
-            [
-                "pkg-1",
-                "pkg-1/mod_1",
-                "pkg-1/mod_1/sub-1",
-                "pkg_2",
-                "pkg_2/mod-2",
-                "pkg_2/mod-2/sub_2",
-                "pkg3",
-                "pkg3/mod3",
-                "pkg3/mod3/sub-3",
-                "pkg3/mod3/sub-3/leaf_3",
-            ],
-            ["A", "A/B", "A/B/C", "a", "a/b", "a/b/c", "Alpha", "Alpha/Beta", "alpha", "alpha/beta"],
-            [
-                "top",
-                "top/mid1",
-                "top/mid1/leaf1",
-                "top/mid2",
-                "top/mid2/leaf2",
-                "top/mid2/leaf2/subleaf",
-                "top2",
-                "top2/mid",
-                "top2/mid/leaf",
-                "top2/mid/leaf/sub",
-            ],
-            ["d0", "d0/e1", "d0/e1/f2", "d0/e1/f2/g3", "d1", "d1/e2", "d2", "d2/e3", "d2/e3/f4", "d2/e3/f4/g5"],
-            ["x", "x/y", "x/y/z", "x/y1", "x/y1/z1", "x2", "x2/y", "x2/y/z", "x2/y/z/a", "x2/y1"],
-            ["m_n", "m_n/o", "m_n/o/p", "m-n", "m-n/o", "m-n/o/p", "mn", "mn/o", "mn/o/p", "mn/op"],
-            [
-                "a",
-                "a/b",
-                "a/b/c",
-                "a/b/c/d",
-                "a/b/c/d/e",
-                "a/b/c/d/e/f",
-                "a/b/c/d/e/f/g",
-                "a/b/c/d/e/f/g/h",
-                "a/b/c/d/e/f/g/h/i",
-                "a/b/c/d/e/f/g/h/i/j",
-            ],
-            ["root", "root/a", "root/a/b", "root/a/c", "root/d", "root/d/e", "root/d/f", "other", "other/x", "other/x/y"],
-            ["a", "A", "a/b", "A/B", "a/b/c", "A/B/C", "d", "D", "d/e", "D/E"],
-            ["a1", "a1/b1", "a1/b1/c1", "a1/b2", "a1/b2/c2", "a2", "a2/b1", "a2/b1/c1", "a2/b2", "a2/b2/c2"],
-            ["ab-c", "ab-c/d", "ab-c/d/e", "x_y", "x_y/z", "x_y/z/a", "foo-bar", "foo-bar/baz", "foo_bar", "foo_bar/qux"],
-            ["a", "ab", "ab/c", "abc", "abc/d", "b", "b/c", "bc", "bc/d", "c"],
-            ["m/n/p/q", "m", "m/n", "m/n/p", "m/x", "m/x/y", "n", "n/o", "n/o/p", "n/o/p/q"],
-            ["tank", "tank/a", "tank/a/b", "tank/aa", "tank/aa/b", "tank/aa/b/c", "tanka", "tanka/b", "tanka/b/c", "tankb"],
-            ["x", "x/a", "x/a/b", "x/a/b/c", "y", "y/a", "y/a/b", "z", "z/a", "z/a/b"],
-            [
-                "data",
-                "data/child",
-                "data/child/grand",
-                "data0",
-                "data0/child",
-                "data1",
-                "data1/child",
-                "data2",
-                "data2/child",
-                "data2/child/grand",
-            ],
         ]
+        if not self.is_unit_test:  # slow
+            exhaustive_basis_sets += [
+                [
+                    "pkg-1",
+                    "pkg-1/mod_1",
+                    "pkg-1/mod_1/sub-1",
+                    "pkg_2",
+                    "pkg_2/mod-2",
+                    "pkg_2/mod-2/sub_2",
+                    "pkg3",
+                    "pkg3/mod3",
+                    "pkg3/mod3/sub-3",
+                    "pkg3/mod3/sub-3/leaf_3",
+                ],
+                ["A", "A/B", "A/B/C", "a", "a/b", "a/b/c", "Alpha", "Alpha/Beta", "alpha", "alpha/beta"],
+                [
+                    "top",
+                    "top/mid1",
+                    "top/mid1/leaf1",
+                    "top/mid2",
+                    "top/mid2/leaf2",
+                    "top/mid2/leaf2/subleaf",
+                    "top2",
+                    "top2/mid",
+                    "top2/mid/leaf",
+                    "top2/mid/leaf/sub",
+                ],
+                ["d0", "d0/e1", "d0/e1/f2", "d0/e1/f2/g3", "d1", "d1/e2", "d2", "d2/e3", "d2/e3/f4", "d2/e3/f4/g5"],
+                ["x", "x/y", "x/y/z", "x/y1", "x/y1/z1", "x2", "x2/y", "x2/y/z", "x2/y/z/a", "x2/y1"],
+                ["m_n", "m_n/o", "m_n/o/p", "m-n", "m-n/o", "m-n/o/p", "mn", "mn/o", "mn/o/p", "mn/op"],
+                [
+                    "a",
+                    "a/b",
+                    "a/b/c",
+                    "a/b/c/d",
+                    "a/b/c/d/e",
+                    "a/b/c/d/e/f",
+                    "a/b/c/d/e/f/g",
+                    "a/b/c/d/e/f/g/h",
+                    "a/b/c/d/e/f/g/h/i",
+                    "a/b/c/d/e/f/g/h/i/j",
+                ],
+                [
+                    "root",
+                    "root/a",
+                    "root/a/b",
+                    "root/a/c",
+                    "root/d",
+                    "root/d/e",
+                    "root/d/f",
+                    "other",
+                    "other/x",
+                    "other/x/y",
+                ],
+                ["a", "A", "a/b", "A/B", "a/b/c", "A/B/C", "d", "D", "d/e", "D/E"],
+                ["a1", "a1/b1", "a1/b1/c1", "a1/b2", "a1/b2/c2", "a2", "a2/b1", "a2/b1/c1", "a2/b2", "a2/b2/c2"],
+                [
+                    "ab-c",
+                    "ab-c/d",
+                    "ab-c/d/e",
+                    "x_y",
+                    "x_y/z",
+                    "x_y/z/a",
+                    "foo-bar",
+                    "foo-bar/baz",
+                    "foo_bar",
+                    "foo_bar/qux",
+                ],
+                ["a", "ab", "ab/c", "abc", "abc/d", "b", "b/c", "bc", "bc/d", "c"],
+                ["m/n/p/q", "m", "m/n", "m/n/p", "m/x", "m/x/y", "n", "n/o", "n/o/p", "n/o/p/q"],
+                [
+                    "tank",
+                    "tank/a",
+                    "tank/a/b",
+                    "tank/aa",
+                    "tank/aa/b",
+                    "tank/aa/b/c",
+                    "tanka",
+                    "tanka/b",
+                    "tanka/b/c",
+                    "tankb",
+                ],
+                ["x", "x/a", "x/a/b", "x/a/b/c", "y", "y/a", "y/a/b", "z", "z/a", "z/a/b"],
+                [
+                    "data",
+                    "data/child",
+                    "data/child/grand",
+                    "data0",
+                    "data0/child",
+                    "data1",
+                    "data1/child",
+                    "data2",
+                    "data2/child",
+                    "data2/child/grand",
+                ],
+            ]
         for ex_basis_set in exhaustive_basis_sets:
             if False:  # can take minutes; toggle this when you modify root_datasets_if_recursive_zfs_snapshot_is_possible()
                 basis_sets = [list(subset) for r in range(len(ex_basis_set) + 1) for subset in combinations(ex_basis_set, r)]
@@ -1267,13 +1313,6 @@ class TestJobMethods(AbstractTestCase):
             mock_run.return_value = None
 
             # Act: Should complete without conflict and run a single incremental send based on h1->d2.
-            from bzfs_main.replication import (
-                replicate_dataset,
-            )
-            from bzfs_main.retry import (
-                Retry,
-            )
-
             replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0))
             # Assert: incremental planning was invoked (found common base -> incremental)
             mock_steps.assert_called_once()
@@ -1783,6 +1822,115 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
 
         self.assertListEqual(["tank/b"], received)
         self.assertDictEqual({label: ["tank/a"]}, result)
+
+
+#############################################################################
+class TestTerminationEventBehavior(AbstractTestCase):
+    """Covers termination_event branches in bzfs.Job, including early loop break and daemon sleep wake-up."""
+
+    class _DummyPR:
+        def __init__(self, *args: object, **kwargs: object) -> None:  # pragma: no cover - trivial
+            pass
+
+        def reset(self) -> None:  # pragma: no cover - trivial
+            pass
+
+        def pause(self) -> None:  # pragma: no cover - trivial
+            pass
+
+        def stop(self) -> None:  # pragma: no cover - trivial
+            pass
+
+    def make_job(self, args: list[str]) -> bzfs.Job:
+        parsed = self.argparser_parse_args(args=args)
+        job = bzfs.Job()
+        job.params = self.make_params(args=parsed)
+        job.is_test_mode = True
+        return job
+
+    def test_run_tasks_terminates_when_event_pre_set(self) -> None:
+        """If termination_event is already set at task loop start, terminate() is called and no task runs."""
+        job = self.make_job(["src1", "dst1", "src2", "dst2"])
+        job.termination_event.set()
+
+        with (
+            patch.object(job, "validate_once", return_value=None),
+            patch.object(bzfs, "ProgressReporter", self._DummyPR),
+            patch.object(job, "validate_task", side_effect=AssertionError("validate_task must not be called")),
+            patch.object(job, "run_task", side_effect=AssertionError("run_task must not be called")),
+            patch.object(job, "sleep_until_next_daemon_iteration", return_value=False) as sleep_mock,
+            patch.object(job, "terminate") as term_mock,
+        ):
+            job.run_tasks()
+            term_mock.assert_called_once()
+            # Ensure early break: sleep called exactly once after breaking out of inner loop
+            sleep_mock.assert_called_once()
+
+    def test_run_tasks_terminates_after_first_task_when_event_set_mid_loop(self) -> None:
+        """When termination_event is set between task iterations, terminate() is called and subsequent tasks are skipped."""
+        job = self.make_job(["s1", "d1", "s2", "d2", "s3", "d3"])
+        run_calls: list[str] = []
+
+        def run_task_side_effect() -> None:
+            run_calls.append("run_task")
+            if len(run_calls) == 1:
+                job.termination_event.set()  # simulate external termination after first task
+
+        with (
+            patch.object(job, "validate_once", return_value=None),
+            patch.object(bzfs, "ProgressReporter", self._DummyPR),
+            patch.object(job, "validate_task", return_value=None),
+            patch.object(job, "run_task", side_effect=run_task_side_effect),
+            patch.object(job, "sleep_until_next_daemon_iteration", return_value=False),
+            patch.object(job, "terminate") as term_mock,
+        ):
+            job.run_tasks()
+            self.assertEqual(1, len(run_calls), f"Expected exactly one task to run, got {len(run_calls)}")
+            term_mock.assert_called_once()
+
+    def test_sleep_until_next_daemon_iteration_wakes_on_termination(self) -> None:
+        """sleep_until_next_daemon_iteration returns early with False when termination_event is set during wait."""
+        job = self.make_job(["src", "dst"])
+
+        job.progress_reporter = cast(ProgressReporter, self._DummyPR())
+        # Provide required log file attribute for logging in sleep_until_next_daemon_iteration
+        job.params.log_params.log_file = "dummy.log"
+
+        # Stop time far in the future to ensure we rely on termination_event for wake-up
+        stoptime_nanos = time.monotonic_ns() + 2 * 1_000_000_000  # 2s
+
+        job.termination_event.set()
+        result: bool = job.sleep_until_next_daemon_iteration(stoptime_nanos)
+        self.assertLess(time.monotonic_ns(), stoptime_nanos - 0.2 * 1_000_000_000)
+        self.assertFalse(result, "Expected False when termination_event is set during daemon sleep")
+
+
+#############################################################################
+class TestPerJobTermination(AbstractTestCase):
+    """Verifies that Job.terminate() can be scoped to only kill the Job's own child processes."""
+
+    def test_scoped_termination_kills_only_registered_children(self) -> None:
+        job = bzfs.Job()
+        # Start two child processes; register only one with the job
+        p1 = subprocess.Popen(["sleep", "1"])
+        p2 = subprocess.Popen(["sleep", "1"])
+        try:
+            job.subprocesses.register_child_pid(p1.pid)
+            self.assertIsNone(p1.poll())
+            self.assertIsNone(p2.poll())
+
+            # Enable job-scoped termination and invoke terminate()
+            job.terminate()
+            time.sleep(0.05)
+
+            # Registered child should be terminated; unregistered should still be running
+            self.assertIsNotNone(p1.poll(), "Registered child should be terminated")
+            self.assertIsNone(p2.poll(), "Unregistered child should remain running")
+        finally:
+            with contextlib.suppress(Exception):
+                p1.kill()
+            with contextlib.suppress(Exception):
+                p2.kill()
 
 
 #############################################################################

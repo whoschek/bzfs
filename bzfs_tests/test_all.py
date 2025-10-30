@@ -36,6 +36,7 @@ import bzfs_tests.test_interner
 import bzfs_tests.test_jobrunner
 import bzfs_tests.test_loggers
 import bzfs_tests.test_parallel_batch_cmd
+import bzfs_tests.test_parallel_iterator
 import bzfs_tests.test_parallel_tasktree
 import bzfs_tests.test_parallel_tasktree_policy
 import bzfs_tests.test_period_anchors
@@ -57,6 +58,7 @@ def main() -> None:
         bzfs_tests.test_retry,
         bzfs_tests.test_period_anchors,
         bzfs_tests.test_progress_reporter,
+        bzfs_tests.test_parallel_iterator,
         bzfs_tests.test_parallel_batch_cmd,
         bzfs_tests.test_parallel_tasktree,
         bzfs_tests.test_parallel_tasktree_policy,

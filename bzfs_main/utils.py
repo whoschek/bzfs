@@ -142,10 +142,10 @@ V_ = TypeVar("V_")
 R_ = TypeVar("R_")
 
 
-def shuffle_dict(dictionary: dict[K_, V_]) -> dict[K_, V_]:
+def shuffle_dict(dictionary: dict[K_, V_], rand: random.Random = random.SystemRandom()) -> dict[K_, V_]:  # noqa: B008
     """Returns a new dict with items shuffled randomly."""
     items: list[tuple[K_, V_]] = list(dictionary.items())
-    random.shuffle(items)
+    rand.shuffle(items)
     return dict(items)
 
 
@@ -583,75 +583,148 @@ def die(msg: str, exit_code: int = DIE_STATUS, parser: argparse.ArgumentParser |
 
 
 def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
-    """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired."""
+    """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired, and
+    provides optional child PID tracking."""
     input_value = kwargs.pop("input", None)
     timeout = kwargs.pop("timeout", None)
     check = kwargs.pop("check", False)
+    subprocesses: Subprocesses | None = kwargs.pop("subprocesses", None)
     if input_value is not None:
         if kwargs.get("stdin") is not None:
             raise ValueError("input and stdin are mutually exclusive")
         kwargs["stdin"] = subprocess.PIPE
 
-    with subprocess.Popen(*args, **kwargs) as proc:
-        try:
-            stdout, stderr = proc.communicate(input_value, timeout=timeout)
-        except BaseException as e:
+    pid: int | None = None
+    try:
+        with subprocess.Popen(*args, **kwargs) as proc:
+            pid = proc.pid
+            if subprocesses is not None:
+                subprocesses.register_child_pid(pid)
             try:
-                if isinstance(e, subprocess.TimeoutExpired):
-                    terminate_process_subtree(root_pid=proc.pid)  # send SIGTERM to child process and its descendants
-            finally:
-                proc.kill()
-                raise
-        else:
-            exitcode: int | None = proc.poll()
-            assert exitcode is not None
-            if check and exitcode:
-                raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
-    return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
+                stdout, stderr = proc.communicate(input_value, timeout=timeout)
+            except BaseException as e:
+                try:
+                    if isinstance(e, subprocess.TimeoutExpired):
+                        terminate_process_subtree(root_pids=[proc.pid])  # send SIGTERM to child process and its descendants
+                finally:
+                    proc.kill()
+                    raise
+            else:
+                exitcode: int | None = proc.poll()
+                assert exitcode is not None
+                if check and exitcode:
+                    raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
+        return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
+    finally:
+        if subprocesses is not None and isinstance(pid, int):
+            subprocesses.unregister_child_pid(pid)
 
 
 def terminate_process_subtree(
-    except_current_process: bool = False, root_pid: int | None = None, sig: signal.Signals = signal.SIGTERM
+    except_current_process: bool = True, root_pids: list[int] | None = None, sig: signal.Signals = signal.SIGTERM
 ) -> None:
-    """Sends ``sig`` to ``root_pid`` and all of its descendant processes."""
+    """For each root PID: Sends the given signal to the root PID and all its descendant processes."""
     current_pid: int = os.getpid()
-    root_pid = current_pid if root_pid is None else root_pid
-    pids: list[int] = _get_descendant_processes(root_pid)
-    if root_pid == current_pid:
-        pids += [] if except_current_process else [current_pid]
-    else:
-        pids.insert(0, root_pid)
-    for pid in pids:
-        with contextlib.suppress(OSError):
-            os.kill(pid, sig)
+    root_pids = [current_pid] if root_pids is None else root_pids
+    all_pids: list[list[int]] = _get_descendant_processes(root_pids)
+    assert len(all_pids) == len(root_pids)
+    for i, pids in enumerate(all_pids):
+        root_pid = root_pids[i]
+        if root_pid == current_pid:
+            pids += [] if except_current_process else [current_pid]
+        else:
+            pids.insert(0, root_pid)
+        for pid in pids:
+            with contextlib.suppress(OSError):
+                os.kill(pid, sig)
 
 
-def _get_descendant_processes(root_pid: int) -> list[int]:
-    """Returns the list of all descendant process IDs for the given root PID, on POSIX systems."""
+def _get_descendant_processes(root_pids: list[int]) -> list[list[int]]:
+    """For each root PID, returns the list of all descendant process IDs for the given root PID, on POSIX systems."""
+    if len(root_pids) == 0:
+        return []
     procs: defaultdict[int, list[int]] = defaultdict(list)
     cmd: list[str] = ["ps", "-Ao", "pid,ppid"]
     try:
         lines: list[str] = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()
     except PermissionError:
-        return []  # degrade gracefully in sandbox environments that deny executing `ps` entirely
+        # degrade gracefully in sandbox environments that deny executing `ps` entirely
+        return [[] for _ in root_pids]
     for line in lines[1:]:  # all lines except the header line
         splits: list[str] = line.split()
         assert len(splits) == 2
         pid = int(splits[0])
         ppid = int(splits[1])
         procs[ppid].append(pid)
-    descendants: list[int] = []
 
-    def recursive_append(ppid: int) -> None:
+    def recursive_append(ppid: int, descendants: list[int]) -> None:
         """Recursively collect descendant PIDs starting from ``ppid``."""
         for child_pid in procs[ppid]:
             descendants.append(child_pid)
-            recursive_append(child_pid)
+            recursive_append(child_pid, descendants)
 
-    recursive_append(root_pid)
-    return descendants
+    all_descendants: list[list[int]] = []
+    for root_pid in root_pids:
+        descendants: list[int] = []
+        recursive_append(root_pid, descendants)
+        all_descendants.append(descendants)
+    return all_descendants
 
 
+@contextlib.contextmanager
+def termination_signal_handler(
+    termination_event: threading.Event,
+    termination_handler: Callable[[], None] = lambda: terminate_process_subtree(),
+) -> Iterator[None]:
+    """Context manager that installs SIGINT/SIGTERM handlers that set ``termination_event`` and, by default, terminate all
+    descendant processes."""
+    assert termination_event is not None
+
+    def _handler(_sig: int, _frame: object) -> None:
+        termination_event.set()
+        termination_handler()
+
+    previous_int_handler = signal.signal(signal.SIGINT, _handler)  # install new signal handler
+    previous_term_handler = signal.signal(signal.SIGTERM, _handler)  # install new signal handler
+    try:
+        yield  # run body of context manager
+    finally:
+        signal.signal(signal.SIGINT, previous_int_handler)  # restore original signal handler
+        signal.signal(signal.SIGTERM, previous_term_handler)  # restore original signal handler
+
+
+#############################################################################
+class Subprocesses:
+    """Provides per-job tracking of child PIDs so a job can safely terminate only the subprocesses it spawned itself; used
+    when multiple jobs run concurrently within the same Python process."""
+
+    def __init__(self) -> None:
+        self._lock: Final[threading.Lock] = threading.Lock()
+        self._child_pids: Final[dict[int, None]] = {}  # a set that preserves insertion order
+
+    def subprocess_run(self, *args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
+        """Wrapper around utils.subprocess_run() that auto-registers/unregisters child PIDs for per-job termination."""
+        return subprocess_run(*args, **kwargs, subprocesses=self)
+
+    def register_child_pid(self, pid: int) -> None:
+        """Registers a child PID as managed by this instance."""
+        with self._lock:
+            self._child_pids[pid] = None
+
+    def unregister_child_pid(self, pid: int) -> None:
+        """Unregisters a child PID that has exited or is no longer tracked."""
+        with self._lock:
+            self._child_pids.pop(pid, None)
+
+    def terminate_process_subtrees(self, sig: signal.Signals = signal.SIGTERM) -> None:
+        """Sends the given signal to all tracked child PIDs and their descendants, ignoring errors for dead PIDs."""
+        with self._lock:
+            pids: list[int] = list(self._child_pids)
+            self._child_pids.clear()
+        terminate_process_subtree(root_pids=pids, sig=sig)
+
+
+#############################################################################
 def pid_exists(pid: int) -> bool | None:
     """Returns True if a process with PID exists, False if not, or None on error."""
     if pid <= 0:

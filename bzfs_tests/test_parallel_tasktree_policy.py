@@ -21,6 +21,7 @@ from __future__ import (
 import logging
 import subprocess
 import threading
+import time
 import unittest
 from logging import (
     Logger,
@@ -30,6 +31,7 @@ from typing import (
 )
 from unittest.mock import (
     MagicMock,
+    patch,
 )
 
 from bzfs_main.parallel_tasktree import (
@@ -184,6 +186,47 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         )
         self.assertTrue(failed)
         self.assertListEqual(["a1", "a2"], sorted(self.submitted))
+
+    def test_cancel_pending_futures_when_fail_mode(self) -> None:
+        """Covers the branch that cancels pending futures when skip_on_error == 'fail'.
+
+        We run two datasets with max_workers=2. The first dataset raises immediately to trigger the fail-fast path in the
+        policy callback, while the second sleeps briefly to ensure it remains in the todo_futures set. This guarantees the
+        cancellation loop iterates at least once.
+        """
+
+        def process(dataset: str, tid: str, retry: Retry) -> bool:
+            self.append_submission(dataset)
+            if dataset == "a":
+                raise subprocess.CalledProcessError(1, "cmd")
+            # Keep the other future pending while the callback of the failing one runs
+            time.sleep(0.05)
+            return True
+
+        src_datasets = ["a", "b"]
+
+        # Patch Future.cancel to confirm the cancel loop is executed at least once.
+        # Patch termination_handler to assert we hit the 'fail' branch.
+        mock_terminate = MagicMock()
+        with patch("concurrent.futures.Future.cancel", return_value=False) as mock_cancel:
+            kwargs = dict(self.default_kwargs)
+            kwargs["skip_on_error"] = "fail"
+            with self.assertRaises(subprocess.CalledProcessError):
+                process_datasets_in_parallel_and_fault_tolerant(
+                    datasets=src_datasets,
+                    process_dataset=process,  # lambda
+                    skip_tree_on_error=lambda dataset: False,
+                    max_workers=2,
+                    termination_handler=mock_terminate,
+                    enable_barriers=False,
+                    **kwargs,
+                )
+
+        # Both datasets were submitted; the failing one raised, and the sleeping one remained pending
+        # long enough to be cancelled via the policy branch.
+        self.assertEqual(sorted(["a", "b"]), sorted(self.submitted))
+        mock_terminate.assert_called_once()
+        self.assertTrue(mock_cancel.called, "Expected at least one Future.cancel() call")
 
     def submit_raise_error(self, dataset: str, tid: str, retry: Retry) -> bool:
         self.append_submission(dataset)
