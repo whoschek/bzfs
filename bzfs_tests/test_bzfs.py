@@ -1861,11 +1861,11 @@ class TestTerminationEventBehavior(AbstractTestCase):
         job.params.log_params.log_file = "dummy.log"
 
         # Stop time far in the future to ensure we rely on termination_event for wake-up
-        stoptime_nanos = time.monotonic_ns() + 2_000_000_000  # 2s
+        stoptime_nanos = time.monotonic_ns() + 2 * 1_000_000_000  # 2s
 
         job.termination_event.set()
         result: bool = job.sleep_until_next_daemon_iteration(stoptime_nanos)
-        self.assertLess(time.monotonic_ns(), stoptime_nanos - 1)
+        self.assertLess(time.monotonic_ns(), stoptime_nanos - 0.2 * 1_000_000_000)
         self.assertFalse(result, "Expected False when termination_event is set during daemon sleep")
 
 
