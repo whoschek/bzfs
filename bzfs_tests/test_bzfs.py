@@ -1862,7 +1862,7 @@ class TestTerminationEventBehavior(AbstractTestCase):
         job.params.log_params.log_file = "dummy.log"
 
         # Stop time far in the future to ensure we rely on termination_event for wake-up
-        stoptime_nanos = time.monotonic_ns() + 500_000_000  # 0.5s
+        stoptime_nanos = time.monotonic_ns() + 2_000_000_000  # 2s
 
         def trigger() -> None:
             time.sleep(0.02)
