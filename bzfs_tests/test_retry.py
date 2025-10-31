@@ -18,6 +18,7 @@ from __future__ import (
     annotations,
 )
 import argparse
+import threading
 import unittest
 from logging import (
     Logger,
@@ -75,7 +76,7 @@ class TestRunWithRetries(unittest.TestCase):
                 raise RetryableError("fail", no_sleep=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", run_with_retries(MagicMock(spec=Logger), retry_policy, fn))
+        self.assertEqual("ok", run_with_retries(MagicMock(spec=Logger), retry_policy, threading.Event(), fn))
         self.assertEqual([0, 1, 2], calls)
 
     @patch("time.sleep")
@@ -93,7 +94,7 @@ class TestRunWithRetries(unittest.TestCase):
             raise RetryableError("fail", no_sleep=True) from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            run_with_retries(MagicMock(spec=Logger), retry_policy, fn)
+            run_with_retries(MagicMock(spec=Logger), retry_policy, threading.Event(), fn)
 
     @patch("time.sleep")
     def test_run_with_retries_no_retries(self, mock_sleep: MagicMock) -> None:
@@ -104,7 +105,7 @@ class TestRunWithRetries(unittest.TestCase):
             raise RetryableError("fail") from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            run_with_retries(mock_log, retry_policy, fn)
+            run_with_retries(mock_log, retry_policy, threading.Event(), fn)
         mock_log.warning.assert_not_called()
         mock_sleep.assert_not_called()
 
@@ -127,5 +128,5 @@ class TestRunWithRetries(unittest.TestCase):
                 raise RetryableError("fail", no_sleep=True) from ValueError("boom")
 
             with self.assertRaises(ValueError):
-                run_with_retries(mock_log, retry_policy, fn)
+                run_with_retries(mock_log, retry_policy, threading.Event(), fn)
         mock_log.warning.assert_called_once()

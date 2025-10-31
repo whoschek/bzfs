@@ -268,8 +268,10 @@ class ConnectionLeaseManager:
         try:
             fd = os.open(src_path, flags=open_flags, mode=FILE_PERMISSIONS)
 
-            # Acquire an exclusive lock; will raise a BlockingIOError if lock is already held by another process.
-            # The (advisory) lock is auto-released when the process terminates or the fd is closed.
+            # Acquire an exclusive lock; will raise a BlockingIOError if lock is already held by this process or another
+            # process. The (advisory) lock is auto-released when the process terminates or the fd is closed.
+            # Note: All supported operating systems also reject any attempt to acquire an exclusive flock that is already
+            # held within the same process under an fd obtained from a separate os.open() call, by raising a BlockingIOError.
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
 
             socket_name: str = os.path.basename(src_path)

@@ -23,6 +23,7 @@ from __future__ import (
 )
 import argparse
 import random
+import threading
 import time
 from dataclasses import (
     dataclass,
@@ -92,8 +93,11 @@ class RetryPolicy:
 T = TypeVar("T")
 
 
-def run_with_retries(log: Logger, policy: RetryPolicy, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:  # thread-safe
-    """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
+def run_with_retries(
+    log: Logger, policy: RetryPolicy, termination_event: threading.Event, fn: Callable[..., T], *args: Any, **kwargs: Any
+) -> T:  # thread-safe
+    """Runs the given function with the given arguments, and retries on failure as indicated by policy; The termination_event
+    allows for early async cancellation of the retry loop."""
     c_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     retry_count: int = 0
     sysrandom: random.SystemRandom | None = None
@@ -103,7 +107,9 @@ def run_with_retries(log: Logger, policy: RetryPolicy, fn: Callable[..., T], *ar
             return fn(*args, **kwargs, retry=Retry(retry_count))  # Call the target function with provided args
         except RetryableError as retryable_error:
             elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
-            if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
+            will_retry: bool = False
+            if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos and not termination_event.is_set():
+                will_retry = True
                 retry_count += 1
                 if retryable_error.no_sleep and retry_count <= 1:
                     log.info(f"Retrying [{retry_count}/{policy.retries}] immediately ...")
@@ -111,9 +117,9 @@ def run_with_retries(log: Logger, policy: RetryPolicy, fn: Callable[..., T], *ar
                     sysrandom = random.SystemRandom() if sysrandom is None else sysrandom
                     sleep_nanos: int = sysrandom.randint(policy.min_sleep_nanos, c_max_sleep_nanos)
                     log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
-                    time.sleep(sleep_nanos / 1_000_000_000)
+                    termination_event.wait(sleep_nanos / 1_000_000_000)
                     c_max_sleep_nanos = min(policy.max_sleep_nanos, 2 * c_max_sleep_nanos)  # exponential backoff with cap
-            else:
+            if termination_event.is_set() or not will_retry:
                 if policy.retries > 0:
                     log.warning(
                         f"Giving up because the last [{retry_count}/{policy.retries}] retries across "

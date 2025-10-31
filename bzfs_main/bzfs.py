@@ -49,7 +49,6 @@ import heapq
 import itertools
 import os
 import re
-import signal
 import subprocess
 import sys
 import threading
@@ -75,7 +74,6 @@ from subprocess import (
     CalledProcessError,
 )
 from typing import (
-    IO,
     Any,
     Callable,
     Final,
@@ -126,7 +124,6 @@ from bzfs_main.filter import (
     filter_snapshots,
 )
 from bzfs_main.loggers import (
-    Tee,
     get_simple_logger,
     reset_logger,
 )
@@ -173,6 +170,7 @@ from bzfs_main.utils import (
     YEAR_WITH_FOUR_DIGITS_REGEX,
     Interner,
     SortedInterner,
+    Subprocesses,
     SynchronizedBool,
     SynchronizedDict,
     append_if_absent,
@@ -183,14 +181,13 @@ from bzfs_main.utils import (
     human_readable_bytes,
     human_readable_duration,
     is_descendant,
-    open_nofollow,
     percent,
     pretty_print_formatter,
     replace_in_lines,
     replace_prefix,
     sha256_85_urlsafe_base64,
     sha256_128_urlsafe_base64,
-    terminate_process_subtree,
+    termination_signal_handler,
     validate_dataset_name,
     validate_property_name,
     xappend,
@@ -221,7 +218,10 @@ def main() -> None:
     """API for command line clients."""
     prev_umask: int = os.umask(UMASK)
     try:
-        run_main(argument_parser().parse_args(), sys.argv)
+        # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
+        termination_event: threading.Event = threading.Event()
+        with termination_signal_handler(termination_event=termination_event):
+            run_main(argument_parser().parse_args(), sys.argv, termination_event=termination_event)
     except subprocess.CalledProcessError as e:
         ret: int = e.returncode
         ret = DIE_STATUS if isinstance(ret, int) and 1 <= ret <= STILL_RUNNING_STATUS else ret
@@ -230,17 +230,24 @@ def main() -> None:
         os.umask(prev_umask)  # restore prior global state
 
 
-def run_main(args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
+def run_main(
+    args: argparse.Namespace,
+    sys_argv: list[str] | None = None,
+    log: Logger | None = None,
+    termination_event: threading.Event | None = None,
+) -> None:
     """API for Python clients; visible for testing; may become a public API eventually."""
-    Job().run_main(args, sys_argv, log)
+    Job(termination_event=termination_event).run_main(args, sys_argv, log)
 
 
 #############################################################################
 class Job:
     """Executes one bzfs run, coordinating snapshot replication tasks."""
 
-    def __init__(self) -> None:
+    def __init__(self, termination_event: threading.Event | None = None) -> None:
         self.params: Params
+        self.subprocesses: Final[Subprocesses] = Subprocesses()
+        self.termination_event: Final[threading.Event] = termination_event or threading.Event()
         self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: dict[str, DatasetProperties] = {}
@@ -282,14 +289,9 @@ class Job:
         for i, cache_item in enumerate(cache_items):
             cache_item.connection_pools.shutdown(f"{i + 1}/{len(cache_items)}")
 
-    def terminate(self, old_term_handler: Any, except_current_process: bool = False) -> None:
-        """Shuts down gracefully on SIGTERM, optionally killing descendants."""
-
-        def post_shutdown() -> None:
-            signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
-            terminate_process_subtree(except_current_process=except_current_process)
-
-        with xfinally(post_shutdown):
+    def terminate(self) -> None:
+        """Shuts down gracefully; also terminates descendant processes, if any."""
+        with xfinally(self.subprocesses.terminate_process_subtrees):
             self.shutdown()
 
     def run_main(self, args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
@@ -297,10 +299,19 @@ class Job:
         assert isinstance(self.error_injection_triggers, dict)
         assert isinstance(self.delete_injection_triggers, dict)
         assert isinstance(self.inject_params, dict)
-        with xfinally(reset_logger):  # runs reset_logger() on exit, without masking exception raised in body of `with` block
+        logger_name_suffix: str = ""
+
+        def _reset_logger() -> None:
+            if logger_name_suffix:  # reset Logger unless it's a Logger outside of our control
+                reset_logger(logger_name_suffix=logger_name_suffix)
+
+        with xfinally(_reset_logger):  # runs _reset_logger() on exit, without masking error raised in body of `with` block
             try:
                 log_params: LogParams = LogParams(args)
-                log = bzfs_main.loggers.get_logger(log_params=log_params, args=args, log=log)
+                logger_name_suffix = "" if log is not None else log_params.logger_name_suffix
+                log = bzfs_main.loggers.get_logger(
+                    log_params=log_params, args=args, log=log, logger_name_suffix=logger_name_suffix
+                )
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
                 get_simple_logger(PROG_NAME).error("Log init: %s", e, exc_info=not isinstance(e, SystemExit))
@@ -324,45 +335,35 @@ class Job:
                     log.log(LOG_TRACE, "Parsed CLI arguments: %s", args)
                 self.params = p = Params(args, sys_argv or [], log_params, log, self.inject_params)
                 log_params.params = p
-                with open_nofollow(log_params.log_file, "a", encoding="utf-8", perm=FILE_PERMISSIONS) as log_file_fd:
-                    with contextlib.redirect_stderr(cast(IO[Any], Tee(log_file_fd, sys.stderr))):  # stderr to logfile+stderr
-                        lock_file: str = p.lock_file_name()
-                        lock_fd = os.open(
-                            lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, FILE_PERMISSIONS
-                        )
-                        with xfinally(lambda: os.close(lock_fd)):
-                            try:
-                                # Acquire an exclusive lock; will raise an error if lock is already held by another process.
-                                # The (advisory) lock is auto-released when the process terminates or the fd is closed.
-                                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
-                            except BlockingIOError:
-                                msg = "Exiting as same previous periodic job is still running without completion yet per "
-                                die(msg + lock_file, STILL_RUNNING_STATUS)
+                lock_file: str = p.lock_file_name()
+                lock_fd = os.open(
+                    lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, FILE_PERMISSIONS
+                )
+                with xfinally(lambda: os.close(lock_fd)):
+                    try:
+                        # Acquire an exclusive lock; will raise a BlockingIOError if lock is already held by this process or
+                        # another process. The (advisory) lock is auto-released when the process terminates or the fd is
+                        # closed.
+                        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
+                    except BlockingIOError:
+                        msg = "Exiting as same previous periodic job is still running without completion yet per "
+                        die(msg + lock_file, STILL_RUNNING_STATUS)
 
-                            # xfinally: unlink the lock_file while still holding the flock on its fd — it's correct and safe:
-                            # - Performing unlink() before close() avoids a race where a subsequent bzfs process could
-                            #   recreate and lock a fresh inode for the same path between our close() and a later unlink().
-                            #   In that case, a late unlink would delete the newer process's lock_file path.
-                            # - At this point, critical work is complete; the remaining steps are shutdown mechanics,
-                            #   so continuing to hold the flock until close() is correct, safe, and simple.
-                            with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # don't accumulate stale files
-
-                                # On CTRL-C and SIGTERM, send signal to descendant processes to also terminate descendants
-                                old_term_handler = signal.getsignal(signal.SIGTERM)
-                                signal.signal(signal.SIGTERM, lambda sig, f: self.terminate(old_term_handler))
-                                old_int_handler = signal.signal(signal.SIGINT, lambda s, f: self.terminate(old_term_handler))
-
-                                try:
-                                    self.run_tasks()  # do the real work
-                                except BaseException:
-                                    self.terminate(old_term_handler, except_current_process=True)
-                                    raise
-                                finally:
-                                    signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
-                                    signal.signal(signal.SIGINT, old_int_handler)  # restore original signal handler
-                                self.shutdown()
-                                with contextlib.suppress(BrokenPipeError):
-                                    sys.stderr.flush()
+                    # xfinally: unlink the lock_file while still holding the flock on its fd — it's correct and safe:
+                    # - Performing unlink() before close() avoids a race where a subsequent bzfs process could
+                    #   recreate and lock a fresh inode for the same path between our close() and a later unlink().
+                    #   In that case, a late unlink would delete the newer process's lock_file path.
+                    # - At this point, critical work is complete; the remaining steps are shutdown mechanics,
+                    #   so continuing to hold the flock until close() is correct, safe, and simple.
+                    with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # don't accumulate stale files
+                        try:
+                            self.run_tasks()  # do the real work
+                        except BaseException:
+                            self.terminate()
+                            raise
+                        self.shutdown()
+                        with contextlib.suppress(BrokenPipeError):
+                            sys.stderr.flush()
             except subprocess.CalledProcessError as e:
                 log_error_on_exit(e, e.returncode)
                 raise
@@ -403,6 +404,9 @@ class Job:
                 self.progress_reporter.reset()
                 src, dst = p.src, p.dst
                 for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
+                    if self.termination_event.is_set():
+                        self.terminate()
+                        break
                     src.root_dataset = src.basis_root_dataset = src_root_dataset
                     dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
                     p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
@@ -468,9 +472,9 @@ class Job:
         offset_nanos: int = (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000
         sleep_nanos = min(sleep_nanos, max(0, offset_nanos))
         log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), f" ... [Log {p.log_params.log_file}]")
-        time.sleep(sleep_nanos / 1_000_000_000)
+        self.termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
         config.current_datetime = datetime.now(config.tz)
-        return time.monotonic_ns() < daemon_stoptime_nanos
+        return time.monotonic_ns() < daemon_stoptime_nanos and not self.termination_event.is_set()
 
     def print_replication_stats(self, start_time_nanos: int) -> None:
         """Logs overall replication statistics after a job cycle completes."""
@@ -891,6 +895,8 @@ class Job:
                 skip_tree_on_error=lambda dataset: False,
                 skip_on_error=p.skip_on_error,
                 max_workers=max_workers,
+                termination_event=self.termination_event,
+                termination_handler=self.terminate,
                 enable_barriers=False,
                 task_name="--delete-dst-snapshots",
                 append_exception=self.append_exception,
@@ -1232,6 +1238,8 @@ class Job:
             skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[src2dst(dataset)],
             skip_on_error=p.skip_on_error,
             max_workers=max_workers,
+            termination_event=self.termination_event,
+            termination_handler=self.terminate,
             enable_barriers=False,
             task_name="Replication",
             append_exception=self.append_exception,

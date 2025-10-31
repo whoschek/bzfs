@@ -48,7 +48,7 @@ _bzfs() {
 
 complete -o default -o nospace -F _bzfs bzfs
 
-__opts_bzfs_jobrunner='--create-src-snapshots --daemon-monitor-snapshots-frequency --daemon-prune-dst-frequency --daemon-prune-src-frequency --daemon-replication-frequency --dst-host --dst-hosts --dst-root-datasets --dst-snapshot-plan --help --help, -h --jitter --job-id --job-run --jobrunner-dryrun --jobrunner-log-level --localhost --monitor-dst-snapshots --monitor-snapshot-plan --monitor-src-snapshots --prune-dst-snapshots --prune-src-bookmarks --prune-src-snapshots --replicate --retain-dst-targets --root-dataset-pairs --src-bookmark-plan --src-host --src-hosts --src-snapshot-plan --ssh-dst-config-file --ssh-dst-port --ssh-dst-user --ssh-src-config-file --ssh-src-port --ssh-src-user --version --work-period-seconds --worker-timeout-seconds --workers -h'
+__opts_bzfs_jobrunner='--create-src-snapshots --daemon-monitor-snapshots-frequency --daemon-prune-dst-frequency --daemon-prune-src-frequency --daemon-replication-frequency --dst-host --dst-hosts --dst-root-datasets --dst-snapshot-plan --help --help, -h --jitter --job-id --job-run --jobrunner-dryrun --jobrunner-log-level --localhost --monitor-dst-snapshots --monitor-snapshot-plan --monitor-src-snapshots --prune-dst-snapshots --prune-src-bookmarks --prune-src-snapshots --replicate --retain-dst-targets --root-dataset-pairs --spawn-process-per-job --src-bookmark-plan --src-host --src-hosts --src-snapshot-plan --ssh-dst-config-file --ssh-dst-port --ssh-dst-user --ssh-src-config-file --ssh-src-port --ssh-src-user --version --work-period-seconds --worker-timeout-seconds --workers -h'
 
 __choices_bzfs_jobrunner() {
   case "$1" in

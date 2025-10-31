@@ -144,7 +144,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
                       [--job-run STRING] [--workers INT[%]]
                       [--work-period-seconds FLOAT] [--jitter]
                       [--worker-timeout-seconds FLOAT]
-                      [--jobrunner-dryrun]
+                      [--spawn-process-per-job] [--jobrunner-dryrun]
                       [--jobrunner-log-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
                       [--daemon-replication-frequency STRING]
                       [--daemon-prune-src-frequency STRING]
@@ -496,6 +496,17 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
 
 *  If this much time has passed after a worker process has started executing, kill the straggling
     worker (optional). Other workers remain unaffected. Examples: 60, 3600
+
+<!-- -->
+
+<div id="--spawn-process-per-job"></div>
+
+**--spawn-process-per-job**
+
+*  Spawn a Python process per subjob instead of a Python thread per subjob (optional). The former
+    is only recommended for a job operating in parallel on a large number of hosts as it helps
+    avoid exceeding per-process limits such as the default max number of open file descriptors, at
+    the expense of increased startup latency.
 
 <!-- -->
 

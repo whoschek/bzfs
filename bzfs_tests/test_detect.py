@@ -237,7 +237,7 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         ]
         p.available_programs.pop("local", None)
         with (
-            patch("subprocess.run", side_effect=outputs),
+            patch.object(job.subprocesses, "subprocess_run", side_effect=outputs),
             patch.object(bzfs_main.detect, "_detect_available_programs_remote"),
             patch.object(bzfs_main.detect, "_detect_zpool_features"),
         ):
@@ -251,7 +251,7 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         ]
         p.available_programs.pop("local", None)
         with (
-            patch("subprocess.run", side_effect=outputs),
+            patch.object(job.subprocesses, "subprocess_run", side_effect=outputs),
             patch.object(bzfs_main.detect, "_detect_available_programs_remote"),
             patch.object(bzfs_main.detect, "_detect_zpool_features"),
         ):

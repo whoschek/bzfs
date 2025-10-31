@@ -76,7 +76,6 @@ from bzfs_main import (
 )
 from bzfs_main.argparse_cli import (
     PROG_AUTHOR,
-    SKIP_ON_ERROR_DEFAULT,
 )
 from bzfs_main.detect import (
     DUMMY_DATASET,
@@ -94,13 +93,14 @@ from bzfs_main.utils import (
     DIE_STATUS,
     LOG_TRACE,
     UMASK,
+    Subprocesses,
     format_dict,
     format_obj,
-    has_siblings,
     human_readable_duration,
     percent,
     shuffle_dict,
     terminate_process_subtree,
+    termination_signal_handler,
 )
 from bzfs_main.utils import PROG_NAME as BZFS_PROG_NAME
 
@@ -412,8 +412,11 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="If this much time has passed after a worker process has started executing, kill the straggling worker "
              "(optional). Other workers remain unaffected. Examples: 60, 3600\n\n")
     parser.add_argument(
-        "--spawn_process_per_job", action="store_true",
-        help=argparse.SUPPRESS)
+        "--spawn-process-per-job", action="store_true",
+        help="Spawn a Python process per subjob instead of a Python thread per subjob (optional). The former is only "
+             "recommended for a job operating in parallel on a large number of hosts as it helps avoid exceeding "
+             "per-process limits such as the default max number of open file descriptors, at the expense of increased "
+             "startup latency.\n\n")
     parser.add_argument(
         "--jobrunner-dryrun", action="store_true",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
@@ -463,7 +466,10 @@ def main() -> None:
     """API for command line clients."""
     prev_umask: int = os.umask(UMASK)
     try:
-        Job().run_main(sys.argv)
+        # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
+        termination_event: threading.Event = threading.Event()
+        with termination_signal_handler(termination_event=termination_event):
+            Job(termination_event=termination_event).run_main(sys_argv=sys.argv)
     finally:
         os.umask(prev_umask)  # restore prior global state
 
@@ -472,13 +478,14 @@ def main() -> None:
 class Job:
     """Coordinates subjobs per the CLI flags; Each subjob handles one host pair and may run in its own process or thread."""
 
-    def __init__(self, log: Logger | None = None) -> None:
-        """Initialize caches and logger shared across subjobs."""
+    def __init__(self, log: Logger | None = None, termination_event: threading.Event | None = None) -> None:
         # immutable variables:
+        self.subprocesses: Final[Subprocesses] = Subprocesses()
+        self.termination_event: Final[threading.Event] = termination_event or threading.Event()
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
         self.log: Logger = log if log is not None else get_simple_logger(PROG_NAME)
-        self.loopback_address: str = _detect_loopback_address()
+        self.loopback_address: Final[str] = _detect_loopback_address()
 
         # mutable variables:
         self.first_exception: int | None = None
@@ -552,7 +559,7 @@ class Job:
                 f"Problematic subset of --dst-root-datasets: {bad_root_datasets} for src_hosts: {sorted(basis_src_hosts)}"
             )
         if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
-            random.shuffle(src_hosts)
+            random.SystemRandom().shuffle(src_hosts)
             dst_hosts = shuffle_dict(dst_hosts)
         ssh_src_user: str = args.ssh_src_user or args.src_user  # --src-user is deprecated
         ssh_dst_user: str = args.ssh_dst_user or args.dst_user  # --dst-user is deprecated
@@ -907,7 +914,14 @@ class Job:
         work_period_seconds: float,
         jitter: bool,
     ) -> None:
-        """Executes subjobs sequentially or in parallel, respecting barriers."""
+        """Executes subjobs sequentially or in parallel, respecting '~' barriers.
+
+        Design note on subjob failure, isolation and termination:
+        - On subjob failure the subjob's subtree is skipped.
+        - Subjob failures are converted to return codes (not exceptions) so the policy does not invoke a termination handler
+          on such failures and sibling subjobs continue unaffected. This preserves per-subjob isolation, both within a single
+          process (thread-per-subjob mode; default) as well as in process-per-subjob mode (``--spawn-process-per-job``).
+        """
         self.stats = Stats()
         self.stats.jobs_all = len(subjobs)
         log = self.log
@@ -915,11 +929,11 @@ class Job:
         interval_nanos = 0 if len(subjobs) == 0 else round(1_000_000_000 * max(0.0, work_period_seconds) / num_intervals)
         assert interval_nanos >= 0
         if jitter:  # randomize job start time to avoid potential thundering herd problems in large distributed systems
-            sleep_nanos = random.randint(0, interval_nanos)  # noqa: S311
+            sleep_nanos = random.SystemRandom().randint(0, interval_nanos)
             log.info("Jitter: Delaying job start time by sleeping for %s ...", human_readable_duration(sleep_nanos))
-            time.sleep(sleep_nanos / 1_000_000_000)  # seconds
+            self.termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
         sorted_subjobs: list[str] = sorted(subjobs.keys())
-        spawn_process_per_job: bool = self.spawn_process_per_job or has_siblings(sorted_subjobs, self.is_test_mode)
+        spawn_process_per_job: bool = self.spawn_process_per_job
         log.log(LOG_TRACE, "%s: %s", "spawn_process_per_job", spawn_process_per_job)
         if process_datasets_in_parallel_and_fault_tolerant(
             log=log,
@@ -929,9 +943,11 @@ class Job:
             )
             == 0,
             skip_tree_on_error=lambda subjob: True,
-            skip_on_error=SKIP_ON_ERROR_DEFAULT,
-            max_workers=max_workers if spawn_process_per_job else 1,
+            skip_on_error="dataset",
+            max_workers=max_workers,
             interval_nanos=lambda last_update_nanos, dataset, submitted_count: interval_nanos,
+            termination_event=self.termination_event,
+            termination_handler=self.subprocesses.terminate_process_subtrees,
             task_name="Subjob",
             retry_policy=None,  # no retries
             dry_run=False,
@@ -993,12 +1009,9 @@ class Job:
                 stats.sum_elapsed_nanos += elapsed_nanos
                 stats.jobs_failed += 1 if returncode != 0 else 0
                 msg = str(stats)
-                assert stats.jobs_all >= 0, msg
-                assert stats.jobs_started >= 0, msg
-                assert stats.jobs_completed >= 0, msg
-                assert stats.jobs_failed >= 0, msg
-                assert stats.jobs_running >= 0, msg
                 assert stats.sum_elapsed_nanos >= 0, msg
+                assert stats.jobs_running >= 0, msg
+                assert stats.jobs_failed >= 0, msg
                 assert stats.jobs_failed <= stats.jobs_completed, msg
                 assert stats.jobs_completed <= stats.jobs_started, msg
                 assert stats.jobs_started <= stats.jobs_all, msg
@@ -1024,7 +1037,7 @@ class Job:
 
     def _bzfs_run_main(self, cmd: list[str]) -> None:
         """Delegates execution to :mod:`bzfs` using parsed arguments."""
-        bzfs_job = bzfs.Job()
+        bzfs_job = bzfs.Job(termination_event=self.termination_event)
         bzfs_job.is_test_mode = self.is_test_mode
         bzfs_job.run_main(bzfs.argument_parser().parse_args(cmd[1:]), cmd)
 
@@ -1036,6 +1049,8 @@ class Job:
         if self.jobrunner_dryrun:
             return 0
         proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, text=True)  # run job in a separate subprocess
+        pid: int = proc.pid
+        self.subprocesses.register_child_pid(pid)
         try:
             proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
         except subprocess.TimeoutExpired:
@@ -1048,11 +1063,13 @@ class Job:
                 proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
             except subprocess.TimeoutExpired:
                 log.error("%s", f"Killing worker job as it failed to terminate within {timeout_secs}s: {cmd_str}")
-                terminate_process_subtree(except_current_process=True, root_pid=proc.pid)  # Send SIGTERM to process subtree
+                terminate_process_subtree(root_pids=[proc.pid])  # Send SIGTERM to process subtree
                 proc.kill()  # Sends SIGKILL signal to job subprocess because SIGTERM wasn't enough
                 timeout_secs = min(0.025, timeout_secs)
                 with contextlib.suppress(subprocess.TimeoutExpired):
                     proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
+        finally:
+            self.subprocesses.unregister_child_pid(pid)
         return proc.returncode
 
     def validate_src_hosts(self, src_hosts: list[str]) -> list[str]:

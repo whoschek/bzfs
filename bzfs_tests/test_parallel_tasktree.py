@@ -21,11 +21,17 @@ import logging
 import os
 import random
 import string
+import threading
 import time
 import unittest
-from concurrent.futures import Future
+from concurrent.futures import (
+    Future,
+)
 from typing import (
     Any,
+)
+from unittest.mock import (
+    MagicMock,
 )
 
 from bzfs_main.parallel_tasktree import (
@@ -174,6 +180,90 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
     def test_str_treenode(self) -> None:
         self.assertTrue(bool(str(_make_tree_node("foo", {}))))
+
+    def test_termination_event_pre_set_stops_before_submission(self) -> None:
+        """If termination_event is set before scheduling, no tasks are submitted and the run fails."""
+        log = MagicMock(logging.Logger)
+        datasets = ["a", "b", "c"]
+        calls: list[str] = []
+
+        def process_dataset(
+            dataset: str, submitted_count: int
+        ) -> CompletionCallback:  # pragma: no cover - exercised via scheduler
+            calls.append(dataset)
+
+            def _cb(todo_futures: set[Future[CompletionCallback]]) -> tuple[bool, bool]:
+                return True, False
+
+            return _cb
+
+        termination_event = threading.Event()
+        termination_event.set()
+
+        failed = process_datasets_in_parallel(
+            log=log,
+            datasets=datasets,
+            process_dataset=process_dataset,
+            max_workers=2,
+            termination_event=termination_event,
+            enable_barriers=False,
+            is_test_mode=True,
+        )
+
+        self.assertTrue(failed, "Termination should mark the run as failed")
+        self.assertEqual(0, len(calls), "No dataset should be submitted when already terminated")
+
+    def test_termination_event_set_during_sleep_stops_new_submissions(self) -> None:
+        """When termination_event is set while the coordinator sleeps, it should wake early, stop submitting, and fail."""
+
+        log = MagicMock(logging.Logger)
+        datasets = ["a", "b", "c"]
+        calls: list[str] = []
+        termination_event = threading.Event()
+
+        # Ensure the scheduler sleeps between submissions to hit the termination_event.wait() path
+        def interval_nanos(last_update_nanos: int, dataset: str, submitted_count: int) -> int:
+            # Large enough to allow the background thread to set the event and wake the wait early
+            return 500_000_000  # 0.5s
+
+        def process_dataset(
+            dataset: str, submitted_count: int
+        ) -> CompletionCallback:  # pragma: no cover - exercised via scheduler
+            calls.append(dataset)
+
+            def _cb(todo_futures: set[Future[CompletionCallback]]) -> tuple[bool, bool]:
+                return True, False
+
+            return _cb
+
+        # Background thread that sets termination once the first task has been submitted
+        def trigger_termination() -> None:
+            # Busy-wait is fine here because it runs for a very short time and simplifies determinism
+            while len(calls) < 1:
+                time.sleep(0.005)
+            # Give the coordinator a moment to enter wait(); then signal termination to wake it
+            time.sleep(0.01)
+            termination_event.set()
+
+        t = threading.Thread(target=trigger_termination)
+        t.start()
+
+        failed = process_datasets_in_parallel(
+            log=log,
+            datasets=datasets,
+            process_dataset=process_dataset,
+            max_workers=2,
+            interval_nanos=interval_nanos,
+            termination_event=termination_event,
+            enable_barriers=False,
+            is_test_mode=True,
+        )
+
+        t.join(timeout=2)
+
+        self.assertTrue(failed, "Termination should mark the run as failed")
+        # Exactly one submission is expected: first submitted before sleep, then termination prevents further submissions
+        self.assertEqual(1, len(calls), f"Expected 1 submitted dataset, got {len(calls)}: {calls}")
 
 
 #############################################################################

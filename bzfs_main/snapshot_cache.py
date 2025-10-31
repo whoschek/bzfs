@@ -321,7 +321,7 @@ def set_last_modification_time(
             fd = os.open(path, flags_base)  # we lost the race, open existing file
 
     try:
-        # Acquire an exclusive lock; will block if lock is already held by another process.
+        # Acquire an exclusive lock; will block if lock is already held by this process or another process.
         # The (advisory) lock is auto-released when the process terminates or the fd is closed.
         fcntl.flock(fd, fcntl.LOCK_EX)
 

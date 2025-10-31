@@ -54,6 +54,7 @@ from logging import (
 from subprocess import (
     DEVNULL,
     PIPE,
+    CompletedProcess,
 )
 from typing import (
     Any,
@@ -76,6 +77,7 @@ from bzfs_main.utils import (
     FILE_PERMISSIONS,
     SmallPriorityQueue,
     SnapshotPeriods,
+    Subprocesses,
     SynchronizedBool,
     SynchronizedDict,
     SynchronousExecutor,
@@ -112,6 +114,7 @@ from bzfs_main.utils import (
     subprocess_run,
     tail,
     terminate_process_subtree,
+    termination_signal_handler,
     unixtime_fromisoformat,
     urlsafe_base64,
     validate_file_permissions,
@@ -142,8 +145,10 @@ def suite() -> unittest.TestSuite:
         TestFindMatch,
         TestReplaceCapturingGroups,
         TestSubprocessRun,
+        TestSubprocessRunWithSubprocesses,
         TestPIDExists,
         TestTerminateProcessSubtree,
+        TestTerminationSignalHandler,
         TestSmallPriorityQueue,
         TestSynchronizedBool,
         TestSynchronizedDict,
@@ -457,7 +462,7 @@ class TestShuffleDict(unittest.TestCase):
         def fake_shuffle(lst: list) -> None:
             lst.reverse()
 
-        with patch("random.shuffle", side_effect=fake_shuffle) as mock_shuffle:
+        with patch("bzfs_main.utils.random.SystemRandom.shuffle", side_effect=fake_shuffle) as mock_shuffle:
             result = shuffle_dict(d)
             self.assertEqual({"c": 3, "b": 2, "a": 1}, result)
             mock_shuffle.assert_called_once()
@@ -1214,6 +1219,57 @@ class TestSubprocessRun(unittest.TestCase):
 
 
 #############################################################################
+class TestSubprocessRunWithSubprocesses(unittest.TestCase):
+
+    def test_unregisters_on_success(self) -> None:
+        """Registers a PID and ensures it is unregistered on success."""
+        sp = Subprocesses()
+        result = subprocess_run(["true"], stdout=PIPE, stderr=PIPE, subprocesses=sp)
+        self.assertEqual(0, result.returncode)
+        # After completion, no PIDs should remain tracked
+        self.assertEqual({}, sp._child_pids)
+
+    def test_unregisters_on_check_exception(self) -> None:
+        """Ensures PID is unregistered when check=True raises an error."""
+        sp = Subprocesses()
+        with self.assertRaises(subprocess.CalledProcessError):
+            subprocess_run(["false"], stdout=PIPE, stderr=PIPE, check=True, subprocesses=sp)
+        # Ensure no PIDs remain tracked after exception
+        self.assertEqual({}, sp._child_pids)
+
+    def test_timeout_terminates_subtree_and_unregisters(self) -> None:
+        """On timeout, terminates subtree and unregisters the PID."""
+        sp = Subprocesses()
+        with patch("bzfs_main.utils.terminate_process_subtree") as mock_term:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                subprocess_run(["sleep", "1"], timeout=0.01, stdout=PIPE, stderr=PIPE, subprocesses=sp)
+            self.assertTrue(mock_term.called)
+        # Ensure no PIDs remain tracked after timeout
+        self.assertEqual({}, sp._child_pids)
+
+    def test_terminate_all_kills_running_child(self) -> None:
+        """terminate_process_subtrees kills child and clears tracking."""
+        sp = Subprocesses()
+        result: CompletedProcess | None = None
+
+        def run_sleep() -> None:
+            nonlocal result
+            result = sp.subprocess_run(["sleep", "5"], stdout=PIPE, stderr=PIPE)
+
+        t = threading.Thread(target=run_sleep)
+        t.start()
+        time.sleep(0.05)  # ensure child started and registered
+        self.assertEqual(1, len(sp._child_pids))
+        sp.terminate_process_subtrees()
+        self.assertEqual({}, sp._child_pids)
+        t.join(timeout=1.0)
+        self.assertFalse(t.is_alive(), "Expected sleep subprocess to be terminated by terminate_all()")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertNotEqual(0, result.returncode)
+
+
+#############################################################################
 class TestPIDExists(unittest.TestCase):
 
     def test_pid_exists(self) -> None:
@@ -1261,14 +1317,36 @@ class TestTerminateProcessSubtree(unittest.TestCase):
         child = subprocess.Popen(["sleep", "1"])
         self.children.append(child)
         time.sleep(0.1)
-        descendants = _get_descendant_processes(os.getpid())
-        self.assertIn(child.pid, descendants, "Child PID not found in descendants")
+        descendants = _get_descendant_processes([os.getpid()])
+        self.assertEqual(1, len(descendants))
+        self.assertIn(child.pid, descendants[0], "Child PID not found in descendants")
 
     @patch("bzfs_main.utils.subprocess.run")
-    def test_get_descendant_processes_permission_denied_returns_empty(self, mock_run: MagicMock) -> None:
+    def test_get_descendant_processes_permission_denied_returns_empty_per_root(self, mock_run: MagicMock) -> None:
         # Simulate PermissionError when trying to invoke 'ps' in restricted sandboxes
         mock_run.side_effect = PermissionError(errno.EPERM, "Operation not permitted", "ps")
-        self.assertEqual([], _get_descendant_processes(os.getpid()))
+        self.assertEqual([[]], _get_descendant_processes([os.getpid()]))
+
+    @patch("bzfs_main.utils.subprocess.run")
+    @patch("os.kill")
+    def test_terminate_process_subtree_permission_denied_kills_roots(
+        self, mock_kill: MagicMock, mock_run: MagicMock
+    ) -> None:
+        # When descendant discovery is denied, ensure we still signal the provided roots and preserve shape
+        mock_run.side_effect = PermissionError(errno.EPERM, "Operation not permitted", "ps")
+        current = os.getpid()
+        other = 2**31 - 2  # a fake PID unlikely to exist; os.kill is mocked anyway
+        # except_current_process=True should NOT signal current process but should signal the other root
+        terminate_process_subtree(except_current_process=True, root_pids=[current, other], sig=signal.SIGTERM)
+        mock_kill.assert_any_call(other, signal.SIGTERM)
+        # Ensure we did NOT signal current process in this case
+        for call in mock_kill.call_args_list:
+            self.assertNotEqual(call.args, (current, signal.SIGTERM))
+        mock_kill.reset_mock()
+        # except_current_process=False should signal both roots
+        terminate_process_subtree(except_current_process=False, root_pids=[current, other], sig=signal.SIGTERM)
+        mock_kill.assert_any_call(current, signal.SIGTERM)
+        mock_kill.assert_any_call(other, signal.SIGTERM)
 
     def test_terminate_process_subtree_excluding_current(self) -> None:
         try:
@@ -1283,6 +1361,92 @@ class TestTerminateProcessSubtree(unittest.TestCase):
         terminate_process_subtree(except_current_process=True)
         time.sleep(0.1)
         self.assertIsNotNone(child.poll(), "Child process should be terminated")
+
+    def test_get_descendant_processes_empty_list(self) -> None:
+        self.assertEqual([], _get_descendant_processes([]))
+
+
+#############################################################################
+class TestTerminationSignalHandler(unittest.TestCase):
+
+    def test_sets_event_and_calls_custom_handler_on_sigint(self) -> None:
+        old_sigint = signal.getsignal(signal.SIGINT)
+        old_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            event = threading.Event()
+            mock_handler = MagicMock()
+            with termination_signal_handler(event, termination_handler=mock_handler):
+                self.assertFalse(event.is_set(), "Event should not be set before a signal is received")
+                os.kill(os.getpid(), signal.SIGINT)
+                self.assertTrue(event.wait(1.0), "Event should be set after SIGINT")
+                mock_handler.assert_called_once()
+        finally:
+            # Ensure global handlers are restored to what they were before the test
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+
+    def test_sets_event_and_calls_custom_handler_on_sigterm(self) -> None:
+        old_sigint = signal.getsignal(signal.SIGINT)
+        old_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            event = threading.Event()
+            mock_handler = MagicMock()
+            with termination_signal_handler(event, termination_handler=mock_handler):
+                self.assertFalse(event.is_set(), "Event should not be set before a signal is received")
+                os.kill(os.getpid(), signal.SIGTERM)
+                self.assertTrue(event.wait(1.0), "Event should be set after SIGTERM")
+                mock_handler.assert_called_once()
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+
+    def test_restores_signal_handlers_on_exit(self) -> None:
+        old_sigint = signal.getsignal(signal.SIGINT)
+        old_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            event = threading.Event()
+            with termination_signal_handler(event):
+                # Inside context, handlers should differ from originals
+                self.assertNotEqual(old_sigint, signal.getsignal(signal.SIGINT))
+                self.assertNotEqual(old_sigterm, signal.getsignal(signal.SIGTERM))
+            # After exit, original handlers are restored
+            self.assertEqual(old_sigint, signal.getsignal(signal.SIGINT))
+            self.assertEqual(old_sigterm, signal.getsignal(signal.SIGTERM))
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+
+    def test_restores_handlers_on_exception(self) -> None:
+        old_sigint = signal.getsignal(signal.SIGINT)
+        old_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            event = threading.Event()
+            with self.assertRaises(RuntimeError):
+                with termination_signal_handler(event):
+                    raise RuntimeError("boom")
+            # Even on exception, original handlers are restored
+            self.assertEqual(old_sigint, signal.getsignal(signal.SIGINT))
+            self.assertEqual(old_sigterm, signal.getsignal(signal.SIGTERM))
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+
+    @patch("bzfs_main.utils.terminate_process_subtree")
+    def test_default_handler_invokes_terminate_process_subtree(self, mock_terminate: MagicMock) -> None:
+        old_sigint = signal.getsignal(signal.SIGINT)
+        old_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            event = threading.Event()
+            with termination_signal_handler(event):
+                os.kill(os.getpid(), signal.SIGINT)
+                self.assertTrue(event.wait(1.0), "Event should be set after SIGINT")
+                mock_terminate.assert_called_once()
+                # Verify called with except_current_process=True to avoid killing current process
+                _, kwargs = mock_terminate.call_args
+                self.assertIsNone(kwargs.get("except_current_process"))
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
 
 
 #############################################################################

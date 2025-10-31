@@ -30,6 +30,7 @@ from __future__ import (
 import logging
 import os
 import subprocess
+import threading
 import time
 from concurrent.futures import (
     Future,
@@ -53,7 +54,6 @@ from bzfs_main.retry import (
 from bzfs_main.utils import (
     dry,
     human_readable_duration,
-    terminate_process_subtree,
 )
 
 
@@ -69,6 +69,8 @@ def process_datasets_in_parallel_and_fault_tolerant(
     interval_nanos: Callable[
         [int, str, int], int
     ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
+    termination_event: threading.Event | None = None,  # optional event to request early async termination
+    termination_handler: Callable[[], None] = lambda: None,
     task_name: str = "Task",
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error
@@ -89,6 +91,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     """
     assert callable(process_dataset)
     assert callable(skip_tree_on_error)
+    termination_event = threading.Event() if termination_event is None else termination_event
     assert "%" not in task_name
     assert callable(append_exception)
     retry_policy = RetryPolicy.no_retries() if retry_policy is None else retry_policy
@@ -102,7 +105,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         exception = None
         no_skip: bool = False
         try:
-            no_skip = run_with_retries(log, retry_policy, process_dataset, dataset, tid)
+            no_skip = run_with_retries(log, retry_policy, termination_event, process_dataset, dataset, tid)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
             exception = e  # may be reraised later
         finally:
@@ -117,9 +120,10 @@ def process_datasets_in_parallel_and_fault_tolerant(
             fail: bool = False
             if exception is not None:
                 fail = True
-                if skip_on_error == "fail":
-                    [todo_future.cancel() for todo_future in todo_futures]
-                    terminate_process_subtree(except_current_process=True)
+                if skip_on_error == "fail" or termination_event.is_set():
+                    for todo_future in todo_futures:
+                        todo_future.cancel()
+                    termination_handler()
                     raise exception
                 no_skip = not (skip_on_error == "tree" or skip_tree_on_error(dataset))
                 log.error("%s", exception)
@@ -134,6 +138,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         process_dataset=_process_dataset,
         max_workers=max_workers,
         interval_nanos=interval_nanos,
+        termination_event=termination_event,
         enable_barriers=enable_barriers,
         is_test_mode=is_test_mode,
     )

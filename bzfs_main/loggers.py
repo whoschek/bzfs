@@ -13,8 +13,12 @@
 # limitations under the License.
 #
 """Logging helpers that build default and syslog-enabled loggers; Centralizes logger setup so that all bzfs tools share
-uniform formatting and configuration."""
+uniform formatting and configuration.
 
+Each bzfs.Job has its own separate logger object such that multiple Jobs can run concurrently in the same Python process
+without interfering with each other's logging semantics. This is achieved by passing a unique logger_name_suffix per job to
+get_logger(). reset_logger() closes only those objects tied to that particular logger_name_suffix.
+"""
 from __future__ import (
     annotations,
 )
@@ -55,19 +59,33 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     )
 
 
-def get_logger_name() -> str:
+def _get_logger_name() -> str:
     """Returns the canonical logger name used throughout bzfs."""
     return "bzfs_main.bzfs"
 
 
-def get_logger_subname() -> str:
+def _get_logger_subname() -> str:
     """Returns the logger name for use by --log-config-file."""
-    return get_logger_name() + ".sub"
+    return _get_logger_name() + ".sub"
 
 
-def reset_logger() -> None:
+def _resolve_logger_names(logger_name_suffix: str) -> tuple[str, str]:
+    """Returns the logger and sublogger names for the given optional logger suffix.
+
+    Each bzfs.Job instance gets a distinct Logger name and hence uses a separate private (thread-safe) logging.Logger object.
+    """
+    logger_name: str = _get_logger_name()
+    logger_subname: str = _get_logger_subname()
+    if logger_name_suffix:
+        return logger_name + "." + logger_name_suffix, logger_subname + "." + logger_name_suffix
+    else:
+        return logger_name, logger_subname
+
+
+def reset_logger(logger_name_suffix: str = "") -> None:
     """Removes and closes logging handlers (and closes their files) and resets loggers to default state."""
-    for log in [logging.getLogger(get_logger_name()), logging.getLogger(get_logger_subname())]:
+    logger_name, logger_subname = _resolve_logger_names(logger_name_suffix)
+    for log in [logging.getLogger(logger_name), logging.getLogger(logger_subname)]:
         for handler in log.handlers.copy():
             log.removeHandler(handler)
             with contextlib.suppress(BrokenPipeError):
@@ -79,7 +97,9 @@ def reset_logger() -> None:
         log.propagate = True
 
 
-def get_logger(log_params: LogParams, args: argparse.Namespace, log: Logger | None = None) -> Logger:
+def get_logger(
+    log_params: LogParams, args: argparse.Namespace, log: Logger | None = None, logger_name_suffix: str = ""
+) -> Logger:
     """Returns a logger configured from CLI arguments or an optional base logger."""
     _add_trace_loglevel()
     logging.addLevelName(LOG_STDERR, "STDERR")
@@ -89,27 +109,32 @@ def get_logger(log_params: LogParams, args: argparse.Namespace, log: Logger | No
         assert isinstance(log, Logger)
         return log  # use third party provided logger object
     elif args.log_config_file:
-        clog = _get_dict_config_logger(log_params, args)  # use logger defined in config file, and afterwards ...
+        clog = _get_dict_config_logger(log_params, args, logger_name_suffix=logger_name_suffix)  # read config file
     # ... add our own handlers unless matching handlers are already present
-    default_log = _get_default_logger(log_params, args)
+    default_log = _get_default_logger(log_params, args, logger_name_suffix=logger_name_suffix)
     return clog if args.log_config_file else default_log
 
 
-def _get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
+def _get_default_logger(log_params: LogParams, args: argparse.Namespace, logger_name_suffix: str = "") -> Logger:
     """Creates the default logger with stream, file and optional syslog handlers."""
-    sublog = logging.getLogger(get_logger_subname())
-    log = logging.getLogger(get_logger_name())
+    logger_name, logger_subname = _resolve_logger_names(logger_name_suffix)
+    sublog = logging.getLogger(logger_subname)
+    log = logging.getLogger(logger_name)
     log.setLevel(log_params.log_level)
     log.propagate = False  # don't propagate log messages up to the root logger to avoid emitting duplicate messages
 
-    if not any(isinstance(h, logging.StreamHandler) and h.stream in [sys.stdout, sys.stderr] for h in sublog.handlers):
+    if not any(
+        isinstance(h, logging.StreamHandler) and h.stream in [sys.stdout, sys.stderr] for h in log.handlers + sublog.handlers
+    ):
         handler: logging.Handler = logging.StreamHandler(stream=sys.stdout)
         handler.setFormatter(get_default_log_formatter(log_params=log_params))
         handler.setLevel(log_params.log_level)
         log.addHandler(handler)
 
     abs_log_file: str = os.path.abspath(log_params.log_file)
-    if not any(isinstance(h, logging.FileHandler) and h.baseFilename == abs_log_file for h in sublog.handlers):
+    if not any(
+        isinstance(h, logging.FileHandler) and h.baseFilename == abs_log_file for h in log.handlers + sublog.handlers
+    ):
         handler = logging.FileHandler(log_params.log_file, encoding="utf-8")
         handler.setFormatter(get_default_log_formatter())
         handler.setLevel(log_params.log_level)
@@ -153,7 +178,7 @@ LOG_LEVEL_PREFIXES: Final[dict[int, str]] = {
 
 def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = None) -> logging.Formatter:
     """Returns a formatter for bzfs logs with optional prefix and column padding."""
-    level_prefixes_: dict[int, str] = LOG_LEVEL_PREFIXES
+    level_prefixes_: dict[int, str] = LOG_LEVEL_PREFIXES.copy()
     log_stderr_: int = LOG_STDERR
     log_stdout_: int = LOG_STDOUT
     terminal_cols: list[int | None] = [0 if log_params is None else None]  # 'None' indicates "configure value later"
@@ -269,14 +294,15 @@ def _remove_json_comments(config_str: str) -> str:
     return "\n".join(lines)
 
 
-def _get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
+def _get_dict_config_logger(log_params: LogParams, args: argparse.Namespace, logger_name_suffix: str = "") -> Logger:
     """Creates a logger from a JSON config file with variable substitution."""
     import json  # lazy import for startup perf
-    from logging import config  # lazy import for startup perf
+    from logging.config import dictConfig  # lazy import for startup perf
 
+    _, logger_subname = _resolve_logger_names(logger_name_suffix)
     prefix: str = PROG_NAME + "."
     log_config_vars: dict[str, str] = {
-        prefix + "sub.logger": get_logger_subname(),
+        prefix + "sub.logger": logger_subname,
         prefix + "get_default_log_formatter": __name__ + ".get_default_log_formatter",
         prefix + "log_level": log_params.log_level,
         prefix + "log_dir": log_params.log_dir,
@@ -329,8 +355,8 @@ def _get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> 
     #     print("[T] Substituted log_config_file_str:\n" + log_config_file_str, flush=True)
     log_config_dict: dict = json.loads(log_config_file_str)
     _validate_log_config_dict(log_config_dict)
-    config.dictConfig(log_config_dict)
-    return logging.getLogger(get_logger_subname())
+    dictConfig(log_config_dict)
+    return logging.getLogger(logger_subname)
 
 
 def validate_log_config_variable(var: str) -> str | None:

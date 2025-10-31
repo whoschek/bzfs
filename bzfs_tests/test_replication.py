@@ -19,6 +19,7 @@ from __future__ import (
 )
 import shlex
 import subprocess
+import threading
 import unittest
 from collections import (
     defaultdict,
@@ -109,6 +110,7 @@ def _make_job(**params_kwargs: object) -> MagicMock:
     job = MagicMock()
     job.params = _make_params(**params_kwargs)
     job.max_workers = {"src": 1, "dst": 1, "local": 1}
+    job.termination_event = threading.Event()
     return job
 
 
