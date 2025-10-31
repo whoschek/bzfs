@@ -21,7 +21,6 @@ import contextlib
 import logging
 import re
 import subprocess
-import threading
 import time
 import unittest
 from collections.abc import (
@@ -1854,7 +1853,7 @@ class TestTerminationEventBehavior(AbstractTestCase):
             term_mock.assert_called_once()
 
     def test_sleep_until_next_daemon_iteration_wakes_on_termination(self) -> None:
-        """sleep_until_next_daemon_iteration returns False when termination_event is set during wait."""
+        """sleep_until_next_daemon_iteration returns early with False when termination_event is set during wait."""
         job = self.make_job(["src", "dst"])
 
         job.progress_reporter = cast(ProgressReporter, self._DummyPR())
@@ -1864,15 +1863,9 @@ class TestTerminationEventBehavior(AbstractTestCase):
         # Stop time far in the future to ensure we rely on termination_event for wake-up
         stoptime_nanos = time.monotonic_ns() + 2_000_000_000  # 2s
 
-        def trigger() -> None:
-            time.sleep(0.02)
-            job.termination_event.set()
-
-        thread = threading.Thread(target=trigger)
-        thread.start()
-        result = job.sleep_until_next_daemon_iteration(stoptime_nanos)
-        thread.join(timeout=1)
-
+        job.termination_event.set()
+        result: bool = job.sleep_until_next_daemon_iteration(stoptime_nanos)
+        self.assertLess(time.monotonic_ns(), stoptime_nanos - 1)
         self.assertFalse(result, "Expected False when termination_event is set during daemon sleep")
 
 
