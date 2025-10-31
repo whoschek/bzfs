@@ -154,14 +154,15 @@ def zfs_list_snapshots_in_parallel(
 
     Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and any number of
     snapshots. For local execution (no SSH leg), the minibatch size is divided by a factor of 8 relative to the number of
-    workers to reflect reduced communication latency, which improves throughput.
+    workers to reflect reduced communication latency, which improves throughput. Attempts to use at least 8 datasets per
+    remote cmd in order to amortize SSH latency.
     """
     max_workers: int = job.max_workers[r.location]
     max_batch_items: int = min(
         job.max_datasets_per_minibatch_on_list_snaps[r.location],
         max(
             len(datasets) // (max_workers if r.ssh_user_host else max_workers * 8),
-            max_workers if r.ssh_user_host else 1,
+            8 if r.ssh_user_host else 1,
         ),
     )
     return itr_ssh_cmd_parallel(
