@@ -462,7 +462,7 @@ class TestShuffleDict(unittest.TestCase):
         def fake_shuffle(lst: list) -> None:
             lst.reverse()
 
-        with patch("random.shuffle", side_effect=fake_shuffle) as mock_shuffle:
+        with patch("bzfs_main.utils.random.SystemRandom.shuffle", side_effect=fake_shuffle) as mock_shuffle:
             result = shuffle_dict(d)
             self.assertEqual({"c": 3, "b": 2, "a": 1}, result)
             mock_shuffle.assert_called_once()

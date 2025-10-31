@@ -142,10 +142,10 @@ V_ = TypeVar("V_")
 R_ = TypeVar("R_")
 
 
-def shuffle_dict(dictionary: dict[K_, V_]) -> dict[K_, V_]:
+def shuffle_dict(dictionary: dict[K_, V_], rand: random.Random = random.SystemRandom()) -> dict[K_, V_]:  # noqa: B008
     """Returns a new dict with items shuffled randomly."""
     items: list[tuple[K_, V_]] = list(dictionary.items())
-    random.shuffle(items)
+    rand.shuffle(items)
     return dict(items)
 
 

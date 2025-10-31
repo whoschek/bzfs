@@ -560,7 +560,7 @@ class Job:
                 f"Problematic subset of --dst-root-datasets: {bad_root_datasets} for src_hosts: {sorted(basis_src_hosts)}"
             )
         if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
-            random.shuffle(src_hosts)
+            random.SystemRandom().shuffle(src_hosts)
             dst_hosts = shuffle_dict(dst_hosts)
         ssh_src_user: str = args.ssh_src_user or args.src_user  # --src-user is deprecated
         ssh_dst_user: str = args.ssh_dst_user or args.dst_user  # --dst-user is deprecated
@@ -931,7 +931,7 @@ class Job:
         interval_nanos = 0 if len(subjobs) == 0 else round(1_000_000_000 * max(0.0, work_period_seconds) / num_intervals)
         assert interval_nanos >= 0
         if jitter:  # randomize job start time to avoid potential thundering herd problems in large distributed systems
-            sleep_nanos = random.randint(0, interval_nanos)  # noqa: S311
+            sleep_nanos = random.SystemRandom().randint(0, interval_nanos)
             log.info("Jitter: Delaying job start time by sleeping for %s ...", human_readable_duration(sleep_nanos))
             self.termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
         sorted_subjobs: list[str] = sorted(subjobs.keys())
