@@ -167,7 +167,7 @@ class LogParams:
         log_file_stem: str = os.path.basename(self.log_file)[0 : -len(".log")]
         # Python's standard logger naming API interprets chars such as '.', '-', ':', spaces, etc in special ways, e.g.
         # logging.getLogger("foo.bar") vs logging.getLogger("foo-bar"). Thus, we sanitize the Python logger name via a regex:
-        self.logger_name_suffix: Final[str] = re.sub(r"[^A-Za-z0-9_]", "_", log_file_stem)
+        self.logger_name_suffix: Final[str] = re.sub(r"[^A-Za-z0-9_]", repl="_", string=log_file_stem)
         cache_root_dir: str = os.path.join(log_parent_dir, ".cache")
         os.makedirs(cache_root_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_file_permissions(cache_root_dir, DIR_PERMISSIONS)

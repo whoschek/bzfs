@@ -623,7 +623,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
 def terminate_process_subtree(
     except_current_process: bool = True, root_pids: list[int] | None = None, sig: signal.Signals = signal.SIGTERM
 ) -> None:
-    """For each ``root_pid``: Sends ``sig`` to ``root_pid`` and all of its descendant processes."""
+    """For each root PID: Sends the given signal to the root PID and all its descendant processes."""
     current_pid: int = os.getpid()
     root_pids = [current_pid] if root_pids is None else root_pids
     all_pids: list[list[int]] = _get_descendant_processes(root_pids)
@@ -676,7 +676,7 @@ def termination_signal_handler(
     termination_event: threading.Event,
     termination_handler: Callable[[], None] = lambda: terminate_process_subtree(),
 ) -> Iterator[None]:
-    """Context manager that installs SIGINT/SIGTERM handlers that set ``termination_event`` and, by default, terminate
+    """Context manager that installs SIGINT/SIGTERM handlers that set ``termination_event`` and, by default, terminate all
     descendant processes."""
     assert termination_event is not None
 
@@ -695,12 +695,12 @@ def termination_signal_handler(
 
 #############################################################################
 class Subprocesses:
-    """Provides per-job tracking of child PIDs so a caller can safely terminate only the subprocesses spawned by that job
-    when running multiple jobs within a single Python process."""
+    """Provides per-job tracking of child PIDs so a job can safely terminate only the subprocesses it spawned itself; used
+    when multiple jobs run concurrently within the same Python process."""
 
     def __init__(self) -> None:
         self._lock: Final[threading.Lock] = threading.Lock()
-        self._child_pids: Final[dict[int, None]] = {}
+        self._child_pids: Final[dict[int, None]] = {}  # a set that preserves insertion order
 
     def subprocess_run(self, *args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
         """Wrapper around utils.subprocess_run() that auto-registers/unregisters child PIDs for per-job termination."""
@@ -717,9 +717,9 @@ class Subprocesses:
             self._child_pids.pop(pid, None)
 
     def terminate_process_subtrees(self, sig: signal.Signals = signal.SIGTERM) -> None:
-        """Sends ``sig`` to all tracked child PIDs and their descendants, ignoring errors for dead PIDs."""
+        """Sends the given signal to all tracked child PIDs and their descendants, ignoring errors for dead PIDs."""
         with self._lock:
-            pids = list(self._child_pids)
+            pids: list[int] = list(self._child_pids)
             self._child_pids.clear()
         terminate_process_subtree(root_pids=pids, sig=sig)
 
