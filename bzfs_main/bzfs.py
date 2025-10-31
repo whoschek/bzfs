@@ -219,7 +219,7 @@ def main() -> None:
     """API for command line clients."""
     prev_umask: int = os.umask(UMASK)
     try:
-        # On CTRL-C and SIGTERM, send signal to descendant processes to also terminate descendants
+        # On CTRL-C and SIGTERM, send signal to all descendant processes to also terminate descendants
         termination_event = threading.Event()
         with termination_signal_handler(termination_event=termination_event):
             run_main(argument_parser().parse_args(), sys.argv, termination_event=termination_event)
