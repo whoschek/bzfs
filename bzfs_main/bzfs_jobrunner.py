@@ -94,6 +94,7 @@ from bzfs_main.utils import (
     DIE_STATUS,
     LOG_TRACE,
     UMASK,
+    Subprocesses,
     format_dict,
     format_obj,
     human_readable_duration,
@@ -480,6 +481,7 @@ class Job:
     def __init__(self, log: Logger | None = None, termination_event: threading.Event | None = None) -> None:
         """Initialize caches, logger, and optional termination event shared across subjobs."""
         # immutable variables:
+        self.subprocesses: Final[Subprocesses] = Subprocesses()
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
         self.log: Logger = log if log is not None else get_simple_logger(PROG_NAME)
@@ -947,6 +949,7 @@ class Job:
             max_workers=max_workers,
             interval_nanos=lambda last_update_nanos, dataset, submitted_count: interval_nanos,
             termination_event=self.termination_event,
+            termination_handler=self.subprocesses.terminate_process_subtrees,
             task_name="Subjob",
             retry_policy=None,  # no retries
             dry_run=False,
@@ -1051,6 +1054,8 @@ class Job:
         if self.jobrunner_dryrun:
             return 0
         proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, text=True)  # run job in a separate subprocess
+        pid: int = proc.pid
+        self.subprocesses.register_child_pid(pid)
         try:
             proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
         except subprocess.TimeoutExpired:
@@ -1068,6 +1073,8 @@ class Job:
                 timeout_secs = min(0.025, timeout_secs)
                 with contextlib.suppress(subprocess.TimeoutExpired):
                     proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
+        finally:
+            self.subprocesses.unregister_child_pid(pid)
         return proc.returncode
 
     def validate_src_hosts(self, src_hosts: list[str]) -> list[str]:

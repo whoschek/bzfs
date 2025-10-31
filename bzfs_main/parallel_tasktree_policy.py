@@ -54,7 +54,6 @@ from bzfs_main.retry import (
 from bzfs_main.utils import (
     dry,
     human_readable_duration,
-    terminate_process_subtree,
 )
 
 
@@ -71,7 +70,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         [int, str, int], int
     ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
     termination_event: threading.Event | None = None,  # optional event to request early async termination
-    termination_handler: Callable[[], None] = lambda: terminate_process_subtree(),
+    termination_handler: Callable[[], None] = lambda: None,
     task_name: str = "Task",
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error

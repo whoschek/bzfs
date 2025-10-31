@@ -205,12 +205,10 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
         src_datasets = ["a", "b"]
 
-        # Patch terminate_process_subtree to avoid any side effects and assert we hit the 'fail' branch.
-        # Also patch Future.cancel to confirm the cancel loop is executed at least once.
-        with (
-            patch("bzfs_main.parallel_tasktree_policy.terminate_process_subtree") as mock_terminate,
-            patch("concurrent.futures.Future.cancel", return_value=False) as mock_cancel,
-        ):
+        # Patch Future.cancel to confirm the cancel loop is executed at least once.
+        # Patch termination_handler to assert we hit the 'fail' branch.
+        mock_terminate = MagicMock()
+        with patch("concurrent.futures.Future.cancel", return_value=False) as mock_cancel:
             kwargs = dict(self.default_kwargs)
             kwargs["skip_on_error"] = "fail"
             with self.assertRaises(subprocess.CalledProcessError):
@@ -219,6 +217,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                     process_dataset=process,  # lambda
                     skip_tree_on_error=lambda dataset: False,
                     max_workers=2,
+                    termination_handler=mock_terminate,
                     enable_barriers=False,
                     **kwargs,
                 )
