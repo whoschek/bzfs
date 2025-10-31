@@ -1920,7 +1920,6 @@ class TestPerJobTermination(AbstractTestCase):
             self.assertIsNone(p2.poll())
 
             # Enable job-scoped termination and invoke terminate()
-            job.terminate_only_job_processes = True
             job.terminate()
             time.sleep(0.05)
 

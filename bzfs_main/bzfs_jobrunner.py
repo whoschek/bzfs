@@ -1040,7 +1040,6 @@ class Job:
     def _bzfs_run_main(self, cmd: list[str]) -> None:
         """Delegates execution to :mod:`bzfs` using parsed arguments."""
         bzfs_job = bzfs.Job(termination_event=self.termination_event)
-        bzfs_job.terminate_only_job_processes = True
         bzfs_job.is_test_mode = self.is_test_mode
         bzfs_job.run_main(bzfs.argument_parser().parse_args(cmd[1:]), cmd)
 

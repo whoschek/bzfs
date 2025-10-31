@@ -187,7 +187,6 @@ from bzfs_main.utils import (
     replace_prefix,
     sha256_85_urlsafe_base64,
     sha256_128_urlsafe_base64,
-    terminate_process_subtree,
     termination_signal_handler,
     validate_dataset_name,
     validate_property_name,
@@ -249,7 +248,6 @@ class Job:
         self.params: Params
         self.subprocesses: Final[Subprocesses] = Subprocesses()
         self.termination_event: Final[threading.Event] = termination_event or threading.Event()
-        self.terminate_only_job_processes: bool = False  # on terminate() only kill this Job's own child processes, not all?
         self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: dict[str, DatasetProperties] = {}
@@ -293,14 +291,7 @@ class Job:
 
     def terminate(self) -> None:
         """Shuts down gracefully; also terminates descendant processes, if any."""
-
-        def post_shutdown() -> None:
-            if self.terminate_only_job_processes:
-                self.subprocesses.terminate_process_subtrees()
-            else:
-                terminate_process_subtree()
-
-        with xfinally(post_shutdown):
+        with xfinally(self.subprocesses.terminate_process_subtrees):
             self.shutdown()
 
     def run_main(self, args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
