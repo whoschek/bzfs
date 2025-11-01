@@ -24,6 +24,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import unittest
 from logging import (
@@ -46,6 +47,9 @@ from unittest.mock import (
 
 from bzfs_main import (
     bzfs_jobrunner,
+)
+from bzfs_main.loggers import (
+    get_simple_logger,
 )
 from bzfs_main.utils import (
     DIE_STATUS,
@@ -79,11 +83,18 @@ def suite() -> unittest.TestSuite:
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
 
+def make_bzfs_jobrunner_job(log: Logger | None = None) -> bzfs_jobrunner.Job:
+    log = get_simple_logger(bzfs_jobrunner.PROG_NAME) if log is None else log
+    job = bzfs_jobrunner.Job(log=log, termination_event=threading.Event())
+    job.is_test_mode = True
+    return job
+
+
 #############################################################################
 class TestHelperFunctions(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
+        self.job = make_bzfs_jobrunner_job()
 
     def test_validate_type(self) -> None:
         """Ensure validate_type accepts expected types and exits on mismatches quietly."""
@@ -216,13 +227,13 @@ class TestHelperFunctions(AbstractTestCase):
 
     @unittest.skipIf(platform.system() != "Linux", "This test is designed for Linux only")
     def test_get_localhost_ips(self) -> None:
-        job = bzfs_jobrunner.Job()
+        job = make_bzfs_jobrunner_job()
         ips: set[str] = job.get_localhost_ips()
         self.assertTrue(len(ips) > 0)
 
     @patch("subprocess.run", side_effect=RuntimeError("fail"))
     def test_get_localhost_ips_failure_logs_warning(self, mock_run: MagicMock) -> None:
-        job = bzfs_jobrunner.Job()
+        job = make_bzfs_jobrunner_job()
         with patch("platform.system", return_value="Linux"), patch.object(job.log, "warning") as mock_warn:
             ips = job.get_localhost_ips()
         self.assertEqual(set(), ips)
@@ -236,7 +247,7 @@ class TestHelperFunctions(AbstractTestCase):
 class TestParseSrcHosts(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
+        self.job = make_bzfs_jobrunner_job()
 
     # ---- raw_src_hosts provided (no stdin) ----
     def test_cli_value_valid_list(self) -> None:
@@ -322,9 +333,7 @@ class TestParseSrcHosts(AbstractTestCase):
 class TestValidation(AbstractTestCase):
 
     def _new_job(self) -> bzfs_jobrunner.Job:
-        job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
-        job.is_test_mode = True
+        job = make_bzfs_jobrunner_job()
         return job
 
     def _build_argv(
@@ -461,9 +470,7 @@ class TestFiltering(AbstractTestCase):
         localhostname: str = "localtest",
     ) -> dict[str, list[str]]:
         """Builds argv, runs Job.run_main and returns the subjobs dict captured via run_subjobs."""
-        job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
-        job.is_test_mode = True
+        job = make_bzfs_jobrunner_job()
 
         argv: list[str] = [
             bzfs_jobrunner.PROG_NAME,
@@ -555,9 +562,8 @@ class TestFiltering(AbstractTestCase):
 class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
         self.log_mock = MagicMock()
-        self.job.log = cast(Logger, self.log_mock)
+        self.job = make_bzfs_jobrunner_job(log=self.log_mock)
 
     def test_empty_input_raises(self) -> None:
         with self.assertRaises(AssertionError):
@@ -834,7 +840,7 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
 
     def setUp(self) -> None:
         self.assertIsNotNone(shutil.which("sh"))
-        self.job = bzfs_jobrunner.Job()
+        self.job = make_bzfs_jobrunner_job()
 
     def run_and_capture(self, cmd: list[str], timeout_secs: float | None) -> tuple[int | None, list[str]]:
         """Helper: invoke the method, return (exit_code, [all error-log messages])."""
@@ -892,7 +898,7 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
 class TestRunSubJobInCurrentThread(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
+        self.job = make_bzfs_jobrunner_job()
 
     def test_no_timeout_success(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo", "bar"]
@@ -958,7 +964,7 @@ class TestRunSubJobInCurrentThread(AbstractTestCase):
 class TestRunSubJob(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
+        self.job = make_bzfs_jobrunner_job()
         self.job.stats.jobs_all = 1
         self.assertIsNone(self.job.first_exception)
 
@@ -1003,14 +1009,10 @@ class TestRunSubJob(AbstractTestCase):
 class TestErrorPropagation(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
-        self.job.is_test_mode = True
+        self.job = make_bzfs_jobrunner_job()
 
     def test_parallel_worker_exception_sets_first_exception_via_exception_mode(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
-        self.job.is_test_mode = True
+        self.job = make_bzfs_jobrunner_job()
         with patch.object(self.job, "run_worker_job_in_current_thread", side_effect=CalledProcessError(1, "boom")):
             self.job.run_subjobs(
                 subjobs={"000000src-host/replicate": ["bzfs", "--no-argument-file"]},
@@ -1033,9 +1035,7 @@ class TestSpawnProcessPerJobDecision(AbstractTestCase):
     """
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
-        self.job.is_test_mode = True
+        self.job = make_bzfs_jobrunner_job()
 
     def _capture_spawn_flags(self, subjobs: dict[str, list[str]], spawn_process_per_job: bool) -> list[bool]:
         self.job.spawn_process_per_job = spawn_process_per_job
@@ -1084,9 +1084,7 @@ class TestScopedTerminationInProcess(AbstractTestCase):
     """
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
-        self.job.is_test_mode = True
+        self.job = make_bzfs_jobrunner_job()
 
     def test_failing_subjob_terminates_only_its_own_children_process(self) -> None:
         self._assert_scoped_termination(spawn_process_per_job=True, patch_method="run_worker_job_spawn_process_per_job")
@@ -1147,8 +1145,7 @@ class TestScopedTerminationInProcess(AbstractTestCase):
 class TestValidateSnapshotPlan(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
+        self.job = make_bzfs_jobrunner_job(log=MagicMock())
 
     def test_validate_snapshot_plan_empty(self) -> None:
         plan: dict = {}
@@ -1168,8 +1165,7 @@ class TestValidateSnapshotPlan(AbstractTestCase):
 class TestValidateMonitorSnapshotPlan(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
+        self.job = make_bzfs_jobrunner_job(log=MagicMock())
 
     def test_validate_monitor_snapshot_plan_empty(self) -> None:
         plan: dict = {}
@@ -1197,9 +1193,7 @@ class TestParserIsolationAcrossSubjobs(AbstractTestCase):
         parse inside Job._bzfs_run_main (before bzfs re-parses aux args). With a reused parser, the list accumulates
         across subjobs and we would see both regexes in the second subjob.
         """
-        job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
-        job.is_test_mode = True
+        job = make_bzfs_jobrunner_job()
 
         # Build argv that yields two separate replicate subjobs, one per dst host with distinct targets.
         # Host A replicates empty-target daily; Host B replicates 'onsite' hourly.

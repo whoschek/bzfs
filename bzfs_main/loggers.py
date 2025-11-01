@@ -86,15 +86,20 @@ def reset_logger(logger_name_suffix: str = "") -> None:
     """Removes and closes logging handlers (and closes their files) and resets loggers to default state."""
     logger_name, logger_subname = _resolve_logger_names(logger_name_suffix)
     for log in [logging.getLogger(logger_name), logging.getLogger(logger_subname)]:
-        for handler in log.handlers.copy():
-            log.removeHandler(handler)
-            with contextlib.suppress(BrokenPipeError):
-                handler.flush()
-            handler.close()
-        for _filter in log.filters.copy():
-            log.removeFilter(_filter)
-        log.setLevel(logging.NOTSET)
-        log.propagate = True
+        reset_logger_obj(log)
+
+
+def reset_logger_obj(log: Logger) -> None:
+    """Removes and closes logging handlers (and closes their files) and resets logger to default state."""
+    for handler in log.handlers.copy():
+        log.removeHandler(handler)
+        with contextlib.suppress(BrokenPipeError):
+            handler.flush()
+        handler.close()
+    for _filter in log.filters.copy():
+        log.removeFilter(_filter)
+    log.setLevel(logging.NOTSET)
+    log.propagate = True
 
 
 def get_logger(
@@ -247,15 +252,14 @@ def get_simple_logger(program: str, logger_name_suffix: str = "") -> Logger:
             return super().format(record)
 
     _add_trace_loglevel()
-    log = logging.getLogger(logger_name)
+    log = Logger(logger_name)  # noqa: LOG001 do not register logger with Logger.manager to avoid potential memory leak
     log.setLevel(logging.INFO)
     log.propagate = False
-    if not any(isinstance(h, logging.StreamHandler) for h in log.handlers):
-        handler = logging.StreamHandler()
-        handler.setFormatter(
-            LevelFormatter(fmt="%(asctime)s %(level_prefix)s [%(program)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-        )
-        log.addHandler(handler)
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        LevelFormatter(fmt="%(asctime)s %(level_prefix)s [%(program)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    )
+    log.addHandler(handler)
     return log
 
 

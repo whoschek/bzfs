@@ -82,6 +82,7 @@ from bzfs_main.detect import (
 )
 from bzfs_main.loggers import (
     get_simple_logger,
+    reset_logger_obj,
 )
 from bzfs_main.parallel_tasktree import (
     BARRIER_CHAR,
@@ -466,10 +467,14 @@ def main() -> None:
     """API for command line clients."""
     prev_umask: int = os.umask(UMASK)
     try:
-        # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
-        termination_event: threading.Event = threading.Event()
-        with termination_signal_handler(termination_event=termination_event):
-            Job(termination_event=termination_event).run_main(sys_argv=sys.argv)
+        log: Logger = get_simple_logger(PROG_NAME)
+        try:
+            # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
+            termination_event: threading.Event = threading.Event()
+            with termination_signal_handler(termination_event=termination_event):
+                Job(log=log, termination_event=termination_event).run_main(sys_argv=sys.argv)
+        finally:
+            reset_logger_obj(log)
     finally:
         os.umask(prev_umask)  # restore prior global state
 
@@ -478,13 +483,13 @@ def main() -> None:
 class Job:
     """Coordinates subjobs per the CLI flags; Each subjob handles one host pair and may run in its own process or thread."""
 
-    def __init__(self, log: Logger | None = None, termination_event: threading.Event | None = None) -> None:
+    def __init__(self, log: Logger, termination_event: threading.Event) -> None:
         # immutable variables:
+        self.log: Final[Logger] = log
+        self.termination_event: Final[threading.Event] = termination_event
         self.subprocesses: Final[Subprocesses] = Subprocesses()
-        self.termination_event: Final[threading.Event] = termination_event or threading.Event()
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
-        self.log: Logger = log if log is not None else get_simple_logger(PROG_NAME)
         self.loopback_address: Final[str] = _detect_loopback_address()
 
         # mutable variables:

@@ -126,6 +126,7 @@ from bzfs_main.filter import (
 from bzfs_main.loggers import (
     get_simple_logger,
     reset_logger,
+    reset_logger_obj,
 )
 from bzfs_main.parallel_batch_cmd import (
     run_ssh_cmd_parallel,
@@ -246,8 +247,8 @@ class Job:
 
     def __init__(self, termination_event: threading.Event | None = None) -> None:
         self.params: Params
-        self.subprocesses: Final[Subprocesses] = Subprocesses()
         self.termination_event: Final[threading.Event] = termination_event or threading.Event()
+        self.subprocesses: Final[Subprocesses] = Subprocesses()
         self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: dict[str, DatasetProperties] = {}
@@ -314,9 +315,11 @@ class Job:
                 )
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
-                get_simple_logger(PROG_NAME, logger_name_suffix=logger_name_suffix).error(
-                    "Log init: %s", e, exc_info=not isinstance(e, SystemExit)
-                )
+                simple_log: Logger = get_simple_logger(PROG_NAME, logger_name_suffix=logger_name_suffix)
+                try:
+                    simple_log.error("Log init: %s", e, exc_info=not isinstance(e, SystemExit))
+                finally:
+                    reset_logger_obj(simple_log)
                 raise
 
             aux_args: list[str] = []

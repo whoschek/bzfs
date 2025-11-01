@@ -38,6 +38,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 import unittest
@@ -480,7 +481,7 @@ class IntegrationTestCase(ParametrizedTestCase):
 
         job: bzfs.Job | bzfs_jobrunner.Job
         if use_jobrunner:
-            job = bzfs_jobrunner.Job()
+            job = bzfs_jobrunner.Job(log=get_simple_logger(bzfs_jobrunner.PROG_NAME), termination_event=threading.Event())
             job.is_test_mode = True
             if spawn_process_per_job:
                 args += ["--spawn-process-per-job"]
