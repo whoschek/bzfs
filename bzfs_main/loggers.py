@@ -231,20 +231,23 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = N
     return DefaultLogFormatter()
 
 
-def get_simple_logger(program: str) -> Logger:
+def get_simple_logger(program: str, logger_name_suffix: str = "") -> Logger:
     """Returns a minimal logger for simple tools."""
+
+    level_prefixes_: dict[int, str] = LOG_LEVEL_PREFIXES.copy()
+    logger_name = program + "." + logger_name_suffix if logger_name_suffix else program
 
     class LevelFormatter(logging.Formatter):
         """Injects level prefix and program name into log records."""
 
         def format(self, record: logging.LogRecord) -> str:
             """Attaches extra fields before delegating to base formatter."""
-            record.level_prefix = LOG_LEVEL_PREFIXES.get(record.levelno, "")
+            record.level_prefix = level_prefixes_.get(record.levelno, "")
             record.program = program
             return super().format(record)
 
     _add_trace_loglevel()
-    log = logging.getLogger(program)
+    log = logging.getLogger(logger_name)
     log.setLevel(logging.INFO)
     log.propagate = False
     if not any(isinstance(h, logging.StreamHandler) for h in log.handlers):

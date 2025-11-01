@@ -314,7 +314,9 @@ class Job:
                 )
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
-                get_simple_logger(PROG_NAME).error("Log init: %s", e, exc_info=not isinstance(e, SystemExit))
+                get_simple_logger(PROG_NAME, logger_name_suffix=logger_name_suffix).error(
+                    "Log init: %s", e, exc_info=not isinstance(e, SystemExit)
+                )
                 raise
 
             aux_args: list[str] = []
