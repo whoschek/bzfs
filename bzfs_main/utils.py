@@ -313,7 +313,7 @@ def open_nofollow(
 
 
 def close_quietly(fd: int) -> None:
-    """Closes the given file descriptor while silently swallowing any exception that might arise as part of this."""
+    """Closes the given file descriptor while silently swallowing any OSError that might arise as part of this."""
     if fd >= 0:
         try:
             os.close(fd)
@@ -1228,7 +1228,7 @@ class SynchronousExecutor(Executor):
 
     @classmethod
     def executor_for(cls, max_workers: int) -> Executor:
-        """Factory returning a SynchronousExecutor if max_workers == 1; else a ThreadPoolExecutor."""
+        """Factory returning a SynchronousExecutor if 0 <= max_workers <= 1; else a ThreadPoolExecutor."""
         return cls() if 0 <= max_workers <= 1 else ThreadPoolExecutor(max_workers=max_workers)
 
 

@@ -112,6 +112,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     )
 
 # constants:
+HOME_DIRECTORY: Final[str] = get_home_directory()
 _UNSET_ENV_VARS_LOCK: Final[threading.Lock] = threading.Lock()
 _UNSET_ENV_VARS_LATCH: Final[SynchronizedBool] = SynchronizedBool(True)
 
@@ -133,7 +134,7 @@ class LogParams:
             log_level = "INFO"
         self.log_level: Final[str] = log_level
         self.timestamp: Final[str] = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
-        self.home_dir: Final[str] = get_home_directory()
+        self.home_dir: Final[str] = HOME_DIRECTORY
         log_parent_dir: Final[str] = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)
         if LOG_DIR_DEFAULT not in os.path.basename(log_parent_dir):
             die(f"Basename of --log-dir must contain the substring '{LOG_DIR_DEFAULT}', but got: {log_parent_dir}")
@@ -512,7 +513,7 @@ class Remote:
         self.socket_prefix: Final[str] = "s"
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
-            ssh_home_dir: str = os.path.join(get_home_directory(), ".ssh")
+            ssh_home_dir: str = os.path.join(HOME_DIRECTORY, ".ssh")
             os.makedirs(ssh_home_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             self.ssh_socket_dir: Final[str] = os.path.join(ssh_home_dir, "bzfs")
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
