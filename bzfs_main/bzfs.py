@@ -351,7 +351,7 @@ class Job:
                         msg = "Exiting as same previous periodic job is still running without completion yet per "
                         die(msg + lock_file, STILL_RUNNING_STATUS)
 
-                    # xfinally: unlink the lock_file while still holding the flock on its fd — it's correct and safe:
+                    # xfinally: unlink the lock_file while still holding the flock on its fd - it's correct and safe:
                     # - Performing unlink() before close() avoids a race where a subsequent bzfs process could
                     #   recreate and lock a fresh inode for the same path between our close() and a later unlink().
                     #   In that case, a late unlink would delete the newer process's lock_file path.

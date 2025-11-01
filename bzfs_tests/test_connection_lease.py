@@ -576,8 +576,8 @@ class TestConnectionLease(AbstractTestCase):
 
         Rationale: This test proves that the collision check prevents replacing an existing ``used/<name>`` (avoiding
         double-ownership hazards), that salvage from ``used/`` remains functional, and that release resolves any
-        temporary duplication without leaks. It focuses on externally observable invariants—paths, existence, and final
-        directory contents—rather than internal implementation details, ensuring robust behavior under rare edge
+        temporary duplication without leaks. It focuses on externally observable invariants - paths, existence, and final
+        directory contents - rather than internal implementation details, ensuring robust behavior under rare edge
         conditions without introducing latency or complexity in the common path.
         """
         with get_tmpdir() as root_dir:

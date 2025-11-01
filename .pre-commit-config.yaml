@@ -149,7 +149,7 @@ repos:
       - id: forbid-ambiguous-characters
         name: "forbid ambiguous characters"
         language: pygrep
-        entry: '…|–|“|”|‘|’|→'               # replace ambiguous with unambiguous characters (en dash, curly quotes, etc)
+        entry: '…|—|–|“|”|‘|’|→'             # replace ambiguous with unambiguous characters (em dash, curly quotes, etc)
         types: [python]
   - repo: https://github.com/hukkin/mdformat
     rev: 0.7.22
