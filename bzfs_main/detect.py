@@ -166,7 +166,7 @@ def detect_available_programs(job: Job) -> None:
                 uname: str = program[len("uname-") :]
                 programs["uname"] = uname
                 log.log(LOG_TRACE, f"available_programs[{key}][uname]: %s", uname)
-                programs["os"] = uname.split(" ")[0]  # Linux|FreeBSD|Darwin
+                programs["os"] = uname.split(" ", maxsplit=1)[0]  # Linux|FreeBSD|Darwin
                 log.log(LOG_TRACE, f"available_programs[{key}][os]: %s", programs["os"])
             elif program.startswith("default_shell-"):
                 programs.pop(program)

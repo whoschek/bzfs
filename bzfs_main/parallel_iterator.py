@@ -144,7 +144,7 @@ def parallel_iterator_results(
     iterator: Iterator[Future[T]],
     max_workers: int,
     ordered: bool,
-    termination_event: threading.Event | None = None,
+    termination_event: threading.Event | None = None,  # optional event to request early async termination
 ) -> Iterator[T]:
     """Yield results from an iterator of Future[T] using sliding-window parallelism with optional ordered delivery."""
     assert max_workers >= 0

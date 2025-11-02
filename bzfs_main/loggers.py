@@ -94,7 +94,7 @@ def get_logger(
 
 def _get_default_logger(log_params: LogParams, args: argparse.Namespace, logger_name_suffix: str = "") -> Logger:
     """Creates the default logger with stream, file and optional syslog handlers."""
-    logger_name = _resolve_logger_name(logger_name_suffix)
+    logger_name: str = _resolve_logger_name(logger_name_suffix)
     log = Logger(logger_name)  # noqa: LOG001 do not register logger with Logger.manager to avoid potential memory leak
     log.setLevel(log_params.log_level)
     log.propagate = False  # don't propagate log messages up to the root logger to avoid emitting duplicate messages

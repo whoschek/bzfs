@@ -137,7 +137,7 @@ jobs:
         echo "[CI] pre-commit fail_fast is now set to: $(grep '^fail_fast:' .pre-commit-config.yaml)"
         # Run all normal pre-commit hooks, plus the manual stage for CI-only checks such as cyclic import detection by pylint
         pre-commit run --all-files --hook-stage manual
-    - name: Test with unittest
+    - name: Run tests
       run: |
         ./test.sh
         echo "bzfs-testrun-success"
@@ -190,7 +190,7 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-    - name: Test with unittest
+    - name: Run tests
       run: |
         if [ "${{ matrix.python-version }}" == "3.15-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
         echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
@@ -245,7 +245,7 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-    - name: Test with unittest
+    - name: Run tests
       run: |
         ./test.sh
     - name: Run tests and generate code coverage
@@ -293,7 +293,7 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-    - name: Test with unittest
+    - name: Run tests
       run: |
         ./test.sh
     - name: Run tests and generate code coverage
@@ -341,7 +341,7 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-    - name: Test with unittest
+    - name: Run tests
       run: |
         ./test.sh
     - name: Run tests and generate code coverage
@@ -382,7 +382,7 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-    - name: Test with unittest
+    - name: Run tests
       run: |
         ./test.sh
     - name: Run tests and generate code coverage
@@ -423,7 +423,7 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-    - name: Test with unittest
+    - name: Run tests
       run: |
         ./test.sh
 
@@ -474,7 +474,7 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-    - name: Test with unittest
+    - name: Run tests
       run: |
         ./test.sh
     - name: Run tests and generate code coverage
@@ -499,7 +499,7 @@ jobs:
     - uses: actions/checkout@v5
       with:
         persist-credentials: false
-    - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+    - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
@@ -525,7 +525,7 @@ jobs:
     - uses: actions/checkout@v5
       with:
         persist-credentials: false
-    - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+    - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
