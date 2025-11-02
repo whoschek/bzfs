@@ -500,8 +500,7 @@ intermittent failures, via efficient 'zfs receive -s' and 'zfs send -t'.
 simultaneously this is detected and the operation can be auto-retried safely.
 * A job that runs periodically declines to start if the same previous periodic job is still running without
 completion yet.
-* Can log to local and remote destinations out of the box. Logging mechanism is customizable and pluggable for smooth
-integration.
+* Can log to local and remote destinations out of the box.
 * Codebase is easy to change and maintain. No hidden magic. Python is very readable to contemporary engineers.
 Chances are that CI tests will catch changes that have unintended side effects.
 * It's fast!
@@ -650,8 +649,6 @@ usage: bzfs [-h] [--recursive]
             [--log-syslog-socktype {UDP,TCP}]
             [--log-syslog-facility INT] [--log-syslog-prefix STRING]
             [--log-syslog-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
-            [--log-config-file STRING]
-            [--log-config-var NAME:VALUE [NAME:VALUE ...]]
             [--include-envvar-regex REGEX [REGEX ...]]
             [--exclude-envvar-regex REGEX [REGEX ...]]
             [--yearly_year INT] [--yearly_month INT]
@@ -2236,51 +2233,6 @@ usage: bzfs [-h] [--recursive]
 
 *  Only send messages with equal or higher priority than this log level to syslog. Default is
     'ERROR'.
-
-<!-- -->
-
-<div id="--log-config-file"></div>
-
-**--log-config-file** *STRING*
-
-*  The contents of a JSON file that defines a custom python logging configuration to be used
-    (optional). If the option starts with a `+` prefix then the contents are read from the UTF-8
-    JSON file given after the `+` prefix. Examples: +log_config.json, +/path/to/log_config.json.
-    Here is an example config file that demonstrates usage:
-    https://github.com/whoschek/bzfs/blob/main/bzfs_tests/log_config.json
-
-    For more examples see
-    https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig
-    and for details see
-    https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema
-
-    *Note:* Lines starting with a # character are ignored as comments within the JSON. Also, if
-    a line ends with a # character the portion between that # character and the preceding #
-    character on the same line is ignored as a comment.
-
-<!-- -->
-
-<div id="--log-config-var"></div>
-
-**--log-config-var** *NAME:VALUE [NAME:VALUE ...]*
-
-*  User defined variables in the form of zero or more NAME:VALUE pairs (optional). These
-    variables can be used within the JSON passed with --log-config-file (see above) via
-    `${name[:default]}` references, which are substituted (aka interpolated) as follows:
-
-    If the variable contains a non-empty CLI value then that value is used. Else if a default
-    value for the variable exists in the JSON file that default value is used. Else the program
-    aborts with an error. Example: In the JSON variable `${syslog_address:/dev/log}`, the
-    variable name is 'syslog_address' and the default value is '/dev/log'. The default value
-    is the portion after the optional : colon within the variable declaration. The default value
-    is used if the CLI user does not specify a non-empty value via --log-config-var, for example
-    via --log-config-var syslog_address:/path/to/socket_file or via --log-config-var
-    syslog_address:[host,port].
-
-    bzfs automatically supplies the following convenience variables: `${bzfs.log_level}`,
-    `${bzfs.log_dir}`, `${bzfs.log_file}`, `${bzfs.sub.logger}`,
-    `${bzfs.get_default_log_formatter}`, `${bzfs.timestamp}`. For a complete list see the
-    source code of get_dict_config_logger().
 
 <!-- -->
 

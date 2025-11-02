@@ -30,7 +30,6 @@ from bzfs_main.argparse_actions import (
     DeleteDstSnapshotsExceptPlanAction,
     FileOrLiteralAction,
     IncludeSnapshotPlanAction,
-    LogConfigVariablesAction,
     NewSnapshotFilterGroupAction,
     NonEmptyStringAction,
     SafeDirectoryNameAction,
@@ -1374,37 +1373,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--log-syslog-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
         default="ERROR",
         help="Only send messages with equal or higher priority than this log level to syslog. Default is '%(default)s'.\n\n")
-    parser.add_argument(
-        "--log-config-file", default=None, action=NonEmptyStringAction, metavar="STRING",
-        help="The contents of a JSON file that defines a custom python logging configuration to be used (optional). "
-             "If the option starts with a `+` prefix then the contents are read from the UTF-8 JSON file given "
-             "after the `+` prefix. Examples: +log_config.json, +/path/to/log_config.json. "
-             "Here is an example config file that demonstrates usage: "
-             "https://github.com/whoschek/bzfs/blob/main/bzfs_tests/log_config.json\n\n"
-             "For more examples see "
-             "https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig "
-             "and for details see "
-             "https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema\n\n"
-             "*Note:* Lines starting with a # character are ignored as comments within the JSON. Also, if a line ends "
-             "with a # character the portion between that # character and the preceding # character on the same line "
-             "is ignored as a comment.\n\n")
-    parser.add_argument(
-        "--log-config-var", action=LogConfigVariablesAction, nargs="+", default=[], metavar="NAME:VALUE",
-        help="User defined variables in the form of zero or more NAME:VALUE pairs (optional). "
-             "These variables can be used within the JSON passed with --log-config-file (see above) via "
-             "`${name[:default]}` references, which are substituted (aka interpolated) as follows:\n\n"
-             "If the variable contains a non-empty CLI value then that value is used. Else if a default value for the "
-             "variable exists in the JSON file that default value is used. Else the program aborts with an error. "
-             "Example: In the JSON variable `${syslog_address:/dev/log}`, the variable name is 'syslog_address' "
-             "and the default value is '/dev/log'. The default value is the portion after the optional : colon "
-             "within the variable declaration. The default value is used if the CLI user does not specify a non-empty "
-             "value via --log-config-var, for example via "
-             "--log-config-var syslog_address:/path/to/socket_file or via "
-             "--log-config-var syslog_address:[host,port].\n\n"
-             f"{PROG_NAME} automatically supplies the following convenience variables: "
-             "`${bzfs.log_level}`, `${bzfs.log_dir}`, `${bzfs.log_file}`, `${bzfs.sub.logger}`, "
-             "`${bzfs.get_default_log_formatter}`, `${bzfs.timestamp}`. "
-             "For a complete list see the source code of get_dict_config_logger().\n\n")
     parser.add_argument(
         "--include-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="On program startup, unset all Unix environment variables for which the full environment variable "

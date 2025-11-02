@@ -42,9 +42,6 @@ from bzfs_main.filter import (
     RankRange,
     UnixTimeRange,
 )
-from bzfs_main.loggers import (
-    validate_log_config_variable,
-)
 from bzfs_main.utils import (
     SHELL_CHARS,
     SNAPSHOT_FILTERS_VAR,
@@ -516,25 +513,6 @@ class TimeRangeAndRankRangeAction(argparse.Action):
                     lo = parse_rank(f"{kind}0")
             rankranges.append((lo[1:], hi[1:]))
         return rankranges
-
-
-#############################################################################
-class LogConfigVariablesAction(argparse.Action):
-    """Collects --log-config-var NAME:VALUE pairs for later substitution."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Validates NAME:VALUE entries and accumulate them."""
-        current_values: list[str] | None = getattr(namespace, self.dest, None)
-        if current_values is None:
-            current_values = []
-        for variable in values:
-            error_msg: str | None = validate_log_config_variable(variable)
-            if error_msg:
-                parser.error(error_msg)
-            current_values.append(variable)
-        setattr(namespace, self.dest, current_values)
 
 
 #############################################################################

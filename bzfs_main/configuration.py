@@ -54,7 +54,6 @@ import bzfs_main.utils
 from bzfs_main.argparse_actions import (
     SnapshotFilter,
     optimize_snapshot_filters,
-    validate_no_argument_file,
 )
 from bzfs_main.argparse_cli import (
     LOG_DIR_DEFAULT,
@@ -133,10 +132,6 @@ class LogParams:
         else:
             log_level = "INFO"
         self.log_level: Final[str] = log_level
-        self.log_config_file: Final[str] = args.log_config_file
-        if self.log_config_file and self.log_config_file.startswith("+"):
-            validate_no_argument_file(self.log_config_file, args, err_prefix="--log-config-file: ")
-        self.log_config_vars: Final[dict[str, str]] = dict(var.split(":", 1) for var in args.log_config_var)
         self.timestamp: Final[str] = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.home_dir: Final[str] = get_home_directory()
         log_parent_dir: Final[str] = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)

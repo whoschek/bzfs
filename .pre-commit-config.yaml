@@ -37,9 +37,7 @@ repos:
       - id: check-yaml                  # Attempt to load all YAML files to verify syntax
       - id: check-xml                   # Attempt to load all XML files to verify syntax via xmllint
       - id: check-json                  # Attempt to load all JSON files to verify syntax
-        exclude: '.*/.*bzfs_log_config.*\.json$'
       - id: pretty-format-json          # Auto-format JSON files
-        exclude: '.*/.*bzfs_log_config.*\.json$'
         args: [
           --autofix,
           --indent=4,

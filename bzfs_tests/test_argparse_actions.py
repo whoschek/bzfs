@@ -46,7 +46,6 @@ def suite() -> unittest.TestSuite:
         TestFileOrLiteralAction,
         TestNewSnapshotFilterGroupAction,
         TestNonEmptyStringAction,
-        TestLogConfigVariablesAction,
         SSHConfigFileNameAction,
         TestSafeFileNameAction,
         TestSafeDirectoryNameAction,
@@ -194,22 +193,6 @@ class TestNonEmptyStringAction(AbstractTestCase):
     def test_non_empty_string_action_empty(self) -> None:
         with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["--name", " "])
-
-
-###############################################################################
-class TestLogConfigVariablesAction(AbstractTestCase):
-
-    def setUp(self) -> None:
-        self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--log-config-var", nargs="+", action=argparse_actions.LogConfigVariablesAction)
-
-    def test_basic(self) -> None:
-        args = self.parser.parse_args(["--log-config-var", "name1:val1", "name2:val2"])
-        self.assertEqual(["name1:val1", "name2:val2"], args.log_config_var)
-
-        for var in ["", "  ", "varWithoutColon", ":valueWithoutName", " nameWithWhitespace:value"]:
-            with self.assertRaises(SystemExit), suppress_output():
-                self.parser.parse_args(["--log-config-var", var])
 
 
 ###############################################################################
