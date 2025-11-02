@@ -308,10 +308,10 @@ def process_datasets_in_parallel(
         if termination_event.is_set():
             for todo_future in todo_futures:
                 todo_future.cancel()
+            failed = failed or len(priority_queue) > 0 or len(todo_futures) > 0
             priority_queue.clear()
             todo_futures.clear()
             future_to_node.clear()
-            failed = True
         assert len(priority_queue) == 0
         assert len(todo_futures) == 0
         assert len(future_to_node) == 0
