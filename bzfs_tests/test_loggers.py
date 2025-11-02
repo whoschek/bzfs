@@ -46,7 +46,6 @@ from bzfs_main.configuration import (
 )
 from bzfs_main.loggers import (
     LOG_LEVEL_PREFIXES,
-    Tee,
     _get_default_logger,
     _get_syslog_address,
     get_default_log_formatter,
@@ -70,7 +69,6 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestHelperFunctions,
         TestLogging,
-        TestTee,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -343,33 +341,3 @@ class TestLogging(AbstractTestCase):
         self.assertEqual(LOG_LEVEL_PREFIXES[logging.WARNING], rec_any.level_prefix)
         self.assertEqual("demo", rec_any.program)
         self.assertIn("[demo]", formatted)
-
-
-#############################################################################
-class TestTee(AbstractTestCase):
-    """Tests the Tee class that duplicates writes to multiple streams."""
-
-    def test_write_flushes_all_streams(self) -> None:
-        """Write() forwards text and flush() to each target file."""
-        file1 = MagicMock()
-        file2 = MagicMock()
-        tee = Tee(file1, file2)
-        tee.write("abc")
-        for f in (file1, file2):
-            f.write.assert_called_once_with("abc")
-            f.flush.assert_called_once()
-
-    def test_flush_only(self) -> None:
-        """Flush() independently flushes all target streams."""
-        file1 = MagicMock()
-        file2 = MagicMock()
-        tee = Tee(file1, file2)
-        tee.flush()
-        file1.flush.assert_called_once()
-        file2.flush.assert_called_once()
-
-    def test_fileno_returns_first_descriptor(self) -> None:
-        """Fileno() exposes the descriptor of the first underlying stream."""
-        with tempfile.TemporaryFile() as f1, tempfile.TemporaryFile() as f2:
-            tee = Tee(f1, f2)
-            self.assertEqual(f1.fileno(), tee.fileno())

@@ -34,7 +34,6 @@ from logging import (
     Logger,
 )
 from typing import (
-    IO,
     TYPE_CHECKING,
     Any,
     Final,
@@ -249,26 +248,3 @@ def _get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | t
         )
         return addr, scktype
     return address, socktype
-
-
-#############################################################################
-class Tee:
-    """File-like object that duplicates writes to multiple streams."""
-
-    def __init__(self, *files: IO[Any]) -> None:
-        self.files: Final = files
-
-    def write(self, obj: str) -> None:
-        """Write ``obj`` to all target files and flush immediately."""
-        for file in self.files:
-            file.write(obj)
-            file.flush()
-
-    def flush(self) -> None:
-        """Flush all target streams."""
-        for file in self.files:
-            file.flush()
-
-    def fileno(self) -> int:
-        """Return file descriptor of the first target stream."""
-        return self.files[0].fileno()
