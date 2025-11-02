@@ -15,9 +15,10 @@
 """Logging helpers that build default and syslog-enabled loggers; Centralizes logger setup so that all bzfs tools share
 uniform formatting and configuration.
 
-Each bzfs.Job has its own separate logger object such that multiple Jobs can run concurrently in the same Python process
-without interfering with each other's logging semantics. This is achieved by passing a unique logger_name_suffix per job to
-get_logger(). reset_logger() closes only those objects tied to that particular logger_name_suffix.
+Each bzfs.Job has its own separate Logger object such that multiple Jobs can run concurrently in the same Python process
+without interfering with each other's logging semantics. This is achieved by passing a unique ``logger_name_suffix`` per job
+to ``get_logger()`` so each job receives an isolated Logger instance. Callers are responsible for closing any loggers they
+own via ``reset_logger()``.
 """
 from __future__ import (
     annotations,
@@ -25,7 +26,6 @@ from __future__ import (
 import argparse
 import contextlib
 import logging
-import os
 import sys
 from datetime import (
     datetime,
@@ -66,13 +66,7 @@ def _resolve_logger_name(logger_name_suffix: str) -> str:
     return logger_name + "." + logger_name_suffix if logger_name_suffix else logger_name
 
 
-def reset_logger(logger_name_suffix: str = "") -> None:
-    """Removes and closes logging handlers (and closes their files) and resets logger to default state."""
-    logger_name = _resolve_logger_name(logger_name_suffix)
-    reset_logger_obj(logging.getLogger(logger_name))
-
-
-def reset_logger_obj(log: Logger) -> None:
+def reset_logger(log: Logger) -> None:
     """Removes and closes logging handlers (and closes their files) and resets logger to default state."""
     for handler in log.handlers.copy():
         log.removeHandler(handler)
@@ -102,22 +96,19 @@ def get_logger(
 def _get_default_logger(log_params: LogParams, args: argparse.Namespace, logger_name_suffix: str = "") -> Logger:
     """Creates the default logger with stream, file and optional syslog handlers."""
     logger_name = _resolve_logger_name(logger_name_suffix)
-    log = logging.getLogger(logger_name)
+    log = Logger(logger_name)  # noqa: LOG001 do not register logger with Logger.manager to avoid potential memory leak
     log.setLevel(log_params.log_level)
     log.propagate = False  # don't propagate log messages up to the root logger to avoid emitting duplicate messages
 
-    if not any(isinstance(h, logging.StreamHandler) and h.stream in [sys.stdout, sys.stderr] for h in log.handlers):
-        handler: logging.Handler = logging.StreamHandler(stream=sys.stdout)
-        handler.setFormatter(get_default_log_formatter(log_params=log_params))
-        handler.setLevel(log_params.log_level)
-        log.addHandler(handler)
+    handler: logging.Handler = logging.StreamHandler(stream=sys.stdout)
+    handler.setFormatter(get_default_log_formatter(log_params=log_params))
+    handler.setLevel(log_params.log_level)
+    log.addHandler(handler)
 
-    abs_log_file: str = os.path.abspath(log_params.log_file)
-    if not any(isinstance(h, logging.FileHandler) and h.baseFilename == abs_log_file for h in log.handlers):
-        handler = logging.FileHandler(log_params.log_file, encoding="utf-8")
-        handler.setFormatter(get_default_log_formatter())
-        handler.setLevel(log_params.log_level)
-        log.addHandler(handler)
+    handler = logging.FileHandler(log_params.log_file, encoding="utf-8")
+    handler.setFormatter(get_default_log_formatter())
+    handler.setLevel(log_params.log_level)
+    log.addHandler(handler)
 
     address = args.log_syslog_address
     if address:  # optionally, also log to local or remote syslog

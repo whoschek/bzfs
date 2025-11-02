@@ -126,7 +126,6 @@ from bzfs_main.filter import (
 from bzfs_main.loggers import (
     get_simple_logger,
     reset_logger,
-    reset_logger_obj,
 )
 from bzfs_main.parallel_batch_cmd import (
     run_ssh_cmd_parallel,
@@ -303,8 +302,8 @@ class Job:
         logger_name_suffix: str = ""
 
         def _reset_logger() -> None:
-            if logger_name_suffix:  # reset Logger unless it's a Logger outside of our control
-                reset_logger(logger_name_suffix=logger_name_suffix)
+            if logger_name_suffix and log is not None:  # reset Logger unless it's a Logger outside of our control
+                reset_logger(log)
 
         with xfinally(_reset_logger):  # runs _reset_logger() on exit, without masking error raised in body of `with` block
             try:
@@ -319,7 +318,7 @@ class Job:
                 try:
                     simple_log.error("Log init: %s", e, exc_info=not isinstance(e, SystemExit))
                 finally:
-                    reset_logger_obj(simple_log)
+                    reset_logger(simple_log)
                 raise
 
             aux_args: list[str] = []

@@ -1280,7 +1280,7 @@ def xfinally(cleanup: Callable[[], None]) -> _XFinally:
 
     Example:
     -------
-    >>> with xfinally(reset_logger):   # doctest: +SKIP
+    >>> with xfinally(lambda: release_resources()):   # doctest: +SKIP
     ...     run_tasks()
 
     The single *with* line replaces verbose ``try/except/finally`` boilerplate while preserving full error information.

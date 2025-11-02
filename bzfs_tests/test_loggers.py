@@ -114,7 +114,6 @@ class TestHelperFunctions(AbstractTestCase):
                     files_todo.remove(handler.baseFilename)
             self.assertEqual(0, len(files_todo))
 
-        reset_logger()
         prefix = "test_get_logger:"
         args = self.argparser_parse_args(args=["src", "dst"])
         root_logger = logging.getLogger()
@@ -143,11 +142,11 @@ class TestHelperFunctions(AbstractTestCase):
         log_params = LogParams(args)
         log = get_logger(log_params, args)
         self.assertIsNotNone(log)
-        files.add(os.path.abspath(log_params.log_file))
+        files = {os.path.abspath(log_params.log_file)}
         check(log, files)
 
         log.addFilter(lambda record: True)  # dummy
-        reset_logger()
+        reset_logger(log)
         files.clear()
         check(log, files)
 
@@ -155,17 +154,15 @@ class TestHelperFunctions(AbstractTestCase):
         log_params = LogParams(args)
         log = get_logger(log_params, args)
         self.assertIsNotNone(log)
-        files.add(os.path.abspath(log_params.log_file))
+        files = {os.path.abspath(log_params.log_file)}
         check(log, files)
 
         args = self.argparser_parse_args(args=["src", "dst", "--quiet"])
         log_params = LogParams(args)
         log = get_logger(log_params, args)
         self.assertIsNotNone(log)
-        files.add(os.path.abspath(log_params.log_file))
+        files = {os.path.abspath(log_params.log_file)}
         check(log, files)
-
-        reset_logger()
 
     def test_get_syslog_address(self) -> None:
         udp = socket.SOCK_DGRAM
@@ -183,7 +180,6 @@ class TestLogging(AbstractTestCase):
     def test_get_default_logger(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         lp = LogParams(args)
-        reset_logger()
         log = _get_default_logger(lp, args)
         self.assertTrue(any(isinstance(h, logging.StreamHandler) for h in log.handlers))
         self.assertTrue(any(isinstance(h, logging.FileHandler) for h in log.handlers))
@@ -191,24 +187,29 @@ class TestLogging(AbstractTestCase):
     def test_get_default_logger_considers_existing_sublog_handlers(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         lp = LogParams(args)
-        logger = logging.getLogger(f"{bzfs.__name__}.{lp.logger_name_suffix}")
-        logger.handlers.clear()
+        # Ensure _get_default_logger does not reuse handlers registered in the global logging registry
+        manager_logger = logging.getLogger(f"{bzfs.__name__}.{lp.logger_name_suffix}")
+        manager_logger.handlers.clear()
         stream_h: logging.StreamHandler | None = None
         file_h: logging.FileHandler | None = None
         try:
             stream_h = logging.StreamHandler(stream=sys.stdout)
             file_h = logging.FileHandler(lp.log_file, encoding="utf-8")
-            logger.addHandler(stream_h)
-            logger.addHandler(file_h)
+            manager_logger.addHandler(stream_h)
+            manager_logger.addHandler(file_h)
             log_result = _get_default_logger(lp, args, logger_name_suffix=lp.logger_name_suffix)
-            self.assertEqual([stream_h, file_h], log_result.handlers)
+            self.assertIsNot(log_result, manager_logger)
+            # Handlers should be independently created, not the ones attached to manager_logger
+            self.assertTrue(any(isinstance(h, logging.StreamHandler) for h in log_result.handlers))
+            self.assertTrue(any(isinstance(h, logging.FileHandler) for h in log_result.handlers))
+            self.assertNotIn(stream_h, log_result.handlers)
+            self.assertNotIn(file_h, log_result.handlers)
         finally:
             if stream_h is not None:
                 stream_h.close()
             if file_h is not None:
                 file_h.close()
-            logger.handlers.clear()
-            reset_logger(logger_name_suffix=lp.logger_name_suffix)
+            manager_logger.handlers.clear()
 
     @patch("logging.handlers.SysLogHandler")
     def test_get_default_logger_syslog_warning(self, mock_syslog: MagicMock) -> None:
@@ -227,18 +228,17 @@ class TestLogging(AbstractTestCase):
         self.assertEqual("UDP", args.log_syslog_socktype)
         self.assertEqual(1, args.log_syslog_facility)
         self.assertEqual("DEBUG", args.log_syslog_level)
-        reset_logger()
-        logger = logging.getLogger(bzfs.__name__)
+        # ensure fresh logger and clean up after
         handler = logging.Handler()
         mock_syslog.return_value = handler
         try:
-            with patch.object(logger, "warning") as mock_warning:
+            with patch.object(logging.Logger, "warning") as mock_warning:
                 log = _get_default_logger(lp, args)
                 mock_syslog.assert_called_once()
                 self.assertIn(handler, log.handlers)
                 mock_warning.assert_called_once()
         finally:
-            reset_logger()
+            reset_logger(log)
 
     def test_default_log_formatter_with_exc_info(self) -> None:
         """Ensures DefaultLogFormatter outputs traceback when exc_info is set."""
@@ -296,7 +296,7 @@ class TestLogging(AbstractTestCase):
         self.assertNotIn("%s", formatted)
 
     def test_scoped_loggers_teardown_is_isolated(self) -> None:
-        """reset_logger(logger_name_suffix=...) only removes handlers for the targeted suffix-specific logger."""
+        """reset_logger_obj(log) only removes handlers for the targeted logger instance."""
         args1 = self.argparser_parse_args(["src", "dst"])
         lp1 = LogParams(args1)
         log1 = get_logger(lp1, args1, logger_name_suffix=lp1.logger_name_suffix)
@@ -314,14 +314,14 @@ class TestLogging(AbstractTestCase):
         self.assertEqual({os.path.abspath(lp1.log_file)}, file_paths(log1))
         self.assertEqual({os.path.abspath(lp2.log_file)}, file_paths(log2))
 
-        reset_logger(logger_name_suffix=lp1.logger_name_suffix)
-        self.assertEqual([], logging.getLogger(log1.name).handlers)
-        remaining = logging.getLogger(log2.name)
-        self.assertNotEqual([], remaining.handlers)
-        self.assertEqual({os.path.abspath(lp2.log_file)}, file_paths(remaining))
+        # Reset only the first scoped logger; second must remain unaffected
+        reset_logger(log1)
+        self.assertEqual([], log1.handlers)
+        self.assertNotEqual([], log2.handlers)
+        self.assertEqual({os.path.abspath(lp2.log_file)}, file_paths(log2))
 
-        reset_logger(logger_name_suffix=lp2.logger_name_suffix)
-        self.assertEqual([], logging.getLogger(log2.name).handlers)
+        reset_logger(log2)
+        self.assertEqual([], log2.handlers)
 
     def test_level_formatter_injects_fields(self) -> None:
         """LevelFormatter attaches level prefix and program name to records."""

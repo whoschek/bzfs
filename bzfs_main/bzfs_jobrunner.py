@@ -82,7 +82,7 @@ from bzfs_main.detect import (
 )
 from bzfs_main.loggers import (
     get_simple_logger,
-    reset_logger_obj,
+    reset_logger,
 )
 from bzfs_main.parallel_tasktree import (
     BARRIER_CHAR,
@@ -474,7 +474,7 @@ def main() -> None:
             with termination_signal_handler(termination_event=termination_event):
                 Job(log=log, termination_event=termination_event).run_main(sys_argv=sys.argv)
         finally:
-            reset_logger_obj(log)
+            reset_logger(log)
     finally:
         os.umask(prev_umask)  # restore prior global state
 
