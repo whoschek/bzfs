@@ -38,9 +38,13 @@ from bzfs_main.parallel_tasktree import (
     BARRIER_CHAR,
     CompletionCallback,
     _build_dataset_tree,
+    _complete_job_with_barriers,
     _make_tree_node,
     _Tree,
     process_datasets_in_parallel,
+)
+from bzfs_main.utils import (
+    SortedInterner,
 )
 
 
@@ -49,6 +53,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestBuildTree,
         TestProcessDatasetsInParallel,
+        TestDisabledBarriers,
         TestParallelTaskTreeBenchmark,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
@@ -264,6 +269,164 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertTrue(failed, "Termination should mark the run as failed")
         # Exactly one submission is expected: first submitted before sleep, then termination prevents further submissions
         self.assertEqual(1, len(calls), f"Expected 1 submitted dataset, got {len(calls)}: {calls}")
+
+
+#############################################################################
+class TestDisabledBarriers(unittest.TestCase):
+
+    def test_failure_disables_ancestor_barriers_and_sets_immutable_empty_barrier(self) -> None:
+        """Verifies that a first failure disables barriers for the node and all its ancestors + sets immutable_empty_barrier.
+
+        This exercises the ancestor-walking guard by confirming disabled flags are set along the chain, and that barriers are
+        set to the immutable_empty_barrier on each visited node when handling a failure without further propagation (pending
+        > 0 suppresses the subsequent while-loop).
+        """
+
+        # Build a -> b -> c chain
+        a = _make_tree_node("a", {})
+        b = _make_tree_node("a/b", {}, parent=a)
+        c = _make_tree_node("a/b/c", {}, parent=b)
+
+        # Prevent the completion-propagation while-loop from running to keep the test focused on the failure path only
+        c.mut.pending = 1
+        a.mut.pending = 0
+        b.mut.pending = 0
+
+        priority_queue: list = []
+        datasets_set: SortedInterner[str] = SortedInterner([])
+        immutable_empty_barrier = _make_tree_node("immutable_empty_barrier", {})
+
+        # First failure at deepest node
+        _complete_job_with_barriers(
+            c,
+            no_skip=False,
+            priority_queue=priority_queue,
+            datasets_set=datasets_set,
+            immutable_empty_barrier=immutable_empty_barrier,
+        )
+
+        # Check that the node and its ancestors have barriers disabled and point to the immutable_empty_barrier
+        self.assertTrue(c.mut.disabled_barriers)
+        self.assertTrue(b.mut.disabled_barriers)
+        self.assertTrue(a.mut.disabled_barriers)
+        self.assertIs(c.mut.barrier, immutable_empty_barrier)
+        self.assertIs(b.mut.barrier, immutable_empty_barrier)
+        self.assertIs(a.mut.barrier, immutable_empty_barrier)
+
+    def test_ancestor_walking_stops_at_disabled_ancestor(self) -> None:
+        """Second failure in the same subtree should stop disabling at the first already-disabled ancestor.
+
+        We confirm by setting a custom barrier object on an ancestor and ensuring it remains unchanged after the second
+        failure. We again keep pending > 0 to avoid the subsequent completion-propagation loop from running.
+        """
+
+        # Build a -> b -> c
+        a = _make_tree_node("a", {})
+        b = _make_tree_node("a/b", {}, parent=a)
+        c = _make_tree_node("a/b/c", {}, parent=b)
+
+        # First failure disables barriers up to root
+        c.mut.pending = 1  # suppress while-loop
+        priority_queue: list = []
+        datasets_set: SortedInterner[str] = SortedInterner([])
+        immutable_empty_barrier = _make_tree_node("immutable_empty_barrier", {})
+        _complete_job_with_barriers(
+            c,
+            no_skip=False,
+            priority_queue=priority_queue,
+            datasets_set=datasets_set,
+            immutable_empty_barrier=immutable_empty_barrier,
+        )
+
+        # Verify barriers disabled
+        self.assertTrue(a.mut.disabled_barriers)
+        self.assertTrue(b.mut.disabled_barriers)
+        self.assertTrue(c.mut.disabled_barriers)
+
+        # Place a custom marker on ancestor 'a' to detect unwanted overwrites; ancestor walking must stop at 'b'.
+        marker = _make_tree_node("custom_marker", {})
+        a.mut.barrier = marker
+
+        # Now fail deeper sibling 'd' under 'b' and ensure 'a' stays untouched by the barrier-disabling loop
+        d = _make_tree_node("a/b/d", {}, parent=b)
+        d.mut.pending = 1  # suppress while-loop
+        _complete_job_with_barriers(
+            d,
+            no_skip=False,
+            priority_queue=priority_queue,
+            datasets_set=datasets_set,
+            immutable_empty_barrier=immutable_empty_barrier,
+        )
+
+        # 'd' gets barriers disabled; 'b' and 'a' remain with barriers disabled but 'a' barrier should still be the custom marker
+        self.assertTrue(d.mut.disabled_barriers)
+        self.assertTrue(b.mut.disabled_barriers)
+        self.assertTrue(a.mut.disabled_barriers)
+        self.assertIs(
+            a.mut.barrier, marker, "Ancestor walking should stop at first disabled ancestor and not touch higher ancestors"
+        )
+
+    def test_early_break_can_open_ancestor_barrier_after_failure(self) -> None:
+        """Demonstrate that breaking when encountering a immutable_empty_barrier on an intermediate ancestor would allow a
+        higher ancestor barrier to open after a failure deeper in the tree; This exposes that an early-break optimization
+        would be unsafe unless all higher ancestors are already set to the immutable_empty_barrier."""
+
+        log = MagicMock(logging.Logger)
+        br = BARRIER_CHAR
+
+        # Tree under 'x':
+        # - x/node/child -> success, which opens x/node barrier and enqueues x/node/~/bar/fail
+        # - x/node/~/bar/fail -> failure (no_skip=False)
+        # - x/other -> delayed completion to keep x.pending > 0 at the time of failure
+        # - x/~/after -> barrier job at ancestor 'x' that must NOT start if any descendant fails
+        datasets = [
+            "x",
+            "x/node",
+            "x/node/child",
+            f"x/node/{br}/bar/fail",
+            "x/other",
+            f"x/{br}/after",
+        ]
+        self.assertEqual(sorted(datasets), datasets)
+
+        calls: list[str] = []
+        lock = threading.Lock()
+        failure_done = threading.Event()
+
+        def record(dataset: str) -> None:
+            with lock:
+                calls.append(dataset)
+
+        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+            # Simulate long-running sibling to keep ancestor 'x' pending > 0 during failure handling
+            if dataset == "x/other":
+                time.sleep(0.05)  # give others a head start
+                failure_done.wait(timeout=2)  # finish only after failure has been handled
+
+            record(dataset)
+
+            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> tuple[bool, bool]:
+                if dataset == f"x/node/{br}/bar/fail":
+                    # Signal that failure handling has run; return no_skip=False (skip subtree) but not fail the run
+                    failure_done.set()
+                    return False, False
+                return True, False
+
+            return _completion_callback
+
+        failed = process_datasets_in_parallel(
+            log=log,
+            datasets=datasets,
+            process_dataset=process_dataset,
+            max_workers=2,
+            enable_barriers=True,
+            is_test_mode=True,
+        )
+
+        # The run should not be marked failed since fail=False, but the ancestor barrier 'x/~/after' must NOT start.
+        # If it did start, the early-break allowed opening of ancestor barrier after a failure.
+        self.assertFalse(failed)
+        self.assertNotIn(f"x/{br}/after", calls, msg=f"Ancestor barrier job should not start after failure, calls={calls}")
 
 
 #############################################################################
