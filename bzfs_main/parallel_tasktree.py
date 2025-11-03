@@ -242,16 +242,16 @@ def process_datasets_in_parallel(
     assert max_workers > 0
     assert callable(interval_nanos)
     termination_event = threading.Event() if termination_event is None else termination_event
-    has_barrier: bool = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
+    has_barrier: Final[bool] = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
     assert (enable_barriers is not False) or not has_barrier, "Barriers seen in datasets but barriers explicitly disabled"
-    barriers_enabled: bool = bool(has_barrier or enable_barriers)
-    is_parallel: bool = max_workers != 1 and len(datasets) > 1 and has_siblings(datasets)
+    barriers_enabled: Final[bool] = bool(has_barrier or enable_barriers)
+    is_parallel: Final[bool] = max_workers > 1 and len(datasets) > 1 and has_siblings(datasets)  # siblings can run in par
 
-    immutable_empty_barrier: _TreeNode = _make_tree_node("immutable_empty_barrier", {})
-    datasets_set: SortedInterner[str] = SortedInterner(datasets)  # reduces memory footprint
-    priority_queue: list[_TreeNode] = _build_dataset_tree_and_find_roots(datasets)
+    immutable_empty_barrier: Final[_TreeNode] = _make_tree_node("immutable_empty_barrier", {})
+    datasets_set: Final[SortedInterner[str]] = SortedInterner(datasets)  # reduces memory footprint
+    priority_queue: Final[list[_TreeNode]] = _build_dataset_tree_and_find_roots(datasets)
     heapq.heapify(priority_queue)  # same order as sorted()
-    executor: Executor = ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()
+    executor: Final[Executor] = ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()
     with executor:
         todo_futures: set[Future[CompletionCallback]] = set()
         future_to_node: dict[Future[CompletionCallback], _TreeNode] = {}

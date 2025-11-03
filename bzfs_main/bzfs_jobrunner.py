@@ -83,6 +83,7 @@ from bzfs_main.detect import (
 from bzfs_main.loggers import (
     get_simple_logger,
     reset_logger,
+    set_logging_runtime_defaults,
 )
 from bzfs_main.parallel_tasktree import (
     BARRIER_CHAR,
@@ -97,6 +98,7 @@ from bzfs_main.utils import (
     Subprocesses,
     format_dict,
     format_obj,
+    getenv_bool,
     human_readable_duration,
     percent,
     shuffle_dict,
@@ -467,14 +469,11 @@ def main() -> None:
     """API for command line clients."""
     prev_umask: int = os.umask(UMASK)
     try:
-        log: Logger = get_simple_logger(PROG_NAME)
-        try:
-            # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
-            termination_event: threading.Event = threading.Event()
-            with termination_signal_handler(termination_event=termination_event):
-                Job(log=log, termination_event=termination_event).run_main(sys_argv=sys.argv)
-        finally:
-            reset_logger(log)
+        set_logging_runtime_defaults()
+        # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
+        termination_event: threading.Event = threading.Event()
+        with termination_signal_handler(termination_event=termination_event):
+            Job(log=None, termination_event=termination_event).run_main(sys_argv=sys.argv)
     finally:
         os.umask(prev_umask)  # restore prior global state
 
@@ -483,9 +482,10 @@ def main() -> None:
 class Job:
     """Coordinates subjobs per the CLI flags; Each subjob handles one host pair and may run in its own process or thread."""
 
-    def __init__(self, log: Logger, termination_event: threading.Event) -> None:
+    def __init__(self, log: Logger | None, termination_event: threading.Event) -> None:
         # immutable variables:
-        self.log: Final[Logger] = log
+        self.log_was_None: Final[bool] = log is None
+        self.log: Final[Logger] = get_simple_logger(PROG_NAME) if log is None else log
         self.termination_event: Final[threading.Event] = termination_event
         self.subprocesses: Final[Subprocesses] = Subprocesses()
         self.jobrunner_dryrun: bool = False
@@ -502,6 +502,13 @@ class Job:
 
     def run_main(self, sys_argv: list[str]) -> None:
         """API for Python clients; visible for testing; may become a public API eventually."""
+        try:
+            self._run_main(sys_argv)
+        finally:
+            if self.log_was_None:  # reset Logger unless it's a Logger outside of our control
+                reset_logger(self.log)
+
+    def _run_main(self, sys_argv: list[str]) -> None:
         self.first_exception = None
         log: Logger = self.log
         log.info("CLI arguments: %s", " ".join(sys_argv))
@@ -584,6 +591,7 @@ class Job:
         loopback_ids: set[str] = {"localhost", "127.0.0.1", "::1", socket.gethostname()}  # ::1 is IPv6 loopback address
         loopback_ids.update(self.get_localhost_ips())  # union
         loopback_ids.add(localhostname)
+        loopback_ids = set() if getenv_bool("disable_loopback", False) else loopback_ids
         log.log(LOG_TRACE, "loopback_ids: %s", sorted(loopback_ids))
 
         def zero_pad(number: int, width: int = 6) -> str:

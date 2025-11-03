@@ -126,6 +126,7 @@ from bzfs_main.filter import (
 from bzfs_main.loggers import (
     get_simple_logger,
     reset_logger,
+    set_logging_runtime_defaults,
 )
 from bzfs_main.parallel_batch_cmd import (
     run_ssh_cmd_parallel,
@@ -218,6 +219,7 @@ def main() -> None:
     """API for command line clients."""
     prev_umask: int = os.umask(UMASK)
     try:
+        set_logging_runtime_defaults()
         # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
         termination_event: threading.Event = threading.Event()
         with termination_signal_handler(termination_event=termination_event):

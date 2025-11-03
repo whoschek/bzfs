@@ -48,9 +48,6 @@ from unittest.mock import (
 from bzfs_main import (
     bzfs_jobrunner,
 )
-from bzfs_main.loggers import (
-    get_simple_logger,
-)
 from bzfs_main.utils import (
     DIE_STATUS,
 )
@@ -84,7 +81,6 @@ def suite() -> unittest.TestSuite:
 
 
 def make_bzfs_jobrunner_job(log: Logger | None = None) -> bzfs_jobrunner.Job:
-    log = get_simple_logger(bzfs_jobrunner.PROG_NAME) if log is None else log
     job = bzfs_jobrunner.Job(log=log, termination_event=threading.Event())
     job.is_test_mode = True
     return job
@@ -562,7 +558,7 @@ class TestFiltering(AbstractTestCase):
 class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.log_mock = MagicMock()
+        self.log_mock = MagicMock(Logger)
         self.job = make_bzfs_jobrunner_job(log=self.log_mock)
 
     def test_empty_input_raises(self) -> None:

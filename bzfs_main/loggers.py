@@ -82,10 +82,6 @@ def get_logger(
     log_params: LogParams, args: argparse.Namespace, log: Logger | None = None, logger_name_suffix: str = ""
 ) -> Logger:
     """Returns a logger configured from CLI arguments or an optional base logger."""
-    _add_trace_loglevel()
-    logging.addLevelName(LOG_STDERR, "STDERR")
-    logging.addLevelName(LOG_STDOUT, "STDOUT")
-
     if log is not None:
         assert isinstance(log, Logger)
         return log  # use third party provided logger object
@@ -126,12 +122,6 @@ def _get_default_logger(log_params: LogParams, args: argparse.Namespace, logger_
                 f"No messages with priority lower than {log_level_name} will be sent to syslog because syslog "
                 f"log level {args.log_syslog_level} is lower than overall log level {log_level_name}.",
             )
-
-    # perf: tell logging framework not to gather unnecessary expensive info for each log record
-    logging.logProcesses = False
-    logging.logThreads = False
-    logging.logMultiprocessing = False
-    logging.raiseExceptions = False  # avoid noisy tracebacks from logging handler errors like BrokenPipeError in production
     return log
 
 
@@ -215,7 +205,6 @@ def get_simple_logger(program: str, logger_name_suffix: str = "") -> Logger:
             record.program = program
             return super().format(record)
 
-    _add_trace_loglevel()
     log = Logger(logger_name)  # noqa: LOG001 do not register logger with Logger.manager to avoid potential memory leak
     log.setLevel(logging.INFO)
     log.propagate = False
@@ -227,9 +216,16 @@ def get_simple_logger(program: str, logger_name_suffix: str = "") -> Logger:
     return log
 
 
-def _add_trace_loglevel() -> None:
-    """Registers a custom TRACE logging level with the standard python logging framework."""
+def set_logging_runtime_defaults() -> None:
+    """Applies process-wide logging runtime defaults for production use."""
     logging.addLevelName(LOG_TRACE, "TRACE")
+    logging.addLevelName(LOG_STDERR, "STDERR")
+    logging.addLevelName(LOG_STDOUT, "STDOUT")
+    # perf: tell logging framework not to gather unnecessary expensive info for each log record
+    logging.logProcesses = False
+    logging.logThreads = False
+    logging.logMultiprocessing = False
+    logging.raiseExceptions = False  # avoid noisy tracebacks from logging handler errors like BrokenPipeError in production
 
 
 def _get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tuple[str, int], Any]:

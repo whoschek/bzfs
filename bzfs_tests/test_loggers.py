@@ -52,6 +52,7 @@ from bzfs_main.loggers import (
     get_logger,
     get_simple_logger,
     reset_logger,
+    set_logging_runtime_defaults,
 )
 from bzfs_main.utils import (
     DIE_STATUS,
@@ -66,6 +67,7 @@ from bzfs_tests.abstract_testcase import (
 
 #############################################################################
 def suite() -> unittest.TestSuite:
+    set_logging_runtime_defaults()
     test_cases = [
         TestHelperFunctions,
         TestLogging,
