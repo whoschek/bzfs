@@ -49,6 +49,7 @@ from bzfs_main.utils import (
     SortedInterner,
     SynchronousExecutor,
     has_duplicates,
+    has_siblings,
     is_descendant,
 )
 
@@ -243,12 +244,13 @@ def process_datasets_in_parallel(
     has_barrier: bool = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
     assert (enable_barriers is not False) or not has_barrier, "Barriers seen in datasets but barriers explicitly disabled"
     barriers_enabled: bool = bool(has_barrier or enable_barriers)
+    is_parallel: bool = max_workers != 1 and len(datasets) > 1 and has_siblings(datasets)
 
     immutable_empty_barrier: _TreeNode = _make_tree_node("immutable_empty_barrier", {})
     datasets_set: SortedInterner[str] = SortedInterner(datasets)  # reduces memory footprint
     priority_queue: list[_TreeNode] = _build_dataset_tree_and_find_roots(datasets)
     heapq.heapify(priority_queue)  # same order as sorted()
-    executor: Executor = ThreadPoolExecutor(max_workers) if max_workers != 1 and len(datasets) > 1 else SynchronousExecutor()
+    executor: Executor = ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()
     with executor:
         todo_futures: set[Future[CompletionCallback]] = set()
         future_to_node: dict[Future[CompletionCallback], _TreeNode] = {}
