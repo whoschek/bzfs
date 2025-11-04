@@ -108,12 +108,12 @@ def _build_dataset_tree_and_find_roots(sorted_datasets: list[str]) -> list[_Tree
 class _TreeNodeMutableAttributes:
     """Container for mutable attributes, stored space efficiently."""
 
-    __slots__ = ("barrier", "disabled_barriers", "pending")  # uses more compact memory layout than __dict__
+    __slots__ = ("barrier", "barriers_cleared", "pending")  # uses more compact memory layout than __dict__
 
     def __init__(self) -> None:
         self.barrier: _TreeNode | None = None  # zero or one barrier TreeNode waiting for this node to complete
         self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
-        self.disabled_barriers: bool = False  # Irrevocably mark barriers of this node and all its ancestors as disabled?
+        self.barriers_cleared: bool = False  # Irrevocably mark barriers of this node and all its ancestors as cleared?
 
 
 class _TreeNode(NamedTuple):
@@ -389,11 +389,11 @@ def _complete_job_with_barriers(
         enqueue_children(node)  # make child datasets available for start of processing
     else:  # job completed without success
         # ... thus, opening the barrier shall always do nothing in node and its ancestors.
-        # perf: Irrevocably mark (exactly once) barriers of this node and all its ancestors as disabled due to subtree skip,
-        # via disabled_barriers=True. This enables to avoid redundant re-walking the entire ancestor chain on subsequent skip
+        # perf: Irrevocably mark (exactly once) barriers of this node and all its ancestors as cleared due to subtree skip,
+        # via barriers_cleared=True. This enables to avoid redundant re-walking the entire ancestor chain on subsequent skip.
         tmp: _TreeNode | None = node
-        while tmp is not None and not tmp.mut.disabled_barriers:
-            tmp.mut.disabled_barriers = True
+        while tmp is not None and not tmp.mut.barriers_cleared:
+            tmp.mut.barriers_cleared = True
             tmp.mut.barrier = immutable_empty_barrier
             tmp = tmp.parent
     assert node.mut.pending >= 0

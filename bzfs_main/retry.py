@@ -137,7 +137,6 @@ class RetryableError(Exception):
 
     def __init__(self, message: str, no_sleep: bool = False) -> None:
         super().__init__(message)
-        # immutable variables:
         self.no_sleep: bool = no_sleep
 
 

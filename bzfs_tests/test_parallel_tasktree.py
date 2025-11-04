@@ -53,7 +53,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestBuildTree,
         TestProcessDatasetsInParallel,
-        TestDisabledBarriers,
+        TestBarriersCleared,
         TestParallelTaskTreeBenchmark,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
@@ -272,14 +272,14 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
 
 #############################################################################
-class TestDisabledBarriers(unittest.TestCase):
+class TestBarriersCleared(unittest.TestCase):
 
-    def test_failure_disables_ancestor_barriers_and_sets_immutable_empty_barrier(self) -> None:
-        """Verifies that a first failure disables barriers for the node and all its ancestors + sets immutable_empty_barrier.
+    def test_failure_clears_ancestor_barriers_and_sets_immutable_empty_barrier(self) -> None:
+        """Verifies that a first failure clears barriers for the node and all its ancestors + sets immutable_empty_barrier.
 
-        This exercises the ancestor-walking guard by confirming disabled flags are set along the chain, and that barriers are
-        set to the immutable_empty_barrier on each visited node when handling a failure without further propagation (pending
-        > 0 suppresses the subsequent while-loop).
+        This exercises the ancestor-walking guard by confirming barriers_cleared flags are set along the chain, and that
+        barriers are set to the immutable_empty_barrier on each visited node when handling a failure without further
+        propagation (pending > 0 suppresses the subsequent while-loop).
         """
 
         # Build a -> b -> c chain
@@ -305,16 +305,16 @@ class TestDisabledBarriers(unittest.TestCase):
             immutable_empty_barrier=immutable_empty_barrier,
         )
 
-        # Check that the node and its ancestors have barriers disabled and point to the immutable_empty_barrier
-        self.assertTrue(c.mut.disabled_barriers)
-        self.assertTrue(b.mut.disabled_barriers)
-        self.assertTrue(a.mut.disabled_barriers)
+        # Check that the node and its ancestors have barriers cleared and point to the immutable_empty_barrier
+        self.assertTrue(c.mut.barriers_cleared)
+        self.assertTrue(b.mut.barriers_cleared)
+        self.assertTrue(a.mut.barriers_cleared)
         self.assertIs(c.mut.barrier, immutable_empty_barrier)
         self.assertIs(b.mut.barrier, immutable_empty_barrier)
         self.assertIs(a.mut.barrier, immutable_empty_barrier)
 
-    def test_ancestor_walking_stops_at_disabled_ancestor(self) -> None:
-        """Second failure in the same subtree should stop disabling at the first already-disabled ancestor.
+    def test_ancestor_walking_stops_at_cleared_ancestor(self) -> None:
+        """Second failure in the same subtree should stop clearing at the first ancestor with barriers_cleared set.
 
         We confirm by setting a custom barrier object on an ancestor and ensuring it remains unchanged after the second
         failure. We again keep pending > 0 to avoid the subsequent completion-propagation loop from running.
@@ -325,7 +325,7 @@ class TestDisabledBarriers(unittest.TestCase):
         b = _make_tree_node("a/b", {}, parent=a)
         c = _make_tree_node("a/b/c", {}, parent=b)
 
-        # First failure disables barriers up to root
+        # First failure clears barriers up to root
         c.mut.pending = 1  # suppress while-loop
         priority_queue: list = []
         datasets_set: SortedInterner[str] = SortedInterner([])
@@ -338,16 +338,16 @@ class TestDisabledBarriers(unittest.TestCase):
             immutable_empty_barrier=immutable_empty_barrier,
         )
 
-        # Verify barriers disabled
-        self.assertTrue(a.mut.disabled_barriers)
-        self.assertTrue(b.mut.disabled_barriers)
-        self.assertTrue(c.mut.disabled_barriers)
+        # Verify barriers cleared
+        self.assertTrue(a.mut.barriers_cleared)
+        self.assertTrue(b.mut.barriers_cleared)
+        self.assertTrue(c.mut.barriers_cleared)
 
         # Place a custom marker on ancestor 'a' to detect unwanted overwrites; ancestor walking must stop at 'b'.
         marker = _make_tree_node("custom_marker", {})
         a.mut.barrier = marker
 
-        # Now fail deeper sibling 'd' under 'b' and ensure 'a' stays untouched by the barrier-disabling loop
+        # Now fail deeper sibling 'd' under 'b' and ensure 'a' stays untouched by the barrier-clearing loop
         d = _make_tree_node("a/b/d", {}, parent=b)
         d.mut.pending = 1  # suppress while-loop
         _complete_job_with_barriers(
@@ -358,12 +358,12 @@ class TestDisabledBarriers(unittest.TestCase):
             immutable_empty_barrier=immutable_empty_barrier,
         )
 
-        # 'd' gets barriers disabled; 'b' and 'a' remain with barriers disabled but 'a' barrier should still be the custom marker
-        self.assertTrue(d.mut.disabled_barriers)
-        self.assertTrue(b.mut.disabled_barriers)
-        self.assertTrue(a.mut.disabled_barriers)
+        # 'd' gets barriers cleared; 'b' and 'a' remain with barriers cleared but 'a' barrier should still be the custom marker
+        self.assertTrue(d.mut.barriers_cleared)
+        self.assertTrue(b.mut.barriers_cleared)
+        self.assertTrue(a.mut.barriers_cleared)
         self.assertIs(
-            a.mut.barrier, marker, "Ancestor walking should stop at first disabled ancestor and not touch higher ancestors"
+            a.mut.barrier, marker, "Ancestor walking should stop at first cleared ancestor and not touch higher ancestors"
         )
 
     def test_early_break_can_open_ancestor_barrier_after_failure(self) -> None:
