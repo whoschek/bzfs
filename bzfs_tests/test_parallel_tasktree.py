@@ -41,6 +41,7 @@ from bzfs_main.parallel_tasktree import (
     _complete_job_with_barriers,
     _make_tree_node,
     _Tree,
+    _TreeNode,
     process_datasets_in_parallel,
 )
 from bzfs_main.utils import (
@@ -53,6 +54,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestBuildTree,
         TestProcessDatasetsInParallel,
+        TestCustomPriorityOrder,
         TestBarriersCleared,
         TestParallelTaskTreeBenchmark,
     ]
@@ -184,7 +186,7 @@ class TestBuildTree(unittest.TestCase):
 class TestProcessDatasetsInParallel(unittest.TestCase):
 
     def test_str_treenode(self) -> None:
-        self.assertTrue(bool(str(_make_tree_node("foo", {}))))
+        self.assertTrue(bool(str(_make_tree_node("foo", "foo", {}))))
 
     def test_termination_event_pre_set_stops_before_submission(self) -> None:
         """If termination_event is set before scheduling, no tasks are submitted and the run fails."""
@@ -272,20 +274,83 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
 
 #############################################################################
+class TestCustomPriorityOrder(unittest.TestCase):
+
+    def test_custom_priority_orders_available_datasets(self) -> None:
+        """Custom priority uses integer "size" (cost) per dataset to decide order among available datasets.
+
+        Datasets with the largest size must be processed first, while always respecting the dependency rule that a parent
+        must complete before any of its children can be processed. Two roots ("r" and "s") with children are used. With
+        max_workers=1 the order is deterministic.
+        """
+        log = MagicMock(logging.Logger)
+
+        # Sorted input list with two roots and children; no barriers involved
+        datasets = ["r", "r/a", "r/b", "r/c", "s", "s/x", "s/y"]
+
+        # Simulated dataset sizes (aka cost). Largest size should be picked first among available datasets.
+        sizes: dict[str, int] = {
+            "r": 10,
+            "r/a": 30,
+            "r/b": 20,
+            "r/c": 40,
+            "s": 50,
+            "s/x": 5,
+            "s/y": 60,
+        }
+
+        # Priority: smaller compares first; use negative size for max-heap behavior, add dataset for stable tie-break
+        def priority(ds: str) -> tuple[int, str]:
+            return (-sizes[ds], ds)
+
+        calls: list[str] = []
+
+        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+            calls.append(dataset)
+
+            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> tuple[bool, bool]:
+                return True, False  # no skip, no fail
+
+            return _completion_callback
+
+        failed = process_datasets_in_parallel(
+            log=log,
+            datasets=datasets,
+            process_dataset=process_dataset,
+            priority=priority,
+            max_workers=1,
+            enable_barriers=False,
+            is_test_mode=True,
+        )
+
+        self.assertFalse(failed)
+        # Expected order determined by sizes while respecting dependencies:
+        # Roots available initially: pick 's'(50) over 'r'(10); after 's', its children become available along with 'r'.
+        # Pick 's/y'(60) over 'r'(10) and 's/x'(5); then 'r'(10) before the remaining 's/x'(5). After 'r', pick 'r/c'(40),
+        # 'r/a'(30), 'r/b'(20), then last remaining 's/x'(5).
+        expected = ["s", "s/y", "r", "r/c", "r/a", "r/b", "s/x"]
+        self.assertEqual(expected, calls)
+
+
+def make_tree_node(dataset: str, children: _Tree, parent: _TreeNode | None = None) -> _TreeNode:
+    return _make_tree_node(priority=dataset, dataset=dataset, children=children, parent=parent)
+
+
+#############################################################################
 class TestBarriersCleared(unittest.TestCase):
 
-    def test_failure_clears_ancestor_barriers_and_sets_immutable_empty_barrier(self) -> None:
-        """Verifies that a first failure clears barriers for the node and all its ancestors + sets immutable_empty_barrier.
+    def test_failure_clears_ancestor_barriers_and_sets_empty_barrier(self) -> None:
+        """Verifies that a first failure clears barriers for the node and all its ancestors and sets empty_barrier.
 
         This exercises the ancestor-walking guard by confirming barriers_cleared flags are set along the chain, and that
-        barriers are set to the immutable_empty_barrier on each visited node when handling a failure without further
-        propagation (pending > 0 suppresses the subsequent while-loop).
+        barriers are set to the empty_barrier on each visited node when handling a failure without further propagation
+        (pending > 0 suppresses the subsequent while-loop).
         """
 
         # Build a -> b -> c chain
-        a = _make_tree_node("a", {})
-        b = _make_tree_node("a/b", {}, parent=a)
-        c = _make_tree_node("a/b/c", {}, parent=b)
+        a = make_tree_node("a", {})
+        b = make_tree_node("a/b", {}, parent=a)
+        c = make_tree_node("a/b/c", {}, parent=b)
 
         # Prevent the completion-propagation while-loop from running to keep the test focused on the failure path only
         c.mut.pending = 1
@@ -294,24 +359,25 @@ class TestBarriersCleared(unittest.TestCase):
 
         priority_queue: list = []
         datasets_set: SortedInterner[str] = SortedInterner([])
-        immutable_empty_barrier = _make_tree_node("immutable_empty_barrier", {})
+        empty_barrier = make_tree_node("empty_barrier", {})
 
         # First failure at deepest node
         _complete_job_with_barriers(
             c,
             no_skip=False,
             priority_queue=priority_queue,
+            priority=lambda dataset: dataset,
             datasets_set=datasets_set,
-            immutable_empty_barrier=immutable_empty_barrier,
+            empty_barrier=empty_barrier,
         )
 
-        # Check that the node and its ancestors have barriers cleared and point to the immutable_empty_barrier
+        # Check that the node and its ancestors have barriers cleared and point to the empty_barrier
         self.assertTrue(c.mut.barriers_cleared)
         self.assertTrue(b.mut.barriers_cleared)
         self.assertTrue(a.mut.barriers_cleared)
-        self.assertIs(c.mut.barrier, immutable_empty_barrier)
-        self.assertIs(b.mut.barrier, immutable_empty_barrier)
-        self.assertIs(a.mut.barrier, immutable_empty_barrier)
+        self.assertIs(c.mut.barrier, empty_barrier)
+        self.assertIs(b.mut.barrier, empty_barrier)
+        self.assertIs(a.mut.barrier, empty_barrier)
 
     def test_ancestor_walking_stops_at_cleared_ancestor(self) -> None:
         """Second failure in the same subtree should stop clearing at the first ancestor with barriers_cleared set.
@@ -321,21 +387,22 @@ class TestBarriersCleared(unittest.TestCase):
         """
 
         # Build a -> b -> c
-        a = _make_tree_node("a", {})
-        b = _make_tree_node("a/b", {}, parent=a)
-        c = _make_tree_node("a/b/c", {}, parent=b)
+        a = make_tree_node("a", {})
+        b = make_tree_node("a/b", {}, parent=a)
+        c = make_tree_node("a/b/c", {}, parent=b)
 
         # First failure clears barriers up to root
         c.mut.pending = 1  # suppress while-loop
         priority_queue: list = []
         datasets_set: SortedInterner[str] = SortedInterner([])
-        immutable_empty_barrier = _make_tree_node("immutable_empty_barrier", {})
+        empty_barrier = make_tree_node("empty_barrier", {})
         _complete_job_with_barriers(
             c,
             no_skip=False,
             priority_queue=priority_queue,
+            priority=lambda dataset: dataset,
             datasets_set=datasets_set,
-            immutable_empty_barrier=immutable_empty_barrier,
+            empty_barrier=empty_barrier,
         )
 
         # Verify barriers cleared
@@ -344,18 +411,19 @@ class TestBarriersCleared(unittest.TestCase):
         self.assertTrue(c.mut.barriers_cleared)
 
         # Place a custom marker on ancestor 'a' to detect unwanted overwrites; ancestor walking must stop at 'b'.
-        marker = _make_tree_node("custom_marker", {})
+        marker = make_tree_node("custom_marker", {})
         a.mut.barrier = marker
 
         # Now fail deeper sibling 'd' under 'b' and ensure 'a' stays untouched by the barrier-clearing loop
-        d = _make_tree_node("a/b/d", {}, parent=b)
+        d = make_tree_node("a/b/d", {}, parent=b)
         d.mut.pending = 1  # suppress while-loop
         _complete_job_with_barriers(
             d,
             no_skip=False,
             priority_queue=priority_queue,
+            priority=lambda dataset: dataset,
             datasets_set=datasets_set,
-            immutable_empty_barrier=immutable_empty_barrier,
+            empty_barrier=empty_barrier,
         )
 
         # 'd' gets barriers cleared; 'b' and 'a' remain with barriers cleared but 'a' barrier should still be the custom marker
@@ -367,9 +435,9 @@ class TestBarriersCleared(unittest.TestCase):
         )
 
     def test_early_break_can_open_ancestor_barrier_after_failure(self) -> None:
-        """Demonstrate that breaking when encountering a immutable_empty_barrier on an intermediate ancestor would allow a
-        higher ancestor barrier to open after a failure deeper in the tree; This exposes that an early-break optimization
-        would be unsafe unless all higher ancestors are already set to the immutable_empty_barrier."""
+        """Demonstrate that breaking when encountering an empty_barrier on an intermediate ancestor would allow a higher
+        ancestor barrier to open after a failure deeper in the tree; This exposes that an early-break optimization would be
+        unsafe unless all higher ancestors are already set to the empty_barrier."""
 
         log = MagicMock(logging.Logger)
         br = BARRIER_CHAR
