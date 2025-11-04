@@ -17,4 +17,6 @@
 set -e
 PYTHONPATH="$(dirname "$(dirname "$(realpath "$0")")")"
 export PYTHONPATH
+PYTHON_LAZY_IMPORTS=all  # PEP 810
+export PYTHON_LAZY_IMPORTS
 exec python3 -m bzfs_main.bzfs_jobrunner ${1+"$@"}

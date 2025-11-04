@@ -24,6 +24,8 @@ if [ "$bzfs_test_remote_userhost" = "" ]; then
     export TMPDIR
     mkdir -p "$TMPDIR"
   fi
+  PYTHON_LAZY_IMPORTS=all  # PEP 810
+  export PYTHON_LAZY_IMPORTS
   python3 -m bzfs_tests.test_all
 else
   ./test_host.sh  # rsync's the local repo to remote host and runs tests there
