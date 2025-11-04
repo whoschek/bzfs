@@ -55,6 +55,7 @@ from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
 from bzfs_tests.tools import (
+    suppress_logger,
     suppress_output,
 )
 
@@ -96,36 +97,36 @@ class TestHelperFunctions(AbstractTestCase):
         """Ensure validate_type accepts expected types and exits on mismatches quietly."""
         self.job.validate_type("foo", str, "name")
         self.job.validate_type(123, int, "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_type(123, str, "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_type("foo", int, "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_type(None, str, "name")
         self.job.validate_type("foo", Union[str, int], "name")
         self.job.validate_type(123, Union[str, int], "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_type([], Union[str, int], "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_type(None, Union[str, int], "name")
 
     def test_validate_non_empty_string(self) -> None:
         """Reject empty strings while keeping the log output silent."""
         self.job.validate_non_empty_string("valid_string", "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_non_empty_string("", "name")
 
     def test_validate_non_negative_int(self) -> None:
         """Verify negative integers abort without leaking error logs."""
         self.job.validate_non_negative_int(1, "name")
         self.job.validate_non_negative_int(0, "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_non_negative_int(-1, "name")
 
     def test_validate_true(self) -> None:
         """Expect false values to trigger exit, capturing any error message."""
         self.job.validate_true(1, "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_true(0, "name")
 
     def test_validate_is_subset(self) -> None:
@@ -133,13 +134,13 @@ class TestHelperFunctions(AbstractTestCase):
         self.job.validate_is_subset(["1"], ["1", "2"], "x", "y")
         self.job.validate_is_subset([], ["1", "2"], "x", "y")
         self.job.validate_is_subset([], [], "x", "y")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_is_subset(["3"], ["1", "2"], "x", "y")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_is_subset(["3", "4"], [], "x", "y")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_is_subset("foo", ["3"], "x", "y")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_is_subset(["3"], "foo", "x", "y")
 
     def _make_mock_socket(self, bind_side_effect: Exception | None = None) -> MagicMock:
@@ -251,13 +252,13 @@ class TestParseSrcHosts(AbstractTestCase):
         self.assertEqual(["h1", "h2"], result)
 
     def test_cli_value_invalid_literal(self) -> None:
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
             self.job.parse_src_hosts_from_cli_or_stdin("[not_a_name]")
         self.assertEqual(DIE_STATUS, cm.exception.code)
         self.assertIn("Invalid --src-hosts format:", str(cm.exception))
 
     def test_cli_value_not_a_list(self) -> None:
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
             self.job.parse_src_hosts_from_cli_or_stdin("'single'")
         self.assertEqual(DIE_STATUS, cm.exception.code)
         self.assertIn("expected a Python list literal", str(cm.exception))
@@ -280,7 +281,7 @@ class TestParseSrcHosts(AbstractTestCase):
     def test_stdin_tty_raises(self) -> None:
         fake = self._FakeStdin(data="", isatty=True)
         with patch.object(sys, "stdin", fake):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn("stdin is a TTY", str(cm.exception))
@@ -288,7 +289,7 @@ class TestParseSrcHosts(AbstractTestCase):
     def test_stdin_empty_raises(self) -> None:
         fake = self._FakeStdin(data="   \n\t  ", isatty=False)
         with patch.object(sys, "stdin", fake):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn("stdin is empty", str(cm.exception))
@@ -296,7 +297,7 @@ class TestParseSrcHosts(AbstractTestCase):
     def test_stdin_invalid_literal_raises(self) -> None:
         fake = self._FakeStdin(data="nonsense", isatty=False)
         with patch.object(sys, "stdin", fake):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn("Invalid --src-hosts format:", str(cm.exception))
@@ -304,7 +305,7 @@ class TestParseSrcHosts(AbstractTestCase):
     def test_stdin_not_a_list_raises(self) -> None:
         fake = self._FakeStdin(data="'abc'", isatty=False)
         with patch.object(sys, "stdin", fake):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn("expected a Python list literal", str(cm.exception))
@@ -361,7 +362,8 @@ class TestValidation(AbstractTestCase):
     def _expect_pass(self, job: bzfs_jobrunner.Job, argv: list[str]) -> None:
         with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
             with patch("sys.argv", argv):
-                job.run_main(argv)
+                with suppress_output():
+                    job.run_main(argv)
                 mock_run_subjobs.assert_called_once()
 
     def test_multisource_substitution_token_validation_with_empty_target(self) -> None:
@@ -388,7 +390,7 @@ class TestValidation(AbstractTestCase):
         # Scenario 3: Run for both (no --src-host filter), should fail.
         job = self._new_job()
         with patch("sys.argv", base_argv):  # No --src-host filter
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output():
                 job.run_main(base_argv)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
@@ -427,7 +429,7 @@ class TestValidation(AbstractTestCase):
         # Scenario 1: Run for srcA only, should fail.
         argv_src1 = base_argv + ["--src-host", "src1"]
         with patch("sys.argv", argv_src1):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output():
                 job.run_main(argv_src1)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
@@ -435,7 +437,7 @@ class TestValidation(AbstractTestCase):
         # Scenario 2: Run for srcB only, should fail.
         argv_src2 = base_argv + ["--src-host", "src2"]
         with patch("sys.argv", argv_src2):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output():
                 job.run_main(argv_src2)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
@@ -443,7 +445,7 @@ class TestValidation(AbstractTestCase):
         # Scenario 3: Run for both (no --src-host filter), should fail.
         job = self._new_job()
         with patch("sys.argv", base_argv):  # No --src-host filter
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output():
                 job.run_main(base_argv)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
@@ -494,7 +496,8 @@ class TestFiltering(AbstractTestCase):
 
         with patch.object(job, "run_subjobs", side_effect=fake_run_subjobs):
             with patch("sys.argv", argv):
-                job.run_main(argv)
+                with suppress_output():
+                    job.run_main(argv)
 
         return captured
 
@@ -1010,13 +1013,14 @@ class TestErrorPropagation(AbstractTestCase):
     def test_parallel_worker_exception_sets_first_exception_via_exception_mode(self) -> None:
         self.job = make_bzfs_jobrunner_job()
         with patch.object(self.job, "run_worker_job_in_current_thread", side_effect=CalledProcessError(1, "boom")):
-            self.job.run_subjobs(
-                subjobs={"000000src-host/replicate": ["bzfs", "--no-argument-file"]},
-                max_workers=1,
-                timeout_secs=None,
-                work_period_seconds=0,
-                jitter=False,
-            )
+            with suppress_output():
+                self.job.run_subjobs(
+                    subjobs={"000000src-host/replicate": ["bzfs", "--no-argument-file"]},
+                    max_workers=1,
+                    timeout_secs=None,
+                    work_period_seconds=0,
+                    jitter=False,
+                )
         self.assertIsInstance(self.job.first_exception, int)
         self.assertEqual(DIE_STATUS, self.job.first_exception)
         self.assertEqual(1, self.job.stats.jobs_started)
@@ -1042,7 +1046,14 @@ class TestSpawnProcessPerJobDecision(AbstractTestCase):
             return 0
 
         with patch.object(self.job, "run_subjob", side_effect=fake_run_subjob):
-            self.job.run_subjobs(subjobs=subjobs, max_workers=1, timeout_secs=None, work_period_seconds=0, jitter=False)
+            with suppress_output():
+                self.job.run_subjobs(
+                    subjobs=subjobs,
+                    max_workers=1,
+                    timeout_secs=None,
+                    work_period_seconds=0,
+                    jitter=False,
+                )
         return flags
 
     def test_no_siblings_spawn_flag_false_runs_in_process(self) -> None:
@@ -1116,8 +1127,14 @@ class TestScopedTerminationInProcess(AbstractTestCase):
 
         self.job.spawn_process_per_job = spawn_process_per_job
         target = f"bzfs_main.bzfs_jobrunner.Job.{patch_method}"
-        with patch(target, side_effect=fake_worker):
-            self.job.run_subjobs(subjobs=subjobs, max_workers=2, timeout_secs=None, work_period_seconds=0, jitter=False)
+        with patch(target, side_effect=fake_worker), suppress_output():
+            self.job.run_subjobs(
+                subjobs=subjobs,
+                max_workers=2,
+                timeout_secs=None,
+                work_period_seconds=0,
+                jitter=False,
+            )
 
         # B's child should have been terminated
         self.assertIn("B", children)
@@ -1216,7 +1233,8 @@ class TestParserIsolationAcrossSubjobs(AbstractTestCase):
 
         with patch.object(job, "run_subjobs", side_effect=fake_run_subjobs):
             with patch("sys.argv", argv):
-                job.run_main(argv)
+                with suppress_output():
+                    job.run_main(argv)
 
         # In this test we only emit replicate subjobs; assert count and take them in deterministic order.
         self.assertEqual(2, len(captured), f"unexpected subjobs: {sorted(captured.keys())}")

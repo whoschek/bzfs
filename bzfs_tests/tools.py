@@ -55,6 +55,23 @@ def suppress_output() -> Iterator[None]:
 
 
 @contextlib.contextmanager
+def suppress_logger(log: logging.Logger) -> Iterator[None]:
+    """Temporarily remove handlers from the given logger to prevent console output to keep test output clean."""
+    previous_handlers: list[logging.Handler] = log.handlers.copy()
+    previous_level: int = log.level
+    previous_propagate: bool = log.propagate
+    try:
+        for h in previous_handlers:
+            log.removeHandler(h)
+        yield
+    finally:
+        for h in previous_handlers:
+            log.addHandler(h)
+        log.setLevel(previous_level)
+        log.propagate = previous_propagate
+
+
+@contextlib.contextmanager
 def capture_stderr() -> Iterator[io.StringIO]:
     """Capture stderr output for later inspection within a test."""
     buf = io.StringIO()
