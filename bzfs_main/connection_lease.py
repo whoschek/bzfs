@@ -288,7 +288,7 @@ class ConnectionLeaseManager:
         except OSError as e:
             close_quietly(fd)  # release lock
             if isinstance(e, BlockingIOError):
-                return None  # lock is already held by another process
+                return None  # lock is already held by this process or another process
             elif isinstance(e, FileNotFoundError):
                 self._validate_dirs()
                 return None
