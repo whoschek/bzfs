@@ -310,7 +310,7 @@ def process_datasets_in_parallel(
             for done_future in done_futures:
                 done_node: _TreeNode = future_to_node.pop(done_future)
                 c_callback: CompletionCallback = done_future.result()  # does not block as processing has already completed
-                c_callback_result = c_callback(todo_futures)
+                c_callback_result: CompletionCallbackResult = c_callback(todo_futures)
                 no_skip: bool = c_callback_result.no_skip
                 fail: bool = c_callback_result.fail
                 failed = failed or fail

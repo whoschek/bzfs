@@ -1829,16 +1829,16 @@ class TestTerminationEventBehavior(AbstractTestCase):
     """Covers termination_event branches in bzfs.Job, including early loop break and daemon sleep wake-up."""
 
     class _DummyPR:
-        def __init__(self, *args: object, **kwargs: object) -> None:  # pragma: no cover - trivial
+        def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
-        def reset(self) -> None:  # pragma: no cover - trivial
+        def reset(self) -> None:
             pass
 
-        def pause(self) -> None:  # pragma: no cover - trivial
+        def pause(self) -> None:
             pass
 
-        def stop(self) -> None:  # pragma: no cover - trivial
+        def stop(self) -> None:
             pass
 
     def make_job(self, args: list[str]) -> bzfs.Job:
