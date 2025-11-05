@@ -1453,6 +1453,7 @@ class TestTerminationSignalHandler(unittest.TestCase):
 
 #############################################################################
 class TestJobStats(unittest.TestCase):
+
     def test_stats_repr(self) -> None:
         stats = JobStats(jobs_all=10)
         stats.jobs_started = 5
@@ -1460,7 +1461,7 @@ class TestJobStats(unittest.TestCase):
         stats.jobs_failed = 2
         stats.jobs_running = 1
         stats.sum_elapsed_nanos = 1_000_000_000
-        expect = "all:10, started:5=50%, completed:5=50%, failed:2=20%, running:1, avg_completion_time:200ms"
+        expect = "all:10, started:5/10=50%, completed:5/10=50%, failed:2/10=20%, running:1, avg_completion_time:200ms"
         self.assertEqual(expect, repr(stats))
 
 

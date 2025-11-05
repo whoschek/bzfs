@@ -982,7 +982,7 @@ class JobStats:
     def __repr__(self) -> str:
         def pct(number: int) -> str:
             """Returns percentage string relative to total jobs."""
-            return percent(number, total=self.jobs_all)
+            return percent(number, total=self.jobs_all, print_total=True)
 
         al, started, completed, failed = self.jobs_all, self.jobs_started, self.jobs_completed, self.jobs_failed
         running = self.jobs_running
