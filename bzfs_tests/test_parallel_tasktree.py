@@ -37,6 +37,7 @@ from unittest.mock import (
 from bzfs_main.parallel_tasktree import (
     BARRIER_CHAR,
     CompletionCallback,
+    CompletionCallbackResult,
     _build_dataset_tree,
     _complete_job_with_barriers,
     _make_tree_node,
@@ -199,10 +200,10 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         ) -> CompletionCallback:  # pragma: no cover - exercised via scheduler
             calls.append(dataset)
 
-            def _cb(todo_futures: set[Future[CompletionCallback]]) -> tuple[bool, bool]:
-                return True, False
+            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                return CompletionCallbackResult(no_skip=True, fail=False)
 
-            return _cb
+            return _completion_callback
 
         termination_event = threading.Event()
         termination_event.set()
@@ -238,10 +239,10 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         ) -> CompletionCallback:  # pragma: no cover - exercised via scheduler
             calls.append(dataset)
 
-            def _cb(todo_futures: set[Future[CompletionCallback]]) -> tuple[bool, bool]:
-                return True, False
+            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                return CompletionCallbackResult(no_skip=True, fail=False)
 
-            return _cb
+            return _completion_callback
 
         # Background thread that sets termination once the first task has been submitted
         def trigger_termination() -> None:
@@ -308,8 +309,8 @@ class TestCustomPriorityOrder(unittest.TestCase):
         def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
             calls.append(dataset)
 
-            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> tuple[bool, bool]:
-                return True, False  # no skip, no fail
+            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                return CompletionCallbackResult(no_skip=True, fail=False)
 
             return _completion_callback
 
@@ -473,12 +474,12 @@ class TestBarriersCleared(unittest.TestCase):
 
             record(dataset)
 
-            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> tuple[bool, bool]:
+            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
                 if dataset == f"x/node/{br}/bar/fail":
                     # Signal that failure handling has run; return no_skip=False (skip subtree) but not fail the run
                     failure_done.set()
-                    return False, False
-                return True, False
+                    return CompletionCallbackResult(no_skip=False, fail=False)
+                return CompletionCallbackResult(no_skip=True, fail=False)
 
             return _completion_callback
 
@@ -532,11 +533,9 @@ class TestParallelTaskTreeBenchmark(unittest.TestCase):
         def dummy_process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
             """A dummy function that does nothing, to benchmark the framework overhead."""
 
-            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> tuple[bool, bool]:
+            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
                 """A dummy function that never skips."""
-                no_skip = True
-                fail = False
-                return no_skip, fail
+                return CompletionCallbackResult(no_skip=True, fail=False)
 
             return _completion_callback
 

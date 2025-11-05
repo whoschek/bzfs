@@ -44,6 +44,7 @@ from typing import (
 
 from bzfs_main.parallel_tasktree import (
     CompletionCallback,
+    CompletionCallbackResult,
     process_datasets_in_parallel,
 )
 from bzfs_main.retry import (
@@ -113,7 +114,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 elapsed_duration: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
                 log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, elapsed_duration)
 
-        def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> tuple[bool, bool]:
+        def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
             """CompletionCallback determining if to fail or skip subtree on error; Runs in the (single) main thread as part
             of the coordination loop."""
             nonlocal no_skip
@@ -128,7 +129,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 no_skip = not (skip_on_error == "tree" or skip_tree_on_error(dataset))
                 log.error("%s", exception)
                 append_exception(exception, task_name, dataset)
-            return no_skip, fail
+            return CompletionCallbackResult(no_skip=no_skip, fail=fail)
 
         return _completion_callback
 

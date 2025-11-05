@@ -138,13 +138,21 @@ def _make_tree_node(priority: Comparable, dataset: str, children: _Tree, parent:
 
 
 #############################################################################
-CompletionCallback = Callable[[set[Future["CompletionCallback"]]], tuple[bool, bool]]  # Type alias
+class CompletionCallbackResult(NamedTuple):
+    """Result of a CompletionCallback invocation."""
+
+    no_skip: bool
+    """True enqueues descendants, False skips the subtree."""
+
+    fail: bool
+    """True marks overall run as failed; exceptions may be raised here."""
+
+
+CompletionCallback = Callable[[set[Future["CompletionCallback"]]], CompletionCallbackResult]  # Type alias
 """Callable that is run by the main coordination thread after a ``process_dataset()`` task finishes.
 
 Purpose:
-- Decide follow-up scheduling after a ``process_dataset()`` task finished. Returns ``(no_skip: bool, failed: bool)``:
-  - ``no_skip`` True enqueues descendants, False skips the subtree.
-  - ``failed`` True marks overall run as failed; exceptions may be raised here.
+- Decide follow-up scheduling after a ``process_dataset()`` task finished.
 
 Assumptions:
 - Runs in the single coordination thread.
@@ -156,6 +164,7 @@ until they exit or time out.
 """
 
 
+#############################################################################
 def process_datasets_in_parallel(
     log: Logger,
     datasets: list[str],  # (sorted) list of datasets to process
@@ -301,9 +310,9 @@ def process_datasets_in_parallel(
             for done_future in done_futures:
                 done_node: _TreeNode = future_to_node.pop(done_future)
                 c_callback: CompletionCallback = done_future.result()  # does not block as processing has already completed
-                no_skip: bool
-                fail: bool
-                no_skip, fail = c_callback(todo_futures)
+                c_callback_result = c_callback(todo_futures)
+                no_skip: bool = c_callback_result.no_skip
+                fail: bool = c_callback_result.fail
                 failed = failed or fail
                 if barriers_enabled:  # This barrier-based algorithm is for more general job scheduling, as in bzfs_jobrunner
                     _complete_job_with_barriers(done_node, no_skip, priority_queue, priority, datasets_set, empty_barrier)
