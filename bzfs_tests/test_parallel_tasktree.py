@@ -26,6 +26,10 @@ import time
 import unittest
 from concurrent.futures import (
     Future,
+    ProcessPoolExecutor,
+)
+from functools import (
+    partial,
 )
 from typing import (
     Any,
@@ -47,6 +51,7 @@ from bzfs_main.parallel_tasktree import (
 )
 from bzfs_main.utils import (
     SortedInterner,
+    SynchronousExecutor,
 )
 
 
@@ -57,6 +62,7 @@ def suite() -> unittest.TestSuite:
         TestProcessDatasetsInParallel,
         TestCustomPriorityOrder,
         TestBarriersCleared,
+        TestProcessPoolExecutor,
         TestParallelTaskTreeBenchmark,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
@@ -195,9 +201,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         datasets = ["a", "b", "c"]
         calls: list[str] = []
 
-        def process_dataset(
-            dataset: str, submitted_count: int
-        ) -> CompletionCallback:  # pragma: no cover - exercised via scheduler
+        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
             calls.append(dataset)
 
             def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
@@ -234,9 +238,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             # Large enough to allow the background thread to set the event and wake the wait early
             return 500_000_000  # 0.5s
 
-        def process_dataset(
-            dataset: str, submitted_count: int
-        ) -> CompletionCallback:  # pragma: no cover - exercised via scheduler
+        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
             calls.append(dataset)
 
             def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
@@ -272,6 +274,44 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertTrue(failed, "Termination should mark the run as failed")
         # Exactly one submission is expected: first submitted before sleep, then termination prevents further submissions
         self.assertEqual(1, len(calls), f"Expected 1 submitted dataset, got {len(calls)}: {calls}")
+
+    def test_explicit_sync_executor_runs_inline_on_main_thread(self) -> None:
+        """With an explicit SynchronousExecutor, tasks execute inline on the main thread.
+
+        Uses a dataset list with siblings to prove that even with ``max_workers>1`` and parallelizable structure, an explicit
+        synchronous executor forces in-thread execution and preserves deterministic order.
+        """
+
+        log = MagicMock(logging.Logger)
+        datasets = ["a", "a/b", "a/c"]  # siblings under 'a'
+
+        lock: threading.Lock = threading.Lock()
+        main_ident: int = threading.get_ident()
+        calls: list[tuple[str, int]] = []
+
+        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+            with lock:
+                calls.append((dataset, threading.get_ident()))
+
+            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                return CompletionCallbackResult(no_skip=True, fail=False)
+
+            return _completion_callback
+
+        failed = process_datasets_in_parallel(
+            log=log,
+            datasets=datasets,
+            process_dataset=process_dataset,
+            max_workers=4,
+            executor=SynchronousExecutor(),
+            enable_barriers=False,
+            is_test_mode=True,
+        )
+
+        self.assertFalse(failed)
+        # Expected order: root 'a' first, then its children in lexicographic order
+        self.assertEqual([d for d, _ in calls], ["a", "a/b", "a/c"])
+        self.assertTrue(all(tid == main_ident for _, tid in calls), msg=f"Calls not on main thread: {calls}")
 
 
 #############################################################################
@@ -496,6 +536,75 @@ class TestBarriersCleared(unittest.TestCase):
         # If it did start, the early-break allowed opening of ancestor barrier after a failure.
         self.assertFalse(failed)
         self.assertNotIn(f"x/{br}/after", calls, msg=f"Ancestor barrier job should not start after failure, calls={calls}")
+
+
+#############################################################################
+# Top-level helpers used by TestProcessPoolExecutor pickling tests.
+#
+# Process pools require pickleable, importable callables. We return a functools.partial of a top-level function to carry
+# simple picklable state.
+PP_CALLS: list[tuple[str, int, int]] = []  # (dataset, worker_pid, main_pid_at_callback)
+
+
+def pp_completion_callback(
+    dataset: str, worker_pid: int, todo_futures: set[Future[CompletionCallback]]
+) -> CompletionCallbackResult:
+    """Top-level callback for ProcessPoolExecutor tests; appends a record and continues.
+
+    Must remain at module scope to be pickleable for functools.partial().
+    """
+    PP_CALLS.append((dataset, worker_pid, os.getpid()))
+    return CompletionCallbackResult(no_skip=True, fail=False)
+
+
+def pp_process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+    """Top-level worker used by process pool tests; returns a pickleable callback.
+
+    Binds only simple values (dataset, worker_pid) into the partial so unpickling is reliable across processes.
+    """
+    worker_pid: int = os.getpid()
+    return partial(pp_completion_callback, dataset, worker_pid)
+
+
+#############################################################################
+class TestProcessPoolExecutor(unittest.TestCase):
+
+    def test_process_pool_executor_with_picklable_callback_via_partial(self) -> None:
+        """ProcessPoolExecutor works when process_dataset returns a pickleable callback (via partial).
+
+        - Ensures the returned CompletionCallback is reconstructed in the coordinator process and can record results.
+        - Confirms that workers ran in separate processes by comparing PIDs.
+        - Validates dependency ordering: the root runs before its children; sibling completion order is not asserted.
+        """
+
+        # Reset global call log
+        PP_CALLS.clear()
+
+        log = MagicMock(logging.Logger)
+        datasets = ["a", "a/b", "a/c"]  # siblings under 'a'
+        main_pid = os.getpid()
+
+        failed = process_datasets_in_parallel(
+            log=log,
+            datasets=datasets,
+            process_dataset=pp_process_dataset,
+            max_workers=2,
+            executor=ProcessPoolExecutor(max_workers=2),
+            enable_barriers=False,
+            is_test_mode=True,
+        )
+
+        self.assertFalse(failed)
+        self.assertEqual(3, len(PP_CALLS), PP_CALLS)
+        # Root must complete before children are scheduled
+        self.assertEqual("a", PP_CALLS[0][0], PP_CALLS)
+        # Sibling order may vary; assert set equality for the remaining two
+        remaining = [rec[0] for rec in PP_CALLS[1:]]
+        self.assertEqual({"a/b", "a/c"}, set(remaining), PP_CALLS)
+        # At least one worker must be a separate process
+        self.assertTrue(any(worker_pid != main_pid for _, worker_pid, _ in PP_CALLS), PP_CALLS)
+        # Callback runs in the main process
+        self.assertTrue(all(main_pid == cb_main_pid for _, _, cb_main_pid in PP_CALLS), PP_CALLS)
 
 
 #############################################################################

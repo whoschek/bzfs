@@ -171,6 +171,7 @@ def process_datasets_in_parallel(
     process_dataset: Callable[[str, int], CompletionCallback],  # lambda: dataset, tid; must be thread-safe
     priority: Callable[[str], Comparable] = lambda dataset: dataset,  # lexicographical order by default
     max_workers: int = os.cpu_count() or 1,
+    executor: Executor | None = None,  # the Executor to submit tasks to; None means 'auto-choose'
     interval_nanos: Callable[
         [int, str, int], int
     ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
@@ -225,8 +226,9 @@ def process_datasets_in_parallel(
 
     Concurrency Design:
     -------------------
-    Uses ThreadPoolExecutor with configurable worker limits to balance parallelism against resource consumption. The
-    single-threaded coordination loop prevents race conditions while worker threads execute dataset operations in parallel.
+    By default uses ThreadPoolExecutor with configurable worker limits to balance parallelism against resource consumption.
+    Optionally, plug in a custom Executor to submit tasks to scale-out clusters via frameworks like Ray Core or Dask, etc.
+    The single-threaded coordination loop prevents race conditions while worker threads execute dataset operations in parallel.
 
     Params:
     -------
@@ -237,6 +239,7 @@ def process_datasets_in_parallel(
     - interval_nanos: Callback that returns a non-negative delay (ns) to add to ``next_update_nanos`` for
       jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submitted_count)``
     - max_workers: Maximum number of parallel worker threads
+    - executor: the Executor to submit tasks to; None means 'auto-choose'
     - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
     - termination_event: Optional event to request early async termination; stops new submissions and cancels in-flight tasks
 
@@ -260,13 +263,14 @@ def process_datasets_in_parallel(
     has_barrier: Final[bool] = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
     assert (enable_barriers is not False) or not has_barrier, "Barriers seen in datasets but barriers explicitly disabled"
     barriers_enabled: Final[bool] = bool(has_barrier or enable_barriers)
-    is_parallel: Final[bool] = max_workers > 1 and len(datasets) > 1 and has_siblings(datasets)  # siblings can run in par
 
     empty_barrier: Final[_TreeNode] = _make_tree_node("empty_barrier", "empty_barrier", {})  # immutable!
     datasets_set: Final[SortedInterner[str]] = SortedInterner(datasets)  # reduces memory footprint
     priority_queue: Final[list[_TreeNode]] = _build_dataset_tree_and_find_roots(datasets, priority)
     heapq.heapify(priority_queue)  # same order as sorted()
-    executor: Final[Executor] = ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()
+    if executor is None:
+        is_parallel: bool = max_workers > 1 and len(datasets) > 1 and has_siblings(datasets)  # siblings can run in parallel
+        executor = ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()
     with executor:
         todo_futures: set[Future[CompletionCallback]] = set()
         future_to_node: dict[Future[CompletionCallback], _TreeNode] = {}
