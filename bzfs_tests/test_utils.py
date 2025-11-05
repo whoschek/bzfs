@@ -75,6 +75,7 @@ from bzfs_main.utils import (
     DESCENDANTS_RE_SUFFIX,
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
+    JobStats,
     SmallPriorityQueue,
     SnapshotPeriods,
     Subprocesses,
@@ -149,6 +150,7 @@ def suite() -> unittest.TestSuite:
         TestPIDExists,
         TestTerminateProcessSubtree,
         TestTerminationSignalHandler,
+        TestJobStats,
         TestSmallPriorityQueue,
         TestSynchronizedBool,
         TestSynchronizedDict,
@@ -1447,6 +1449,19 @@ class TestTerminationSignalHandler(unittest.TestCase):
         finally:
             signal.signal(signal.SIGINT, old_sigint)
             signal.signal(signal.SIGTERM, old_sigterm)
+
+
+#############################################################################
+class TestJobStats(unittest.TestCase):
+    def test_stats_repr(self) -> None:
+        stats = JobStats(jobs_all=10)
+        stats.jobs_started = 5
+        stats.jobs_completed = 5
+        stats.jobs_failed = 2
+        stats.jobs_running = 1
+        stats.sum_elapsed_nanos = 1_000_000_000
+        expect = "all:10, started:5=50%, completed:5=50%, failed:2=20%, running:1, avg_completion_time:200ms"
+        self.assertEqual(expect, repr(stats))
 
 
 #############################################################################

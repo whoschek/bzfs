@@ -118,7 +118,7 @@ class _TreeNodeMutableAttributes:
 
 
 class _TreeNode(NamedTuple):
-    """Node in dataset dependency tree used by the scheduler; TreeNodes are ordered by priority and dataset name within a
+    """Node in dataset dependency tree used by the scheduler; _TreeNodes are ordered by priority and dataset name within a
     priority queue, via __lt__ comparisons."""
 
     priority: Comparable  # determines the processing order once this dataset has become available for start of processing

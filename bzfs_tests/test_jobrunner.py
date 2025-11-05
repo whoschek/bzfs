@@ -198,17 +198,6 @@ class TestHelperFunctions(AbstractTestCase):
         with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--delete-dst-snapshots"] + opts)
 
-    def test_stats_repr(self) -> None:
-        stats = bzfs_jobrunner.Stats()
-        stats.jobs_all = 10
-        stats.jobs_started = 5
-        stats.jobs_completed = 5
-        stats.jobs_failed = 2
-        stats.jobs_running = 1
-        stats.sum_elapsed_nanos = 1_000_000_000
-        expect = "all:10, started:5=50%, completed:5=50%, failed:2=20%, running:1, avg_completion_time:200ms"
-        self.assertEqual(expect, repr(stats))
-
     def test_dedupe_and_flatten(self) -> None:
         pairs = [("a", "b"), ("a", "b"), ("c", "d")]
         self.assertEqual([("a", "b"), ("c", "d")], bzfs_jobrunner._dedupe(pairs))

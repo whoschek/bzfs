@@ -940,6 +940,57 @@ class SnapshotPeriods:  # thread-safe
 
 
 #############################################################################
+class JobStats:
+    """Simple thread-safe counters summarizing job progress."""
+
+    def __init__(self, jobs_all: int) -> None:
+        assert jobs_all >= 0
+        self.lock: Final[threading.Lock] = threading.Lock()
+        self.jobs_all: int = jobs_all
+        self.jobs_started: int = 0
+        self.jobs_completed: int = 0
+        self.jobs_failed: int = 0
+        self.jobs_running: int = 0
+        self.sum_elapsed_nanos: int = 0
+        self.started_job_names: Final[set[str]] = set()
+
+    def submit_job(self, job_name: str) -> str:
+        """Count a job submission."""
+        with self.lock:
+            self.jobs_started += 1
+            self.jobs_running += 1
+            self.started_job_names.add(job_name)
+            return str(self)
+
+    def complete_job(self, failed: bool, elapsed_nanos: int) -> str:
+        """Count a job completion."""
+        assert elapsed_nanos >= 0
+        with self.lock:
+            self.jobs_running -= 1
+            self.jobs_completed += 1
+            self.sum_elapsed_nanos += elapsed_nanos
+            self.jobs_failed += 1 if failed else 0
+            msg = str(self)
+            assert self.sum_elapsed_nanos >= 0, msg
+            assert self.jobs_running >= 0, msg
+            assert self.jobs_failed >= 0, msg
+            assert self.jobs_failed <= self.jobs_completed, msg
+            assert self.jobs_completed <= self.jobs_started, msg
+            assert self.jobs_started <= self.jobs_all, msg
+            return msg
+
+    def __repr__(self) -> str:
+        def pct(number: int) -> str:
+            """Returns percentage string relative to total jobs."""
+            return percent(number, total=self.jobs_all)
+
+        al, started, completed, failed = self.jobs_all, self.jobs_started, self.jobs_completed, self.jobs_failed
+        running = self.jobs_running
+        t = "avg_completion_time:" + human_readable_duration(self.sum_elapsed_nanos / max(1, completed))
+        return f"all:{al}, started:{pct(started)}, completed:{pct(completed)}, failed:{pct(failed)}, running:{running}, {t}"
+
+
+#############################################################################
 class Comparable(Protocol):
     """Partial ordering protocol."""
 

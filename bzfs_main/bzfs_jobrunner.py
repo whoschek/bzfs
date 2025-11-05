@@ -95,6 +95,7 @@ from bzfs_main.utils import (
     DIE_STATUS,
     LOG_TRACE,
     UMASK,
+    JobStats,
     Subprocesses,
     format_dict,
     format_obj,
@@ -494,7 +495,7 @@ class Job:
 
         # mutable variables:
         self.first_exception: int | None = None
-        self.stats: Stats = Stats()
+        self.stats: JobStats = JobStats(jobs_all=0)
         self.cache_existing_dst_pools: set[str] = set()
         self.cache_known_dst_pools: set[str] = set()
 
@@ -935,8 +936,7 @@ class Job:
           on such failures and sibling subjobs continue unaffected. This preserves per-subjob isolation, both within a single
           process (thread-per-subjob mode; default) as well as in process-per-subjob mode (``--spawn-process-per-job``).
         """
-        self.stats = Stats()
-        self.stats.jobs_all = len(subjobs)
+        self.stats = JobStats(len(subjobs))
         log = self.log
         num_intervals = 1 + len(subjobs) if jitter else len(subjobs)
         interval_nanos = 0 if len(subjobs) == 0 else round(1_000_000_000 * max(0.0, work_period_seconds) / num_intervals)
@@ -988,11 +988,7 @@ class Job:
         cmd_str = " ".join(cmd)
         stats = self.stats
         try:
-            with stats.lock:
-                stats.jobs_started += 1
-                stats.jobs_running += 1
-                stats.started_job_names.add(name)
-                msg = str(stats)
+            msg: str = stats.submit_job(name)
             log.log(LOG_TRACE, "Starting worker job: %s", cmd_str)
             log.info("Progress: %s", msg)
             start_time_nanos = time.monotonic_ns()
@@ -1004,8 +1000,7 @@ class Job:
             log.error("Worker job failed with unexpected exception: %s for command: %s", e, cmd_str)
             raise
         else:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            elapsed_human = human_readable_duration(elapsed_nanos)
+            elapsed_human = human_readable_duration(time.monotonic_ns() - start_time_nanos)
             if returncode != 0:
                 with stats.lock:
                     if self.first_exception is None:
@@ -1015,19 +1010,7 @@ class Job:
                 log.debug("Worker job succeeded in %s: %s", elapsed_human, cmd_str)
             return returncode
         finally:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            with stats.lock:
-                stats.jobs_running -= 1
-                stats.jobs_completed += 1
-                stats.sum_elapsed_nanos += elapsed_nanos
-                stats.jobs_failed += 1 if returncode != 0 else 0
-                msg = str(stats)
-                assert stats.sum_elapsed_nanos >= 0, msg
-                assert stats.jobs_running >= 0, msg
-                assert stats.jobs_failed >= 0, msg
-                assert stats.jobs_failed <= stats.jobs_completed, msg
-                assert stats.jobs_completed <= stats.jobs_started, msg
-                assert stats.jobs_started <= stats.jobs_all, msg
+            msg = stats.complete_job(failed=returncode != 0, elapsed_nanos=time.monotonic_ns() - start_time_nanos)
             log.info("Progress: %s", msg)
 
     def run_worker_job_in_current_thread(self, cmd: list[str], timeout_secs: float | None) -> int | None:
@@ -1234,32 +1217,6 @@ class Job:
                 ips = {ip for ip in proc.stdout.strip().split() if ip}
         self.log.log(LOG_TRACE, "localhost_ips: %s", sorted(ips))
         return ips
-
-
-#############################################################################
-class Stats:
-    """Thread-safe counters summarizing subjob progress."""
-
-    def __init__(self) -> None:
-        self.lock: Final[threading.Lock] = threading.Lock()
-        self.jobs_all: int = 0
-        self.jobs_started: int = 0
-        self.jobs_completed: int = 0
-        self.jobs_failed: int = 0
-        self.jobs_running: int = 0
-        self.sum_elapsed_nanos: int = 0
-        self.started_job_names: Final[set[str]] = set()
-
-    def __repr__(self) -> str:
-
-        def pct(number: int) -> str:
-            """Returns percentage string relative to total jobs."""
-            return percent(number, total=self.jobs_all)
-
-        al, started, completed, failed = self.jobs_all, self.jobs_started, self.jobs_completed, self.jobs_failed
-        running = self.jobs_running
-        t = "avg_completion_time:" + human_readable_duration(self.sum_elapsed_nanos / max(1, completed))
-        return f"all:{al}, started:{pct(started)}, completed:{pct(completed)}, failed:{pct(failed)}, running:{running}, {t}"
 
 
 #############################################################################
