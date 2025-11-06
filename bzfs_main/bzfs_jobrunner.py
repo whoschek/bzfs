@@ -969,7 +969,7 @@ class Job:
             self.first_exception = DIE_STATUS if self.first_exception is None else self.first_exception
         stats = self.stats
         jobs_skipped = stats.jobs_all - stats.jobs_started
-        msg = f"{stats}, skipped:" + percent(jobs_skipped, total=stats.jobs_all)
+        msg = f"{stats}, skipped:" + percent(jobs_skipped, total=stats.jobs_all, print_total=True)
         log.info("Final Progress: %s", msg)
         assert stats.jobs_running == 0, msg
         assert stats.jobs_completed == stats.jobs_started, msg
@@ -1000,7 +1000,7 @@ class Job:
             log.error("Worker job failed with unexpected exception: %s for command: %s", e, cmd_str)
             raise
         else:
-            elapsed_human = human_readable_duration(time.monotonic_ns() - start_time_nanos)
+            elapsed_human: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
             if returncode != 0:
                 with stats.lock:
                     if self.first_exception is None:

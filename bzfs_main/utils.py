@@ -968,8 +968,8 @@ class JobStats:
         with self.lock:
             self.jobs_running -= 1
             self.jobs_completed += 1
-            self.sum_elapsed_nanos += elapsed_nanos
             self.jobs_failed += 1 if failed else 0
+            self.sum_elapsed_nanos += elapsed_nanos
             msg = str(self)
             assert self.sum_elapsed_nanos >= 0, msg
             assert self.jobs_running >= 0, msg
