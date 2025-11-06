@@ -355,12 +355,13 @@ class Job:
                         msg = "Exiting as same previous periodic job is still running without completion yet per "
                         die(msg + lock_file, STILL_RUNNING_STATUS)
 
-                    # xfinally: unlink the lock_file while still holding the flock on its fd - it's correct and safe:
-                    # - Performing unlink() before close() avoids a race where a subsequent bzfs process could
-                    #   recreate and lock a fresh inode for the same path between our close() and a later unlink().
-                    #   In that case, a late unlink would delete the newer process's lock_file path.
-                    # - At this point, critical work is complete; the remaining steps are shutdown mechanics,
-                    #   so continuing to hold the flock until close() is correct, safe, and simple.
+                    # xfinally: unlink the lock_file while still holding the flock on its fd - it's a correct and safe
+                    # standard POSIX pattern:
+                    # - Performing unlink() before close(fd) avoids a race where a subsequent bzfs process could recreate and
+                    #   lock a fresh inode for the same path between our close() and a later unlink(). In that case, a late
+                    #   unlink would delete the newer process's lock_file path.
+                    # - At this point, critical work is complete; the remaining steps are shutdown mechanics that have no
+                    #   side effect, so this pattern is correct, safe, and simple.
                     with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # don't accumulate stale files
                         try:
                             self.run_tasks()  # do the real work

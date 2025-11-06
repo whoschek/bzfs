@@ -211,6 +211,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
                 for j in range(start + 1, end + 1):
                     output_snapshots.append(input_snapshots[j])
             else:
+                self.assertEqual("-i", incr_flag)
                 output_snapshots.append(input_snapshots[end])
         if len(steps) == 0 and len(input_snapshots) > 0:
             output_snapshots.append(input_snapshots[0])  # dst contains at least the latest common snapshot

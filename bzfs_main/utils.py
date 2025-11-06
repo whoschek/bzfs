@@ -770,12 +770,13 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
     # Also see https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
     # and https://github.com/openzfs/zfs/issues/8798
     # and (by now no longer accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
+    invalid_chars: str = SHELL_CHARS
     if (
         dataset in ("", ".", "..")
         or dataset.startswith(("/", "./", "../"))
         or dataset.endswith(("/", "/.", "/.."))
         or any(substring in dataset for substring in ("//", "/./", "/../"))
-        or any(char in SHELL_CHARS or (char.isspace() and char != " ") for char in dataset)
+        or any(char in invalid_chars or (char.isspace() and char != " ") for char in dataset)
         or not dataset[0].isalpha()
     ):
         die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")

@@ -1136,7 +1136,7 @@ def _zfs_get(
     if not propnames:
         return {}
     p = job.params
-    cache_key = (sources, output_columns, propnames)
+    cache_key: tuple[str, str, str] = (sources, output_columns, propnames)
     props: dict[str, str | None] | None = props_cache.get(cache_key)
     if props is None:
         cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
@@ -1144,6 +1144,7 @@ def _zfs_get(
         is_name_value_pair: bool = "," in output_columns
         props = {}
         # if not splitlines: omit single trailing newline that was appended by 'zfs get' CLI
+        assert splitlines or len(lines) == 0 or lines[-1] == "\n"
         for line in lines.splitlines() if splitlines else [lines[0:-1]]:
             if is_name_value_pair:
                 propname, propvalue = line.split("\t", 1)
