@@ -10,6 +10,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Change default of `--create-bookmarks` from `hourly` to `all` to improve safety.
 - [bzfs] [security] Set the umask so intermediate directories created by `os.makedirs()` have stricter permissions.
 - [bzfs] [security] Remove the `--log-config-file` and `--log-config-var` CLI options.
+- [bzfs] Don't optimize regex if it might contain a pathological character class that contains parenthesis.
 - [bzfs] Also run nightly tests on zfs-2.4.0-rcX.
 - [bzfs] Also run nightly tests on python-3.15-dev.
 - For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.13.0...v1.14.0

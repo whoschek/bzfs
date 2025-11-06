@@ -1115,8 +1115,8 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 
     def test_complex_pattern(self) -> None:
         complex_pattern = "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))"
-        expected_result = "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))"
-        self.assertEqual(expected_result, replace_capturing_groups_with_non_capturing_groups(complex_pattern))
+        # Conservative fallback: presence of [ and ( anywhere => skip rewrite.
+        self.assertEqual(complex_pattern, replace_capturing_groups_with_non_capturing_groups(complex_pattern))
 
     def test_example(self) -> None:
         pattern = "(.*/)?tmp(foo|bar)(?!public)("
@@ -1157,16 +1157,46 @@ class TestReplaceCapturingGroups(unittest.TestCase):
             r"(?=a)(b)\(c)(?:d)(e)": r"(?=a)(?:b)\(c)(?:d)(?:e)",  # complex mix of groups
             "(你好)": "(?:你好)",  # group with Unicode characters
             "a(?:b)": "a(?:b)",  # string ending with a non-capturing group
-            "([*+?^])": "(?:[*+?^])",  # group containing only special regex metacharacters
+            "([*+?^])": "([*+?^])",  # group containing only special regex metachars; presence of [ and ( => skip rewrite
             r"\(a)": r"\(a)",  # one backslash -> escaped -> NO change
             r"\\(a)": r"\\(a)",  # double-escaped parentheses -> escaped -> NO change
             r"\\\\(a)": r"\\\\(a)",  # quadruple-escaped parentheses -> escaped -> NO change
             r"(a)\(b)(?:c)(?=d)(e)": r"(?:a)\(b)(?:c)(?=d)(?:e)",  # mixed complex case
-            "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))": "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))",  # mixed complex case
+            # Conservative fallback: presence of [ and ( anywhere => skip rewrite.
+            "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))": "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))",  # mixed complex case
         }
         for i, (pattern, expected_result) in enumerate(testcases.items()):
             with self.subTest(i=i):
                 self.assertEqual(expected_result, replace_capturing_groups_with_non_capturing_groups(pattern))
+
+    def test_char_class_with_parentheses_remains_unchanged(self) -> None:
+        # If a character class contains parentheses, rewriting can corrupt the regex.
+        # Since the rewrite is a perf-only optimization, leave such patterns unchanged.
+        patterns = [
+            "[()]",
+            "a[()]b",
+            "[(]",
+            "[a()b]",
+        ]
+        for i, pattern in enumerate(patterns):
+            with self.subTest(i=i):
+                self.assertEqual(pattern, replace_capturing_groups_with_non_capturing_groups(pattern))
+
+    def test_char_class_left_bracket_escapes_remain_unchanged(self) -> None:
+        # Escaped forms of '[' that the regex engine recognizes should also trigger the conservative fallback.
+        patterns = [
+            "\\N{LEFT SQUARE BRACKET}()\\]",  # named Unicode escape for '[' expressed literally
+            r"\x5b()\]",  # hex escape for '[' (lowercase)
+            r"\x5B()\]",  # hex escape for '[' (uppercase)
+            "\\u005b()\\]",  # 4-digit Unicode escape for '[' (lowercase), expressed literally
+            "\\u005B()\\]",  # 4-digit Unicode escape for '[' (uppercase), expressed literally
+            "\\U0000005b()\\]",  # 8-digit Unicode escape for '[' (lowercase), expressed literally
+            "\\U0000005B()\\]",  # 8-digit Unicode escape for '[' (uppercase), expressed literally
+            r"\133()\]",  # octal escape for '['
+        ]
+        for i, pattern in enumerate(patterns):
+            with self.subTest(i=i):
+                self.assertEqual(pattern, replace_capturing_groups_with_non_capturing_groups(pattern))
 
 
 #############################################################################

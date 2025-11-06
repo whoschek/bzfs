@@ -792,7 +792,7 @@ usage: bzfs [-h] [--recursive]
 **--exclude-dataset-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-dataset-regex (see above) except that the default is
-    `(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*` (exclude tmp datasets). Example:
+    `(?:.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*` (exclude tmp datasets). Example:
     `!.*` (exclude no dataset)
 
 <!-- -->
