@@ -643,13 +643,13 @@ def _get_descendant_processes(root_pids: list[int]) -> list[list[int]]:
     """For each root PID, returns the list of all descendant process IDs for the given root PID, on POSIX systems."""
     if len(root_pids) == 0:
         return []
-    procs: defaultdict[int, list[int]] = defaultdict(list)
     cmd: list[str] = ["ps", "-Ao", "pid,ppid"]
     try:
         lines: list[str] = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()
     except PermissionError:
         # degrade gracefully in sandbox environments that deny executing `ps` entirely
         return [[] for _ in root_pids]
+    procs: dict[int, list[int]] = defaultdict(list)
     for line in lines[1:]:  # all lines except the header line
         splits: list[str] = line.split()
         assert len(splits) == 2
@@ -956,7 +956,7 @@ class JobStats:
         self.started_job_names: Final[set[str]] = set()
 
     def submit_job(self, job_name: str) -> str:
-        """Count a job submission."""
+        """Counts a job submission."""
         with self.lock:
             self.jobs_started += 1
             self.jobs_running += 1
@@ -964,7 +964,7 @@ class JobStats:
             return str(self)
 
     def complete_job(self, failed: bool, elapsed_nanos: int) -> str:
-        """Count a job completion."""
+        """Counts a job completion."""
         assert elapsed_nanos >= 0
         with self.lock:
             self.jobs_running -= 1
