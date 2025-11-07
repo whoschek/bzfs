@@ -54,7 +54,7 @@ from bzfs_main.utils import (
 )
 
 # constants:
-__version__: Final[str] = "1.14.0"
+__version__: Final[str] = "1.15.0.dev0"
 PROG_AUTHOR: Final[str] = "Wolfgang Hoschek"
 EXCLUDE_DATASET_REGEXES_DEFAULT: Final[str] = r"(?:.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 LOG_DIR_DEFAULT: Final[str] = PROG_NAME + "-logs"
