@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.14.0] - TBD
+## [1.14.0] - November 7, 2025
 
 - [bzfs_jobrunner] [perf] Improve latency by enabling bzfs_jobrunner to safely execute multiple bzfs jobs in parallel
   within the same Python process (not just in parallel across multiple Python subprocesses).
