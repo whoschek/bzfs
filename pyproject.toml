@@ -7,11 +7,11 @@ name = "bzfs"
 version = "1.14.0.dev0"
 
 description = """
-bzfs is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote) source ZFS dataset \
-(ZFS filesystem or ZFS volume) and its descendant datasets to a (local or remote) destination ZFS dataset to make the \
-destination dataset a recursively synchronized copy of the source dataset, using zfs send/receive/rollback/destroy and \
-ssh as directed. bzfs can be used to incrementally replicate all ZFS snapshots since the most recent common snapshot \
-from source to destination."""
+bzfs is a high-performance parallel backup and replication command line tool that reliably replicates ZFS snapshots \
+from many (local or remote) source ZFS datasets and their descendant datasets to (local or remote) destination ZFS \
+datasets, using zfs send/receive/rollback/destroy and ssh, even at sub-second latency across large fleets of hosts.
+bzfs can be used to incrementally replicate all ZFS snapshots since the most recent common snapshot from source to \
+destination, in order to scale out or to help protect against data loss or ransomware."""
 
 authors = [
   {name = "Wolfgang Hoschek", email = "wolfgang.hoschek@mac.com"},
