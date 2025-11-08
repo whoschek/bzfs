@@ -79,6 +79,14 @@ def capture_stderr() -> Iterator[io.StringIO]:
         yield buf
 
 
+@contextlib.contextmanager
+def capture_stdout() -> Iterator[io.StringIO]:
+    """Capture stdout output for later inspection within a test."""
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        yield buf
+
+
 #############################################################################
 class TestSuiteCompleteness(unittest.TestCase):
     """Verifies each test module's suite() includes all locally defined test classes to avoid accidentally orphaned tests."""

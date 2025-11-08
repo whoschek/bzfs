@@ -23,6 +23,7 @@ import copy
 import logging
 import shlex
 import subprocess
+import sys
 import threading
 import time
 from collections import (
@@ -117,12 +118,12 @@ def run_ssh_command(
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
             if not isinstance(e, UnicodeDecodeError):
-                xprint(log, stderr_to_str(e.stdout), run=print_stdout, end="")
-                xprint(log, stderr_to_str(e.stderr), run=print_stderr, end="")
+                xprint(log, stderr_to_str(e.stdout), run=print_stdout, file=sys.stdout, end="")
+                xprint(log, stderr_to_str(e.stderr), run=print_stderr, file=sys.stderr, end="")
             raise
         else:
-            xprint(log, process.stdout, run=print_stdout, end="")
-            xprint(log, process.stderr, run=print_stderr, end="")
+            xprint(log, process.stdout, run=print_stdout, file=sys.stdout, end="")
+            xprint(log, process.stderr, run=print_stderr, file=sys.stderr, end="")
             return process.stdout
 
 

@@ -19,6 +19,7 @@ from __future__ import (
 )
 import re
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import (
@@ -88,12 +89,12 @@ def detect_available_programs(job: Job) -> None:
         cmd: list[str] = [p.shell_program_local, "-c", _find_available_programs(p)]
         sp = job.subprocesses
         proc = sp.subprocess_run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
-        xprint(log=log, value=stderr_to_str(proc.stderr), end="")
+        xprint(log=log, value=stderr_to_str(proc.stderr), file=sys.stderr, end="")
         stdout: str = proc.stdout
         available_programs["local"] = dict.fromkeys(stdout.splitlines(), "")
         cmd = [p.shell_program_local, "-c", "exit"]
         proc = sp.subprocess_run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
-        xprint(log=log, value=stderr_to_str(proc.stderr), end="")
+        xprint(log=log, value=stderr_to_str(proc.stderr), file=sys.stderr, end="")
         if proc.returncode != 0:
             _disable_program(p, "sh", ["local"])
 

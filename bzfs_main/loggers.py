@@ -158,8 +158,12 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = N
                     i += len(ts_level)
                     msg = msg[0:i].ljust(54) + msg[i:]  # right-pad msg if record.msg contains "%s" unless at start
                 if record.exc_info or record.exc_text or record.stack_info:
-                    record.msg = msg
-                    msg = super().format(record)
+                    original_msg = record.msg
+                    try:
+                        record.msg = msg
+                        msg = super().format(record)
+                    finally:
+                        record.msg = original_msg  # restore original msg so other logging handlers see unmodified state
                 elif record.args:
                     msg = msg % record.args
             else:

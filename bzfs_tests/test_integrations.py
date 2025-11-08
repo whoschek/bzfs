@@ -104,7 +104,6 @@ from bzfs_tests.test_incremental_send_steps import (
     TestIncrementalSendSteps,
 )
 from bzfs_tests.tools import (
-    capture_stderr,
     stop_on_failure_subtest,
 )
 from bzfs_tests.zfs_util import (
@@ -3554,10 +3553,8 @@ class LocalTestCase(IntegrationTestCase):
         self.setup_basic()
         non_existing_snapshot = snapshots(src_root_dataset)[0] + "$"
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--create-bookmarks=all")
-        with capture_stderr() as buf:
-            with self.assertRaises(subprocess.CalledProcessError):
-                bzfs_main.replication._create_zfs_bookmarks(job, job.params.src, src_root_dataset, [non_existing_snapshot])
-            self.assertTrue(buf.getvalue())
+        with self.assertRaises(subprocess.CalledProcessError):
+            bzfs_main.replication._create_zfs_bookmarks(job, job.params.src, src_root_dataset, [non_existing_snapshot])
 
     def test_create_zfs_bookmarks_existing_bookmark(self) -> None:
         if not are_bookmarks_enabled("src"):

@@ -97,6 +97,7 @@ from bzfs_main.utils import (
     UMASK,
     JobStats,
     Subprocesses,
+    dry,
     format_dict,
     format_obj,
     getenv_bool,
@@ -809,7 +810,7 @@ class Job:
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
-        msg = "Ready to run %s subjobs using %s/%s src hosts: %s, %s/%s dst hosts: %s"
+        msg = dry("Ready to run %s subjobs using %s/%s src hosts: %s, %s/%s dst hosts: %s", is_dry_run=self.jobrunner_dryrun)
         log.info(
             msg, len(subjobs), len(src_hosts), nb_src_hosts, src_hosts, len(dst_hosts), nb_dst_hosts, list(dst_hosts.keys())
         )

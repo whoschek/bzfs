@@ -371,6 +371,7 @@ class Job:
                         self.shutdown()
                         with contextlib.suppress(BrokenPipeError):
                             sys.stderr.flush()
+                            sys.stdout.flush()
             except subprocess.CalledProcessError as e:
                 log_error_on_exit(e, e.returncode)
                 raise
@@ -391,6 +392,7 @@ class Job:
             log.info("Success. Goodbye!")
             with contextlib.suppress(BrokenPipeError):
                 sys.stderr.flush()
+                sys.stdout.flush()
 
     def run_tasks(self) -> None:
         """Executes replication cycles, repeating until daemon lifetime expires."""

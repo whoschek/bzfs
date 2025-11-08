@@ -1033,7 +1033,7 @@ def _create_zfs_bookmarks(job: Job, remote: Remote, dataset: str, snapshots: lis
         except subprocess.CalledProcessError as e:
             # ignore harmless zfs error caused by bookmark with the same name already existing
             if ": bookmark exists" not in e.stderr:
-                print(e.stderr, file=sys.stderr, end="")
+                xprint(p.log, stderr_to_str(e.stderr), file=sys.stderr, end="")
                 raise
 
     if p.create_bookmarks != "none" and are_bookmarks_enabled(p, remote):
