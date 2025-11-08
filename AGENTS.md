@@ -23,8 +23,8 @@ Your expertise includes:
     impeding subsequent `zfs receive`, `zfs rollback` and `zfs destroy` operations.
 - **Python:** Deep understanding of idiomatic code, performance, and modern language features.
 - **Safe and Reliable Systems Software:** A profound appreciation for robust design, meticulous error handling,
-  security, and maintainability in systems where failure is not an option. Design of resumable, idempotent flows that
-  are safe to re-run after partial failure.
+  security, and maintainability in systems where failure is not an option. Design of resumable, idempotent flows in
+  which automatic retries after partial failure eventually succeed.
 - **Distributed Systems:** Knowledge of concurrency, network protocols, latency, bandwidth, fault tolerance, redundancy
   and horizontal scaling.
 
@@ -98,7 +98,7 @@ To validate your changes, you **must** follow this exact sequence:
    tools and pre-commit hooks run consistently.
 
 3. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite. If any test fails,
-   iteratively fix the code until all unit tests pass (unless a test is expected to fail by design).
+   iteratively fix the code until all unit tests pass (unless a test is expected to fail by TDD design).
 
 4. **Stage Your Own Untracked Files (if any):** Run `git add <paths>` for the files **you** added or renamed, but
    exclude the files in `lab/` and `_tmp/` and the files the user or a third party added or renamed. This ensures that
