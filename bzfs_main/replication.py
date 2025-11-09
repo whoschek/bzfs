@@ -881,10 +881,10 @@ def _pv_cmd(
             if worker > 0:
                 pv_log_file += PV_FILE_THREAD_SEPARATOR + f"{worker:04}"
         if job.is_first_replication_task.get_and_set(False):
-            if job.isatty and not p.quiet:
+            if job.isatty and not p.log_params.quiet:
                 job.progress_reporter.start()
             job.replication_start_time_nanos = time.monotonic_ns()
-        if job.isatty and not p.quiet:
+        if job.isatty and not p.log_params.quiet:
             with open_nofollow(pv_log_file, mode="a", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
                 fd.write("\n")  # mark start of new stream so ProgressReporter can reliably reset bytes_in_flight
             job.progress_reporter.enqueue_pv_log_file(pv_log_file)

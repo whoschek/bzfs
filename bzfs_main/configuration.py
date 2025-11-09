@@ -134,6 +134,13 @@ class LogParams:
             log_level = "INFO"
         self.log_level: Final[str] = log_level
         self.timestamp: Final[str] = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
+        self.isatty: Final[bool] = getenv_bool("isatty", True)
+        self.quiet: Final[bool] = args.quiet
+        self.terminal_columns: Final[int] = (
+            getenv_int("terminal_columns", shutil.get_terminal_size(fallback=(120, 24)).columns)
+            if self.isatty and args.pv_program != DISABLE_PRG and not self.quiet
+            else 0
+        )
         self.home_dir: Final[str] = HOME_DIRECTORY
         log_parent_dir: Final[str] = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)
         if LOG_DIR_DEFAULT not in os.path.basename(log_parent_dir):
@@ -187,7 +194,6 @@ class LogParams:
             _delete_stale_files(dot_current_dir, prefix="", millis=5000, dirs=True, exclude=os.path.basename(current_dir))
         except FileNotFoundError:
             pass  # harmless concurrent cleanup
-        self.params: Params | None = None
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -232,7 +238,6 @@ class Params:
         self.dry_run_no_send: Final[bool] = args.dryrun == "send"
         self.verbose_zfs: Final[bool] = args.verbose >= 2
         self.verbose_destroy: Final[str] = "" if args.quiet else "-v"
-        self.quiet: Final[bool] = args.quiet
 
         self.zfs_send_program_opts: list[str] = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
         zfs_recv_program_opts: list[str] = self.split_args(args.zfs_recv_program_opts)
@@ -306,7 +311,6 @@ class Params:
                        "-U", "--store-and-forward", "-d", "--watchfd", "-R", "--remote", "-P", "--pidfile"}  # fmt: skip
         for opt in bad_pv_opts.intersection(self.pv_program_opts):
             die(f"--pv-program-opts: {opt} is disallowed for security reasons.")
-        self.isatty: Final[bool] = getenv_bool("isatty", True)
         if args.bwlimit:
             self.pv_program_opts.extend([f"--rate-limit={self.validate_arg_str(args.bwlimit)}"])
         self.shell_program_local: Final[str] = "sh"
@@ -329,11 +333,6 @@ class Params:
         self.timeout_nanos: int | None = timeout_nanos
         self.no_estimate_send_size: Final[bool] = args.no_estimate_send_size
         self.remote_conf_cache_ttl_nanos: int = 1_000_000 * parse_duration_to_milliseconds(args.daemon_remote_conf_cache_ttl)
-        self.terminal_columns: Final[int] = (
-            getenv_int("terminal_columns", shutil.get_terminal_size(fallback=(120, 24)).columns)
-            if self.isatty and self.pv_program != DISABLE_PRG and not self.quiet
-            else 0
-        )
 
         self.os_cpu_count: Final[int | None] = os.cpu_count()
         self.os_getuid: Final[int] = os.getuid()

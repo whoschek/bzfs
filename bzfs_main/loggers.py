@@ -140,7 +140,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = N
     level_prefixes_: dict[int, str] = LOG_LEVEL_PREFIXES.copy()
     log_stderr_: int = LOG_STDERR
     log_stdout_: int = LOG_STDOUT
-    terminal_cols: list[int | None] = [0 if log_params is None else None]  # 'None' indicates "configure value later"
+    cols: int = 0 if log_params is None else log_params.terminal_columns
 
     class DefaultLogFormatter(logging.Formatter):
         """Formatter adding timestamps and padding for progress output."""
@@ -170,26 +170,8 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = N
                 msg = super().format(record)
 
             msg = prefix + msg
-            cols: int | None = terminal_cols[0]
-            if cols is None:
-                cols = self.ljust_cols()
             msg = msg.ljust(cols)  # w/ progress line, "overwrite" trailing chars of previous msg with spaces
             return msg
-
-        @staticmethod
-        def ljust_cols() -> int:
-            """Lazily determines padding width from ProgressReporter settings."""
-            # lock-free yet thread-safe late configuration-based init for prettier ProgressReporter output
-            # log_params.params and available_programs are not fully initialized yet before detect_available_programs() ends
-            cols: int = 0
-            assert log_params is not None
-            p = log_params.params
-            if p is not None and "local" in p.available_programs:
-                if "pv" in p.available_programs["local"]:
-                    cols = p.terminal_columns
-                    assert cols is not None
-                terminal_cols[0] = cols  # finally, resolve to use this specific value henceforth
-            return cols
 
     return DefaultLogFormatter()
 

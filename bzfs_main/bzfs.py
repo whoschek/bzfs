@@ -340,7 +340,6 @@ class Job:
                 if self.is_test_mode:
                     log.log(LOG_TRACE, "Parsed CLI arguments: %s", args)
                 self.params = p = Params(args, sys_argv or [], log_params, log, self.inject_params)
-                log_params.params = p
                 lock_file: str = p.lock_file_name()
                 lock_fd = os.open(
                     lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, FILE_PERMISSIONS
@@ -401,7 +400,7 @@ class Job:
         self.all_exceptions_count = 0
         self.first_exception = None
         self.remote_conf_cache = {}
-        self.isatty = self.isatty if self.isatty is not None else p.isatty
+        self.isatty = self.isatty if self.isatty is not None else p.log_params.isatty
         self.validate_once()
         self.replication_start_time_nanos = time.monotonic_ns()
         self.progress_reporter = ProgressReporter(log, p.pv_program_opts, self.use_select, self.progress_update_intervals)
@@ -494,7 +493,7 @@ class Job:
             sent_bytes: int = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
             sent_bytes_per_sec: int = round(1_000_000_000 * sent_bytes / (elapsed_nanos or 1))
             msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s]."
-        log.info("%s", msg.ljust(p.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
+        log.info("%s", msg.ljust(p.log_params.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
 
     def validate_once(self) -> None:
         """Validates CLI parameters and compiles regex lists one time only, which will later be reused many times."""
@@ -532,7 +531,7 @@ class Job:
             pv_program_opts_set = set(p.pv_program_opts)
             if pv_program_opts_set.isdisjoint({"--bytes", "-b", "--bits", "-8"}):
                 die("--pv-program-opts must contain one of --bytes or --bits for progress metrics to function.")
-            if self.isatty and not p.quiet:
+            if self.isatty and not p.log_params.quiet:
                 for opts in [["--eta", "-e"], ["--fineta", "-I"], ["--average-rate", "-a"]]:
                     if pv_program_opts_set.isdisjoint(opts):
                         die(f"--pv-program-opts must contain one of {', '.join(opts)} for progress report line to function.")

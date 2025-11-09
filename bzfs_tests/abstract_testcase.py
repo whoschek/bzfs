@@ -63,6 +63,12 @@ class AbstractTestCase(unittest.TestCase):
         inject_params: dict[str, bool] | None = None,
     ) -> configuration.Params:
         log_params = log_params if log_params is not None else MagicMock(spec=configuration.LogParams)
+        if not hasattr(log_params, "isatty"):
+            log_params.isatty = True  # type: ignore[misc]  # cannot assign to final attribute
+        if not hasattr(log_params, "quiet"):
+            log_params.quiet = False  # type: ignore[misc]  # cannot assign to final attribute
+        if not hasattr(log_params, "terminal_columns"):
+            log_params.terminal_columns = 120  # type: ignore[misc]  # cannot assign to final attribute
         if log is None:
             log = MagicMock(spec=logging.Logger)
             log.isEnabledFor.side_effect = lambda level: level >= logging.INFO
