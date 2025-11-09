@@ -707,7 +707,7 @@ def _run_zfs_send_receive(
                 maybe_inject_error(job, cmd=cmd, error_trigger=error_trigger)
                 sp: Subprocesses = job.subprocesses
                 process = sp.subprocess_run(
-                    cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=True
+                    cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=True, log=log
                 )
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
                 no_sleep: bool = False

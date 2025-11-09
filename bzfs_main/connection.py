@@ -114,7 +114,7 @@ def run_ssh_command(
         try:
             sp: Subprocesses = job.subprocesses
             process: CompletedProcess[str] = sp.subprocess_run(
-                ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=check
+                ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=check, log=log
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
             if not isinstance(e, UnicodeDecodeError):
@@ -178,7 +178,8 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
         # extend lifetime of ssh master by $ssh_control_persist_secs via 'ssh -O check' if master is still running.
         # 'ssh -S /path/to/socket -O check' doesn't talk over the network, hence is still a low latency fast path.
         sp: Subprocesses = job.subprocesses
-        if sp.subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, timeout=timeout(job)).returncode == 0:
+        t: float | None = timeout(job)
+        if sp.subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, timeout=t, log=log).returncode == 0:
             log.log(LOG_TRACE, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
         else:  # ssh master is not alive; start a new master:
             log.log(LOG_TRACE, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
@@ -191,7 +192,8 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
             ssh_socket_cmd += ["-M", f"-oControlPersist={ssh_control_persist_secs}s", remote.ssh_user_host, "exit"]
             log.log(LOG_TRACE, "Executing: %s", list_formatter(ssh_socket_cmd))
             try:
-                sp.subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, check=True, timeout=timeout(job))
+                t = timeout(job)
+                sp.subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, check=True, timeout=t, log=log)
             except subprocess.CalledProcessError as e:
                 log.error("%s", stderr_to_str(e.stderr).rstrip())
                 raise RetryableError(

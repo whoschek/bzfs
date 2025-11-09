@@ -295,6 +295,7 @@ jobs:
         command -v sh | xargs ls -l
     - name: Run tests
       run: |
+        export bzfs_subprocess_run_loglevel=10  # also log subprocess perf stats
         ./test.sh
     - name: Run tests and generate code coverage
       run: |

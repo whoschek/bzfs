@@ -21,6 +21,7 @@ import argparse
 import base64
 import errno
 import hashlib
+import logging
 import os
 import re
 import shutil
@@ -147,6 +148,7 @@ def suite() -> unittest.TestSuite:
         TestReplaceCapturingGroups,
         TestSubprocessRun,
         TestSubprocessRunWithSubprocesses,
+        TestSubprocessRunLogging,
         TestPIDExists,
         TestTerminateProcessSubtree,
         TestTerminationSignalHandler,
@@ -1301,6 +1303,110 @@ class TestSubprocessRunWithSubprocesses(unittest.TestCase):
         self.assertIsNotNone(result)
         assert result is not None
         self.assertNotEqual(0, result.returncode)
+
+
+#############################################################################
+class TestSubprocessRunLogging(unittest.TestCase):
+    """Tests logging behavior of subprocess_run() finalization block.
+
+    Covers success, failure, timeout statuses and argv formatting via positional args, kwargs, tuple and string (with lstrip)
+    while ensuring deterministic elapsed time formatting using patched monotonic_ns.
+    """
+
+    class _CapturingHandler(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.records: list[str] = []
+            self.setFormatter(logging.Formatter("%(message)s"))
+
+        def emit(self, record: logging.LogRecord) -> None:
+            self.records.append(self.format(record))  # capture the emitted records for later inspection
+
+    def _make_logger(self) -> tuple[Logger, _CapturingHandler]:
+        logger = logging.getLogger(self.id())
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+        handler = self._CapturingHandler()
+        logger.handlers.clear()
+        logger.addHandler(handler)
+        self.addCleanup(logger.handlers.clear)
+        return logger, handler
+
+    def test_logs_success_with_positional_args_list(self) -> None:
+        log, handler = self._make_logger()
+        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 1_230_000]):
+            result = subprocess_run(["true"], stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
+        self.assertEqual(0, result.returncode)
+        self.assertEqual(["Executed [success] [1.23ms]: true"], handler.records)
+
+    def test_logs_failure_without_check(self) -> None:
+        log, handler = self._make_logger()
+        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 12_340_000]):
+            result = subprocess_run(["false"], stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
+        self.assertNotEqual(0, result.returncode)
+        # For values between 10 and 100, human_readable_float uses 1 decimal
+        self.assertEqual(["Executed [failure] [12.3ms]: false"], handler.records)
+
+    def test_logs_failure_with_check_exception(self) -> None:
+        log, handler = self._make_logger()
+        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 9_990_000]):
+            with self.assertRaises(subprocess.CalledProcessError):
+                subprocess_run(["false"], stdout=PIPE, stderr=PIPE, check=True, log=log, loglevel=logging.INFO)
+        self.assertEqual(["Executed [failure] [9.99ms]: false"], handler.records)
+
+    def test_logs_timeout_status(self) -> None:
+        log, handler = self._make_logger()
+        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 12_350_000]):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                subprocess_run(["sleep", "1"], timeout=0.01, stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
+        # 12.35 is not exactly representable in binary; formatting with one decimal may yield 12.3
+        self.assertEqual(["Executed [timeout] [12.3ms]: sleep 1"], handler.records)
+
+    def test_logs_argv_from_kwargs_list(self) -> None:
+        log, handler = self._make_logger()
+        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 500_000]):
+            result = subprocess_run(stdout=PIPE, stderr=PIPE, args=["true"], log=log, loglevel=logging.INFO)
+        self.assertEqual(0, result.returncode)
+        self.assertEqual(["Executed [success] [0.5ms]: true"], handler.records)
+
+    def test_logs_tuple_args_and_string_with_lstrip(self) -> None:
+        # Tuple args formatting
+        log1, handler1 = self._make_logger()
+        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 2_000_000]):
+            result1 = subprocess_run(args=("true",), stdout=PIPE, stderr=PIPE, log=log1, loglevel=logging.INFO)
+        self.assertEqual(0, result1.returncode)
+        self.assertEqual(["Executed [success] [2ms]: true"], handler1.records)
+
+        # String args with leading whitespace and shell=True should be lstrip()'d in logs
+        log2, handler2 = self._make_logger()
+        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 1_500_000]):
+            result2 = subprocess_run(
+                args="  echo foo", shell=True, stdout=PIPE, stderr=PIPE, log=log2, loglevel=logging.INFO
+            )
+        self.assertEqual(0, result2.returncode)
+        self.assertEqual(["Executed [success] [1.5ms]: echo foo"], handler2.records)
+
+    def test_no_logging_when_level_disabled(self) -> None:
+        logger = logging.getLogger(self.id() + ":disabled")
+        logger.setLevel(logging.ERROR)  # INFO not enabled
+        logger.propagate = False
+        handler = self._CapturingHandler()
+        logger.handlers.clear()
+        logger.addHandler(handler)
+        self.addCleanup(logger.handlers.clear)
+
+        result = subprocess_run(["true"], stdout=PIPE, stderr=PIPE, log=logger, loglevel=logging.INFO)
+        self.assertEqual(0, result.returncode)
+        self.assertEqual([], handler.records)
+
+    def test_logs_failure_when_popen_raises_oserror(self) -> None:
+        """Logs a failure when Popen raises OSError before starting the process (exitcode stays None)."""
+        log, handler = self._make_logger()
+        with patch("bzfs_main.utils.subprocess.Popen", side_effect=OSError("boom")):
+            with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 1_000_000]):
+                with self.assertRaises(OSError):
+                    subprocess_run(["true"], stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
+        self.assertEqual(["Executed [failure] [1ms]: true"], handler.records)
 
 
 #############################################################################

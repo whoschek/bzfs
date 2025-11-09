@@ -88,12 +88,12 @@ def detect_available_programs(job: Job) -> None:
     if "local" not in available_programs:
         cmd: list[str] = [p.shell_program_local, "-c", _find_available_programs(p)]
         sp = job.subprocesses
-        proc = sp.subprocess_run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+        proc = sp.subprocess_run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, log=log)
         xprint(log=log, value=stderr_to_str(proc.stderr), file=sys.stderr, end="")
         stdout: str = proc.stdout
         available_programs["local"] = dict.fromkeys(stdout.splitlines(), "")
         cmd = [p.shell_program_local, "-c", "exit"]
-        proc = sp.subprocess_run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+        proc = sp.subprocess_run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, log=log)
         xprint(log=log, value=stderr_to_str(proc.stderr), file=sys.stderr, end="")
         if proc.returncode != 0:
             _disable_program(p, "sh", ["local"])

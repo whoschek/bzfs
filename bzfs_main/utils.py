@@ -598,9 +598,12 @@ def die(msg: str, exit_code: int = DIE_STATUS, parser: argparse.ArgumentParser |
         parser.error(msg)
 
 
+_SUBPROCESS_RUN_LOGLEVEL: Final[int] = getenv_int("subprocess_run_loglevel", LOG_TRACE)
+
+
 def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
     """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired, and
-    provides optional child PID tracking."""
+    provides optional child PID tracking, and optional logging of execution status via ``log`` and ``loglevel`` params."""
     input_value = kwargs.pop("input", None)
     timeout = kwargs.pop("timeout", None)
     check = kwargs.pop("check", False)
@@ -610,30 +613,46 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
             raise ValueError("input and stdin are mutually exclusive")
         kwargs["stdin"] = subprocess.PIPE
 
-    pid: int | None = None
-    try:
-        with subprocess.Popen(*args, **kwargs) as proc:
-            pid = proc.pid
-            if subprocesses is not None:
-                subprocesses.register_child_pid(pid)
-            try:
-                stdout, stderr = proc.communicate(input_value, timeout=timeout)
-            except BaseException as e:
+    log: logging.Logger | None = kwargs.pop("log", None)
+    loglevel: int = kwargs.pop("loglevel", _SUBPROCESS_RUN_LOGLEVEL)
+    start_time_nanos: int = time.monotonic_ns()
+    is_timeout: bool = False
+    exitcode: int | None = None
+
+    def log_status() -> None:
+        if log is not None and log.isEnabledFor(loglevel):
+            elapsed_time: str = human_readable_float((time.monotonic_ns() - start_time_nanos) / 1_000_000) + "ms"
+            status: str = "timeout" if is_timeout else "success" if exitcode == 0 else "failure"
+            cmd = kwargs["args"] if "args" in kwargs else (args[0] if args else None)
+            cmd_str: str = " ".join(str(arg) for arg in iter(cmd)) if isinstance(cmd, (list, tuple)) else str(cmd)
+            log.log(loglevel, f"Executed [{status}] [{elapsed_time}]: %s", cmd_str.lstrip())
+
+    with xfinally(log_status):
+        pid: int | None = None
+        try:
+            with subprocess.Popen(*args, **kwargs) as proc:
+                pid = proc.pid
+                if subprocesses is not None:
+                    subprocesses.register_child_pid(pid)
                 try:
-                    if isinstance(e, subprocess.TimeoutExpired):
-                        terminate_process_subtree(root_pids=[proc.pid])  # send SIGTERM to child process and its descendants
-                finally:
-                    proc.kill()
-                    raise
-            else:
-                exitcode: int | None = proc.poll()
-                assert exitcode is not None
-                if check and exitcode:
-                    raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
-        return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
-    finally:
-        if subprocesses is not None and isinstance(pid, int):
-            subprocesses.unregister_child_pid(pid)
+                    stdout, stderr = proc.communicate(input_value, timeout=timeout)
+                except BaseException as e:
+                    try:
+                        if isinstance(e, subprocess.TimeoutExpired):
+                            is_timeout = True
+                            terminate_process_subtree(root_pids=[proc.pid])  # send SIGTERM to child proc and its descendants
+                    finally:
+                        proc.kill()
+                        raise
+                else:
+                    exitcode = proc.poll()
+                    assert exitcode is not None
+                    if check and exitcode:
+                        raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
+            return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
+        finally:
+            if subprocesses is not None and isinstance(pid, int):
+                subprocesses.unregister_child_pid(pid)
 
 
 def terminate_process_subtree(
