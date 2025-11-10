@@ -598,9 +598,6 @@ def die(msg: str, exit_code: int = DIE_STATUS, parser: argparse.ArgumentParser |
         parser.error(msg)
 
 
-_SUBPROCESS_RUN_LOGLEVEL: Final[int] = getenv_int("subprocess_run_loglevel", LOG_TRACE)
-
-
 def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
     """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired, and
     provides optional child PID tracking, and optional logging of execution status via ``log`` and ``loglevel`` params."""
@@ -614,18 +611,20 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
         kwargs["stdin"] = subprocess.PIPE
 
     log: logging.Logger | None = kwargs.pop("log", None)
-    loglevel: int = kwargs.pop("loglevel", _SUBPROCESS_RUN_LOGLEVEL)
+    loglevel: int | None = kwargs.pop("loglevel", None)
     start_time_nanos: int = time.monotonic_ns()
     is_timeout: bool = False
     exitcode: int | None = None
 
     def log_status() -> None:
-        if log is not None and log.isEnabledFor(loglevel):
-            elapsed_time: str = human_readable_float((time.monotonic_ns() - start_time_nanos) / 1_000_000) + "ms"
-            status: str = "timeout" if is_timeout else "success" if exitcode == 0 else "failure"
-            cmd = kwargs["args"] if "args" in kwargs else (args[0] if args else None)
-            cmd_str: str = " ".join(str(arg) for arg in iter(cmd)) if isinstance(cmd, (list, tuple)) else str(cmd)
-            log.log(loglevel, f"Executed [{status}] [{elapsed_time}]: %s", cmd_str.lstrip())
+        if log is not None:
+            _loglevel: int = loglevel if loglevel is not None else getenv_int("subprocess_run_loglevel", LOG_TRACE)
+            if log.isEnabledFor(_loglevel):
+                elapsed_time: str = human_readable_float((time.monotonic_ns() - start_time_nanos) / 1_000_000) + "ms"
+                status: str = "timeout" if is_timeout else "success" if exitcode == 0 else "failure"
+                cmd = kwargs["args"] if "args" in kwargs else (args[0] if args else None)
+                cmd_str: str = " ".join(str(arg) for arg in iter(cmd)) if isinstance(cmd, (list, tuple)) else str(cmd)
+                log.log(_loglevel, f"Executed [{status}] [{elapsed_time}]: %s", cmd_str.lstrip())
 
     with xfinally(log_status):
         pid: int | None = None
