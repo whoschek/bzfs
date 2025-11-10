@@ -867,7 +867,7 @@ def _fix_send_recv_opts(
     return results, sorted(x_names)
 
 
-SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: Final[re.Pattern[str]] = re.compile(r"^[0-9]+")  # see local_ssh_command()
+_SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: Final[re.Pattern[str]] = re.compile(r"^[0-9]+")  # see local_ssh_command()
 
 
 def _delete_stale_files(
@@ -894,7 +894,7 @@ def _delete_stale_files(
                         shutil.rmtree(entry.path, ignore_errors=True)
                     elif not (ssh and stat.S_ISSOCK(stats.st_mode)):
                         os.remove(entry.path)
-                    elif match := SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
+                    elif match := _SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
                         pid: int = int(match.group(0))
                         if pid_exists(pid) is False or now - stats.st_mtime >= 31 * 24 * 60 * 60:
                             os.remove(entry.path)  # bzfs process is no longer alive; its ssh master process isn't either

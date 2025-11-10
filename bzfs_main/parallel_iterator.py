@@ -229,7 +229,7 @@ def batch_cmd_iterator(
 
 def get_max_command_line_bytes(os_name: str) -> int:
     """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
-    arg_max = MAX_CMDLINE_BYTES.get(os_name, 256 * 1024)
+    arg_max = _MAX_CMDLINE_BYTES.get(os_name, 256 * 1024)
     environ_size = 4 * 1024  # typically is 1-4 KB
     safety_margin = (8 * 2 * 4 + 4) * 1024 if arg_max >= 1 * 1024 * 1024 else 8 * 1024
     max_bytes = max(4 * 1024, arg_max - environ_size - safety_margin)
@@ -237,7 +237,7 @@ def get_max_command_line_bytes(os_name: str) -> int:
 
 
 # constants:
-MAX_CMDLINE_BYTES: Final[dict[str, int]] = {
+_MAX_CMDLINE_BYTES: Final[dict[str, int]] = {
     "Linux": 2 * 1024 * 1024,
     "FreeBSD": 256 * 1024,
     "Darwin": 1 * 1024 * 1024,

@@ -1181,7 +1181,7 @@ class Job:
         if raw_src_hosts is None:
             # If stdin is an interactive TTY, don't block waiting for input; fail clearly instead
             try:
-                is_tty: bool = bool(getattr(sys.stdin, "isatty", lambda: False)())
+                is_tty: bool = getattr(sys.stdin, "isatty", lambda: False)()
             except Exception:
                 is_tty = False
             if is_tty:

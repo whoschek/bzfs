@@ -66,9 +66,9 @@ from bzfs_main.utils import (
 
 # constants
 PV_FILE_THREAD_SEPARATOR: Final[str] = "_"
-ARABIC_DECIMAL_SEPARATOR: Final[str] = "\u066b"  # "٫"  # noqa: RUF003
-PV_SIZE_TO_BYTES_REGEX: Final[re.Pattern[str]] = re.compile(
-    rf"(\d+[.,{ARABIC_DECIMAL_SEPARATOR}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)"
+_ARABIC_DECIMAL_SEPARATOR: Final[str] = "\u066b"  # "٫"  # noqa: RUF003
+_PV_SIZE_TO_BYTES_REGEX: Final[re.Pattern[str]] = re.compile(
+    rf"(\d+[.,{_ARABIC_DECIMAL_SEPARATOR}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)"
 )
 
 
@@ -348,8 +348,8 @@ def _pv_size_to_bytes(
     size: str,
 ) -> tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
     """Converts pv size string to bytes and returns remaining text."""
-    if match := PV_SIZE_TO_BYTES_REGEX.fullmatch(size):
-        number: float = float(match.group(1).replace(",", ".").replace(ARABIC_DECIMAL_SEPARATOR, "."))
+    if match := _PV_SIZE_TO_BYTES_REGEX.fullmatch(size):
+        number: float = float(match.group(1).replace(",", ".").replace(_ARABIC_DECIMAL_SEPARATOR, "."))
         i: int = "KMGTPEZYRQ".index(match.group(2)) if match.group(2) else -1
         m: int = 1024 if match.group(3) == "i" else 1000
         b: int = 1 if match.group(4) == "B" else 8

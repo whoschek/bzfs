@@ -85,7 +85,9 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(round(4.12 * 1024), pv_size_to_bytes("4.12 KiB"))
         self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46,2GiB"))
         self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46.2GiB"))
-        self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46" + progress_reporter.ARABIC_DECIMAL_SEPARATOR + "2GiB"))
+        self.assertEqual(
+            round(46.2 * 1024**3), pv_size_to_bytes("46" + progress_reporter._ARABIC_DECIMAL_SEPARATOR + "2GiB")
+        )
         self.assertEqual(2 * 1024**2, pv_size_to_bytes("2 MiB"))
         self.assertEqual(1000**2, pv_size_to_bytes("1 MB"))
         self.assertEqual(1024**3, pv_size_to_bytes("1 GiB"))
