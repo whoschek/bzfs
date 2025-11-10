@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# shellcheck disable=SC2154
 
 set -e
 # Use tmpfs (RAM disk) as fast backing storage where available
@@ -21,6 +22,8 @@ if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
   export TMPDIR
   mkdir -p "$TMPDIR"
 fi
+echo "Now using TMPDIR: $TMPDIR"
+echo "Now using bzfs_test_mode: $bzfs_test_mode"
 
 cd "$(dirname "$(realpath "$0")")"
 

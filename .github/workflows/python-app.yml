@@ -82,7 +82,7 @@ permissions:
   contents: read
 
 env:  # it's sufficient to run smoke tests when dependabot is detected
-  bzfs_test_mode: ${{ (github.actor == 'dependabot[bot]' && 'smoke') || (github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string || (github.event.inputs.bzfs_test_mode == 'all' && '' || github.event.inputs.bzfs_test_mode)) }}
+  bzfs_test_mode: ${{ (github.actor == 'dependabot[bot]' && 'smoke') || (github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string) || (github.event.inputs.bzfs_test_mode != 'all' && github.event.inputs.bzfs_test_mode) || '' }}
   NUM_RUNS: ${{ github.event.inputs.num_runs != '' && github.event.inputs.num_runs || '1' }}
 
 jobs:
