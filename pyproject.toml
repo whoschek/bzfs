@@ -60,9 +60,9 @@ dev = [  # for development only
   # "pandoc", # instead use this for pandoc >= 3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
   "genbadge[coverage]==1.1.2",      # see https://smarie.github.io/python-genbadge/
   "commitizen==4.9.1",              # see https://github.com/commitizen-tools/commitizen
-  "pre-commit==4.3.0",              # see https://github.com/pre-commit/pre-commit
-  "black==25.9.0",                  # see https://github.com/psf/black
-  "ruff==0.14.4",                   # see https://github.com/astral-sh/ruff
+  "pre-commit==4.4.0",              # see https://github.com/pre-commit/pre-commit
+  "black==25.11.0",                 # see https://github.com/psf/black
+  "ruff==0.14.5",                   # see https://github.com/astral-sh/ruff
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
   "mypy==1.18.2",                   # see https://github.com/python/mypy
   "shellcheck-py==0.11.0.1",        # see https://github.com/shellcheck-py/shellcheck-py
