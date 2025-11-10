@@ -868,9 +868,9 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
     def setUp(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         self.p = self.make_params(args=args)
-        self.p.src = Remote("src", args, self.p)
-        self.p.dst = Remote("dst", args, self.p)
-        self.p.zfs_recv_x_names = ["xprop1", "xprop2"]
+        self.p.src = Remote("src", args, self.p)  # type: ignore[misc]  # cannot assign to final attribute
+        self.p.dst = Remote("dst", args, self.p)  # type: ignore[misc]  # cannot assign to final attribute
+        self.p.zfs_recv_x_names = ["xprop1", "xprop2"]  # type: ignore[misc]  # cannot assign to final attribute
         self.p.zfs_recv_ox_names = {"existing"}
         self.job = bzfs.Job()
         self.job.params = self.p
@@ -906,7 +906,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def test_appends_o_options_for_whitelisted_props(self) -> None:
         """Add '-o' options for properties allowed by default regex."""
-        self.p.zfs_recv_x_names = []
+        self.p.zfs_recv_x_names = []  # type: ignore[misc]  # cannot assign to final attribute
         self.p.zfs_recv_ox_names = set()
         recv_opts: list[str] = []
 
@@ -929,7 +929,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def test_skips_o_options_for_non_whitelisted_props(self) -> None:
         """Ignore properties that are absent from default whitelist."""
-        self.p.zfs_recv_x_names = []
+        self.p.zfs_recv_x_names = []  # type: ignore[misc]  # cannot assign to final attribute
         self.p.zfs_recv_ox_names = set()
         recv_opts: list[str] = []
 
@@ -969,8 +969,8 @@ class TestPreservePropertiesValidation(AbstractTestCase):
         self.job.params = self.p
 
         # Setup minimal remote objects. The specific details don't matter much as they are mocked.
-        self.p.src = Remote("src", self.args, self.p)
-        self.p.dst = Remote("dst", self.args, self.p)
+        self.p.src = Remote("src", self.args, self.p)  # type: ignore[misc]  # cannot assign to final attribute
+        self.p.dst = Remote("dst", self.args, self.p)  # type: ignore[misc]  # cannot assign to final attribute
         self.p.src.ssh_user_host = "src_host"
         self.p.dst.ssh_user_host = "dst_host"
         self.p.connection_pools = {
@@ -1064,7 +1064,7 @@ class TestJobMethods(AbstractTestCase):
     def test_sudo_cmd_nonroot_no_privilege_elevation(self) -> None:
         """Non-root without elevation requests delegation instead."""
         job = self.make_job(["src", "dst"])
-        job.params.enable_privilege_elevation = False
+        job.params.enable_privilege_elevation = False  # type: ignore[misc]  # cannot assign to final attribute
         with patch("os.getuid", return_value=1):
             sudo, deleg = job.sudo_cmd("user@host", "user")
         self.assertEqual("", sudo)
@@ -1073,7 +1073,7 @@ class TestJobMethods(AbstractTestCase):
     def test_sudo_cmd_disabled_program_raises(self) -> None:
         """Disabled sudo program exits when elevation is required."""
         job = self.make_job(["src", "dst"])
-        job.params.sudo_program = bzfs_main.detect.DISABLE_PRG
+        job.params.sudo_program = bzfs_main.detect.DISABLE_PRG  # type: ignore[misc]  # cannot assign to final attribute
         with patch("os.getuid", return_value=1):
             with self.assertRaises(SystemExit) as cm:
                 job.sudo_cmd("user@host", "user")
@@ -1391,7 +1391,7 @@ class TestJobMethods(AbstractTestCase):
         job = self.make_job(["src", "dst"])
         p = job.params
         p.available_programs = {"local": {"pv": "pv"}}
-        p.log_params.pv_log_file = "pv.log"
+        p.log_params.pv_log_file = "pv.log"  # type: ignore[misc]  # cannot assign to final attribute
         job.num_snapshots_replicated = 5
         with (
             patch("time.monotonic_ns", return_value=2_000_000_000),
@@ -1492,7 +1492,7 @@ class TestDeleteEmptyDstDatasetsTask(AbstractTestCase):
         args = self.argparser_parse_args(args=["src", "dst"])
         job = bzfs.Job()
         job.params = self.make_params(args=args)
-        job.params.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = delete_snapshots_and_bookmarks
+        job.params.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = delete_snapshots_and_bookmarks  # type: ignore[misc]  # cannot assign to final attribute
         return job
 
     def test_deletes_only_leaf_without_snapshots(self) -> None:
@@ -1710,7 +1710,7 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
         job = self._job()
         config = job.params.create_src_snapshots_config
         config.current_datetime = datetime(2024, 1, 1, 5, 30, tzinfo=timezone.utc)
-        config.tz = timezone.utc
+        config.tz = timezone.utc  # type: ignore[misc]  # cannot assign to final attribute
         label = config.snapshot_labels()[0]
 
         def fake_handle(
@@ -1750,7 +1750,7 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
         config = job.params.create_src_snapshots_config
 
         config.current_datetime = datetime(2024, 1, 1, 5, 30, tzinfo=timezone.utc)
-        config.tz = timezone.utc
+        config.tz = timezone.utc  # type: ignore[misc]  # cannot assign to final attribute
         label = config.snapshot_labels()[0]
         creation_time_a = int(datetime(2024, 1, 1, 4, tzinfo=timezone.utc).timestamp())
 

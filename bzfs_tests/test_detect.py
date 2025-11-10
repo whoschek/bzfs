@@ -73,8 +73,8 @@ class TestRemoteConfCache(AbstractTestCase):
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
-        p.src = Remote("src", args, p)
-        p.dst = Remote("dst", args, p)
+        p.src = Remote("src", args, p)  # type: ignore[misc]  # cannot assign to final attribute
+        p.dst = Remote("dst", args, p)  # type: ignore[misc]  # cannot assign to final attribute
         p.src.pool = "tank"
         p.src.ssh_host = "host"
         p.src.ssh_user_host = "host"
@@ -99,8 +99,8 @@ class TestRemoteConfCache(AbstractTestCase):
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
-        p.src = Remote("src", args, p)
-        p.dst = Remote("dst", args, p)
+        p.src = Remote("src", args, p)  # type: ignore[misc]  # cannot assign to final attribute
+        p.dst = Remote("dst", args, p)  # type: ignore[misc]  # cannot assign to final attribute
         p.src.pool = "tank"
         p.src.ssh_host = "host"
         p.src.ssh_user_host = "host"
@@ -198,8 +198,8 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
-        p.src = Remote("src", args, p)
-        p.dst = Remote("dst", args, p)
+        p.src = Remote("src", args, p)  # type: ignore[misc]  # cannot assign to final attribute
+        p.dst = Remote("dst", args, p)  # type: ignore[misc]  # cannot assign to final attribute
         job.params.available_programs = {"local": {"sh": ""}, "src": {}, "dst": {}}
         job.params.zpool_features = {"src": {}, "dst": {}}
         return job
@@ -262,7 +262,7 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         job = self._setup_job()
         p = job.params
         p.args.preserve_properties = ["x"]
-        p.zfs_send_program_opts = ["--props"]
+        p.zfs_send_program_opts = ["--props"]  # type: ignore[misc]  # cannot assign to final attribute
         p.available_programs[p.dst.location] = {}
         with (
             patch.object(bzfs_main.detect, "_detect_available_programs_remote", return_value={}),
@@ -306,7 +306,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
-        p.src = Remote("src", args, p)
+        p.src = Remote("src", args, p)  # type: ignore[misc]  # cannot assign to final attribute
         return job, p.src
 
     def test_zfs_version_parsing_and_shell(self) -> None:
@@ -398,7 +398,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
     def test_shell_program_disabled(self) -> None:
         job, remote = self._setup()
         p = job.params
-        p.shell_program = bzfs_main.detect.DISABLE_PRG
+        p.shell_program = bzfs_main.detect.DISABLE_PRG  # type: ignore[misc]  # cannot assign to final attribute
         with patch.object(bzfs_main.detect, "run_ssh_command", return_value="zfs-2.1.0\n"):
             avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
             p.available_programs[remote.location] = avail

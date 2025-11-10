@@ -583,22 +583,22 @@ class TestHelperFunctions(AbstractTestCase):
         configuration.CreateSrcSnapshotConfig(good_args, params)
 
         args = bzfs.argument_parser().parse_args(["src", "dst"])
-        params.daemon_frequency = "2secondly"
+        params.daemon_frequency = "2secondly"  # type: ignore[misc]  # cannot assign to final attribute
         config = configuration.CreateSrcSnapshotConfig(args, params)
         self.assertDictEqual({"_2secondly": (2, "secondly")}, config.suffix_durations)
 
         args = bzfs.argument_parser().parse_args(["src", "dst"])
-        params.daemon_frequency = "2seconds"
+        params.daemon_frequency = "2seconds"  # type: ignore[misc]  # cannot assign to final attribute
         with self.assertRaises(SystemExit):
             configuration.CreateSrcSnapshotConfig(args, params)
 
         args = bzfs.argument_parser().parse_args(["src", "dst"])
-        params.daemon_frequency = "-2secondly"
+        params.daemon_frequency = "-2secondly"  # type: ignore[misc]  # cannot assign to final attribute
         with self.assertRaises(SystemExit):
             configuration.CreateSrcSnapshotConfig(args, params)
 
         args = bzfs.argument_parser().parse_args(["src", "dst"])
-        params.daemon_frequency = "2adhoc"
+        params.daemon_frequency = "2adhoc"  # type: ignore[misc]  # cannot assign to final attribute
         with self.assertRaises(SystemExit):
             configuration.CreateSrcSnapshotConfig(args, params)
 
@@ -769,7 +769,7 @@ class TestAdditionalHelpers(AbstractTestCase):
             self.assertIn("-S", cmd)
             self.assertEqual("user@host", cmd[-1])
 
-            r.reuse_ssh_connection = False
+            r.reuse_ssh_connection = False  # type: ignore[misc]  # cannot assign to final attribute
             cmd = r.local_ssh_command(None)
             self.assertNotIn("-S", cmd)
 

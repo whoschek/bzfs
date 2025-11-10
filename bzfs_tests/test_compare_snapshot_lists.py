@@ -192,7 +192,7 @@ class TestCompareSnapshotLists(AbstractTestCase):
             p = self.make_params(args, log_params=log_params)
             p.src.root_dataset = "tank/src"
             p.dst.root_dataset = "tank/dst"
-            p.compare_snapshot_lists = compare_choice
+            p.compare_snapshot_lists = compare_choice  # type: ignore[misc]  # cannot assign to final attribute
             job.params = p
 
             def fake_zfs_list(

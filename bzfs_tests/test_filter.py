@@ -830,7 +830,7 @@ class TestFilterDatasets(CommonTest):
         p = job.params
         p.include_dataset_regexes = compile_regexes(include or [".*"])
         p.exclude_dataset_regexes = compile_regexes(exclude or [])
-        p.skip_parent = skip_parent
+        p.skip_parent = skip_parent  # type: ignore[misc]  # cannot assign to final attribute
         p.exclude_dataset_property = exclude_property
         remote = MagicMock(spec=Remote, root_dataset="src", location="src")
         return job, remote

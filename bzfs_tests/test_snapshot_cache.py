@@ -1686,7 +1686,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Use current_datetime after one hour has elapsed since creation
             # Choose a current time that is after 04:00:00 but before 05:00:00; e.g., 04:30:00
             job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(2_000_003_400, tz=timezone.utc)
-            job.params.create_src_snapshots_config.tz = timezone.utc
+            job.params.create_src_snapshots_config.tz = timezone.utc  # type: ignore[misc]  # cannot assign to final attribute
 
             # Label under test
             label = job.params.create_src_snapshots_config.snapshot_labels()[0]
@@ -2218,17 +2218,17 @@ class TestSnapshotCache(AbstractTestCase):
 
         with self.job_context([SRC_DATASET, DST_DATASET]) as (job_a, tmpdir):
             # Same user@host, different ports
-            job_a.params.dst.basis_ssh_user = "u"
-            job_a.params.dst.basis_ssh_host = "h"
-            job_a.params.dst.ssh_port = 1111
+            job_a.params.dst.basis_ssh_user = "u"  # type: ignore[misc]  # cannot assign to final attribute
+            job_a.params.dst.basis_ssh_host = "h"  # type: ignore[misc]  # cannot assign to final attribute
+            job_a.params.dst.ssh_port = 1111  # type: ignore[misc]  # cannot assign to final attribute
             job_a.params.dst.ssh_user = "u"
             job_a.params.dst.ssh_host = "h"
             job_a.params.dst.ssh_user_host = "u@h"
 
             job_b = self.make_job_for_tmp(tmpdir, [SRC_DATASET, DST_DATASET])
-            job_b.params.dst.basis_ssh_user = "u"
-            job_b.params.dst.basis_ssh_host = "h"
-            job_b.params.dst.ssh_port = 2222
+            job_b.params.dst.basis_ssh_user = "u"  # type: ignore[misc]  # cannot assign to final attribute
+            job_b.params.dst.basis_ssh_host = "h"  # type: ignore[misc]  # cannot assign to final attribute
+            job_b.params.dst.ssh_port = 2222  # type: ignore[misc]  # cannot assign to final attribute
             job_b.params.dst.ssh_user = "u"
             job_b.params.dst.ssh_host = "h"
             job_b.params.dst.ssh_user_host = "u@h"
@@ -2266,13 +2266,13 @@ class TestSnapshotCache(AbstractTestCase):
             job_b.params.src.root_dataset = SRC_DATASET
             job_b.params.dst.root_dataset = DST_DATASET
             # Same user@host, different port
-            job_a.params.dst.basis_ssh_user = job_b.params.dst.basis_ssh_user = "u"
-            job_a.params.dst.basis_ssh_host = job_b.params.dst.basis_ssh_host = "h"
+            job_a.params.dst.basis_ssh_user = job_b.params.dst.basis_ssh_user = "u"  # type: ignore[misc]  # cannot assign to final attribute
+            job_a.params.dst.basis_ssh_host = job_b.params.dst.basis_ssh_host = "h"  # type: ignore[misc]  # cannot assign to final attribute
             job_a.params.dst.ssh_user = job_b.params.dst.ssh_user = "u"
             job_a.params.dst.ssh_host = job_b.params.dst.ssh_host = "h"
             job_a.params.dst.ssh_user_host = job_b.params.dst.ssh_user_host = "u@h"
-            job_a.params.dst.ssh_port = 1111
-            job_b.params.dst.ssh_port = 2222
+            job_a.params.dst.ssh_port = 1111  # type: ignore[misc]  # cannot assign to final attribute
+            job_b.params.dst.ssh_port = 2222  # type: ignore[misc]  # cannot assign to final attribute
             job_a.dst_dataset_exists[job_a.params.dst.root_dataset] = True
             job_b.dst_dataset_exists[job_b.params.dst.root_dataset] = True
 
@@ -2534,7 +2534,7 @@ class TestSnapshotCache(AbstractTestCase):
             job.params.dst.root_dataset = DST_DATASET
             job.params.create_src_snapshots_config.current_datetime = base_dt
             # Ensure scheduler uses timezone-aware datetimes for cache trust and next_event comparisons
-            job.params.create_src_snapshots_config.tz = timezone.utc
+            job.params.create_src_snapshots_config.tz = timezone.utc  # type: ignore[misc]  # cannot assign to final attribute
 
             src_datasets = [f"{SRC_DATASET}/d{i:04d}" for i in range(n)]
             src_datasets.sort()
@@ -3038,8 +3038,8 @@ class TestSnapshotCache(AbstractTestCase):
             remote: Remote = job.params.src
             # Configure a 100-char cache namespace using a 98-char random ssh_user_host plus two separators
             remote.ssh_user_host = "".join(rng.choice(letters) for _ in range(98))
-            remote.ssh_port = 22
-            remote.ssh_config_file_hash = ""
+            remote.ssh_port = 22  # type: ignore[misc]  # cannot assign to final attribute
+            remote.ssh_config_file_hash = ""  # type: ignore[misc]  # cannot assign to final attribute
             self.assertEqual(100 + 2, len(remote.cache_namespace()))
 
             # Warmup to let Python/CPU settle and populate caches

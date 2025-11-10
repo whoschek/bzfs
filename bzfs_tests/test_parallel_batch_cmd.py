@@ -86,7 +86,7 @@ class TestItrSshCmdParallel(AbstractTestCase):
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
-        p.src = Remote("src", args, p)
+        p.src = Remote("src", args, p)  # type: ignore[misc]  # cannot assign to final attribute
         job.params.connection_pools["src"] = ConnectionPools(
             p.src, {SHARED: p.src.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
         )

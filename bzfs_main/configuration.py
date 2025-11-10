@@ -166,7 +166,7 @@ class LogParams:
         )
         os.fchmod(fd, FILE_PERMISSIONS)
         os.close(fd)
-        self.pv_log_file: str = self.log_file[0 : -len(".log")] + ".pv"
+        self.pv_log_file: Final[str] = self.log_file[0 : -len(".log")] + ".pv"
         log_file_stem: str = os.path.basename(self.log_file)[0 : -len(".log")]
         # Python's standard logger naming API interprets chars such as '.', '-', ':', spaces, etc in special ways, e.g.
         # logging.getLogger("foo.bar") vs logging.getLogger("foo-bar"). Thus, we sanitize the Python logger name via a regex:
@@ -239,14 +239,14 @@ class Params:
         self.verbose_zfs: Final[bool] = args.verbose >= 2
         self.verbose_destroy: Final[str] = "" if args.quiet else "-v"
 
-        self.zfs_send_program_opts: list[str] = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
+        self.zfs_send_program_opts: Final[list[str]] = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
         zfs_recv_program_opts: list[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             zfs_recv_program_opts.append(self.validate_arg_str(extra_opt, allow_all=True))
         preserve_properties = [validate_property_name(name, "--preserve-properties") for name in args.preserve_properties]
         zfs_recv_program_opts, zfs_recv_x_names = self._fix_recv_opts(zfs_recv_program_opts, frozenset(preserve_properties))
         self.zfs_recv_program_opts: Final[list[str]] = zfs_recv_program_opts
-        self.zfs_recv_x_names: list[str] = zfs_recv_x_names
+        self.zfs_recv_x_names: Final[list[str]] = zfs_recv_x_names
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
@@ -257,14 +257,16 @@ class Params:
         self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
 
         self.force_rollback_to_latest_snapshot: Final[bool] = args.force_rollback_to_latest_snapshot
-        self.force_rollback_to_latest_common_snapshot = SynchronizedBool(args.force_rollback_to_latest_common_snapshot)
+        self.force_rollback_to_latest_common_snapshot: Final[SynchronizedBool] = SynchronizedBool(
+            args.force_rollback_to_latest_common_snapshot
+        )
         self.force: Final[SynchronizedBool] = SynchronizedBool(args.force)
         self.force_once: Final[bool] = args.force_once
         self.force_unmount: Final[str] = "-f" if args.force_unmount else ""
         force_hard: str = "-R" if args.force_destroy_dependents else ""
         self.force_hard: Final[str] = "-R" if args.force_hard else force_hard  # --force-hard is deprecated
 
-        self.skip_parent: bool = args.skip_parent
+        self.skip_parent: Final[bool] = args.skip_parent
         self.skip_missing_snapshots: Final[str] = args.skip_missing_snapshots
         self.skip_on_error: Final[str] = args.skip_on_error
         self.retry_policy: Final[RetryPolicy] = RetryPolicy(args)
@@ -275,13 +277,13 @@ class Params:
         self.delete_dst_snapshots_except: Final[bool] = args.delete_dst_snapshots_except
         self.delete_dst_datasets: Final[bool] = args.delete_dst_datasets
         self.delete_empty_dst_datasets: Final[bool] = args.delete_empty_dst_datasets is not None
-        self.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: bool = (
+        self.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: Final[bool] = (
             args.delete_empty_dst_datasets == "snapshots+bookmarks"
         )
-        self.compare_snapshot_lists: str = args.compare_snapshot_lists
+        self.compare_snapshot_lists: Final[str] = args.compare_snapshot_lists
         self.daemon_lifetime_nanos: Final[int] = 1_000_000 * parse_duration_to_milliseconds(args.daemon_lifetime)
-        self.daemon_frequency: str = args.daemon_frequency
-        self.enable_privilege_elevation: bool = not args.no_privilege_elevation
+        self.daemon_frequency: Final[str] = args.daemon_frequency
+        self.enable_privilege_elevation: Final[bool] = not args.no_privilege_elevation
         self.no_stream: Final[bool] = args.no_stream
         self.resume_recv: Final[bool] = not args.no_resume_recv
         self.create_bookmarks: Final[str] = (
@@ -289,8 +291,8 @@ class Params:
         )  # no_create_bookmark depr
         self.use_bookmark: Final[bool] = not args.no_use_bookmark
 
-        self.src: Remote = Remote("src", args, self)  # src dataset, host and ssh options
-        self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
+        self.src: Final[Remote] = Remote("src", args, self)  # src dataset, host and ssh options
+        self.dst: Final[Remote] = Remote("dst", args, self)  # dst dataset, host and ssh options
         self.create_src_snapshots_config: Final[CreateSrcSnapshotConfig] = CreateSrcSnapshotConfig(args, self)
         self.monitor_snapshots_config: Final[MonitorSnapshotsConfig] = MonitorSnapshotsConfig(args, self)
         self.is_caching_snapshots: Final[bool] = args.cache_snapshots == "true"
@@ -314,9 +316,9 @@ class Params:
         if args.bwlimit:
             self.pv_program_opts.extend([f"--rate-limit={self.validate_arg_str(args.bwlimit)}"])
         self.shell_program_local: Final[str] = "sh"
-        self.shell_program: str = self._program_name(args.shell_program)
+        self.shell_program: Final[str] = self._program_name(args.shell_program)
         self.ssh_program: Final[str] = self._program_name(args.ssh_program)
-        self.sudo_program: str = self._program_name(args.sudo_program)
+        self.sudo_program: Final[str] = self._program_name(args.sudo_program)
         self.uname_program: Final[str] = self._program_name("uname")
         self.zfs_program: Final[str] = self._program_name("zfs")
         self.zpool_program: Final[str] = self._program_name(args.zpool_program)
@@ -330,9 +332,11 @@ class Params:
         # threads: with --force-once we intentionally coerce to a single-threaded run to ensure deterministic serial behavior
         self.threads: Final[tuple[int, bool]] = (1, False) if self.force_once else args.threads
         timeout_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
-        self.timeout_nanos: int | None = timeout_nanos
+        self.timeout_nanos: Final[int | None] = timeout_nanos
         self.no_estimate_send_size: Final[bool] = args.no_estimate_send_size
-        self.remote_conf_cache_ttl_nanos: int = 1_000_000 * parse_duration_to_milliseconds(args.daemon_remote_conf_cache_ttl)
+        self.remote_conf_cache_ttl_nanos: Final[int] = 1_000_000 * parse_duration_to_milliseconds(
+            args.daemon_remote_conf_cache_ttl
+        )
 
         self.os_cpu_count: Final[int | None] = os.cpu_count()
         self.os_getuid: Final[int] = os.getuid()
@@ -491,26 +495,26 @@ class Remote:
         assert loc == "src" or loc == "dst"
         self.location: Final[str] = loc
         self.params: Final[Params] = p
-        self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
-        self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
-        self.ssh_port: int | None = getattr(args, f"ssh_{loc}_port")
+        self.basis_ssh_user: Final[str] = getattr(args, f"ssh_{loc}_user")
+        self.basis_ssh_host: Final[str] = getattr(args, f"ssh_{loc}_host")
+        self.ssh_port: Final[int | None] = getattr(args, f"ssh_{loc}_port")
         self.ssh_config_file: Final[str | None] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
         if self.ssh_config_file:
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
-        self.ssh_config_file_hash: str = (
+        self.ssh_config_file_hash: Final[str] = (
             sha256_urlsafe_base64(os.path.abspath(self.ssh_config_file), padding=False) if self.ssh_config_file else ""
         )
         self.ssh_cipher: Final[str] = p.validate_arg_str(args.ssh_cipher)
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
-        self.ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
+        self.ssh_extra_opts: Final[list[str]] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
             ["-v"] if args.verbose >= 3 else []
         )
         self.max_concurrent_ssh_sessions_per_tcp_connection: Final[int] = args.max_concurrent_ssh_sessions_per_tcp_connection
         self.ssh_exit_on_shutdown: Final[bool] = args.ssh_exit_on_shutdown
         self.ssh_control_persist_secs: Final[int] = args.ssh_control_persist_secs
         self.socket_prefix: Final[str] = "s"
-        self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
+        self.reuse_ssh_connection: Final[bool] = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
             ssh_home_dir: str = os.path.join(HOME_DIRECTORY, ".ssh")
             os.makedirs(ssh_home_dir, mode=DIR_PERMISSIONS, exist_ok=True)
@@ -668,7 +672,7 @@ class CreateSrcSnapshotConfig:
         self.skip_create_src_snapshots: Final[bool] = not args.create_src_snapshots
         self.create_src_snapshots_even_if_not_due: Final[bool] = args.create_src_snapshots_even_if_not_due
         tz_spec: str | None = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
-        self.tz: tzinfo | None = get_timezone(tz_spec)
+        self.tz: Final[tzinfo | None] = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: Final[str] = args.create_src_snapshots_timeformat
         self.anchors: Final[PeriodAnchors] = PeriodAnchors.parse(args)

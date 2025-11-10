@@ -595,7 +595,7 @@ class TestRefreshSshConnection(AbstractTestCase):
 
     @patch("bzfs_main.utils.Subprocesses.subprocess_run")
     def test_reuse_disabled_no_action(self, mock_run: MagicMock) -> None:
-        self.remote.reuse_ssh_connection = False
+        self.remote.reuse_ssh_connection = False  # type: ignore[misc]  # cannot assign to final attribute
         connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
         mock_run.assert_not_called()
 
@@ -625,7 +625,7 @@ class TestRefreshSshConnection(AbstractTestCase):
 
     @patch("bzfs_main.utils.Subprocesses.subprocess_run")
     def test_verbose_option_limits_persist_time(self, mock_run: MagicMock) -> None:
-        self.remote.ssh_extra_opts = ["-v"]
+        self.remote.ssh_extra_opts = ["-v"]  # type: ignore[misc]  # cannot assign to final attribute
         mock_run.side_effect = [MagicMock(returncode=1), MagicMock(returncode=0)]
         connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
         args = mock_run.call_args_list[1][0][0]
@@ -689,7 +689,7 @@ class TestTimeout(AbstractTestCase):
         self.assertIsNone(connection.timeout(self.job))
 
     def test_expired_timeout_raises(self) -> None:
-        self.job.params.timeout_nanos = 1
+        self.job.params.timeout_nanos = 1  # type: ignore[misc]  # cannot assign to final attribute
         self.job.timeout_nanos = time.monotonic_ns() - 1
         with self.assertRaises(subprocess.TimeoutExpired):
             connection.timeout(self.job)
