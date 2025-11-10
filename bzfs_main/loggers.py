@@ -95,13 +95,15 @@ def _get_default_logger(log_params: LogParams, args: argparse.Namespace, logger_
     log.setLevel(log_params.log_level)
     log.propagate = False  # don't propagate log messages up to the root logger to avoid emitting duplicate messages
 
-    handler: logging.Handler = logging.StreamHandler(stream=sys.stdout)
-    handler.setFormatter(get_default_log_formatter(log_params=log_params))
+    handler: logging.StreamHandler = logging.StreamHandler(stream=sys.stdout)
+    handler.terminator = ""
+    handler.setFormatter(get_default_log_formatter(default_terminator="\n", log_params=log_params))
     handler.setLevel(log_params.log_level)
     log.addHandler(handler)
 
     handler = logging.FileHandler(log_params.log_file, encoding="utf-8")
-    handler.setFormatter(get_default_log_formatter())
+    handler.terminator = ""
+    handler.setFormatter(get_default_log_formatter(default_terminator="\n"))
     handler.setLevel(log_params.log_level)
     log.addHandler(handler)
 
@@ -111,11 +113,11 @@ def _get_default_logger(log_params: LogParams, args: argparse.Namespace, logger_
 
         address, socktype = _get_syslog_address(address, args.log_syslog_socktype)
         log_syslog_prefix = str(args.log_syslog_prefix).strip().replace("%", "")  # sanitize
-        handler = handlers.SysLogHandler(address=address, facility=args.log_syslog_facility, socktype=socktype)
-        handler.setFormatter(get_default_log_formatter(prefix=log_syslog_prefix + " "))
-        handler.setLevel(args.log_syslog_level)
-        log.addHandler(handler)
-        if handler.level < log.getEffectiveLevel():
+        syslog_handler = handlers.SysLogHandler(address=address, facility=args.log_syslog_facility, socktype=socktype)
+        syslog_handler.setFormatter(get_default_log_formatter(prefix=log_syslog_prefix + " "))
+        syslog_handler.setLevel(args.log_syslog_level)
+        log.addHandler(syslog_handler)
+        if syslog_handler.level < log.getEffectiveLevel():
             log_level_name: str = logging.getLevelName(log.getEffectiveLevel())
             log.warning(
                 "%s",
@@ -135,7 +137,9 @@ LOG_LEVEL_PREFIXES: Final[dict[int, str]] = {
 }
 
 
-def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = None) -> logging.Formatter:
+def get_default_log_formatter(
+    prefix: str = "", default_terminator: str = "", log_params: LogParams | None = None
+) -> logging.Formatter:
     """Returns a formatter for bzfs logs with optional prefix and column padding."""
     level_prefixes_: dict[int, str] = LOG_LEVEL_PREFIXES.copy()
     log_stderr_: int = LOG_STDERR
@@ -171,7 +175,8 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = N
 
             msg = prefix + msg
             msg = msg.ljust(cols)  # w/ progress line, "overwrite" trailing chars of previous msg with spaces
-            return msg
+            terminator: str = getattr(record, "terminator", default_terminator)
+            return msg + terminator
 
     return DefaultLogFormatter()
 

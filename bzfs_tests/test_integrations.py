@@ -514,9 +514,6 @@ class IntegrationTestCase(ParametrizedTestCase):
             if control_persist_margin_secs is not None:
                 job.control_persist_margin_secs = control_persist_margin_secs
 
-            if isatty is not None:
-                job.isatty = isatty
-
             if use_select is not None:
                 job.use_select = use_select
 
@@ -537,6 +534,10 @@ class IntegrationTestCase(ParametrizedTestCase):
             # probably caused by https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=283101
             # via https://github.com/openzfs/zfs/issues/16731#issuecomment-2561987688
             os.environ[ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send"] = "false"
+
+        old_isatty = os.environ.get(ENV_VAR_PREFIX + "isatty")
+        if isatty is not None:
+            os.environ[ENV_VAR_PREFIX + "isatty"] = str(isatty)
 
         returncode = 0
         try:
@@ -585,6 +586,11 @@ class IntegrationTestCase(ParametrizedTestCase):
                 os.environ[ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send"] = (
                     old_dedicated_tcp_connection_per_zfs_send
                 )
+
+            if old_isatty is None:
+                os.environ.pop(ENV_VAR_PREFIX + "isatty", None)
+            else:
+                os.environ[ENV_VAR_PREFIX + "isatty"] = old_isatty
 
         if isinstance(expected_status, list):
             self.assertIn(returncode, expected_status)

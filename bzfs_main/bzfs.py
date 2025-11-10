@@ -275,7 +275,6 @@ class Job:
 
         self.is_test_mode: bool = False  # for testing only
         self.creation_prefix: str = ""  # for testing only
-        self.isatty: bool | None = None  # for testing only
         self.use_select: bool = False  # for testing only
         self.progress_update_intervals: tuple[float, float] | None = None  # for testing only
         self.error_injection_triggers: dict[str, Counter[str]] = {}  # for testing only
@@ -400,7 +399,6 @@ class Job:
         self.all_exceptions_count = 0
         self.first_exception = None
         self.remote_conf_cache = {}
-        self.isatty = self.isatty if self.isatty is not None else p.log_params.isatty
         self.validate_once()
         self.replication_start_time_nanos = time.monotonic_ns()
         self.progress_reporter = ProgressReporter(log, p.pv_program_opts, self.use_select, self.progress_update_intervals)
@@ -531,7 +529,7 @@ class Job:
             pv_program_opts_set = set(p.pv_program_opts)
             if pv_program_opts_set.isdisjoint({"--bytes", "-b", "--bits", "-8"}):
                 die("--pv-program-opts must contain one of --bytes or --bits for progress metrics to function.")
-            if self.isatty and not p.log_params.quiet:
+            if not p.log_params.quiet:
                 for opts in [["--eta", "-e"], ["--fineta", "-I"], ["--average-rate", "-a"]]:
                     if pv_program_opts_set.isdisjoint(opts):
                         die(f"--pv-program-opts must contain one of {', '.join(opts)} for progress report line to function.")

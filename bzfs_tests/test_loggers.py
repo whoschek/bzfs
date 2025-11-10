@@ -132,9 +132,11 @@ class TestHelperFunctions(AbstractTestCase):
         log.log(LOG_STDERR, "%s", prefix + "bbbe2")
         log.log(LOG_STDOUT, "%s", prefix + "bbbo2")
         log.info("%s", prefix + "bbb4")
+        logging.addLevelName(LOG_TRACE, "TRACE")
         log.log(LOG_TRACE, "%s", prefix + "bbb5")
         log.setLevel(LOG_TRACE)
         log.log(LOG_TRACE, "%s", prefix + "bbb6")
+        log.log(logging.WARNING, "%s", prefix + "bbb7", extra={"terminator": "\r"})
         files = {os.path.abspath(log_params.log_file)}
         check(log, files)
 

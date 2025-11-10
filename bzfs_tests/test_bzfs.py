@@ -205,7 +205,7 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertTrue(is_busy("zfs send " + ds + "@snap", ds))
 
     def test_pv_cmd(self) -> None:
-        args = self.argparser_parse_args(args=["src", "dst"])
+        args = self.argparser_parse_args(args=["src", "dst", "--quiet"])
         job = bzfs.Job()
         job.params = self.make_params(args=args, log_params=LogParams(args))
         job.params.available_programs = {"src": {"pv": "pv"}}
@@ -1189,7 +1189,6 @@ class TestJobMethods(AbstractTestCase):
                 "--pv-program-opts=--bytes --fineta --average-rate",
             ]
         )
-        job.isatty = True
         with self.assertRaises(SystemExit):
             job.validate_once()
 
@@ -1202,7 +1201,6 @@ class TestJobMethods(AbstractTestCase):
                 "--pv-program-opts=--bytes --eta --average-rate",
             ]
         )
-        job.isatty = True
         with self.assertRaises(SystemExit):
             job.validate_once()
 
@@ -1215,7 +1213,6 @@ class TestJobMethods(AbstractTestCase):
                 "--pv-program-opts=--bytes --eta --fineta",
             ]
         )
-        job.isatty = True
         with self.assertRaises(SystemExit):
             job.validate_once()
 
@@ -1228,7 +1225,6 @@ class TestJobMethods(AbstractTestCase):
                 "--pv-program-opts=--bytes --eta --fineta --average-rate",
             ]
         )
-        job.isatty = True
         job.validate_once()
 
     def test_validate_once_accepts_pv_options_short_forms(self) -> None:
@@ -1240,7 +1236,6 @@ class TestJobMethods(AbstractTestCase):
                 "--pv-program-opts=-b -e -I -a",
             ]
         )
-        job.isatty = True
         job.validate_once()
 
     def test_latest_common_snapshot_considers_excluded_src_snapshots(self) -> None:
