@@ -19,6 +19,7 @@ from __future__ import (
     annotations,
 )
 import contextlib
+import gc
 import inspect
 import io
 import logging
@@ -85,6 +86,21 @@ def capture_stdout() -> Iterator[io.StringIO]:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         yield buf
+
+
+@contextlib.contextmanager
+def gc_disabled(run_gc_first: bool = False) -> Iterator[None]:
+    """Temporarily disables Python's automatic cyclic GC within a with-block; for more accurate benchmarking."""
+    if run_gc_first:
+        gc.collect()
+    was_enabled: bool = gc.isenabled()
+    try:
+        if was_enabled:
+            gc.disable()
+        yield
+    finally:
+        if was_enabled:
+            gc.enable()
 
 
 #############################################################################

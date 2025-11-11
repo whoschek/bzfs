@@ -104,6 +104,7 @@ from bzfs_tests.test_incremental_send_steps import (
     TestIncrementalSendSteps,
 )
 from bzfs_tests.tools import (
+    gc_disabled,
     stop_on_failure_subtest,
 )
 from bzfs_tests.zfs_util import (
@@ -937,14 +938,35 @@ class TestSSHLatency(IntegrationTestCase):
         else:
             ssh_opts_list += src_private_key2
         ssh_opts = " ".join(ssh_opts_list)
+        memory_hog: str = "x" * 1_000
+        # memory_hog: str = "x" * 1_000_000_000
+
+        def run_benchmark(cmd: list[str], check_cmd: list[str]) -> None:
+            _dummy = len(memory_hog)
+            for close_fds in [False, True]:
+                with gc_disabled(run_gc_first=True):
+                    iters = 0
+                    start_time_nanos = time.monotonic_ns()
+                    while time.monotonic_ns() < start_time_nanos + 2 * 1000_000_000:
+                        if check_cmd:
+                            _stdout, stderr = self.run_latency_cmd(check_cmd, close_fds=close_fds)
+                            self.assertIn("Master running", stderr)
+                        _stdout, stderr = self.run_latency_cmd(cmd, close_fds=close_fds)
+                        iters += 1
+                    elapsed = time.monotonic_ns() - start_time_nanos
+                t = human_readable_duration(elapsed / iters)
+                log.info(f"time/iter: {t}, check: {bool(check_cmd)}, close_fds: {close_fds}, cmd: {' '.join(cmd)}")
+
+        echo_cmd = "echo hello"
+        list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
+        for base_cmd in [echo_cmd, list_cmd]:
+            run_benchmark(p.split_args(base_cmd), check_cmd=[])
 
         for mode in range(2):
             with stop_on_failure_subtest(i=mode):
                 control_persist = 2 if mode == 0 else 2  # noqa: RUF034  # seconds
                 master_cmd = p.split_args(f"{ssh_program} {ssh_opts} -M -oControlPersist={control_persist}s 127.0.0.1 exit")
                 check_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O check 127.0.0.1")
-                echo_cmd = "echo hello"
-                list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
                 master_is_running = False
                 try:
                     log.info(f"mode: {mode}")
@@ -968,24 +990,11 @@ class TestSSHLatency(IntegrationTestCase):
                         self.assertIn("Control socket connect", e.stderr)
                         self.assertIn("No such file or directory", e.stderr)
                         master_is_running = False
-                    elif mode == 1:  # benchmark latency
+                    elif mode >= 1:  # benchmark latency
                         for base_cmd in [echo_cmd, list_cmd]:
-                            cmd = p.split_args(f"{ssh_program} {ssh_opts} 127.0.0.1 {base_cmd}")
                             for check in [False, True]:
-                                # for close_fds in [True]:
-                                for close_fds in [False, True]:
-                                    start_time_nanos = time.time_ns()
-                                    iters = 0
-                                    while time.time_ns() - start_time_nanos < 5 * 1000_000_000:
-                                        iters += 1
-                                        if check:
-                                            stdout, stderr = self.run_latency_cmd(check_cmd, close_fds=close_fds)
-                                            # log.info(f"check result: {(stdout, stderr)}")
-                                            self.assertIn("Master running", stderr)
-                                        result = self.run_latency_cmd(cmd, close_fds=close_fds)
-                                        # log.info(f"cmd result: {result}")
-                                    t = human_readable_duration((time.time_ns() - start_time_nanos) / iters)
-                                    log.info(f"time/iter: {t}, check: {check}, close_fds: {close_fds}, cmd: {' '.join(cmd)}")
+                                cmd = p.split_args(f"{ssh_program} {ssh_opts} 127.0.0.1 {base_cmd}")
+                                run_benchmark(cmd, check_cmd=check_cmd if check else [])
                 except subprocess.CalledProcessError as e:
                     log.error(f"error: {(e.stdout, e.stderr)}")
                     raise
