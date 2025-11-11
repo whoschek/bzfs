@@ -947,7 +947,7 @@ class TestSSHLatency(IntegrationTestCase):
                 with gc_disabled(run_gc_first=True):
                     iters = 0
                     start_time_nanos = time.monotonic_ns()
-                    while time.monotonic_ns() < start_time_nanos + 2 * 1000_000_000:
+                    while time.monotonic_ns() < start_time_nanos + 5 * 1000_000_000:
                         if check_cmd:
                             _stdout, stderr = self.run_latency_cmd(check_cmd, close_fds=close_fds)
                             self.assertIn("Master running", stderr)
