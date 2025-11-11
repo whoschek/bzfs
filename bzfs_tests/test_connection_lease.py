@@ -913,8 +913,11 @@ class TestConnectionLease(AbstractTestCase):
         if self.is_unit_test or self.is_smoke_test:
             self.skipTest("Ignore test_xbenchmark_find_and_acquire_used_when_all_locked() if is unit test or smoke test")
 
-        all_num_locks = [20, 200]
-        all_num_locks += [1000] if platform.system() != "Darwin" else []  # OSX defaults to max 256 open FDs per process
+        all_num_locks = [20]
+        if not self.is_unit_test:
+            all_num_locks.append(200)
+            if not self.is_smoke_test:
+                all_num_locks += [1000] if platform.system() != "Darwin" else []  # OSX default max 256 open FDs per process
         measure_seconds = 0.5
 
         for num_locks in all_num_locks:
