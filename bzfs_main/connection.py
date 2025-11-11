@@ -81,7 +81,7 @@ DEDICATED: Final[str] = "dedicated"
 def run_ssh_command(
     job: Job,
     remote: Remote,
-    level: int = -1,
+    loglevel: int = logging.INFO,
     is_dry: bool = False,
     check: bool = True,
     print_stdout: bool = False,
@@ -97,7 +97,6 @@ def run_ssh_command(
     safely traverse the ssh "remote shell" boundary, as ssh concatenates argv into a single remote shell string. In local
     mode (no remote.ssh_user_host) argv is executed directly without an intermediate shell.
     """
-    level = level if level >= 0 else logging.INFO
     assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
     p, log = job.params, job.params.log
     quoted_cmd: list[str] = [shlex.quote(arg) for arg in cmd]
@@ -108,7 +107,7 @@ def run_ssh_command(
             refresh_ssh_connection_if_necessary(job, remote, conn)
             cmd = quoted_cmd
         msg: str = "Would execute: %s" if is_dry else "Executing: %s"
-        log.log(level, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
+        log.log(loglevel, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
         if is_dry:
             return ""
         try:
@@ -130,7 +129,7 @@ def run_ssh_command(
 def try_ssh_command(
     job: Job,
     remote: Remote,
-    level: int,
+    loglevel: int,
     is_dry: bool = False,
     print_stdout: bool = False,
     cmd: list[str] | None = None,
@@ -142,7 +141,7 @@ def try_ssh_command(
     log = job.params.log
     try:
         maybe_inject_error(job, cmd=cmd, error_trigger=error_trigger)
-        return run_ssh_command(job, remote, level=level, is_dry=is_dry, print_stdout=print_stdout, cmd=cmd)
+        return run_ssh_command(job, remote, loglevel=loglevel, is_dry=is_dry, print_stdout=print_stdout, cmd=cmd)
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
         if not isinstance(e, UnicodeDecodeError):
             stderr: str = stderr_to_str(e.stderr)

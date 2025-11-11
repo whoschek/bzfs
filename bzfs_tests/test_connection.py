@@ -519,7 +519,7 @@ class TestTrySshCommand(AbstractTestCase):
     @patch("bzfs_main.connection.run_ssh_command", return_value="ok")
     @patch("bzfs_main.connection.maybe_inject_error")
     def test_success(self, mock_inject: MagicMock, mock_run: MagicMock) -> None:
-        result = connection.try_ssh_command(self.job, self.remote, level=0, cmd=["ls"])
+        result = connection.try_ssh_command(self.job, self.remote, loglevel=0, cmd=["ls"])
         self.assertEqual("ok", result)
         mock_inject.assert_called_once()
         mock_run.assert_called_once()
@@ -529,7 +529,7 @@ class TestTrySshCommand(AbstractTestCase):
         side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", stderr="zfs: dataset does not exist"),
     )
     def test_dataset_missing_returns_none(self, mock_run: MagicMock) -> None:
-        result = connection.try_ssh_command(self.job, self.remote, level=0, cmd=["zfs"], exists=True)
+        result = connection.try_ssh_command(self.job, self.remote, loglevel=0, cmd=["zfs"], exists=True)
         self.assertIsNone(result)
         mock_run.assert_called_once()
 
@@ -539,7 +539,7 @@ class TestTrySshCommand(AbstractTestCase):
     )
     def test_other_error_raises_retryable(self, mock_run: MagicMock) -> None:
         with self.assertRaises(RetryableError):
-            connection.try_ssh_command(self.job, self.remote, level=0, cmd=["zfs"], exists=False)
+            connection.try_ssh_command(self.job, self.remote, loglevel=0, cmd=["zfs"], exists=False)
         mock_run.assert_called_once()
 
     @patch(
@@ -548,13 +548,13 @@ class TestTrySshCommand(AbstractTestCase):
     )
     def test_unicode_error_wrapped(self, mock_run: MagicMock) -> None:
         with self.assertRaises(RetryableError):
-            connection.try_ssh_command(self.job, self.remote, level=0, cmd=["x"])
+            connection.try_ssh_command(self.job, self.remote, loglevel=0, cmd=["x"])
         mock_run.assert_called_once()
 
     @patch("bzfs_main.connection.maybe_inject_error", side_effect=RetryableError("Subprocess failed"))
     def test_injected_retryable_error_propagates(self, mock_inject: MagicMock) -> None:
         with self.assertRaises(RetryableError):
-            connection.try_ssh_command(self.job, self.remote, level=0, cmd=["x"])
+            connection.try_ssh_command(self.job, self.remote, loglevel=0, cmd=["x"])
         mock_inject.assert_called_once()
 
 
