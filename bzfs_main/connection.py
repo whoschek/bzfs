@@ -52,6 +52,7 @@ from subprocess import (
 from typing import (
     Final,
     Protocol,
+    runtime_checkable,
 )
 
 from bzfs_main.connection_lease import (
@@ -78,6 +79,7 @@ DEDICATED: Final[str] = "dedicated"
 
 
 #############################################################################
+@runtime_checkable
 class MiniJob(Protocol):
     """Minimal Job interface required by the connections module; for loose coupling."""
 
@@ -87,6 +89,7 @@ class MiniJob(Protocol):
 
 
 #############################################################################
+@runtime_checkable
 class MiniParams(Protocol):
     """Minimal Params interface used by the connections module; for loose coupling."""
 
@@ -99,6 +102,7 @@ class MiniParams(Protocol):
 
 
 #############################################################################
+@runtime_checkable
 class MiniRemote(Protocol):
     """Minimal Remote interface used by the connections module; for loose coupling."""
 
