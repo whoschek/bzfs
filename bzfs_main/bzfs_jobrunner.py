@@ -108,6 +108,7 @@ from bzfs_main.util.utils import (
     shuffle_dict,
     terminate_process_subtree,
     termination_signal_handler,
+    validate_dataset_name,
 )
 from bzfs_main.util.utils import PROG_NAME as BZFS_PROG_NAME
 
@@ -640,7 +641,7 @@ class Job:
             root_dataset = root_dataset.replace(SRC_MAGIC_SUBSTITUTION_TOKEN, src_host)
             root_dataset = root_dataset.replace(DST_MAGIC_SUBSTITUTION_TOKEN, dst_hostname)
             resolved_dst_dataset: str = f"{root_dataset}/{dst_dataset}" if root_dataset else dst_dataset
-            utils.validate_dataset_name(resolved_dst_dataset, dst_dataset)
+            validate_dataset_name(resolved_dst_dataset, dst_dataset)
             return resolve_dataset(dst_hostname, resolved_dst_dataset, is_src=False)
 
         for src_host in src_hosts:
@@ -1062,7 +1063,7 @@ class Job:
             else:
                 log.error("%s", f"Terminating worker job as it failed to complete within {timeout_secs}s: {cmd_str}")
             proc.terminate()  # Sends SIGTERM signal to job subprocess
-            assert isinstance(timeout_secs, float)
+            assert timeout_secs is not None
             timeout_secs = min(1.0, timeout_secs)
             try:
                 proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit

@@ -1666,7 +1666,7 @@ class DatasetProperties:
 
 # Input format is [[user@]host:]dataset
 #                                                            1234         5          6
-DATASET_LOCATOR_REGEX: Final[re.Pattern[str]] = re.compile(r"(((([^@]*)@)?([^:]+)):)?(.*)", flags=re.DOTALL)
+_DATASET_LOCATOR_REGEX: Final[re.Pattern[str]] = re.compile(r"(((([^@]*)@)?([^:]+)):)?(.*)", flags=re.DOTALL)
 
 
 def parse_dataset_locator(
@@ -1686,7 +1686,7 @@ def parse_dataset_locator(
     host = convert_ipv6(host)
     user_host, dataset, pool = "", "", ""
 
-    if match := DATASET_LOCATOR_REGEX.fullmatch(input_text):
+    if match := _DATASET_LOCATOR_REGEX.fullmatch(input_text):
         if user_undefined:
             user = match.group(4) or ""
         if host_undefined:

@@ -364,8 +364,9 @@ class ConnectionPool:
                 conn.update_last_modified(self._last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
                 self._priority_queue.push(conn)
 
-    def shutdown(self, msg_prefix: str) -> None:
+    def shutdown(self, msg_prefix: str = "") -> None:
         """Closes all SSH connections managed by this pool."""
+        msg_prefix = msg_prefix + "/" + self._connpool_name
         with self._lock:
             try:
                 if self._remote.reuse_ssh_connection:
@@ -397,7 +398,7 @@ class ConnectionPools:
         """Returns the pool associated with the given name."""
         return self._pools[name]
 
-    def shutdown(self, msg_prefix: str) -> None:
+    def shutdown(self, msg_prefix: str = "") -> None:
         """Shuts down every contained pool."""
-        for name, pool in self._pools.items():
-            pool.shutdown(msg_prefix + "/" + name)
+        for pool in self._pools.values():
+            pool.shutdown(msg_prefix)
