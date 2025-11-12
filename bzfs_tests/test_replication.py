@@ -301,8 +301,7 @@ class TestQuoting(AbstractTestCase):
 class TestResumeErrorParsing(AbstractTestCase):
     """Covers parsing of multi-line stderr for resumable receive recovery."""
 
-    @patch("bzfs_main.replication.try_ssh_command")
-    def test_clear_resumable_on_incremental_source_missing_with_prefix(self, try_cmd: MagicMock) -> None:
+    def test_clear_resumable_on_incremental_source_missing_with_prefix(self) -> None:
         """Ensures multi-line stderr still triggers clearing of resumable recv state.
 
         In the future, some platforms may prepend extra lines before the actual error. The parser must not rely on the
@@ -320,9 +319,10 @@ class TestResumeErrorParsing(AbstractTestCase):
             "cannot resume send: incremental source 0xa0b1c2d3 no longer exists\n"
             "random suffix line\n"
         )
-        cleared: bool = _clear_resumable_recv_state_if_necessary(job, "pool/ds", stderr)
+        with patch.object(job, "try_ssh_command") as mock_try_ssh_command:
+            cleared: bool = _clear_resumable_recv_state_if_necessary(job, "pool/ds", stderr)
         self.assertTrue(cleared)
-        self.assertTrue(try_cmd.called)
+        self.assertTrue(mock_try_ssh_command.called)
 
 
 ###############################################################################
@@ -451,8 +451,7 @@ class TestReplication(AbstractTestCase):
         self.assertTrue(_is_zfs_dataset_busy(procs, "pool/ds", False))
         self.assertFalse(_is_zfs_dataset_busy(["other"], "pool/ds", True))
 
-    @patch("bzfs_main.replication.try_ssh_command", return_value="")
-    def test_check_zfs_dataset_busy(self, _cmd: MagicMock) -> None:
+    def test_check_zfs_dataset_busy(self) -> None:
         log = MagicMock()
         p = _make_params(
             is_program_available=MagicMock(return_value=True),
@@ -463,11 +462,12 @@ class TestReplication(AbstractTestCase):
             params=p,
             inject_params={},
         )
-        remote = MagicMock(location="dst")
-        self.assertTrue(_check_zfs_dataset_busy(job, remote, "pool/ds"))
-        job.inject_params["is_zfs_dataset_busy"] = True
-        with self.assertRaises(RetryableError):
-            _check_zfs_dataset_busy(job, remote, "pool/ds")
+        with patch.object(job, "try_ssh_command", new=MagicMock(return_value="")):
+            remote = MagicMock(location="dst")
+            self.assertTrue(_check_zfs_dataset_busy(job, remote, "pool/ds"))
+            job.inject_params["is_zfs_dataset_busy"] = True
+            with self.assertRaises(RetryableError):
+                _check_zfs_dataset_busy(job, remote, "pool/ds")
 
     def test_recv_resume_token_disabled(self) -> None:
         job = _make_job(resume_recv=False, log=MagicMock())
@@ -488,8 +488,7 @@ class TestReplication(AbstractTestCase):
         self.assertEqual([], recv_opts)
 
     @patch("bzfs_main.replication.is_zpool_feature_enabled_or_active", return_value=True)
-    @patch("bzfs_main.replication.run_ssh_command", return_value="tok\n")
-    def test_recv_resume_token_reads_value(self, run_cmd: MagicMock, _feat: MagicMock) -> None:
+    def test_recv_resume_token_reads_value(self, _feat: MagicMock) -> None:
         job = _make_job(
             resume_recv=True,
             zfs_program="zfs",
@@ -500,14 +499,14 @@ class TestReplication(AbstractTestCase):
             is_program_available=MagicMock(return_value=True),
         )
         job.dst_dataset_exists = {"pool/ds": True}
-        token, send_opts, recv_opts = _recv_resume_token(job, "pool/ds", 0)
+        with patch.object(job, "run_ssh_command", return_value="tok\n") as mock_run_ssh_command:
+            token, send_opts, recv_opts = _recv_resume_token(job, "pool/ds", 0)
         self.assertEqual("tok", token)
         self.assertEqual(["-t", "tok"], send_opts)
         self.assertEqual(["-s"], recv_opts)
-        run_cmd.assert_called_once()
+        mock_run_ssh_command.assert_called_once()
 
-    @patch("bzfs_main.replication.run_ssh_command")
-    def test_create_zfs_filesystem_creates_missing(self, run_cmd: MagicMock) -> None:
+    def test_create_zfs_filesystem_creates_missing(self) -> None:
         job = _make_job(
             zfs_program="zfs",
             dst=MagicMock(sudo="sudo"),
@@ -515,20 +514,20 @@ class TestReplication(AbstractTestCase):
             is_program_available=MagicMock(return_value=True),
         )
         job.dst_dataset_exists = defaultdict(lambda: False, {"a": True})
-        _create_zfs_filesystem(job, "a/b/c")
+        with patch.object(job, "run_ssh_command") as mock_run_ssh_command:
+            _create_zfs_filesystem(job, "a/b/c")
         expected = [
             ["sudo", "zfs", "create", "-p", "-u", "a/b"],
             ["sudo", "zfs", "create", "-p", "-u", "a/b/c"],
         ]
-        run_cmd.assert_has_calls(
+        mock_run_ssh_command.assert_has_calls(
             [
-                call(job, job.params.dst, LOG_DEBUG, is_dry=False, print_stdout=True, cmd=expected[0]),
-                call(job, job.params.dst, LOG_DEBUG, is_dry=False, print_stdout=True, cmd=expected[1]),
+                call(job.params.dst, LOG_DEBUG, is_dry=False, print_stdout=True, cmd=expected[0]),
+                call(job.params.dst, LOG_DEBUG, is_dry=False, print_stdout=True, cmd=expected[1]),
             ]
         )
 
-    @patch("bzfs_main.replication.try_ssh_command", return_value="size\t123\n")
-    def test_estimate_send_size_parses_output(self, try_cmd: MagicMock) -> None:
+    def test_estimate_send_size_parses_output(self) -> None:
         job = _make_job(
             no_estimate_send_size=False,
             zfs_program="zfs",
@@ -536,19 +535,14 @@ class TestReplication(AbstractTestCase):
             curr_zfs_send_program_opts=["-P"],
         )
         remote = MagicMock(sudo="sudo")
-        size = _estimate_send_size(job, remote, "pool/ds", None, "src@snap")
+        with patch.object(job, "try_ssh_command", return_value="size\t123\n") as mock_try_ssh_command:
+            size = _estimate_send_size(job, remote, "pool/ds", None, "src@snap")
         self.assertEqual(123, size)
-        try_cmd.assert_called_once()
+        mock_try_ssh_command.assert_called_once()
 
     @patch("bzfs_main.replication._clear_resumable_recv_state_if_necessary", return_value=True)
-    @patch("bzfs_main.replication.try_ssh_command")
-    def test_estimate_send_size_retryable_error(self, try_cmd: MagicMock, clear: MagicMock) -> None:
+    def test_estimate_send_size_retryable_error(self, clear: MagicMock) -> None:
         cp_error = subprocess.CalledProcessError(1, "cmd", stderr="cannot resume send: fail")
-
-        def side_effect(*_args: object, **_kwargs: object) -> str:
-            raise RetryableError("boom") from cp_error
-
-        try_cmd.side_effect = side_effect
         job = _make_job(
             no_estimate_send_size=False,
             zfs_program="zfs",
@@ -557,8 +551,13 @@ class TestReplication(AbstractTestCase):
             log=MagicMock(),
         )
         remote = MagicMock(sudo="sudo")
-        with self.assertRaises(RetryableError) as ctx:
-            _estimate_send_size(job, remote, "pool/ds", "token", "src@snap")
+
+        def raise_retryable(*_args: object, **_kwargs: object) -> str:
+            raise RetryableError("boom") from cp_error
+
+        with patch.object(job, "try_ssh_command", side_effect=raise_retryable):
+            with self.assertRaises(RetryableError) as ctx:
+                _estimate_send_size(job, remote, "pool/ds", "token", "src@snap")
         self.assertTrue(ctx.exception.no_sleep)
         clear.assert_called_once_with(job, "pool/ds", cp_error.stderr)
 
@@ -583,16 +582,16 @@ class TestReplication(AbstractTestCase):
         batched.assert_called_once()
         self.assertEqual(["foo=bar", "baz=qux"], batched.call_args[0][3])
 
-    @patch("bzfs_main.replication.run_ssh_command", return_value="prop\tval\n")
-    def test_zfs_get_uses_cache(self, run_cmd: MagicMock) -> None:
+    def test_zfs_get_uses_cache(self) -> None:
         job = _make_job(zfs_program="zfs", log=MagicMock())
         remote = MagicMock()
         cache: dict = {}
-        result1 = _zfs_get(job, remote, "pool/ds", "none", "property,value", "prop", True, cache)
-        result2 = _zfs_get(job, remote, "pool/ds", "none", "property,value", "prop", True, cache)
+        with patch.object(job, "run_ssh_command", return_value="prop\tval\n") as mock_run_ssh_command:
+            result1 = _zfs_get(job, remote, "pool/ds", "none", "property,value", "prop", True, cache)
+            result2 = _zfs_get(job, remote, "pool/ds", "none", "property,value", "prop", True, cache)
         self.assertEqual({"prop": "val"}, result1)
         self.assertEqual(result1, result2)
-        run_cmd.assert_called_once()
+        mock_run_ssh_command.assert_called_once()
 
     def test_prepare_src_local_pv(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -1043,7 +1042,6 @@ class TestReplication(AbstractTestCase):
 
         with (
             patch("bzfs_main.replication.are_bookmarks_enabled", return_value=True),
-            patch("bzfs_main.replication.try_ssh_command", side_effect=fake_try_ssh_command),
             patch("bzfs_main.replication._recv_resume_token", return_value=(None, [], [])),
             patch("bzfs_main.replication._estimate_send_size", return_value=0),
             patch(
@@ -1057,7 +1055,10 @@ class TestReplication(AbstractTestCase):
             ),
             patch("bzfs_main.replication._run_zfs_send_receive", side_effect=lambda *_args, **_kw: None),
         ):
-            replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0))
+            with patch.object(
+                job, "try_ssh_command", side_effect=lambda *args, **kwargs: fake_try_ssh_command(job, *args, **kwargs)
+            ):
+                replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0))
 
         self.assertTrue(captured_steps, "No steps captured")
         to_snaps_all = [snap for step in captured_steps[0] for snap in step[3]]

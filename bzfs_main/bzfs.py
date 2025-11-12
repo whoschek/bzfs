@@ -47,6 +47,7 @@ import contextlib
 import fcntl
 import heapq
 import itertools
+import logging
 import os
 import re
 import subprocess
@@ -100,11 +101,11 @@ from bzfs_main.configuration import (
     SnapshotLabel,
 )
 from bzfs_main.connection import (
-    decrement_injection_counter,
-    maybe_inject_error,
+    SHARED,
+    ConnectionPool,
+    MiniJob,
     run_ssh_command,
     timeout,
-    try_ssh_command,
 )
 from bzfs_main.detect import (
     DISABLE_PRG,
@@ -188,6 +189,7 @@ from bzfs_main.utils import (
     replace_prefix,
     sha256_85_urlsafe_base64,
     sha256_128_urlsafe_base64,
+    stderr_to_str,
     termination_signal_handler,
     validate_dataset_name,
     validate_property_name,
@@ -243,13 +245,13 @@ def run_main(
 
 
 #############################################################################
-class Job:
+class Job(MiniJob):
     """Executes one bzfs run, coordinating snapshot replication tasks."""
 
     def __init__(self, termination_event: threading.Event | None = None) -> None:
         self.params: Params
         self.termination_event: Final[threading.Event] = termination_event or threading.Event()
-        self.subprocesses: Final[Subprocesses] = Subprocesses()
+        self.subprocesses: Subprocesses = Subprocesses()
         self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: dict[str, DatasetProperties] = {}
@@ -261,7 +263,6 @@ class Job:
         self.remote_conf_cache: dict[tuple, RemoteConfCacheItem] = {}
         self.max_datasets_per_minibatch_on_list_snaps: dict[str, int] = {}
         self.max_workers: dict[str, int] = {}
-        self.control_persist_margin_secs: int = 2
         self.progress_reporter: ProgressReporter = cast(ProgressReporter, None)
         self.is_first_replication_task: Final[SynchronizedBool] = SynchronizedBool(True)
         self.replication_start_time_nanos: int = time.monotonic_ns()
@@ -424,7 +425,7 @@ class Job:
                         log.info("Starting task: %s", task_description + " ...")
                     try:
                         try:
-                            maybe_inject_error(self, cmd=[], error_trigger="retryable_run_tasks")
+                            self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
                             timeout(self)
                             self.validate_task()
                             self.run_task()  # do the real work
@@ -719,7 +720,7 @@ class Job:
         cmd: list[str] = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
         )
-        for line in (try_ssh_command(self, src, LOG_DEBUG, cmd=cmd) or "").splitlines():
+        for line in (self.try_ssh_command(src, LOG_DEBUG, cmd=cmd) or "").splitlines():
             cols: list[str] = line.split("\t")
             snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
             self.src_properties[src_dataset] = DatasetProperties(
@@ -741,7 +742,7 @@ class Job:
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", dst.root_dataset
         )
         basis_dst_datasets: list[str] = []
-        basis_dst_datasets_str: str | None = try_ssh_command(self, dst, LOG_TRACE, cmd=cmd)
+        basis_dst_datasets_str: str | None = self.try_ssh_command(dst, LOG_TRACE, cmd=cmd)
         if basis_dst_datasets_str is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
         else:
@@ -796,7 +797,7 @@ class Job:
             self,
             src,
             ((commands[lbl], (f"{ds}@{lbl}" for ds in datasets)) for lbl, datasets in datasets_to_snapshot.items()),
-            fn=lambda cmd, batch: run_ssh_command(self, src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
+            fn=lambda cmd, batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
             max_batch_items=2**29,
         )
         if is_caching_snapshots(p, src):
@@ -829,8 +830,8 @@ class Job:
             dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
             self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
             src_snaps_with_guids, dst_snaps_with_guids_str = run_in_parallel(  # list src+dst snapshots in parallel
-                lambda: set(run_ssh_command(self, src, LOG_TRACE, cmd=src_cmd).splitlines() if src_cmd else []),
-                lambda: try_ssh_command(self, dst, LOG_TRACE, cmd=dst_cmd),
+                lambda: set(self.run_ssh_command(src, LOG_TRACE, cmd=src_cmd).splitlines() if src_cmd else []),
+                lambda: self.try_ssh_command(dst, LOG_TRACE, cmd=dst_cmd),
             )
             if dst_snaps_with_guids_str is None:
                 log.warning("Third party deleted destination: %s", dst_dataset)
@@ -1283,16 +1284,16 @@ class Job:
         """For testing only; for unit tests to delete datasets during replication and test correct handling of that."""
         assert delete_trigger
         counter = self.delete_injection_triggers.get("before")
-        if counter and decrement_injection_counter(self, counter, delete_trigger):
+        if counter and self.decrement_injection_counter(counter, delete_trigger):
             p = self.params
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset or "")
-            run_ssh_command(self, remote, LOG_DEBUG, print_stdout=True, cmd=cmd)
+            self.run_ssh_command(remote, LOG_DEBUG, print_stdout=True, cmd=cmd)
 
     def maybe_inject_params(self, error_trigger: str) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
         assert error_trigger
         counter = self.error_injection_triggers.get("before")
-        if counter and decrement_injection_counter(self, counter, error_trigger):
+        if counter and self.decrement_injection_counter(counter, error_trigger):
             self.inject_params = self.param_injection_triggers[error_trigger]
         elif error_trigger in self.param_injection_triggers:
             self.inject_params = {}
@@ -1573,6 +1574,79 @@ class Job:
     def _cache_hits_msg(hits: int, misses: int) -> str:
         total = hits + misses
         return f", cache hits: {percent(hits, total, print_total=True)}, misses: {percent(misses, total, print_total=True)}"
+
+    def run_ssh_command(
+        self,
+        remote: Remote,
+        loglevel: int = logging.INFO,
+        is_dry: bool = False,
+        check: bool = True,
+        print_stdout: bool = False,
+        print_stderr: bool = True,
+        cmd: list[str] | None = None,
+    ) -> str:
+        """Runs the given CLI cmd via ssh on the given remote, and returns stdout."""
+        conn_pool: ConnectionPool = self.params.connection_pools[remote.location].pool(SHARED)
+        with conn_pool.connection() as conn:
+            return run_ssh_command(
+                conn=conn,
+                job=self,
+                loglevel=loglevel,
+                is_dry=is_dry,
+                check=check,
+                print_stdout=print_stdout,
+                print_stderr=print_stderr,
+                cmd=cmd,
+            )
+
+    def try_ssh_command(
+        self,
+        remote: Remote,
+        loglevel: int,
+        is_dry: bool = False,
+        print_stdout: bool = False,
+        cmd: list[str] | None = None,
+        exists: bool = True,
+        error_trigger: str | None = None,
+    ) -> str | None:
+        """Convenience method that helps retry/react to a dataset or pool that potentially doesn't exist anymore."""
+        assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
+        log = self.params.log
+        try:
+            self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
+            return self.run_ssh_command(remote=remote, loglevel=loglevel, is_dry=is_dry, print_stdout=print_stdout, cmd=cmd)
+        except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
+            if not isinstance(e, UnicodeDecodeError):
+                stderr: str = stderr_to_str(e.stderr)
+                if exists and (
+                    ": dataset does not exist" in stderr
+                    or ": filesystem does not exist" in stderr  # solaris 11.4.0
+                    or ": no such pool" in stderr
+                ):
+                    return None
+                log.warning("%s", stderr.rstrip())
+            raise RetryableError("Subprocess failed") from e
+
+    def maybe_inject_error(self, cmd: list[str], error_trigger: str | None = None) -> None:
+        """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
+        if error_trigger:
+            counter = self.error_injection_triggers.get("before")
+            if counter and self.decrement_injection_counter(counter, error_trigger):
+                try:
+                    raise CalledProcessError(returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ":dataset is busy")
+                except subprocess.CalledProcessError as e:
+                    if error_trigger.startswith("retryable_"):
+                        raise RetryableError("Subprocess failed") from e
+                    else:
+                        raise
+
+    def decrement_injection_counter(self, counter: Counter[str], trigger: str) -> bool:
+        """For testing only."""
+        with self.injection_lock:
+            if counter[trigger] <= 0:
+                return False
+            counter[trigger] -= 1
+            return True
 
 
 #############################################################################

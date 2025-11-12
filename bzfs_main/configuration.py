@@ -62,6 +62,10 @@ from bzfs_main.argparse_cli import (
     ZFS_RECV_O_INCLUDE_REGEX_DEFAULT,
     __version__,
 )
+from bzfs_main.connection import (
+    MiniParams,
+    MiniRemote,
+)
 from bzfs_main.detect import (
     DISABLE_PRG,
 )
@@ -200,7 +204,7 @@ class LogParams:
 
 
 #############################################################################
-class Params:
+class Params(MiniParams):
     """All parsed CLI options combined into a single bundle; simplifies passing around numerous settings and defaults."""
 
     def __init__(
@@ -220,7 +224,7 @@ class Params:
         self.args: Final[argparse.Namespace] = args
         self.sys_argv: Final[list[str]] = sys_argv
         self.log_params: Final[LogParams] = log_params
-        self.log: Final[Logger] = log
+        self.log: Logger = log
         self.inject_params: Final[dict[str, bool]] = inject_params if inject_params is not None else {}  # for testing only
         self.one_or_more_whitespace_regex: Final[re.Pattern[str]] = re.compile(r"\s+")
         self.two_or_more_spaces_regex: Final[re.Pattern[str]] = re.compile(r"  +")
@@ -317,7 +321,7 @@ class Params:
             self.pv_program_opts.extend([f"--rate-limit={self.validate_arg_str(args.bwlimit)}"])
         self.shell_program_local: Final[str] = "sh"
         self.shell_program: Final[str] = self._program_name(args.shell_program)
-        self.ssh_program: Final[str] = self._program_name(args.ssh_program)
+        self.ssh_program: str = self._program_name(args.ssh_program)
         self.sudo_program: Final[str] = self._program_name(args.sudo_program)
         self.uname_program: Final[str] = self._program_name("uname")
         self.zfs_program: Final[str] = self._program_name("zfs")
@@ -332,7 +336,7 @@ class Params:
         # threads: with --force-once we intentionally coerce to a single-threaded run to ensure deterministic serial behavior
         self.threads: Final[tuple[int, bool]] = (1, False) if self.force_once else args.threads
         timeout_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
-        self.timeout_nanos: Final[int | None] = timeout_nanos
+        self.timeout_nanos: int | None = timeout_nanos
         self.no_estimate_send_size: Final[bool] = args.no_estimate_send_size
         self.remote_conf_cache_ttl_nanos: Final[int] = 1_000_000 * parse_duration_to_milliseconds(
             args.daemon_remote_conf_cache_ttl
@@ -486,15 +490,15 @@ class Params:
 
 
 #############################################################################
-class Remote:
+class Remote(MiniRemote):
     """Connection settings for either source or destination host."""
 
     def __init__(self, loc: str, args: argparse.Namespace, p: Params) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
         assert loc == "src" or loc == "dst"
-        self.location: Final[str] = loc
-        self.params: Final[Params] = p
+        self.location: str = loc
+        self.params: Params = p
         self.basis_ssh_user: Final[str] = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: Final[str] = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: Final[int | None] = getattr(args, f"ssh_{loc}_port")
@@ -507,18 +511,20 @@ class Remote:
         )
         self.ssh_cipher: Final[str] = p.validate_arg_str(args.ssh_cipher)
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
-        self.ssh_extra_opts: Final[list[str]] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
+        self.ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
             ["-v"] if args.verbose >= 3 else []
         )
         self.max_concurrent_ssh_sessions_per_tcp_connection: Final[int] = args.max_concurrent_ssh_sessions_per_tcp_connection
-        self.ssh_exit_on_shutdown: Final[bool] = args.ssh_exit_on_shutdown
-        self.ssh_control_persist_secs: Final[int] = args.ssh_control_persist_secs
+        self.ssh_exit_on_shutdown: bool = args.ssh_exit_on_shutdown
+        self.ssh_control_persist_secs: int = args.ssh_control_persist_secs
+        self.ssh_control_persist_margin_secs: int = getenv_int("ssh_control_persist_margin_secs", 2)
         self.socket_prefix: Final[str] = "s"
-        self.reuse_ssh_connection: Final[bool] = getenv_bool("reuse_ssh_connection", True)
+        self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
+        self.ssh_socket_dir: str = ""
         if self.reuse_ssh_connection:
             ssh_home_dir: str = os.path.join(HOME_DIRECTORY, ".ssh")
             os.makedirs(ssh_home_dir, mode=DIR_PERMISSIONS, exist_ok=True)
-            self.ssh_socket_dir: Final[str] = os.path.join(ssh_home_dir, "bzfs")
+            self.ssh_socket_dir = os.path.join(ssh_home_dir, "bzfs")
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             validate_file_permissions(self.ssh_socket_dir, mode=DIR_PERMISSIONS)
             self.ssh_exit_on_shutdown_socket_dir: Final[str] = os.path.join(self.ssh_socket_dir, "x")

@@ -12,8 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool; They reuse multiplexed
-ssh connections for low latency."""
+"""Network connection management is in run_ssh_command() and refresh_ssh_connection_if_necessary() and class ConnectionPool;
+They reuse multiplexed ssh connections for low latency.
+
+Example usage:
+
+conn_pool: ConnectionPool = ...
+with conn_pool.connection() as conn:
+    stdout: str = run_ssh_command(
+        conn=conn,
+        ...
+        cmd=["echo", "hello"],
+    )
+    return stdout
+"""
 
 from __future__ import (
     annotations,
@@ -26,9 +38,6 @@ import subprocess
 import sys
 import threading
 import time
-from collections import (
-    Counter,
-)
 from collections.abc import (
     Iterator,
 )
@@ -38,12 +47,11 @@ from dataclasses import (
 from subprocess import (
     DEVNULL,
     PIPE,
-    CalledProcessError,
     CompletedProcess,
 )
 from typing import (
-    TYPE_CHECKING,
     Final,
+    Protocol,
 )
 
 from bzfs_main.connection_lease import (
@@ -64,23 +72,57 @@ from bzfs_main.utils import (
     xprint,
 )
 
-if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import (
-        Job,
-    )
-    from bzfs_main.configuration import (
-        Params,
-        Remote,
-    )
-
 # constants:
 SHARED: Final[str] = "shared"
 DEDICATED: Final[str] = "dedicated"
 
 
+#############################################################################
+class MiniJob(Protocol):
+    """Minimal Job interface required by the connections module; for loose coupling."""
+
+    params: MiniParams
+    timeout_nanos: int | None
+    subprocesses: Subprocesses
+
+
+#############################################################################
+class MiniParams(Protocol):
+    """Minimal Params interface used by the connections module; for loose coupling."""
+
+    log: logging.Logger
+    ssh_program: str
+    timeout_nanos: int | None
+
+    def is_program_available(self, program: str, location: str) -> bool:
+        """Return True if program is available on location host."""
+
+
+#############################################################################
+class MiniRemote(Protocol):
+    """Minimal Remote interface used by the connections module; for loose coupling."""
+
+    location: str  # "src" or "dst"
+    params: MiniParams
+    reuse_ssh_connection: bool
+    ssh_user_host: str
+    ssh_control_persist_secs: int
+    ssh_control_persist_margin_secs: int
+    ssh_extra_opts: list[str]
+    ssh_exit_on_shutdown: bool
+    ssh_socket_dir: str
+
+    def local_ssh_command(self, socket_file: str | None) -> list[str]:
+        """Build the local ssh CLI command for talking to the remote host."""
+
+    def cache_namespace(self) -> str:
+        """Return a stable, unique cache namespace for this Remote."""
+
+
+#############################################################################
 def run_ssh_command(
-    job: Job,
-    remote: Remote,
+    conn: Connection,
+    job: MiniJob,
     loglevel: int = logging.INFO,
     is_dry: bool = False,
     check: bool = True,
@@ -98,66 +140,36 @@ def run_ssh_command(
     mode (no remote.ssh_user_host) argv is executed directly without an intermediate shell.
     """
     assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
-    p, log = job.params, job.params.log
-    quoted_cmd: list[str] = [shlex.quote(arg) for arg in cmd]
-    conn_pool: ConnectionPool = p.connection_pools[remote.location].pool(SHARED)
-    with conn_pool.connection() as conn:
-        ssh_cmd: list[str] = conn.ssh_cmd
-        if remote.ssh_user_host:
-            refresh_ssh_connection_if_necessary(job, remote, conn)
-            cmd = quoted_cmd
-        msg: str = "Would execute: %s" if is_dry else "Executing: %s"
-        log.log(loglevel, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
-        if is_dry:
-            return ""
-        try:
-            sp: Subprocesses = job.subprocesses
-            process: CompletedProcess[str] = sp.subprocess_run(
-                ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=check, log=log
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-            if not isinstance(e, UnicodeDecodeError):
-                xprint(log, stderr_to_str(e.stdout), run=print_stdout, file=sys.stdout, end="")
-                xprint(log, stderr_to_str(e.stderr), run=print_stderr, file=sys.stderr, end="")
-            raise
-        else:
-            xprint(log, process.stdout, run=print_stdout, file=sys.stdout, end="")
-            xprint(log, process.stderr, run=print_stderr, file=sys.stderr, end="")
-            return process.stdout
-
-
-def try_ssh_command(
-    job: Job,
-    remote: Remote,
-    loglevel: int,
-    is_dry: bool = False,
-    print_stdout: bool = False,
-    cmd: list[str] | None = None,
-    exists: bool = True,
-    error_trigger: str | None = None,
-) -> str | None:
-    """Convenience method that helps retry/react to a dataset or pool that potentially doesn't exist anymore."""
-    assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
     log = job.params.log
+    quoted_cmd: list[str] = [shlex.quote(arg) for arg in cmd]
+    ssh_cmd: list[str] = conn.ssh_cmd
+    if conn.remote.ssh_user_host:
+        refresh_ssh_connection_if_necessary(conn, job)
+        cmd = quoted_cmd
+    msg: str = "Would execute: %s" if is_dry else "Executing: %s"
+    log.log(loglevel, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
+    if is_dry:
+        return ""
     try:
-        maybe_inject_error(job, cmd=cmd, error_trigger=error_trigger)
-        return run_ssh_command(job, remote, loglevel=loglevel, is_dry=is_dry, print_stdout=print_stdout, cmd=cmd)
-    except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
+        sp: Subprocesses = job.subprocesses
+        process: CompletedProcess[str] = sp.subprocess_run(
+            ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=check, log=log
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
         if not isinstance(e, UnicodeDecodeError):
-            stderr: str = stderr_to_str(e.stderr)
-            if exists and (
-                ": dataset does not exist" in stderr
-                or ": filesystem does not exist" in stderr  # solaris 11.4.0
-                or ": no such pool" in stderr
-            ):
-                return None
-            log.warning("%s", stderr.rstrip())
-        raise RetryableError("Subprocess failed") from e
+            xprint(log, stderr_to_str(e.stdout), run=print_stdout, file=sys.stdout, end="")
+            xprint(log, stderr_to_str(e.stderr), run=print_stderr, file=sys.stderr, end="")
+        raise
+    else:
+        xprint(log, process.stdout, run=print_stdout, file=sys.stdout, end="")
+        xprint(log, process.stderr, run=print_stderr, file=sys.stderr, end="")
+        return process.stdout
 
 
-def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connection) -> None:
+def refresh_ssh_connection_if_necessary(conn: Connection, job: MiniJob) -> None:
     """Maintain or create an ssh master connection for low latency reuse."""
     p, log = job.params, job.params.log
+    remote = conn.remote
     if not remote.ssh_user_host:
         return  # we're in local mode; no ssh required
     if not p.is_program_available("ssh", "local"):
@@ -167,9 +179,9 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
     # Performance: reuse ssh connection for low latency startup of frequent ssh invocations via the 'ssh -S' and
     # 'ssh -S -M -oControlPersist=90s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
     # and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
-    control_persist_limit_nanos: int = (remote.ssh_control_persist_secs - job.control_persist_margin_secs) * 1_000_000_000
+    control_limit_nanos: int = (remote.ssh_control_persist_secs - remote.ssh_control_persist_margin_secs) * 1_000_000_000
     with conn.lock:
-        if time.monotonic_ns() < conn.last_refresh_time + control_persist_limit_nanos:
+        if time.monotonic_ns() < conn.last_refresh_time + control_limit_nanos:
             return  # ssh master is alive, reuse its TCP connection (this is the common case and the ultra-fast path)
         ssh_cmd: list[str] = conn.ssh_cmd
         ssh_socket_cmd: list[str] = ssh_cmd[0:-1]  # omit trailing ssh_user_host
@@ -182,7 +194,7 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
             log.log(LOG_TRACE, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
         else:  # ssh master is not alive; start a new master:
             log.log(LOG_TRACE, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
-            ssh_control_persist_secs: int = remote.ssh_control_persist_secs
+            ssh_control_persist_secs: int = max(1, remote.ssh_control_persist_secs)
             if "-v" in remote.ssh_extra_opts:
                 # Unfortunately, with `ssh -v` (debug mode), the ssh master won't background; instead it stays in the
                 # foreground and blocks until the ControlPersist timer expires (90 secs). To make progress earlier we ...
@@ -190,8 +202,8 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
             ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
             ssh_socket_cmd += ["-M", f"-oControlPersist={ssh_control_persist_secs}s", remote.ssh_user_host, "exit"]
             log.log(LOG_TRACE, "Executing: %s", list_formatter(ssh_socket_cmd))
+            t = timeout(job)
             try:
-                t = timeout(job)
                 sp.subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, check=True, timeout=t, log=log)
             except subprocess.CalledProcessError as e:
                 log.error("%s", stderr_to_str(e.stderr).rstrip())
@@ -204,7 +216,7 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: Connecti
             conn.connection_lease.set_socket_mtime_to_now()
 
 
-def timeout(job: Job) -> float | None:
+def timeout(job: MiniJob) -> float | None:
     """Raises TimeoutExpired if necessary, else returns the number of seconds left until timeout is to occur."""
     timeout_nanos: int | None = job.timeout_nanos
     if timeout_nanos is None:
@@ -214,29 +226,6 @@ def timeout(job: Job) -> float | None:
         assert job.params.timeout_nanos is not None
         raise subprocess.TimeoutExpired(PROG_NAME + "_timeout", timeout=job.params.timeout_nanos / 1_000_000_000)
     return delta_nanos / 1_000_000_000  # seconds
-
-
-def maybe_inject_error(job: Job, cmd: list[str], error_trigger: str | None = None) -> None:
-    """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
-    if error_trigger:
-        counter = job.error_injection_triggers.get("before")
-        if counter and decrement_injection_counter(job, counter, error_trigger):
-            try:
-                raise CalledProcessError(returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ":dataset is busy")
-            except subprocess.CalledProcessError as e:
-                if error_trigger.startswith("retryable_"):
-                    raise RetryableError("Subprocess failed") from e
-                else:
-                    raise
-
-
-def decrement_injection_counter(job: Job, counter: Counter[str], trigger: str) -> bool:
-    """For testing only."""
-    with job.injection_lock:
-        if counter[trigger] <= 0:
-            return False
-        counter[trigger] -= 1
-        return True
 
 
 #############################################################################
@@ -249,12 +238,13 @@ class Connection:
 
     def __init__(
         self,
-        remote: Remote,
+        remote: MiniRemote,
         max_concurrent_ssh_sessions_per_tcp_connection: int,
         cid: int,
         lease: ConnectionLease | None = None,
     ) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
+        self.remote: Final[MiniRemote] = remote
         self._capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
         self._free: int = max_concurrent_ssh_sessions_per_tcp_connection
         self._last_modified: int = 0  # monotonically increasing
@@ -285,7 +275,7 @@ class Connection:
         """Records when the connection was last used."""
         self._last_modified = last_modified
 
-    def shutdown(self, msg_prefix: str, p: Params) -> None:
+    def shutdown(self, msg_prefix: str, p: MiniParams) -> None:
         """Closes the underlying SSH master connection and releases the corresponding connection lease."""
         ssh_cmd: list[str] = self.ssh_cmd
         if ssh_cmd and self._reuse_ssh_connection:
@@ -307,9 +297,9 @@ class Connection:
 class ConnectionPool:
     """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse."""
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, connpool_name: str) -> None:
+    def __init__(self, remote: MiniRemote, max_concurrent_ssh_sessions_per_tcp_connection: int, connpool_name: str) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
-        self._remote: Final[Remote] = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
+        self._remote: Final[MiniRemote] = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self._capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
         self._connpool_name: Final[str] = connpool_name
         self._priority_queue: Final[SmallPriorityQueue[Connection]] = SmallPriorityQueue(
@@ -391,7 +381,7 @@ class ConnectionPool:
 class ConnectionPools:
     """A bunch of named connection pools with various multiplexing capacities."""
 
-    def __init__(self, remote: Remote, capacities: dict[str, int]) -> None:
+    def __init__(self, remote: MiniRemote, capacities: dict[str, int]) -> None:
         """Creates one connection pool per name with the given capacities."""
         self._pools: Final[dict[str, ConnectionPool]] = {
             name: ConnectionPool(remote, capacity, name) for name, capacity in capacities.items()

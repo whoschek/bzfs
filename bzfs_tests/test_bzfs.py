@@ -34,7 +34,6 @@ from itertools import (
     combinations,
 )
 from typing import (
-    TYPE_CHECKING,
     Callable,
     cast,
 )
@@ -93,11 +92,6 @@ from bzfs_tests.tools import (
     stop_on_failure_subtest,
     suppress_output,
 )
-
-if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import (
-        Job,
-    )
 
 
 #############################################################################
@@ -1270,7 +1264,7 @@ class TestJobMethods(AbstractTestCase):
 
         # Patch out remote calls and heavy operations to isolate the logic
         with (
-            patch("bzfs_main.replication.try_ssh_command") as mock_try,
+            patch("bzfs_main.bzfs.Job.try_ssh_command") as mock_try,
             patch("bzfs_main.replication._run_zfs_send_receive") as mock_run,
             patch("bzfs_main.replication._estimate_send_size", return_value=0),
             patch("bzfs_main.replication._check_zfs_dataset_busy", return_value=True),
@@ -1287,9 +1281,8 @@ class TestJobMethods(AbstractTestCase):
 
             # Filtered listing on src will be built by the code; we just return the raw list and let filters apply.
             def side_effect(
-                _job: Job,
                 remote: Remote,
-                level: int,
+                loglevel: int,
                 is_dry: bool = False,
                 print_stdout: bool = False,
                 cmd: list[str] | None = None,

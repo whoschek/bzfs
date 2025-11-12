@@ -769,7 +769,7 @@ class TestAdditionalHelpers(AbstractTestCase):
             self.assertIn("-S", cmd)
             self.assertEqual("user@host", cmd[-1])
 
-            r.reuse_ssh_connection = False  # type: ignore[misc]  # cannot assign to final attribute
+            r.reuse_ssh_connection = False
             cmd = r.local_ssh_command(None)
             self.assertNotIn("-S", cmd)
 

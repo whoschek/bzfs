@@ -319,7 +319,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
                 return "zfs-2.2.3\n"
             return "sh\n"
 
-        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run):
+        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=run):
             avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
             p.available_programs[remote.location] = avail
         self.assertEqual("2.2.3", p.available_programs[remote.location]["zfs"])
@@ -337,7 +337,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
                 return "zfs 2.2.4\n"
             return "sh\n"
 
-        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run):
+        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=run):
             avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
             p.available_programs[remote.location] = avail
         self.assertEqual("2.2.4", p.available_programs[remote.location]["zfs"])
@@ -354,7 +354,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
                 return "zfs-version unknown build\n"
             return "sh\n"
 
-        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run), self.assertRaises(SystemExit) as cm:
+        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=run), self.assertRaises(SystemExit) as cm:
             bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
         self.assertIn("Unparsable zfs version string", str(cm.exception))
 
@@ -381,13 +381,13 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
 
                 if expect_die:
                     with (
-                        patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run),
+                        patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=run),
                         self.assertRaises(SystemExit) as cm,
                     ):
                         bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
                     self.assertIn("Unparsable zfs version string", str(cm.exception))
                 else:
-                    with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run):
+                    with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=run):
                         avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
                         p.available_programs[remote.location] = avail
                     self.assertEqual(expect_version, p.available_programs[remote.location]["zfs"])
@@ -399,7 +399,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         job, remote = self._setup()
         p = job.params
         p.shell_program = bzfs_main.detect.DISABLE_PRG  # type: ignore[misc]  # cannot assign to final attribute
-        with patch.object(bzfs_main.detect, "run_ssh_command", return_value="zfs-2.1.0\n"):
+        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", return_value="zfs-2.1.0\n"):
             avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
             p.available_programs[remote.location] = avail
         self.assertNotIn("zpool", p.available_programs[remote.location])
@@ -409,7 +409,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         job, remote = self._setup()
         with (
             patch.object(
-                bzfs_main.detect,
+                bzfs_main.bzfs.Job,
                 "run_ssh_command",
                 side_effect=FileNotFoundError(),
             ),
@@ -422,7 +422,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         err = subprocess.CalledProcessError(
             returncode=1, cmd="zfs", output="", stderr="unrecognized command '--version'\nrun: zfs help"
         )
-        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit) as cm:
+        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit) as cm:
             bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
         self.assertIn("Unsupported ZFS platform", str(cm.exception))
         self.assertIn("unrecognized command '--version'", str(cm.exception))
@@ -430,5 +430,5 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
     def test_called_process_error_non_zfs(self) -> None:
         job, remote = self._setup()
         err = subprocess.CalledProcessError(returncode=1, cmd="zfs", output="bad", stderr="fail")
-        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit):
+        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit):
             bzfs_main.detect._detect_available_programs_remote(job, remote, "host")

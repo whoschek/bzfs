@@ -383,7 +383,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         creation_prefix: str | None = None,
         max_exceptions_to_summarize: int | None = None,
         max_datasets_per_minibatch_on_list_snaps: int | None = None,
-        control_persist_margin_secs: int | None = None,
+        ssh_control_persist_margin_secs: int | None = None,
         isatty: bool | None = None,
         progress_update_intervals: tuple[float, float] | None = None,
         use_select: bool | None = None,
@@ -512,14 +512,15 @@ class IntegrationTestCase(ParametrizedTestCase):
             if max_exceptions_to_summarize is not None:
                 job.max_exceptions_to_summarize = max_exceptions_to_summarize
 
-            if control_persist_margin_secs is not None:
-                job.control_persist_margin_secs = control_persist_margin_secs
-
             if use_select is not None:
                 job.use_select = use_select
 
             if progress_update_intervals is not None:
                 job.progress_update_intervals = progress_update_intervals
+
+        old_ssh_control_persist_margin_secs = os.environ.get(ENV_VAR_PREFIX + "ssh_control_persist_margin_secs")
+        if ssh_control_persist_margin_secs is not None:
+            os.environ[ENV_VAR_PREFIX + "ssh_control_persist_margin_secs"] = str(ssh_control_persist_margin_secs)
 
         old_max_datasets_per_minibatch_on_list_snaps = os.environ.get(
             ENV_VAR_PREFIX + "max_datasets_per_minibatch_on_list_snaps"
@@ -592,6 +593,11 @@ class IntegrationTestCase(ParametrizedTestCase):
                 os.environ.pop(ENV_VAR_PREFIX + "isatty", None)
             else:
                 os.environ[ENV_VAR_PREFIX + "isatty"] = old_isatty
+
+            if old_ssh_control_persist_margin_secs is None:
+                os.environ.pop(ENV_VAR_PREFIX + "ssh_control_persist_margin_secs", None)
+            else:
+                os.environ[ENV_VAR_PREFIX + "ssh_control_persist_margin_secs"] = old_ssh_control_persist_margin_secs
 
         if isinstance(expected_status, list):
             self.assertIn(returncode, expected_status)
@@ -5609,7 +5615,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_ssh_master_check_keeps_tcp_connection_alive_with_replication_recursive(self) -> None:
         self.setup_basic()
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", control_persist_margin_secs=2**64)
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", ssh_control_persist_margin_secs=2**64)
         self.assert_snapshots(dst_root_dataset, 3, "s")
         self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
         self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")

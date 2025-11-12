@@ -412,6 +412,8 @@ class _FakeRemote(SimpleNamespace):
         # Provide minimal attributes expected by Connection for lease acquisition.
         if not hasattr(self, "ssh_socket_dir"):
             self.ssh_socket_dir = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX)
+        if not hasattr(self, "ssh_control_persist_margin_secs"):
+            self.ssh_control_persist_margin_secs = 2
         if not hasattr(self, "cache_namespace"):
             self.cache_namespace = lambda: "user@host#22#cfg"
         if not hasattr(self, "pool"):
@@ -427,7 +429,6 @@ class TestRunSshCommand(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
-        self.job.control_persist_margin_secs = 2
         self.job.timeout_nanos = None
         self.remote = cast(
             Remote,
@@ -438,6 +439,7 @@ class TestRunSshCommand(AbstractTestCase):
         self.conn = MagicMock()
         self.conn.ssh_cmd = ["ssh"]
         self.conn.ssh_cmd_quoted = ["ssh"]
+        self.conn.remote = self.remote
         self.conn_pool = MagicMock()
         self.conn_pool.get_connection.return_value = self.conn
         self.conn_pool.return_connection = MagicMock()
@@ -453,7 +455,7 @@ class TestRunSshCommand(AbstractTestCase):
 
     @patch("bzfs_main.utils.Subprocesses.subprocess_run")
     def test_dry_run_skips_execution(self, mock_run: MagicMock) -> None:
-        result = connection.run_ssh_command(self.job, self.remote, cmd=["ls"], is_dry=True)
+        result = self.job.run_ssh_command(self.remote, cmd=["ls"], is_dry=True)
         self.assertEqual("", result)
         mock_run.assert_not_called()
         self.conn_pool.connection.assert_called_once()
@@ -463,9 +465,9 @@ class TestRunSshCommand(AbstractTestCase):
     def test_remote_calls_refresh_and_executes(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "host"
         mock_run.return_value = MagicMock(stdout="out", stderr="err")
-        result = connection.run_ssh_command(self.job, self.remote, cmd=["echo"], print_stdout=True, print_stderr=True)
+        result = self.job.run_ssh_command(self.remote, cmd=["echo"], print_stdout=True, print_stderr=True)
         self.assertEqual("out", result)
-        mock_refresh.assert_called_once_with(self.job, self.remote, self.conn)
+        mock_refresh.assert_called_once_with(self.conn, self.job)
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
@@ -477,7 +479,7 @@ class TestRunSshCommand(AbstractTestCase):
     def test_calledprocesserror_propagates(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
         with self.assertRaises(subprocess.CalledProcessError):
-            connection.run_ssh_command(self.job, self.remote, cmd=["boom"], print_stdout=True)
+            self.job.run_ssh_command(self.remote, cmd=["boom"], print_stdout=True)
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
@@ -489,7 +491,7 @@ class TestRunSshCommand(AbstractTestCase):
     def test_timeout_expired_propagates(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
         with self.assertRaises(subprocess.TimeoutExpired):
-            connection.run_ssh_command(self.job, self.remote, cmd=["sleep"], print_stdout=True)
+            self.job.run_ssh_command(self.remote, cmd=["sleep"], print_stdout=True)
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
@@ -501,7 +503,7 @@ class TestRunSshCommand(AbstractTestCase):
     def test_unicode_error_propagates_without_logging(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
         with self.assertRaises(UnicodeDecodeError):
-            connection.run_ssh_command(self.job, self.remote, cmd=["foo"])
+            self.job.run_ssh_command(self.remote, cmd=["foo"])
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
@@ -516,45 +518,45 @@ class TestTrySshCommand(AbstractTestCase):
             Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
         )
 
-    @patch("bzfs_main.connection.run_ssh_command", return_value="ok")
-    @patch("bzfs_main.connection.maybe_inject_error")
+    @patch("bzfs_main.bzfs.Job.run_ssh_command", return_value="ok")
+    @patch("bzfs_main.bzfs.Job.maybe_inject_error")
     def test_success(self, mock_inject: MagicMock, mock_run: MagicMock) -> None:
-        result = connection.try_ssh_command(self.job, self.remote, loglevel=0, cmd=["ls"])
+        result = self.job.try_ssh_command(self.remote, loglevel=0, cmd=["ls"])
         self.assertEqual("ok", result)
         mock_inject.assert_called_once()
         mock_run.assert_called_once()
 
     @patch(
-        "bzfs_main.connection.run_ssh_command",
+        "bzfs_main.bzfs.Job.run_ssh_command",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", stderr="zfs: dataset does not exist"),
     )
     def test_dataset_missing_returns_none(self, mock_run: MagicMock) -> None:
-        result = connection.try_ssh_command(self.job, self.remote, loglevel=0, cmd=["zfs"], exists=True)
+        result = self.job.try_ssh_command(self.remote, loglevel=0, cmd=["zfs"], exists=True)
         self.assertIsNone(result)
         mock_run.assert_called_once()
 
     @patch(
-        "bzfs_main.connection.run_ssh_command",
+        "bzfs_main.bzfs.Job.run_ssh_command",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", stderr="boom"),
     )
     def test_other_error_raises_retryable(self, mock_run: MagicMock) -> None:
         with self.assertRaises(RetryableError):
-            connection.try_ssh_command(self.job, self.remote, loglevel=0, cmd=["zfs"], exists=False)
+            self.job.try_ssh_command(self.remote, loglevel=0, cmd=["zfs"], exists=False)
         mock_run.assert_called_once()
 
     @patch(
-        "bzfs_main.connection.run_ssh_command",
+        "bzfs_main.bzfs.Job.run_ssh_command",
         side_effect=UnicodeDecodeError("utf-8", b"x", 0, 1, "boom"),
     )
     def test_unicode_error_wrapped(self, mock_run: MagicMock) -> None:
         with self.assertRaises(RetryableError):
-            connection.try_ssh_command(self.job, self.remote, loglevel=0, cmd=["x"])
+            self.job.try_ssh_command(self.remote, loglevel=0, cmd=["x"])
         mock_run.assert_called_once()
 
-    @patch("bzfs_main.connection.maybe_inject_error", side_effect=RetryableError("Subprocess failed"))
+    @patch("bzfs_main.bzfs.Job.maybe_inject_error", side_effect=RetryableError("Subprocess failed"))
     def test_injected_retryable_error_propagates(self, mock_inject: MagicMock) -> None:
         with self.assertRaises(RetryableError):
-            connection.try_ssh_command(self.job, self.remote, loglevel=0, cmd=["x"])
+            self.job.try_ssh_command(self.remote, loglevel=0, cmd=["x"])
         mock_inject.assert_called_once()
 
 
@@ -563,7 +565,6 @@ class TestRefreshSshConnection(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
-        self.job.control_persist_margin_secs = 1
         self.job.timeout_nanos = None
         self.remote = cast(
             Remote,
@@ -577,38 +578,39 @@ class TestRefreshSshConnection(AbstractTestCase):
                 ssh_extra_opts=[],
             ),
         )
+        self.remote.ssh_control_persist_margin_secs = 1
         self.conn = connection.Connection(self.remote, 1, 0)
         self.conn.last_refresh_time = 0
 
     @patch("bzfs_main.utils.Subprocesses.subprocess_run")
     def test_local_mode_returns_immediately(self, mock_run: MagicMock) -> None:
         self.remote.ssh_user_host = ""
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_not_called()
 
     @patch("bzfs_main.connection.die", side_effect=SystemExit)
     def test_ssh_unavailable_dies(self, mock_die: MagicMock) -> None:
         self.job.params.is_program_available = MagicMock(return_value=False)  # type: ignore[method-assign]
         with self.assertRaises(SystemExit):
-            connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+            connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_die.assert_called_once()
 
     @patch("bzfs_main.utils.Subprocesses.subprocess_run")
     def test_reuse_disabled_no_action(self, mock_run: MagicMock) -> None:
-        self.remote.reuse_ssh_connection = False  # type: ignore[misc]  # cannot assign to final attribute
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        self.remote.reuse_ssh_connection = False
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_not_called()
 
     @patch("bzfs_main.utils.Subprocesses.subprocess_run")
     def test_connection_alive_fast_path(self, mock_run: MagicMock) -> None:
         self.conn.last_refresh_time = time.monotonic_ns()
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_not_called()
 
     @patch("bzfs_main.utils.Subprocesses.subprocess_run")
     def test_master_alive_refreshes_timestamp(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_called_once()
         self.assertGreater(self.conn.last_refresh_time, 0)
 
@@ -621,13 +623,13 @@ class TestRefreshSshConnection(AbstractTestCase):
             subprocess.CalledProcessError(returncode=1, cmd="ssh", stderr="bad"),
         ]
         with self.assertRaises(RetryableError):
-            connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+            connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
 
     @patch("bzfs_main.utils.Subprocesses.subprocess_run")
     def test_verbose_option_limits_persist_time(self, mock_run: MagicMock) -> None:
-        self.remote.ssh_extra_opts = ["-v"]  # type: ignore[misc]  # cannot assign to final attribute
+        self.remote.ssh_extra_opts = ["-v"]
         mock_run.side_effect = [MagicMock(returncode=1), MagicMock(returncode=0)]
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         args = mock_run.call_args_list[1][0][0]
         self.assertIn("-oControlPersist=1s", args)
 
@@ -658,7 +660,7 @@ class TestRefreshSshConnection(AbstractTestCase):
             conn = cpool.get_connection()
             try:
                 conn.last_refresh_time = 0  # avoid fast return
-                connection.refresh_ssh_connection_if_necessary(self.job, remote, conn)
+                connection.refresh_ssh_connection_if_necessary(conn, self.job)
                 self.assertTrue(mock_utime.called)
                 self.assertIsNotNone(conn.connection_lease)
                 mock_utime.assert_called_once()
@@ -673,7 +675,7 @@ class TestRefreshSshConnection(AbstractTestCase):
         self.conn.last_refresh_time = 0  # avoid fast return
         # In setUp, ssh_exit_on_shutdown=True ensures no lease is acquired.
         self.assertIsNone(self.conn.connection_lease)
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_utime.assert_not_called()
 
 
@@ -689,7 +691,7 @@ class TestTimeout(AbstractTestCase):
         self.assertIsNone(connection.timeout(self.job))
 
     def test_expired_timeout_raises(self) -> None:
-        self.job.params.timeout_nanos = 1  # type: ignore[misc]  # cannot assign to final attribute
+        self.job.params.timeout_nanos = 1
         self.job.timeout_nanos = time.monotonic_ns() - 1
         with self.assertRaises(subprocess.TimeoutExpired):
             connection.timeout(self.job)
@@ -710,26 +712,26 @@ class TestMaybeInjectError(AbstractTestCase):
         self.job.error_injection_triggers = {"before": Counter()}
 
     def test_no_trigger_noop(self) -> None:
-        connection.maybe_inject_error(self.job, ["cmd"])
+        self.job.maybe_inject_error(cmd=["cmd"])
 
     def test_missing_counter_noop(self) -> None:
-        connection.maybe_inject_error(self.job, ["cmd"], error_trigger="boom")
+        self.job.maybe_inject_error(cmd=["cmd"], error_trigger="boom")
 
     def test_counter_zero_noop(self) -> None:
         self.job.error_injection_triggers["before"]["boom"] = 0
-        connection.maybe_inject_error(self.job, ["cmd"], error_trigger="boom")
+        self.job.maybe_inject_error(cmd=["cmd"], error_trigger="boom")
         self.assertEqual(0, self.job.error_injection_triggers["before"]["boom"])
 
     def test_nonretryable_error_raised(self) -> None:
         self.job.error_injection_triggers["before"]["boom"] = 1
         with self.assertRaises(subprocess.CalledProcessError):
-            connection.maybe_inject_error(self.job, ["cmd"], error_trigger="boom")
+            self.job.maybe_inject_error(cmd=["cmd"], error_trigger="boom")
         self.assertEqual(0, self.job.error_injection_triggers["before"]["boom"])
 
     def test_retryable_error_raised(self) -> None:
         self.job.error_injection_triggers["before"]["retryable_boom"] = 1
         with self.assertRaises(RetryableError):
-            connection.maybe_inject_error(self.job, ["cmd"], error_trigger="retryable_boom")
+            self.job.maybe_inject_error(cmd=["cmd"], error_trigger="retryable_boom")
 
 
 #############################################################################
@@ -741,11 +743,11 @@ class TestDecrementInjectionCounter(AbstractTestCase):
 
     def test_zero_counter_returns_false(self) -> None:
         counter: Counter = Counter()
-        self.assertFalse(connection.decrement_injection_counter(self.job, counter, "x"))
+        self.assertFalse(self.job.decrement_injection_counter(counter=counter, trigger="x"))
 
     def test_positive_counter_decrements(self) -> None:
         counter: Counter = Counter({"x": 2})
-        self.assertTrue(connection.decrement_injection_counter(self.job, counter, "x"))
+        self.assertTrue(self.job.decrement_injection_counter(counter=counter, trigger="x"))
         self.assertEqual(1, counter["x"])
 
 

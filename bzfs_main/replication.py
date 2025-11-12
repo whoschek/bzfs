@@ -52,11 +52,8 @@ from bzfs_main.connection import (
     DEDICATED,
     SHARED,
     ConnectionPool,
-    maybe_inject_error,
     refresh_ssh_connection_if_necessary,
-    run_ssh_command,
     timeout,
-    try_ssh_command,
 )
 from bzfs_main.detect import (
     ZFS_VERSION_IS_AT_LEAST_2_1_0,
@@ -227,8 +224,8 @@ def _list_and_filter_src_and_dst_snapshots(
     src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
     job.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
     src_snapshots_and_bookmarks, dst_snapshots_with_guids_str = run_in_parallel(  # list src+dst snapshots in parallel
-        lambda: try_ssh_command(job, src, LOG_TRACE, cmd=src_cmd),
-        lambda: try_ssh_command(job, dst, LOG_TRACE, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
+        lambda: job.try_ssh_command(src, LOG_TRACE, cmd=src_cmd),
+        lambda: job.try_ssh_command(dst, LOG_TRACE, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
     )
     job.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids_str is not None
     dst_snapshots_with_guids: list[str] = (dst_snapshots_with_guids_str or "").splitlines()
@@ -301,7 +298,7 @@ def _rollback_dst_dataset_if_necessary(
             # rollback just in case the dst dataset was modified since its most recent snapshot
             done_checking = done_checking or _check_zfs_dataset_busy(job, dst, dst_dataset)
             cmd: list[str] = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
-            try_ssh_command(job, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
+            job.try_ssh_command(dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
     elif latest_src_snapshot == "":
         log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
         return True
@@ -343,7 +340,7 @@ def _rollback_dst_dataset_if_necessary(
             f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}", latest_common_dst_snapshot
         )
         try:
-            run_ssh_command(job, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+            job.run_ssh_command(dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
         except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
             stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
             no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
@@ -692,11 +689,11 @@ def _run_zfs_send_receive(
     )
     src_pipe, local_pipe, dst_pipe = pipes
     conn_pool_name: str = DEDICATED if p.dedicated_tcp_connection_per_zfs_send else SHARED
-    src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(conn_pool_name)
-    dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
+    src_conn_pool: ConnectionPool = p.connection_pools[p.src.location].pool(conn_pool_name)
+    dst_conn_pool: ConnectionPool = p.connection_pools[p.dst.location].pool(conn_pool_name)
     with src_conn_pool.connection() as src_conn, dst_conn_pool.connection() as dst_conn:
-        refresh_ssh_connection_if_necessary(job, p.src, src_conn)
-        refresh_ssh_connection_if_necessary(job, p.dst, dst_conn)
+        refresh_ssh_connection_if_necessary(src_conn, job)
+        refresh_ssh_connection_if_necessary(dst_conn, job)
         src_ssh_cmd: str = " ".join(src_conn.ssh_cmd_quoted)
         dst_ssh_cmd: str = " ".join(dst_conn.ssh_cmd_quoted)
         cmd: list[str] = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
@@ -704,7 +701,7 @@ def _run_zfs_send_receive(
         log.debug(msg, cmd[2].lstrip())
         if not dry_run_no_send:
             try:
-                maybe_inject_error(job, cmd=cmd, error_trigger=error_trigger)
+                job.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
                 sp: Subprocesses = job.subprocesses
                 process = sp.subprocess_run(
                     cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=True, log=log
@@ -729,7 +726,7 @@ def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr:
     def clear_resumable_recv_state() -> bool:
         log.warning(p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset)
         cmd: list[str] = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
-        try_ssh_command(job, p.dst, LOG_TRACE, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+        job.try_ssh_command(p.dst, LOG_TRACE, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
         log.log(LOG_TRACE, p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
         return True
 
@@ -807,7 +804,7 @@ def _recv_resume_token(job: Job, dst_dataset: str, retry_count: int) -> tuple[st
     send_resume_opts: list[str] = []
     if job.dst_dataset_exists[dst_dataset]:
         cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset)
-        recv_resume_token = run_ssh_command(job, p.dst, LOG_TRACE, cmd=cmd).rstrip()
+        recv_resume_token = job.run_ssh_command(p.dst, LOG_TRACE, cmd=cmd).rstrip()
         if recv_resume_token == "-" or not recv_resume_token:  # noqa: S105
             recv_resume_token = None
         else:
@@ -933,8 +930,8 @@ def _delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str
     cmd: list[str] = _delete_snapshot_cmd(p, r, snapshots_to_delete)
     is_dry: bool = False  # False is safe because we're using the 'zfs destroy -n' flag
     try:
-        maybe_inject_error(job, cmd=cmd, error_trigger="zfs_delete_snapshot")
-        run_ssh_command(job, r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
+        job.maybe_inject_error(cmd=cmd, error_trigger="zfs_delete_snapshot")
+        job.run_ssh_command(r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
         stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
         no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
@@ -963,8 +960,8 @@ def delete_bookmarks(job: Job, remote: Remote, dataset: str, snapshot_tags: list
         job,
         remote,
         [(cmd, (f"{dataset}#{snapshot_tag}" for snapshot_tag in snapshot_tags))],
-        lambda _cmd, batch: try_ssh_command(
-            job, remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch, exists=False
+        lambda _cmd, batch: job.try_ssh_command(
+            remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch, exists=False
         ),
         max_batch_items=1,
     )
@@ -986,7 +983,7 @@ def delete_datasets(job: Job, remote: Remote, datasets: Iterable[str]) -> None:
             dataset,
         )
         is_dry: bool = False  # False is safe because we're using the 'zfs destroy -n' flag
-        run_ssh_command(job, remote, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
+        job.run_ssh_command(remote, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
         last_deleted_dataset = dataset
 
 
@@ -1004,7 +1001,7 @@ def _create_zfs_filesystem(job: Job, filesystem: str) -> None:
         if not job.dst_dataset_exists[parent]:
             cmd: list[str] = p.split_args(f"{p.dst.sudo} {p.zfs_program} create -p", no_mount, parent)
             try:
-                run_ssh_command(job, p.dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+                job.run_ssh_command(p.dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             except subprocess.CalledProcessError as e:
                 # ignore harmless error caused by 'zfs create' without the -u flag, or by dataset already existing
                 if not (
@@ -1029,7 +1026,7 @@ def _create_zfs_bookmarks(job: Job, remote: Remote, dataset: str, snapshots: lis
         assert "@" in snapshot
         bookmark_cmd: list[str] = cmd + [replace_prefix(snapshot, old_prefix=f"{dataset}@", new_prefix=f"{dataset}#")]
         try:
-            run_ssh_command(job, remote, LOG_DEBUG, is_dry=p.dry_run, print_stderr=False, cmd=bookmark_cmd)
+            job.run_ssh_command(remote, LOG_DEBUG, is_dry=p.dry_run, print_stderr=False, cmd=bookmark_cmd)
         except subprocess.CalledProcessError as e:
             # ignore harmless zfs error caused by bookmark with the same name already existing
             if ": bookmark exists" not in e.stderr:
@@ -1055,7 +1052,7 @@ def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_
         items = ()
     cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
     try:
-        lines: str | None = try_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
+        lines: str | None = job.try_ssh_command(remote, LOG_TRACE, cmd=cmd)
     except RetryableError as retryable_error:
         assert retryable_error.__cause__ is not None
         if recv_resume_token:
@@ -1112,8 +1109,8 @@ def _zfs_set(job: Job, properties: list[str], remote: Remote, dataset: str) -> N
         remote,
         cmd,
         properties,
-        lambda batch: run_ssh_command(
-            job, remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch + [dataset]
+        lambda batch: job.run_ssh_command(
+            remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch + [dataset]
         ),
         max_batch_items=2**29,
     )
@@ -1140,7 +1137,7 @@ def _zfs_get(
     props: dict[str, str | None] | None = props_cache.get(cache_key)
     if props is None:
         cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
-        lines: str = run_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
+        lines: str = job.run_ssh_command(remote, LOG_TRACE, cmd=cmd)
         is_name_value_pair: bool = "," in output_columns
         props = {}
         # if not splitlines: omit single trailing newline that was appended by 'zfs get' CLI
@@ -1240,7 +1237,7 @@ def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send
     if not p.is_program_available("ps", remote.location):
         return True
     cmd: list[str] = p.split_args(f"{p.ps_program} -Ao args")
-    procs: list[str] = (try_ssh_command(job, remote, LOG_TRACE, cmd=cmd) or "").splitlines()
+    procs: list[str] = (job.try_ssh_command(remote, LOG_TRACE, cmd=cmd) or "").splitlines()
     if job.inject_params.get("is_zfs_dataset_busy", False):
         procs += ["sudo -n zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
     if not _is_zfs_dataset_busy(procs, dataset, busy_if_send=busy_if_send):

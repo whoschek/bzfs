@@ -138,9 +138,6 @@ from typing import (
     Final,
 )
 
-from bzfs_main.connection import (
-    run_ssh_command,
-)
 from bzfs_main.parallel_batch_cmd import (
     itr_ssh_cmd_parallel,
 )
@@ -248,7 +245,7 @@ class SnapshotCache:
 
         def try_zfs_list_command(_cmd: list[str], batch: list[str]) -> list[str]:
             try:
-                return run_ssh_command(self.job, remote, LOG_TRACE, print_stderr=False, cmd=_cmd + batch).splitlines()
+                return self.job.run_ssh_command(remote, LOG_TRACE, print_stderr=False, cmd=_cmd + batch).splitlines()
             except CalledProcessError as e:
                 return stderr_to_str(e.stdout).splitlines()
             except UnicodeDecodeError:
