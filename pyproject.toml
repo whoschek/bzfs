@@ -99,8 +99,8 @@ update_changelog_on_bump = false
 
 [tool.coverage.run]  # see https://coverage.readthedocs.io/
 branch = true
-include = ["bzfs_main/*.py"]
-omit = ["bzfs_tests/*.py", "*/__init__.py"]
+include = ["bzfs_main/**/*.py"]
+omit = ["bzfs_tests/**/*.py", "**/__init__.py"]
 
 [tool.docformatter]         # auto-format Python docstrings to follow PEP 257 and wrap them to a specific line length
 wrap-summaries = 125        # summary / one-liner length; see https://docformatter.readthedocs.io/en/latest/usage.html

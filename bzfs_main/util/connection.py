@@ -55,16 +55,15 @@ from typing import (
     runtime_checkable,
 )
 
-from bzfs_main.connection_lease import (
+from bzfs_main.util.connection_lease import (
     ConnectionLease,
     ConnectionLeaseManager,
 )
-from bzfs_main.retry import (
+from bzfs_main.util.retry import (
     RetryableError,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     LOG_TRACE,
-    PROG_NAME,
     SmallPriorityQueue,
     Subprocesses,
     die,
@@ -213,7 +212,7 @@ def refresh_ssh_connection_if_necessary(conn: Connection, job: MiniJob) -> None:
                 log.error("%s", stderr_to_str(e.stderr).rstrip())
                 raise RetryableError(
                     f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
-                    f"first, considering diagnostic log file output from running {PROG_NAME} with -v -v -v."
+                    f"first, considering diagnostic log file output from running with -v -v -v."
                 ) from e
         conn.last_refresh_time = time.monotonic_ns()
         if conn.connection_lease is not None:
@@ -228,7 +227,7 @@ def timeout(job: MiniJob) -> float | None:
     delta_nanos: int = timeout_nanos - time.monotonic_ns()
     if delta_nanos <= 0:
         assert job.params.timeout_nanos is not None
-        raise subprocess.TimeoutExpired(PROG_NAME + "_timeout", timeout=job.params.timeout_nanos / 1_000_000_000)
+        raise subprocess.TimeoutExpired("_timeout", timeout=job.params.timeout_nanos / 1_000_000_000)
     return delta_nanos / 1_000_000_000  # seconds
 
 

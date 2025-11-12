@@ -35,12 +35,12 @@ from typing import (
     Final,
 )
 
-from bzfs_main.connection import (
+from bzfs_main.util.connection import (
     DEDICATED,
     SHARED,
     ConnectionPools,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     LOG_TRACE,
     PROG_NAME,
     SynchronousExecutor,

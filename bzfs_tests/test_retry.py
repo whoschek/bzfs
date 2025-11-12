@@ -28,7 +28,7 @@ from unittest.mock import (
     patch,
 )
 
-from bzfs_main.retry import (
+from bzfs_main.util.retry import (
     Retry,
     RetryableError,
     RetryPolicy,

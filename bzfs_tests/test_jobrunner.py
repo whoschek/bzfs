@@ -48,7 +48,7 @@ from unittest.mock import (
 from bzfs_main import (
     bzfs_jobrunner,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIE_STATUS,
 )
 from bzfs_tests.abstract_testcase import (

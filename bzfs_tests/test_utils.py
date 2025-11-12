@@ -71,8 +71,10 @@ from zoneinfo import (
     ZoneInfo,
 )
 
-import bzfs_main.utils
-from bzfs_main.utils import (
+from bzfs_main.util import (
+    utils,
+)
+from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
@@ -201,7 +203,7 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_has_siblings(self) -> None:
         def has_siblings(sorted_datasets: list[str]) -> bool:
-            return bzfs_main.utils.has_siblings(sorted_datasets, is_test_mode=True)
+            return utils.has_siblings(sorted_datasets, is_test_mode=True)
 
         self.assertFalse(has_siblings([]))
         self.assertFalse(has_siblings(["a"]))
@@ -466,7 +468,7 @@ class TestShuffleDict(unittest.TestCase):
         def fake_shuffle(lst: list) -> None:
             lst.reverse()
 
-        with patch("bzfs_main.utils.random.SystemRandom.shuffle", side_effect=fake_shuffle) as mock_shuffle:
+        with patch("bzfs_main.util.utils.random.SystemRandom.shuffle", side_effect=fake_shuffle) as mock_shuffle:
             result = shuffle_dict(d)
             self.assertEqual({"c": 3, "b": 2, "a": 1}, result)
             mock_shuffle.assert_called_once()
@@ -1276,7 +1278,7 @@ class TestSubprocessRunWithSubprocesses(unittest.TestCase):
     def test_timeout_terminates_subtree_and_unregisters(self) -> None:
         """On timeout, terminates subtree and unregisters the PID."""
         sp = Subprocesses()
-        with patch("bzfs_main.utils.terminate_process_subtree") as mock_term:
+        with patch("bzfs_main.util.utils.terminate_process_subtree") as mock_term:
             with self.assertRaises(subprocess.TimeoutExpired):
                 subprocess_run(["sleep", "1"], timeout=0.01, stdout=PIPE, stderr=PIPE, subprocesses=sp)
             self.assertTrue(mock_term.called)
@@ -1334,14 +1336,14 @@ class TestSubprocessRunLogging(unittest.TestCase):
 
     def test_logs_success_with_positional_args_list(self) -> None:
         log, handler = self._make_logger()
-        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 1_230_000]):
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 1_230_000]):
             result = subprocess_run(["true"], stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
         self.assertEqual(0, result.returncode)
         self.assertEqual(["Executed [success] [1.23ms]: true"], handler.records)
 
     def test_logs_failure_without_check(self) -> None:
         log, handler = self._make_logger()
-        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 12_340_000]):
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 12_340_000]):
             result = subprocess_run(["false"], stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
         self.assertNotEqual(0, result.returncode)
         # For values between 10 and 100, human_readable_float uses 1 decimal
@@ -1349,14 +1351,14 @@ class TestSubprocessRunLogging(unittest.TestCase):
 
     def test_logs_failure_with_check_exception(self) -> None:
         log, handler = self._make_logger()
-        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 9_990_000]):
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 9_990_000]):
             with self.assertRaises(subprocess.CalledProcessError):
                 subprocess_run(["false"], stdout=PIPE, stderr=PIPE, check=True, log=log, loglevel=logging.INFO)
         self.assertEqual(["Executed [failure] [9.99ms]: false"], handler.records)
 
     def test_logs_timeout_status(self) -> None:
         log, handler = self._make_logger()
-        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 12_350_000]):
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 12_350_000]):
             with self.assertRaises(subprocess.TimeoutExpired):
                 subprocess_run(["sleep", "1"], timeout=0.01, stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
         # 12.35 is not exactly representable in binary; formatting with one decimal may yield 12.3
@@ -1364,7 +1366,7 @@ class TestSubprocessRunLogging(unittest.TestCase):
 
     def test_logs_argv_from_kwargs_list(self) -> None:
         log, handler = self._make_logger()
-        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 500_000]):
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 500_000]):
             result = subprocess_run(stdout=PIPE, stderr=PIPE, args=["true"], log=log, loglevel=logging.INFO)
         self.assertEqual(0, result.returncode)
         self.assertEqual(["Executed [success] [0.5ms]: true"], handler.records)
@@ -1372,14 +1374,14 @@ class TestSubprocessRunLogging(unittest.TestCase):
     def test_logs_tuple_args_and_string_with_lstrip(self) -> None:
         # Tuple args formatting
         log1, handler1 = self._make_logger()
-        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 2_000_000]):
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 2_000_000]):
             result1 = subprocess_run(args=("true",), stdout=PIPE, stderr=PIPE, log=log1, loglevel=logging.INFO)
         self.assertEqual(0, result1.returncode)
         self.assertEqual(["Executed [success] [2ms]: true"], handler1.records)
 
         # String args with leading whitespace and shell=True should be lstrip()'d in logs
         log2, handler2 = self._make_logger()
-        with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 1_500_000]):
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 1_500_000]):
             result2 = subprocess_run(
                 args="  echo foo", shell=True, stdout=PIPE, stderr=PIPE, log=log2, loglevel=logging.INFO
             )
@@ -1402,8 +1404,8 @@ class TestSubprocessRunLogging(unittest.TestCase):
     def test_logs_failure_when_popen_raises_oserror(self) -> None:
         """Logs a failure when Popen raises OSError before starting the process (exitcode stays None)."""
         log, handler = self._make_logger()
-        with patch("bzfs_main.utils.subprocess.Popen", side_effect=OSError("boom")):
-            with patch("bzfs_main.utils.time.monotonic_ns", side_effect=[0, 1_000_000]):
+        with patch("bzfs_main.util.utils.subprocess.Popen", side_effect=OSError("boom")):
+            with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 1_000_000]):
                 with self.assertRaises(OSError):
                     subprocess_run(["true"], stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
         self.assertEqual(["Executed [failure] [1ms]: true"], handler.records)
@@ -1461,13 +1463,13 @@ class TestTerminateProcessSubtree(unittest.TestCase):
         self.assertEqual(1, len(descendants))
         self.assertIn(child.pid, descendants[0], "Child PID not found in descendants")
 
-    @patch("bzfs_main.utils.subprocess.run")
+    @patch("bzfs_main.util.utils.subprocess.run")
     def test_get_descendant_processes_permission_denied_returns_empty_per_root(self, mock_run: MagicMock) -> None:
         # Simulate PermissionError when trying to invoke 'ps' in restricted sandboxes
         mock_run.side_effect = PermissionError(errno.EPERM, "Operation not permitted", "ps")
         self.assertEqual([[]], _get_descendant_processes([os.getpid()]))
 
-    @patch("bzfs_main.utils.subprocess.run")
+    @patch("bzfs_main.util.utils.subprocess.run")
     @patch("os.kill")
     def test_terminate_process_subtree_permission_denied_kills_roots(
         self, mock_kill: MagicMock, mock_run: MagicMock
@@ -1571,7 +1573,7 @@ class TestTerminationSignalHandler(unittest.TestCase):
             signal.signal(signal.SIGINT, old_sigint)
             signal.signal(signal.SIGTERM, old_sigterm)
 
-    @patch("bzfs_main.utils.terminate_process_subtree")
+    @patch("bzfs_main.util.utils.terminate_process_subtree")
     def test_default_handler_invokes_terminate_process_subtree(self, mock_terminate: MagicMock) -> None:
         old_sigint = signal.getsignal(signal.SIGINT)
         old_sigterm = signal.getsignal(signal.SIGTERM)

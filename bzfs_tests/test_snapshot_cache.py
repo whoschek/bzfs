@@ -99,7 +99,7 @@ from bzfs_main.snapshot_cache import (
     set_last_modification_time,
     set_last_modification_time_safe,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     sha256_85_urlsafe_base64,
     sha256_128_urlsafe_base64,
 )
@@ -108,7 +108,7 @@ from bzfs_tests.abstract_testcase import (
 )
 
 if TYPE_CHECKING:  # type-only imports for annotations
-    from bzfs_main.retry import (
+    from bzfs_main.util.retry import (
         Retry,
         RetryPolicy,
     )
@@ -141,7 +141,7 @@ class TestSnapshotCache(AbstractTestCase):
         pattern of creating a temp dir, patching get_home_directory, building
         args, log_params and a Job.
         """
-        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.utils.get_home_directory", return_value=tmpdir):
+        with tempfile.TemporaryDirectory() as tmpdir, patch("bzfs_main.util.utils.get_home_directory", return_value=tmpdir):
             job = self.make_job_for_tmp(tmpdir, args)
             yield job, tmpdir
 

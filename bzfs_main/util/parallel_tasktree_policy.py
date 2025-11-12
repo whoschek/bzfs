@@ -42,17 +42,17 @@ from typing import (
     Callable,
 )
 
-from bzfs_main.parallel_tasktree import (
+from bzfs_main.util.parallel_tasktree import (
     CompletionCallback,
     CompletionCallbackResult,
     process_datasets_in_parallel,
 )
-from bzfs_main.retry import (
+from bzfs_main.util.retry import (
     Retry,
     RetryPolicy,
     run_with_retries,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     dry,
     human_readable_duration,
 )

@@ -32,7 +32,7 @@ from unittest.mock import (
     patch,
 )
 
-from bzfs_main.connection_lease import (
+from bzfs_main.util.connection_lease import (
     FREE_DIR,
     NAMESPACE_DIR_LENGTH,
     SOCKETS_DIR,
@@ -40,7 +40,7 @@ from bzfs_main.connection_lease import (
     ConnectionLease,
     ConnectionLeaseManager,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH,
@@ -674,7 +674,7 @@ class TestConnectionLease(AbstractTestCase):
                     raise result
 
             mgr._validate_dirs()  # avoid any unrelated flock calls before the patch is active
-            with patch("bzfs_main.connection_lease.fcntl.flock", side_effect=fake_flock):
+            with patch("bzfs_main.util.connection_lease.fcntl.flock", side_effect=fake_flock):
                 lease = mgr._create_and_acquire()
                 try:
                     self.assertTrue(os.path.exists(lease.used_path))
@@ -719,7 +719,7 @@ class TestConnectionLease(AbstractTestCase):
         """
         with get_tmpdir() as root_dir:
             mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
-            with patch("bzfs_main.connection_lease.os.open", side_effect=PermissionError("denied")):
+            with patch("bzfs_main.util.connection_lease.os.open", side_effect=PermissionError("denied")):
                 with self.assertRaises(PermissionError):
                     _ = mgr._try_lock(os.path.join(mgr._free_dir, "sabc"), open_flags=os.O_WRONLY)
 

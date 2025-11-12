@@ -43,7 +43,7 @@ from typing import (
     NamedTuple,
 )
 
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DONT_SKIP_DATASET,
     Comparable,
     Interner,

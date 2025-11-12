@@ -33,18 +33,18 @@ from typing import (
     Any,
 )
 
-from bzfs_main.check_range import (
-    CheckRange,
-)
 from bzfs_main.filter import (
+    SNAPSHOT_FILTERS_VAR,
     SNAPSHOT_REGEX_FILTER_NAME,
     SNAPSHOT_REGEX_FILTER_NAMES,
     RankRange,
     UnixTimeRange,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.check_range import (
+    CheckRange,
+)
+from bzfs_main.util.utils import (
     SHELL_CHARS,
-    SNAPSHOT_FILTERS_VAR,
     UNIX_TIME_INFINITY_SECS,
     YEAR_WITH_FOUR_DIGITS_REGEX,
     SnapshotPeriods,

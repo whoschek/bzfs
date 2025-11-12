@@ -22,7 +22,6 @@ import sys
 import types
 import unittest
 
-import bzfs_main.utils
 import bzfs_tests.test_argparse_actions
 import bzfs_tests.test_bzfs
 import bzfs_tests.test_compare_snapshot_lists
@@ -45,6 +44,9 @@ import bzfs_tests.test_replication
 import bzfs_tests.test_retry
 import bzfs_tests.test_snapshot_cache
 import bzfs_tests.test_utils
+from bzfs_main.util.utils import (
+    getenv_any,
+)
 from bzfs_tests.tools import (
     TestSuiteCompleteness,
 )
@@ -77,7 +79,7 @@ def main() -> None:
     ]
     incomplete_modules: list[types.ModuleType] = []
 
-    test_mode = bzfs_main.utils.getenv_any("test_mode", "")  # Consider toggling this when testing
+    test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing
     is_unit_test = test_mode == "unit"  # run only unit tests (skip integration tests)
     if not is_unit_test:
         from bzfs_tests import (

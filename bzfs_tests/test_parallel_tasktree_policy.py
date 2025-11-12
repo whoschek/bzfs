@@ -34,13 +34,13 @@ from unittest.mock import (
     patch,
 )
 
-from bzfs_main.parallel_tasktree import (
+from bzfs_main.util.parallel_tasktree import (
     BARRIER_CHAR,
 )
-from bzfs_main.parallel_tasktree_policy import (
+from bzfs_main.util.parallel_tasktree_policy import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
-from bzfs_main.retry import (
+from bzfs_main.util.retry import (
     Retry,
     RetryPolicy,
 )

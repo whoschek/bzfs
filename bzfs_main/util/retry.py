@@ -38,7 +38,7 @@ from typing import (
     TypeVar,
 )
 
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     human_readable_duration,
 )
 

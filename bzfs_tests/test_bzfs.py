@@ -43,7 +43,6 @@ from unittest.mock import (
 )
 
 import bzfs_main.detect
-import bzfs_main.utils
 from bzfs_main import (
     bzfs,
 )
@@ -54,9 +53,6 @@ from bzfs_main.configuration import (
     LogParams,
     Remote,
     SnapshotLabel,
-)
-from bzfs_main.connection import (
-    ConnectionPools,
 )
 from bzfs_main.detect import (
     ZFS_VERSION_IS_AT_LEAST_2_2_0,
@@ -75,13 +71,16 @@ from bzfs_main.replication import (
     _pv_cmd,
     replicate_dataset,
 )
-from bzfs_main.retry import (
-    Retry,
-)
 from bzfs_main.snapshot_cache import (
     SnapshotCache,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.connection import (
+    ConnectionPools,
+)
+from bzfs_main.util.retry import (
+    Retry,
+)
+from bzfs_main.util.utils import (
     DIE_STATUS,
     is_descendant,
 )
@@ -214,7 +213,7 @@ class TestHelperFunctions(AbstractTestCase):
         root_datasets = bzfs.Job().find_root_datasets(src_datasets)
         for basis_dataset in basis_src_datasets:
             for root_dataset in root_datasets:
-                if bzfs_main.utils.is_descendant(basis_dataset, of_root_dataset=root_dataset):
+                if is_descendant(basis_dataset, of_root_dataset=root_dataset):
                     if basis_dataset not in src_datasets_set:
                         return None
         return root_datasets

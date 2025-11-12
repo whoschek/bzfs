@@ -24,7 +24,7 @@ from typing import (
     Protocol,
 )
 
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     Interner,
     SortedInterner,
     T,

@@ -62,7 +62,7 @@ from bzfs_main.filter import (
     filter_properties,
     filter_snapshots,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     LOG_DEBUG,
     UNIX_TIME_INFINITY_SECS,
     compile_regexes,

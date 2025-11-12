@@ -15,8 +15,8 @@
 """Collection of helper functions used across bzfs; includes environment variable parsing, process management and lightweight
 concurrency primitives.
 
-Everything in this module relies only on the standard library so other modules remain dependency free. Each utility favors
-simple, predictable behavior on all supported platforms.
+Everything in this module relies only on the Python standard library so other modules remain dependency free. Each utility
+favors simple, predictable behavior on all supported platforms.
 """
 
 from __future__ import (
@@ -90,7 +90,6 @@ LOG_STDERR: Final[int] = (logging.INFO + logging.WARNING) // 2  # custom log lev
 LOG_STDOUT: Final[int] = (LOG_STDERR + logging.INFO) // 2  # custom log level is halfway in between
 LOG_DEBUG: Final[int] = logging.DEBUG
 LOG_TRACE: Final[int] = logging.DEBUG // 2  # custom log level is halfway in between
-SNAPSHOT_FILTERS_VAR: Final[str] = "snapshot_filters_var"
 YEAR_WITH_FOUR_DIGITS_REGEX: Final[re.Pattern] = re.compile(r"[1-9][0-9][0-9][0-9]")  # empty shall not match nonempty target
 UNIX_TIME_INFINITY_SECS: Final[int] = 2**64  # billions of years and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET: Final[str] = ""
@@ -103,19 +102,19 @@ UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH: Final[int] = 107 if platform.system() == "Li
 RegexList = list[tuple[re.Pattern[str], bool]]  # Type alias
 
 
-def getenv_any(key: str, default: str | None = None) -> str | None:
+def getenv_any(key: str, default: str | None = None, env_var_prefix: str = ENV_VAR_PREFIX) -> str | None:
     """All shell environment variable names used for configuration start with this prefix."""
-    return os.getenv(ENV_VAR_PREFIX + key, default)
+    return os.getenv(env_var_prefix + key, default)
 
 
-def getenv_int(key: str, default: int) -> int:
+def getenv_int(key: str, default: int, env_var_prefix: str = ENV_VAR_PREFIX) -> int:
     """Returns environment variable ``key`` as int with ``default`` fallback."""
-    return int(cast(str, getenv_any(key, str(default))))
+    return int(cast(str, getenv_any(key, default=str(default), env_var_prefix=env_var_prefix)))
 
 
-def getenv_bool(key: str, default: bool = False) -> bool:
+def getenv_bool(key: str, default: bool = False, env_var_prefix: str = ENV_VAR_PREFIX) -> bool:
     """Returns environment variable ``key`` as bool with ``default`` fallback."""
-    return cast(str, getenv_any(key, str(default))).lower().strip() == "true"
+    return cast(str, getenv_any(key, default=str(default), env_var_prefix=env_var_prefix)).lower().strip() == "true"
 
 
 def cut(field: int, separator: str = "\t", *, lines: list[str]) -> list[str]:
@@ -162,7 +161,7 @@ def tail(file: str, n: int, errors: str | None = None) -> Sequence[str]:
         return deque(fd, maxlen=n)
 
 
-NAMED_CAPTURING_GROUP: Final[re.Pattern[str]] = re.compile(r"^" + re.escape("(?P<") + r"[^\W\d]\w*" + re.escape(">"))
+_NAMED_CAPTURING_GROUP: Final[re.Pattern[str]] = re.compile(r"^" + re.escape("(?P<") + r"[^\W\d]\w*" + re.escape(">"))
 
 
 def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
@@ -201,7 +200,7 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
             if regex[i + 1] != "?":
                 regex = f"{regex[0:i]}(?:{regex[i + 1:]}"  # unnamed capturing group
             else:  # potentially a valid named capturing group
-                regex = regex[0:i] + NAMED_CAPTURING_GROUP.sub(repl="(?:", string=regex[i:], count=1)
+                regex = regex[0:i] + _NAMED_CAPTURING_GROUP.sub(repl="(?:", string=regex[i:], count=1)
         i -= 1
     return regex
 
@@ -1029,8 +1028,7 @@ class JobStats:
 class Comparable(Protocol):
     """Partial ordering protocol."""
 
-    def __lt__(self, other: Any) -> bool:  # pragma: no cover - behavior defined by implementer
-        ...
+    def __lt__(self, other: Any) -> bool: ...
 
 
 T = TypeVar("T", bound=Comparable)  # Generic type variable for elements stored in a SmallPriorityQueue

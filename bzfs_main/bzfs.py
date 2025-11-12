@@ -100,13 +100,6 @@ from bzfs_main.configuration import (
     Remote,
     SnapshotLabel,
 )
-from bzfs_main.connection import (
-    SHARED,
-    ConnectionPool,
-    MiniJob,
-    run_ssh_command,
-    timeout,
-)
 from bzfs_main.detect import (
     DISABLE_PRG,
     RemoteConfCacheItem,
@@ -133,12 +126,6 @@ from bzfs_main.parallel_batch_cmd import (
     run_ssh_cmd_parallel,
     zfs_list_snapshots_in_parallel,
 )
-from bzfs_main.parallel_iterator import (
-    run_in_parallel,
-)
-from bzfs_main.parallel_tasktree_policy import (
-    process_datasets_in_parallel_and_fault_tolerant,
-)
 from bzfs_main.progress_reporter import (
     ProgressReporter,
     count_num_bytes_transferred_by_zfs_send,
@@ -149,17 +136,31 @@ from bzfs_main.replication import (
     delete_snapshots,
     replicate_dataset,
 )
-from bzfs_main.retry import (
-    Retry,
-    RetryableError,
-)
 from bzfs_main.snapshot_cache import (
     MONITOR_CACHE_FILE_PREFIX,
     REPLICATION_CACHE_FILE_PREFIX,
     SnapshotCache,
     set_last_modification_time_safe,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.connection import (
+    SHARED,
+    ConnectionPool,
+    MiniJob,
+    MiniRemote,
+    run_ssh_command,
+    timeout,
+)
+from bzfs_main.util.parallel_iterator import (
+    run_in_parallel,
+)
+from bzfs_main.util.parallel_tasktree_policy import (
+    process_datasets_in_parallel_and_fault_tolerant,
+)
+from bzfs_main.util.retry import (
+    Retry,
+    RetryableError,
+)
+from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
     DIE_STATUS,
     DONT_SKIP_DATASET,
@@ -1577,7 +1578,7 @@ class Job(MiniJob):
 
     def run_ssh_command(
         self,
-        remote: Remote,
+        remote: MiniRemote,
         loglevel: int = logging.INFO,
         is_dry: bool = False,
         check: bool = True,
@@ -1601,7 +1602,7 @@ class Job(MiniJob):
 
     def try_ssh_command(
         self,
-        remote: Remote,
+        remote: MiniRemote,
         loglevel: int,
         is_dry: bool = False,
         print_stdout: bool = False,

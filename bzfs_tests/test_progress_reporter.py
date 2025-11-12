@@ -60,7 +60,7 @@ from bzfs_main.progress_reporter import (
     State,
     count_num_bytes_transferred_by_zfs_send,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     tail,
 )
 from bzfs_tests.tools import (

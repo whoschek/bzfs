@@ -62,11 +62,11 @@ from bzfs_main.replication import (
     _zfs_set,
     replicate_dataset,
 )
-from bzfs_main.retry import (
+from bzfs_main.util.retry import (
     Retry,
     RetryableError,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     LOG_DEBUG,
     SynchronizedBool,
     compile_regexes,

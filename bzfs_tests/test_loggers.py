@@ -54,7 +54,7 @@ from bzfs_main.loggers import (
     reset_logger,
     set_logging_runtime_defaults,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIE_STATUS,
     LOG_STDERR,
     LOG_STDOUT,

@@ -39,7 +39,7 @@ from typing import (
     Final,
 )
 
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     LOG_STDERR,
     LOG_STDOUT,
     LOG_TRACE,

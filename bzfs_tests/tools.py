@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Various small tools for use in tests; Everything in this module relies only on the standard library so other modules
-remain dependency free."""
+"""Various small tools for use in tests; Everything in this module relies only on the Python standard library so other
+modules remain dependency free."""
 
 from __future__ import (
     annotations,

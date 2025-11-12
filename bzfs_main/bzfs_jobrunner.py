@@ -69,8 +69,6 @@ from typing import (
 )
 
 import bzfs_main.argparse_actions
-import bzfs_main.check_range
-import bzfs_main.utils
 from bzfs_main import (
     bzfs,
 )
@@ -85,13 +83,17 @@ from bzfs_main.loggers import (
     reset_logger,
     set_logging_runtime_defaults,
 )
-from bzfs_main.parallel_tasktree import (
+from bzfs_main.util import (
+    check_range,
+    utils,
+)
+from bzfs_main.util.parallel_tasktree import (
     BARRIER_CHAR,
 )
-from bzfs_main.parallel_tasktree_policy import (
+from bzfs_main.util.parallel_tasktree_policy import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIE_STATUS,
     LOG_TRACE,
     UMASK,
@@ -107,7 +109,7 @@ from bzfs_main.utils import (
     terminate_process_subtree,
     termination_signal_handler,
 )
-from bzfs_main.utils import PROG_NAME as BZFS_PROG_NAME
+from bzfs_main.util.utils import PROG_NAME as BZFS_PROG_NAME
 
 # constants:
 PROG_NAME: Final[str] = "bzfs_jobrunner"
@@ -371,7 +373,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             help=f"Remote SSH username on {loc} hosts to connect to (optional). Examples: 'root', 'alice'.\n\n")
     for loc in locations:
         parser.add_argument(
-            f"--ssh-{loc}-port", type=int, min=1, max=65535, action=bzfs_main.check_range.CheckRange, metavar="INT",
+            f"--ssh-{loc}-port", type=int, min=1, max=65535, action=check_range.CheckRange, metavar="INT",
             help=f"Remote SSH port on {loc} host to connect to (optional).\n\n")
     for loc in locations:
         parser.add_argument(
@@ -404,7 +406,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many parallel jobs as "
              "there are cores on the machine; 75%% uses num_procs = num_cores * 0.75. Examples: 1, 4, 75%%, 150%%\n\n")
     parser.add_argument(
-        "--work-period-seconds", type=float, min=0, default=0, action=bzfs_main.check_range.CheckRange, metavar="FLOAT",
+        "--work-period-seconds", type=float, min=0, default=0, action=check_range.CheckRange, metavar="FLOAT",
         help="Reduces bandwidth spikes by spreading out the start of worker jobs over this much time; "
              "0 disables this feature (default: %(default)s). Examples: 0, 60, 86400\n\n")
     parser.add_argument(
@@ -412,7 +414,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Randomize job start time and host order to avoid potential thundering herd problems in large distributed "
              "systems (optional). Randomizing job start time is only relevant if --work-period-seconds > 0.\n\n")
     parser.add_argument(
-        "--worker-timeout-seconds", type=float, min=0.001, default=None, action=bzfs_main.check_range.CheckRange,
+        "--worker-timeout-seconds", type=float, min=0.001, default=None, action=check_range.CheckRange,
         metavar="FLOAT",
         help="If this much time has passed after a worker process has started executing, kill the straggling worker "
              "(optional). Other workers remain unaffected. Examples: 60, 3600\n\n")
@@ -638,7 +640,7 @@ class Job:
             root_dataset = root_dataset.replace(SRC_MAGIC_SUBSTITUTION_TOKEN, src_host)
             root_dataset = root_dataset.replace(DST_MAGIC_SUBSTITUTION_TOKEN, dst_hostname)
             resolved_dst_dataset: str = f"{root_dataset}/{dst_dataset}" if root_dataset else dst_dataset
-            bzfs_main.utils.validate_dataset_name(resolved_dst_dataset, dst_dataset)
+            utils.validate_dataset_name(resolved_dst_dataset, dst_dataset)
             return resolve_dataset(dst_hostname, resolved_dst_dataset, is_src=False)
 
         for src_host in src_hosts:
@@ -1203,7 +1205,7 @@ class Job:
     def die(self, msg: str) -> NoReturn:
         """Log ``msg`` and exit the program."""
         self.log.error("%s", msg)
-        bzfs_main.utils.die(msg)
+        utils.die(msg)
 
     def get_localhost_ips(self) -> set[str]:
         """Returns all network addresses of the local host, i.e. all configured addresses on all network interfaces, without

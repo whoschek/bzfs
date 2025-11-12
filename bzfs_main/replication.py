@@ -48,13 +48,6 @@ from typing import (
 from bzfs_main.argparse_actions import (
     has_timerange_filter,
 )
-from bzfs_main.connection import (
-    DEDICATED,
-    SHARED,
-    ConnectionPool,
-    refresh_ssh_connection_if_necessary,
-    timeout,
-)
 from bzfs_main.detect import (
     ZFS_VERSION_IS_AT_LEAST_2_1_0,
     ZFS_VERSION_IS_AT_LEAST_2_2_0,
@@ -72,18 +65,25 @@ from bzfs_main.parallel_batch_cmd import (
     run_ssh_cmd_batched,
     run_ssh_cmd_parallel,
 )
-from bzfs_main.parallel_iterator import (
-    parallel_iterator,
-    run_in_parallel,
-)
 from bzfs_main.progress_reporter import (
     PV_FILE_THREAD_SEPARATOR,
 )
-from bzfs_main.retry import (
+from bzfs_main.util.connection import (
+    DEDICATED,
+    SHARED,
+    ConnectionPool,
+    refresh_ssh_connection_if_necessary,
+    timeout,
+)
+from bzfs_main.util.parallel_iterator import (
+    parallel_iterator,
+    run_in_parallel,
+)
+from bzfs_main.util.retry import (
     Retry,
     RetryableError,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DONT_SKIP_DATASET,
     FILE_PERMISSIONS,
     LOG_DEBUG,

@@ -38,7 +38,7 @@ from unittest.mock import (
     MagicMock,
 )
 
-from bzfs_main.parallel_tasktree import (
+from bzfs_main.util.parallel_tasktree import (
     BARRIER_CHAR,
     CompletionCallback,
     CompletionCallbackResult,
@@ -49,7 +49,7 @@ from bzfs_main.parallel_tasktree import (
     _TreeNode,
     process_datasets_in_parallel,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     SortedInterner,
     SynchronousExecutor,
 )

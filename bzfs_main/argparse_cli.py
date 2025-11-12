@@ -37,9 +37,6 @@ from bzfs_main.argparse_actions import (
     SSHConfigFileNameAction,
     TimeRangeAndRankRangeAction,
 )
-from bzfs_main.check_range import (
-    CheckRange,
-)
 from bzfs_main.detect import (
     DISABLE_PRG,
     DUMMY_DATASET,
@@ -47,7 +44,10 @@ from bzfs_main.detect import (
 from bzfs_main.period_anchors import (
     PeriodAnchors,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.check_range import (
+    CheckRange,
+)
+from bzfs_main.util.utils import (
     ENV_VAR_PREFIX,
     PROG_NAME,
     format_dict,

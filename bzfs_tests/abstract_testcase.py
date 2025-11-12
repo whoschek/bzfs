@@ -33,6 +33,8 @@ from bzfs_main import (
     argparse_cli,
     bzfs,
     configuration,
+)
+from bzfs_main.util import (
     utils,
 )
 

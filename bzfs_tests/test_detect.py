@@ -36,15 +36,15 @@ from bzfs_main import (
 from bzfs_main.configuration import (
     Remote,
 )
-from bzfs_main.connection import (
-    DEDICATED,
-    SHARED,
-    ConnectionPools,
-)
 from bzfs_main.detect import (
     RemoteConfCacheItem,
     _validate_default_shell,
     detect_available_programs,
+)
+from bzfs_main.util.connection import (
+    DEDICATED,
+    SHARED,
+    ConnectionPools,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,

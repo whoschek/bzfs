@@ -57,16 +57,17 @@ from typing import (
     TypeVar,
 )
 
-from bzfs_main.connection import (
+from bzfs_main.util.connection import (
     SHARED,
     ConnectionPool,
+    MiniRemote,
 )
-from bzfs_main.parallel_iterator import (
+from bzfs_main.util.parallel_iterator import (
     batch_cmd_iterator,
     get_max_command_line_bytes,
     parallel_iterator,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     LOG_TRACE,
     drain,
 )
@@ -75,16 +76,13 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import (
         Job,
     )
-    from bzfs_main.configuration import (
-        Remote,
-    )
 
 T = TypeVar("T")
 
 
 def run_ssh_cmd_batched(
     job: Job,
-    r: Remote,
+    r: MiniRemote,
     cmd: list[str],
     cmd_args: Iterable[str],
     fn: Callable[[list[str]], Any],
@@ -97,7 +95,7 @@ def run_ssh_cmd_batched(
 
 def itr_ssh_cmd_batched(
     job: Job,
-    r: Remote,
+    r: MiniRemote,
     cmd: list[str],
     cmd_args: Iterable[str],
     fn: Callable[[list[str]], T],
@@ -111,7 +109,7 @@ def itr_ssh_cmd_batched(
 
 def run_ssh_cmd_parallel(
     job: Job,
-    r: Remote,
+    r: MiniRemote,
     cmd_args_list: Iterable[tuple[list[str], Iterable[str]]],
     fn: Callable[[list[str], list[str]], Any],
     max_batch_items: int = 2**29,
@@ -122,7 +120,7 @@ def run_ssh_cmd_parallel(
 
 def itr_ssh_cmd_parallel(
     job: Job,
-    r: Remote,
+    r: MiniRemote,
     cmd_args_list: Iterable[tuple[list[str], Iterable[str]]],
     fn: Callable[[list[str], list[str]], T],
     max_batch_items: int = 2**29,
@@ -147,7 +145,7 @@ def itr_ssh_cmd_parallel(
 
 
 def zfs_list_snapshots_in_parallel(
-    job: Job, r: Remote, cmd: list[str], datasets: list[str], ordered: bool = True
+    job: Job, r: MiniRemote, cmd: list[str], datasets: list[str], ordered: bool = True
 ) -> Iterator[list[str]]:
     """Runs 'zfs list -t snapshot' on multiple datasets at the same time.
 
@@ -172,7 +170,7 @@ def zfs_list_snapshots_in_parallel(
     )
 
 
-def _max_batch_bytes(job: Job, r: Remote, cmd: list[str], sep: str) -> int:
+def _max_batch_bytes(job: Job, r: MiniRemote, cmd: list[str], sep: str) -> int:
     """Avoids creating a cmdline that's too big for the OS to handle.
 
     The calculation subtracts 'header_bytes', which accounts for the full SSH invocation (including control socket/options)

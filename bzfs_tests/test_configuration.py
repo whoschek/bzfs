@@ -43,7 +43,7 @@ from bzfs_main.configuration import (
     Remote,
     SnapshotLabel,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     UNIX_TIME_INFINITY_SECS,
 )
 from bzfs_tests.abstract_testcase import (

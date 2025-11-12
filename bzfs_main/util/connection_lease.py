@@ -87,7 +87,7 @@ from typing import (
     NamedTuple,
 )
 
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     LOG_TRACE,

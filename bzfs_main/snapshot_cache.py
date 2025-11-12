@@ -141,7 +141,7 @@ from typing import (
 from bzfs_main.parallel_batch_cmd import (
     itr_ssh_cmd_parallel,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     LOG_TRACE,
     SortedInterner,

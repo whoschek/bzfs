@@ -26,7 +26,7 @@ from concurrent.futures import (
     Future,
 )
 
-from bzfs_main.parallel_iterator import (
+from bzfs_main.util.parallel_iterator import (
     parallel_iterator,
     parallel_iterator_results,
 )

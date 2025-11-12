@@ -43,14 +43,12 @@ from logging import (
     Logger,
 )
 from typing import (
-    TYPE_CHECKING,
     Final,
     Literal,
     NamedTuple,
     cast,
 )
 
-import bzfs_main.utils
 from bzfs_main.argparse_actions import (
     SnapshotFilter,
     optimize_snapshot_filters,
@@ -62,25 +60,31 @@ from bzfs_main.argparse_cli import (
     ZFS_RECV_O_INCLUDE_REGEX_DEFAULT,
     __version__,
 )
-from bzfs_main.connection import (
-    MiniParams,
-    MiniRemote,
-)
 from bzfs_main.detect import (
     DISABLE_PRG,
+)
+from bzfs_main.filter import (
+    SNAPSHOT_FILTERS_VAR,
 )
 from bzfs_main.period_anchors import (
     PeriodAnchors,
 )
-from bzfs_main.retry import (
+from bzfs_main.util import (
+    utils,
+)
+from bzfs_main.util.connection import (
+    ConnectionPools,
+    MiniParams,
+    MiniRemote,
+)
+from bzfs_main.util.retry import (
     RetryPolicy,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     PROG_NAME,
     SHELL_CHARS,
-    SNAPSHOT_FILTERS_VAR,
     UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH,
     UNIX_TIME_INFINITY_SECS,
     RegexList,
@@ -109,11 +113,6 @@ from bzfs_main.utils import (
     validate_property_name,
     xappend,
 )
-
-if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.connection import (
-        ConnectionPools,
-    )
 
 # constants:
 HOME_DIRECTORY: Final[str] = get_home_directory()
@@ -482,7 +481,7 @@ class Params(MiniParams):
 
     def dry(self, msg: str) -> str:
         """Prefix ``msg`` with 'Dry' when running in dry-run mode."""
-        return bzfs_main.utils.dry(msg, self.dry_run)
+        return utils.dry(msg, self.dry_run)
 
     def is_program_available(self, program: str, location: str) -> bool:
         """Return True if ``program`` was detected on ``location`` host."""

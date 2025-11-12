@@ -30,13 +30,13 @@ from bzfs_main import (
 from bzfs_main.configuration import (
     Remote,
 )
-from bzfs_main.connection import (
+from bzfs_main.parallel_batch_cmd import (
+    itr_ssh_cmd_parallel,
+)
+from bzfs_main.util.connection import (
     DEDICATED,
     SHARED,
     ConnectionPools,
-)
-from bzfs_main.parallel_batch_cmd import (
-    itr_ssh_cmd_parallel,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,

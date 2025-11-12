@@ -49,10 +49,10 @@ from bzfs_main.filter import (
 from bzfs_main.parallel_batch_cmd import (
     zfs_list_snapshots_in_parallel,
 )
-from bzfs_main.parallel_iterator import (
+from bzfs_main.util.parallel_iterator import (
     run_in_parallel,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     Interner,

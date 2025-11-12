@@ -47,23 +47,25 @@ from unittest.mock import (
 
 from bzfs_main import (
     bzfs,
-    connection,
 )
 from bzfs_main.configuration import (
     Params,
     Remote,
 )
-from bzfs_main.connection import (
+from bzfs_main.util import (
+    connection,
+)
+from bzfs_main.util.connection import (
     DEDICATED,
     SHARED,
     Connection,
     ConnectionPool,
     ConnectionPools,
 )
-from bzfs_main.retry import (
+from bzfs_main.util.retry import (
     RetryableError,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     LOG_TRACE,
 )
 from bzfs_tests.abstract_testcase import (
@@ -453,15 +455,15 @@ class TestRunSshCommand(AbstractTestCase):
         pool_wrapper = MagicMock(pool=MagicMock(return_value=self.conn_pool))
         self.job.params.connection_pools = {"dst": pool_wrapper}
 
-    @patch("bzfs_main.utils.Subprocesses.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_dry_run_skips_execution(self, mock_run: MagicMock) -> None:
         result = self.job.run_ssh_command(self.remote, cmd=["ls"], is_dry=True)
         self.assertEqual("", result)
         mock_run.assert_not_called()
         self.conn_pool.connection.assert_called_once()
 
-    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
-    @patch("bzfs_main.utils.Subprocesses.subprocess_run")
+    @patch("bzfs_main.util.connection.refresh_ssh_connection_if_necessary")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_remote_calls_refresh_and_executes(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "host"
         mock_run.return_value = MagicMock(stdout="out", stderr="err")
@@ -471,9 +473,9 @@ class TestRunSshCommand(AbstractTestCase):
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
-    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @patch("bzfs_main.util.connection.refresh_ssh_connection_if_necessary")
     @patch(
-        "bzfs_main.utils.Subprocesses.subprocess_run",
+        "bzfs_main.util.utils.Subprocesses.subprocess_run",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", output="o", stderr="e"),
     )
     def test_calledprocesserror_propagates(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
@@ -483,9 +485,9 @@ class TestRunSshCommand(AbstractTestCase):
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
-    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @patch("bzfs_main.util.connection.refresh_ssh_connection_if_necessary")
     @patch(
-        "bzfs_main.utils.Subprocesses.subprocess_run",
+        "bzfs_main.util.utils.Subprocesses.subprocess_run",
         side_effect=subprocess.TimeoutExpired(cmd="cmd", timeout=1),
     )
     def test_timeout_expired_propagates(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
@@ -495,9 +497,9 @@ class TestRunSshCommand(AbstractTestCase):
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
-    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @patch("bzfs_main.util.connection.refresh_ssh_connection_if_necessary")
     @patch(
-        "bzfs_main.utils.Subprocesses.subprocess_run",
+        "bzfs_main.util.utils.Subprocesses.subprocess_run",
         side_effect=UnicodeDecodeError("utf-8", b"x", 0, 1, "boom"),
     )
     def test_unicode_error_propagates_without_logging(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
@@ -582,39 +584,39 @@ class TestRefreshSshConnection(AbstractTestCase):
         self.conn = connection.Connection(self.remote, 1, 0)
         self.conn.last_refresh_time = 0
 
-    @patch("bzfs_main.utils.Subprocesses.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_local_mode_returns_immediately(self, mock_run: MagicMock) -> None:
         self.remote.ssh_user_host = ""
         connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_not_called()
 
-    @patch("bzfs_main.connection.die", side_effect=SystemExit)
+    @patch("bzfs_main.util.connection.die", side_effect=SystemExit)
     def test_ssh_unavailable_dies(self, mock_die: MagicMock) -> None:
         self.job.params.is_program_available = MagicMock(return_value=False)  # type: ignore[method-assign]
         with self.assertRaises(SystemExit):
             connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_die.assert_called_once()
 
-    @patch("bzfs_main.utils.Subprocesses.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_reuse_disabled_no_action(self, mock_run: MagicMock) -> None:
         self.remote.reuse_ssh_connection = False
         connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_not_called()
 
-    @patch("bzfs_main.utils.Subprocesses.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_connection_alive_fast_path(self, mock_run: MagicMock) -> None:
         self.conn.last_refresh_time = time.monotonic_ns()
         connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_not_called()
 
-    @patch("bzfs_main.utils.Subprocesses.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_master_alive_refreshes_timestamp(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_called_once()
         self.assertGreater(self.conn.last_refresh_time, 0)
 
-    @patch("bzfs_main.utils.Subprocesses.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_master_start_failure_is_retryable(self, mock_run: MagicMock) -> None:
         # First call: '-O check' returns non-zero, indicating master not alive.
         # Second call: starting master with check=True raises CalledProcessError.
@@ -625,7 +627,7 @@ class TestRefreshSshConnection(AbstractTestCase):
         with self.assertRaises(RetryableError):
             connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
 
-    @patch("bzfs_main.utils.Subprocesses.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_verbose_option_limits_persist_time(self, mock_run: MagicMock) -> None:
         self.remote.ssh_extra_opts = ["-v"]
         mock_run.side_effect = [MagicMock(returncode=1), MagicMock(returncode=0)]
@@ -633,8 +635,8 @@ class TestRefreshSshConnection(AbstractTestCase):
         args = mock_run.call_args_list[1][0][0]
         self.assertIn("-oControlPersist=1s", args)
 
-    @patch("bzfs_main.connection_lease.ConnectionLease.set_socket_mtime_to_now")
-    @patch("bzfs_main.utils.Subprocesses.subprocess_run")
+    @patch("bzfs_main.util.connection_lease.ConnectionLease.set_socket_mtime_to_now")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_mtime_now_invoked_when_connection_lease_present(self, mock_run: MagicMock, mock_utime: MagicMock) -> None:
         """Ensures set_socket_mtime_to_now() is called when a Connection has a lease (socket path).
 
@@ -667,8 +669,8 @@ class TestRefreshSshConnection(AbstractTestCase):
             finally:
                 conn.shutdown("test", self.job.params)
 
-    @patch("bzfs_main.connection_lease.ConnectionLease.set_socket_mtime_to_now")
-    @patch("bzfs_main.utils.Subprocesses.subprocess_run")
+    @patch("bzfs_main.util.connection_lease.ConnectionLease.set_socket_mtime_to_now")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_mtime_now_not_invoked_when_no_connection_lease(self, mock_run: MagicMock, mock_utime: MagicMock) -> None:
         """Ensures set_socket_mtime_to_now() is not called when a Connection has no lease (lease is None)."""
         mock_run.return_value = MagicMock(returncode=0)
@@ -754,7 +756,7 @@ class TestDecrementInjectionCounter(AbstractTestCase):
 #############################################################################
 class TestSshExitOnShutdown(AbstractTestCase):
 
-    @patch("bzfs_main.connection.subprocess.run")
+    @patch("bzfs_main.util.connection.subprocess.run")
     def test_ssh_exit_on_shutdown_true_triggers_exit(self, mock_run: MagicMock) -> None:
         """Purpose: Validate that when ``--ssh-exit-on-shutdown`` is enabled, the connection shutdown triggers an SSH
         ControlMaster administrative ``-O exit`` request, asking the master to terminate immediately once idle.
@@ -789,7 +791,7 @@ class TestSshExitOnShutdown(AbstractTestCase):
         self.assertIn("-O", argv)
         self.assertIn("exit", argv)
 
-    @patch("bzfs_main.connection.subprocess.run")
+    @patch("bzfs_main.util.connection.subprocess.run")
     def test_ssh_exit_on_shutdown_false_skips_exit(self, mock_run: MagicMock) -> None:
         """Purpose: Ensure that the default behavior, and explicit disabling of immediate exit, avoids sending the
         ``-O exit`` administrative command to an SSH ControlMaster during shutdown. Reusable masters should persist to

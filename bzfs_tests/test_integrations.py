@@ -64,12 +64,10 @@ from unittest.mock import (
 )
 
 import bzfs_main.replication
-import bzfs_main.utils
 from bzfs_main import (
     argparse_cli,
     bzfs,
     bzfs_jobrunner,
-    utils,
 )
 from bzfs_main.configuration import (
     LogParams,
@@ -87,7 +85,10 @@ from bzfs_main.parallel_batch_cmd import (
 from bzfs_main.replication import (
     INJECT_DST_PIPE_FAIL_KBYTES,
 )
-from bzfs_main.utils import (
+from bzfs_main.util import (
+    utils,
+)
+from bzfs_main.util.utils import (
     DIE_STATUS,
     ENV_VAR_PREFIX,
     find_match,
@@ -95,6 +96,7 @@ from bzfs_main.utils import (
     getenv_any,
     getenv_bool,
     human_readable_duration,
+    replace_prefix,
     unixtime_fromisoformat,
 )
 from bzfs_tests.abstract_testcase import (
@@ -2272,8 +2274,7 @@ class LocalTestCase(IntegrationTestCase):
             with stop_on_failure_subtest(i=i):
                 src_datasets = zfs_list([src_root_dataset], types=["filesystem", "volume"], max_depth=None)
                 dst_datasets = [
-                    bzfs_main.utils.replace_prefix(src_dataset, src_root_dataset, dst_root_dataset)
-                    for src_dataset in src_datasets
+                    replace_prefix(src_dataset, src_root_dataset, dst_root_dataset) for src_dataset in src_datasets
                 ]
                 opts = [elem for pair in zip(src_datasets, dst_datasets) for elem in pair]
                 self.run_bzfs(*opts, dry_run=(i == 0))

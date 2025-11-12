@@ -24,11 +24,13 @@ from unittest.mock import (
     patch,
 )
 
-import bzfs_main.utils
 from bzfs_main import (
     argparse_actions,
 )
-from bzfs_main.check_range import (
+from bzfs_main.filter import (
+    SNAPSHOT_FILTERS_VAR,
+)
+from bzfs_main.util.check_range import (
     CheckRange,
 )
 from bzfs_tests.abstract_testcase import (
@@ -176,11 +178,11 @@ class TestNewSnapshotFilterGroupAction(AbstractTestCase):
 
     def test_basic0(self) -> None:
         args = self.parser.parse_args(["--new-snapshot-filter-group"])
-        self.assertListEqual([[]], getattr(args, bzfs_main.utils.SNAPSHOT_FILTERS_VAR))
+        self.assertListEqual([[]], getattr(args, SNAPSHOT_FILTERS_VAR))
 
     def test_basic1(self) -> None:
         args = self.parser.parse_args(["--new-snapshot-filter-group", "--new-snapshot-filter-group"])
-        self.assertListEqual([[]], getattr(args, bzfs_main.utils.SNAPSHOT_FILTERS_VAR))
+        self.assertListEqual([[]], getattr(args, SNAPSHOT_FILTERS_VAR))
 
 
 ###############################################################################

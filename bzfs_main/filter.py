@@ -33,7 +33,7 @@ from typing import (
     Union,
 )
 
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DONT_SKIP_DATASET,
     LOG_DEBUG,
     LOG_TRACE,
@@ -56,6 +56,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 # constants:
 SNAPSHOT_REGEX_FILTER_NAME: Final[str] = "snapshot_regex"
 SNAPSHOT_REGEX_FILTER_NAMES: Final[frozenset[str]] = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
+SNAPSHOT_FILTERS_VAR: Final[str] = "snapshot_filters_var"
 
 
 UnixTimeRange = Optional[tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
