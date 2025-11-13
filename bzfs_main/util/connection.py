@@ -19,7 +19,7 @@ Can be configured to reuse multiplexed SSH connections for low latency, even on 
 ballpark 3-5ms total time for running `/bin/echo hello` end-to-end over SSH on LAN, which requires two (sequential) network
 round trips (one for CHANNEL_OPEN, plus a subsequent one for CHANNEL_REQUEST).
 Requires the standard OpenSSH client CLI (`ssh`) to be installed. Also works with `hpnssh`. The latter uses larger TCP window
-sizes for best throughput over high speed long distance networks.
+sizes for best throughput over high speed long distance networks, aka paths with large bandwidth-delay product.
 
 Example usage:
 
@@ -252,12 +252,12 @@ def create_simple_mini_job(remote: MiniRemote, timeout_nanos: int | None = None)
     """Factory that returns a simple implementation of the MiniJob interface."""
 
     @dataclass(frozen=True)
-    class SimpleMiniJobImpl(MiniJob):
+    class SimpleMiniJob(MiniJob):
         params: MiniParams
-        timeout_nanos: int | None
+        timeout_nanos: int | None  # timestamp aka instant in time
         subprocesses: Subprocesses
 
-    return SimpleMiniJobImpl(params=remote.params, timeout_nanos=timeout_nanos, subprocesses=Subprocesses())
+    return SimpleMiniJob(params=remote.params, timeout_nanos=timeout_nanos, subprocesses=Subprocesses())
 
 
 #############################################################################
