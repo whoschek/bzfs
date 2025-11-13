@@ -880,6 +880,43 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
             f"Expected a log starting with 'Killing worker job', got {logs!r}",
         )
 
+    def test_termination_event_triggers_early_cancel_in_spawn_mode(self) -> None:
+        """When termination_event is set, spawned process should be terminated promptly, not after full timeout.
+
+        This covers a race where a termination sweep may miss a just-spawned child. The worker must observe the termination
+        event and proactively terminate its own subprocess to avoid hanging until timeout_secs elapses.
+        """
+        # Arrange a job with the event pre-set; patch Popen so we don't rely on real sleeps.
+        self.job.termination_event.set()
+
+        class _FakeProc:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.args = args
+                self.kwargs = kwargs
+                self.pid = 99999
+                self.returncode: int | None = None
+
+            def poll(self) -> int | None:
+                return self.returncode
+
+            def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+                return ("", "")
+
+            def terminate(self) -> None:
+                self.returncode = -signal.SIGTERM
+
+            def kill(self) -> None:
+                self.returncode = -signal.SIGKILL
+
+        start = time.monotonic()
+        with patch("bzfs_main.bzfs_jobrunner.subprocess.Popen", new=_FakeProc):
+            code, _logs = self.run_and_capture(["sleep", "600"], timeout_secs=10.0)
+        elapsed = time.monotonic() - start
+
+        # Assert we did not wait for the full timeout; should return very quickly (< 0.2s on CI).
+        self.assertLess(elapsed, 0.2, f"unexpected slow early-termination: {elapsed:.3f}s")
+        self.assertIn(code, (-signal.SIGTERM, -signal.SIGKILL))
+
 
 #############################################################################
 @patch("bzfs_main.bzfs_jobrunner.Job._bzfs_run_main")

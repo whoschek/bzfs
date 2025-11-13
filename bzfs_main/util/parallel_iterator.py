@@ -160,6 +160,8 @@ def parallel_iterator_results(
     if ordered:
         while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
             if termination_event.is_set():
+                for future in fifo_buffer:
+                    future.cancel()
                 return
             curr_future: Future[T] = fifo_buffer.popleft()
             next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
@@ -174,6 +176,8 @@ def parallel_iterator_results(
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
             while done_futures:  # submit the next CLI call whenever a CLI call returns
                 if termination_event.is_set():
+                    for future in todo_futures:
+                        future.cancel()
                     return
                 next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
                 if next_future is not sentinel:

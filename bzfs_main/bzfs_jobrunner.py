@@ -1051,10 +1051,16 @@ class Job:
         pid: int = proc.pid
         self.subprocesses.register_child_pid(pid)
         try:
-            proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
+            if self.termination_event.is_set():
+                timeout_secs = 1.0 if timeout_secs is None else timeout_secs
+                raise subprocess.TimeoutExpired(cmd, timeout_secs)  # do not wait for normal completion
+            proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to complete and exit normally
         except subprocess.TimeoutExpired:
             cmd_str = " ".join(cmd)
-            log.error("%s", f"Terminating worker job as it failed to complete within {timeout_secs}s: {cmd_str}")
+            if self.termination_event.is_set():
+                log.error("%s", f"Terminating worker job due to async termination request: {cmd_str}")
+            else:
+                log.error("%s", f"Terminating worker job as it failed to complete within {timeout_secs}s: {cmd_str}")
             proc.terminate()  # Sends SIGTERM signal to job subprocess
             assert isinstance(timeout_secs, float)
             timeout_secs = min(1.0, timeout_secs)
