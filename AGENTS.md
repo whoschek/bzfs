@@ -98,7 +98,10 @@ To validate your changes, you **must** follow this exact sequence:
    tools and pre-commit hooks run consistently.
 
 3. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite. If any test fails,
-   iteratively fix the code until all unit tests pass (unless a test is expected to fail by TDD design).
+   iteratively fix the code until all unit tests pass (unless a test is expected to fail by TDD design). **Never proceed
+   unless you SHOW PROOF with 100% reliability (without any shortcut whatsoever) that the test suite indeed exits with
+   zero exit code.** Spend time to make sure you get this check absolutely right because if you don't you endanger the
+   project and will immediately be replaced with a more reliable AI agent.
 
 4. **Stage Your Own Untracked Files (if any):** Run `git add <paths>` for the files **you** added or renamed, but
    exclude the files in `lab/` and `_tmp/` and the files the user or a third party added or renamed. This ensures that
@@ -107,7 +110,10 @@ To validate your changes, you **must** follow this exact sequence:
 
 5. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run all hooks specified in
    `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting with `ruff`, formatting with
-   `black`, type checking with `mypy`. Fix any reported issues and repeat until all hooks pass.
+   `black`, type checking with `mypy`. Fix any reported issues and repeat until all hooks pass. **Never proceed unless
+   you SHOW PROOF with 100% reliability (without any shortcut whatsoever) that the pre-commit command indeed exits with
+   zero exit code.** Spend time to make sure you get this check absolutely right because if you don't you endanger the
+   project and will immediately be replaced with a more reliable AI agent.
 
 6. **Update Documentation (if needed):** Run `./update_readme.sh` if you changed any `argparse` help text in `.py`
    files, to regenerate the README files.
@@ -188,9 +194,9 @@ Before committing any changes, you **must** follow this exact sequence:
   existing unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug"
   covered by a passing test indicates a flawed analysis.
 - **Use Tree of Thought with Verbalized Sampling for Non-trivial Bugs:** Simultaneously explore five completely distinct
-  promising approaches, with their corresponding numeric probabilities, sampled from the full distribution. Explain and
-  evaluate the pros/cons of each approach. Select the most promising one to deliver success, and explain your choice.
-  Perform a thorough root cause analysis.
+  promising approaches, and include their corresponding numeric probabilities in your response, sampled from the full
+  distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver success, and explain
+  your choice. Perform a thorough root cause analysis.
 - **Test First, Then Fix:** Use TDD: You **must** follow the sequence of steps described above in
   [Core Software Development Workflow](#core-software-development-workflow).
 
@@ -209,6 +215,10 @@ Before committing any changes, you **must** follow this exact sequence:
 - **docstrings:** For every module, class, function, or method you **add or semantically modify**, attach a docstring ≤
   80 words that concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this implementation was
   chosen).
+- **Do not add Historic Code Comments**: Never add code comments that explain how your change relates to the state
+  before the change. For example, never add code comments that mention what you added or deleted or changed. Instead,
+  formulate code comments such that they are useful to readers who care about the current version but do not know or
+  care about prior versions.
 - **Linter Suppressions: Last Resort Only:**
   - Do not add `# noqa:`, `# type:` annotations, etc, unless the linter cannot be satisfied in a reasonable way, in
     which case keep the annotation on the specific line and append a brief comment explaining the reason (≤ 10 words).
@@ -221,9 +231,9 @@ Your goal is to improve quality with zero functional regressions.
   summarizing the intended actions and changes, chosen tool, and validation steps.
 
 - **Tree of Thought with Verbalized Sampling:** Simultaneously explore five completely distinct promising approaches,
-  with their corresponding numeric probabilities, sampled from the full distribution. Explain and evaluate the pros/cons
-  of each approach. Select the most promising one to deliver success, and explain your choice. Then methodically execute
-  each step of your plan.
+  and include their corresponding numeric probabilities in your response, sampled from the full distribution. Evaluate
+  the pros/cons of each approach. Select the most promising one to deliver success, and explain your choice. Then
+  methodically execute each step of your plan.
 
 - **Preserve Public APIs:** Do not change CLI options.
 
