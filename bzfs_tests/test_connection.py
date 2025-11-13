@@ -412,9 +412,10 @@ class TestSimpleMiniRemote(AbstractTestCase):
         self.log = MagicMock(logging.Logger)
 
     def test_init_builds_expected_options_defaults(self) -> None:
-        r = connection.SimpleMiniRemote(log=self.log, ssh_user_host="")
-        self.assertListEqual(
-            ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T", "-c", "^aes256-gcm@openssh.com"], r.ssh_extra_opts
+        r = connection.create_simple_mini_remote(log=self.log, ssh_user_host="")
+        self.assertEqual(
+            ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T", "-c", "^aes256-gcm@openssh.com"],
+            list(r.ssh_extra_opts),
         )
         # SimpleMiniRemote always disables immediate master exit on shutdown
         self.assertFalse(r.ssh_exit_on_shutdown)
@@ -425,7 +426,7 @@ class TestSimpleMiniRemote(AbstractTestCase):
         with get_tmpdir() as tmpdir:
             with tempfile.NamedTemporaryFile(dir=tmpdir, delete=False) as cfg:
                 cfg_path = cfg.name
-            r = connection.SimpleMiniRemote(
+            r = connection.create_simple_mini_remote(
                 log=self.log,
                 ssh_user_host="user@host",
                 ssh_port=2222,
@@ -448,7 +449,7 @@ class TestSimpleMiniRemote(AbstractTestCase):
                 "-p",
                 "2222",
             ]
-            self.assertEqual(expected_prefix, r.ssh_extra_opts)
+            self.assertEqual(expected_prefix, list(r.ssh_extra_opts))
             # cache namespace includes user@host, port and cfg hash
             expected_hash = sha256_urlsafe_base64(os.path.abspath(cfg_path), padding=False)
             self.assertEqual(f"user@host#2222#{expected_hash}", r.cache_namespace())
@@ -463,7 +464,7 @@ class TestSimpleMiniRemote(AbstractTestCase):
 
     def test_init_with_custom_extra_opts_is_copied(self) -> None:
         custom = ["-K"]
-        r = connection.SimpleMiniRemote(
+        r = connection.create_simple_mini_remote(
             log=self.log,
             ssh_user_host="user@h",
             ssh_extra_opts=custom,
@@ -472,11 +473,11 @@ class TestSimpleMiniRemote(AbstractTestCase):
         )
         # The instance copies and extends the provided list, leaving the caller's list untouched.
         self.assertIsNot(custom, r.ssh_extra_opts)
-        self.assertListEqual(["-K", "-v", "-c", "^aes256-gcm@openssh.com"], r.ssh_extra_opts)
+        self.assertEqual(["-K", "-v", "-c", "^aes256-gcm@openssh.com"], list(r.ssh_extra_opts))
         self.assertListEqual(["-K"], custom)
 
     def test_no_cipher_no_config_no_port(self) -> None:
-        r = connection.SimpleMiniRemote(
+        r = connection.create_simple_mini_remote(
             log=self.log,
             ssh_user_host="user@h",
             ssh_cipher="",  # do not include -c
@@ -489,18 +490,41 @@ class TestSimpleMiniRemote(AbstractTestCase):
         self.assertNotIn("-p", opts)
         self.assertEqual("user@h##", r.cache_namespace())
 
-    def test_invalid_parameters_raise_assertions(self) -> None:
+    def test_invalid_parameters_raise_valueerror(self) -> None:
         # ssh_control_persist_secs must be >= 1
-        with self.assertRaises(AssertionError):
-            connection.SimpleMiniRemote(log=self.log, ssh_control_persist_secs=0)
+        with self.assertRaises(ValueError):
+            connection.create_simple_mini_remote(log=self.log, ssh_control_persist_secs=0)
         # location must be 'src' or 'dst'
-        with self.assertRaises(AssertionError):
-            connection.SimpleMiniRemote(log=self.log, location="invalid")
+        with self.assertRaises(ValueError):
+            connection.create_simple_mini_remote(log=self.log, location="invalid")
+
+    def test_invalid_ssh_program_raises_valueerror(self) -> None:
+        with self.assertRaises(ValueError):
+            connection.create_simple_mini_remote(log=self.log, ssh_user_host="user@h", ssh_program="")
+
+    def test_none_log_raises_valueerror(self) -> None:
+        with self.assertRaises(ValueError):
+            connection.create_simple_mini_remote(log=cast(logging.Logger, None), ssh_user_host="user@h")
 
     def test_local_ssh_command_branching(self) -> None:
-        r = connection.SimpleMiniRemote(log=self.log, ssh_user_host="user@h", reuse_ssh_connection=False)
+        r = connection.create_simple_mini_remote(log=self.log, ssh_user_host="user@h", reuse_ssh_connection=False)
         # No -S because reuse is False
-        self.assertEqual([r.params.ssh_program] + r.ssh_extra_opts + ["user@h"], r.local_ssh_command("/tmp/s"))
+        self.assertEqual([r.params.ssh_program] + list(r.ssh_extra_opts) + ["user@h"], r.local_ssh_command("/tmp/s"))
+
+    def test_factory_method_round_trips_arguments(self) -> None:
+        r = connection.create_simple_mini_remote(
+            log=self.log,
+            ssh_user_host="user@host",
+            ssh_port=2222,
+            ssh_verbose=True,
+        )
+        self.assertEqual("user@host", r.ssh_user_host)
+        self.assertEqual(2222, cast(Any, r).ssh_port)
+
+    def test_simple_mini_params_is_program_available_always_true(self) -> None:
+        """Ensure SimpleMiniParams.is_program_available always reports True."""
+        r = connection.create_simple_mini_remote(log=self.log, ssh_user_host="user@host")
+        self.assertTrue(r.params.is_program_available("nonexistent_program", r.location))
 
 
 #############################################################################
@@ -508,8 +532,8 @@ class TestSimpleMiniJob(AbstractTestCase):
     """Smoke tests for SimpleMiniJob wiring to ensure attributes are set correctly."""
 
     def test_initialization_copies_params_and_timeout(self) -> None:
-        r = connection.SimpleMiniRemote(log=logging.getLogger(__name__), ssh_user_host="u@h")
-        j = connection.SimpleMiniJob(remote=r, timeout_nanos=123)
+        r = connection.create_simple_mini_remote(log=logging.getLogger(__name__), ssh_user_host="u@h")
+        j = connection.create_simple_mini_job(remote=r, timeout_nanos=123)
         self.assertIs(j.params, r.params)
         self.assertEqual(123, j.timeout_nanos)
         self.assertIsNotNone(j.subprocesses)
@@ -642,9 +666,12 @@ def make_fake_params() -> Params:
 
 #############################################################################
 class _FakeRemote(SimpleNamespace):
+    ssh_extra_opts: tuple[str, ...]
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        # Provide minimal attributes expected by Connection for lease acquisition.
+        if not hasattr(self, "ssh_extra_opts"):
+            self.ssh_extra_opts = ()
         if not hasattr(self, "ssh_socket_dir"):
             self.ssh_socket_dir = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX)
         if not hasattr(self, "ssh_control_persist_margin_secs"):
@@ -862,7 +889,7 @@ class TestRefreshSshConnection(AbstractTestCase):
 
     @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_verbose_option_limits_persist_time(self, mock_run: MagicMock) -> None:
-        self.remote.ssh_extra_opts = ["-v"]
+        self.remote.ssh_extra_opts = ("-v",)
         mock_run.side_effect = [MagicMock(returncode=1), MagicMock(returncode=0)]
         connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         args = mock_run.call_args_list[1][0][0]

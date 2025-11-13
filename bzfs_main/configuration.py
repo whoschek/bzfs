@@ -510,9 +510,10 @@ class Remote(MiniRemote):
         )
         self.ssh_cipher: Final[str] = p.validate_arg_str(args.ssh_cipher)
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
-        self.ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
+        ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
             ["-v"] if args.verbose >= 3 else []
         )
+        self.ssh_extra_opts: tuple[str, ...] = tuple(ssh_extra_opts)
         self.max_concurrent_ssh_sessions_per_tcp_connection: Final[int] = args.max_concurrent_ssh_sessions_per_tcp_connection
         self.ssh_exit_on_shutdown: bool = args.ssh_exit_on_shutdown
         self.ssh_control_persist_secs: int = args.ssh_control_persist_secs
@@ -554,7 +555,7 @@ class Remote(MiniRemote):
         p: Params = self.params
         if p.ssh_program == DISABLE_PRG:
             die("Cannot talk to remote host because ssh CLI is disabled.")
-        ssh_cmd: list[str] = [p.ssh_program] + self.ssh_extra_opts
+        ssh_cmd: list[str] = [p.ssh_program] + list(self.ssh_extra_opts)
         if self.ssh_config_file:
             ssh_cmd += ["-F", self.ssh_config_file]
         if self.ssh_cipher:

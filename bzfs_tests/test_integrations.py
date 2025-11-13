@@ -933,7 +933,7 @@ class TestSSHLatency(IntegrationTestCase):
         )
         p = self.make_params(args=args, log_params=log_params, log=log)
 
-        ssh_opts_list = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no"]
+        ssh_opts_list = list(p.src.ssh_extra_opts) + ["-oStrictHostKeyChecking=no"]
         ssh_opts_list += ["-S", os.path.join(p.src.ssh_exit_on_shutdown_socket_dir, "bzfs_test_ssh_socket")]
         ssh_opts_list += ["-p", cast(str, getenv_any("test_ssh_port", "22"))]
 

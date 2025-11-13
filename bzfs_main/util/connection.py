@@ -16,29 +16,30 @@
 ConnectionPool.
 
 Can be configured to reuse multiplexed SSH connections for low latency, even on fresh process startup, for example leading to
-ballpark ~5ms total time for running `echo hello` end-to-end over SSH.
-Designed to work with the standard OpenSSH CLI. Also works with `hpnssh`. The latter uses larger TCP window sizes for best
-throughput over high speed long distance networks.
+ballpark 3-5ms total time for running `/bin/echo hello` end-to-end over SSH on LAN, which requires two (sequential) network
+round trips (one for CHANNEL_OPEN, plus a subsequent one for CHANNEL_REQUEST).
+Requires the standard OpenSSH client CLI (`ssh`) to be installed. Also works with `hpnssh`. The latter uses larger TCP window
+sizes for best throughput over high speed long distance networks.
 
 Example usage:
 
 import argparse
 import logging
 import threading
-from bzfs_main.util.connection import SimpleMiniRemote, SimpleMiniJob, ConnectionPool, run_ssh_command
+from bzfs_main.util.connection import ConnectionPool, create_simple_mini_job, create_simple_mini_remote, run_ssh_command
 from bzfs_main.util.retry import RetryPolicy, run_with_retries
 
 log = logging.getLogger(__name__)
-remote = SimpleMiniRemote(log=log, ssh_user_host="alice@127.0.0.1")
-job = SimpleMiniJob(remote)
+remote = create_simple_mini_remote(log=log, ssh_user_host="alice@127.0.0.1")
+job = create_simple_mini_job(remote)
 conn_pool = ConnectionPool(remote, max_concurrent_ssh_sessions_per_tcp_connection=8, connpool_name="example")
 try:
     retry_policy = RetryPolicy(
         argparse.Namespace(
-            retries=3,
+            retries=10,
             retry_min_sleep_secs=0,
-            retry_initial_max_sleep_secs=0,
-            retry_max_sleep_secs=60,
+            retry_initial_max_sleep_secs=0.125,
+            retry_max_sleep_secs=30,
             retry_max_elapsed_secs=300,
         )
     )
@@ -67,6 +68,7 @@ import threading
 import time
 from collections.abc import (
     Iterator,
+    Sequence,
 )
 from dataclasses import (
     dataclass,
@@ -134,13 +136,13 @@ class MiniParams(Protocol):
 class MiniRemote(Protocol):
     """Minimal Remote interface used by the connections module; for loose coupling."""
 
-    location: str  # "src" or "dst"
     params: MiniParams
-    reuse_ssh_connection: bool
+    location: str  # "src" or "dst"
     ssh_user_host: str
+    ssh_extra_opts: tuple[str, ...]
+    reuse_ssh_connection: bool
     ssh_control_persist_secs: int
     ssh_control_persist_margin_secs: int
-    ssh_extra_opts: list[str]
     ssh_exit_on_shutdown: bool
     ssh_socket_dir: str
 
@@ -155,93 +157,107 @@ class MiniRemote(Protocol):
 
 
 #############################################################################
-class SimpleMiniJob(MiniJob):
-    """Simple implementation of MiniJob interface."""
+def create_simple_mini_remote(
+    log: logging.Logger,
+    ssh_user_host: str = "",  # option passed to `ssh` CLI
+    ssh_port: int | None = None,  # option passed to `ssh` CLI
+    ssh_extra_opts: Sequence[str] | None = None,  # optional args passed to `ssh` CLI
+    ssh_verbose: bool = False,  # option passed to `ssh` CLI
+    ssh_config_file: str = "",  # option passed to `ssh` CLI; example: /path/to/homedir/.ssh/config
+    ssh_cipher: str = "^aes256-gcm@openssh.com",  # option passed to `ssh` CLI
+    ssh_program: str = "ssh",  # name or path of executable; "hpnssh" is also valid
+    timeout_duration_nanos: int | None = None,  # duration (not a timestamp); for logging only
+    reuse_ssh_connection: bool = True,
+    ssh_control_persist_secs: int = 90,
+    ssh_control_persist_margin_secs: int = 2,
+    ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs"),
+    location: str = "dst",
+) -> MiniRemote:
+    """Factory that returns a simple implementation of the MiniRemote interface."""
 
-    def __init__(self, remote: MiniRemote, timeout_nanos: int | None = None) -> None:
-        self.params: MiniParams = remote.params
-        self.timeout_nanos: int | None = timeout_nanos  # timestamp aka instant in time
-        self.subprocesses: Subprocesses = Subprocesses()
-
-
-#############################################################################
-class SimpleMiniRemote(MiniRemote):
-    """Simple implementation of MiniRemote interface."""
-
-    def __init__(
-        self,
-        log: logging.Logger,
-        ssh_user_host: str = "",  # flag passed to `ssh` CLI
-        ssh_port: int | None = None,  # flag passed to `ssh` CLI
-        ssh_extra_opts: list[str] | None = None,  # optional CLI flags to be passed to `ssh` CLI
-        ssh_verbose: bool = False,  # flag passed to `ssh` CLI
-        ssh_config_file: str = "",  # e.g. /path/to/homedir/.ssh/config
-        ssh_cipher: str = "^aes256-gcm@openssh.com",  # flag passed to `ssh` CLI
-        ssh_program: str = "ssh",  # name or path of executable; "hpnssh" is also valid
-        timeout_duration_nanos: int | None = None,  # duration (not a timestamp); for logging only
-        reuse_ssh_connection: bool = True,
-        ssh_control_persist_secs: int = 90,
-        ssh_control_persist_margin_secs: int = 2,
-        ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs"),
-        location: str = "dst",
-    ) -> None:
-        self.params: MiniParams = SimpleMiniRemote.SimpleMiniParams(
-            log=log, ssh_program=ssh_program, timeout_duration_nanos=timeout_duration_nanos
-        )
-        self.ssh_user_host: str = ssh_user_host
-        self.ssh_port: int | None = ssh_port
-        self.ssh_config_file: str = ssh_config_file
-        self.ssh_config_file_hash: Final[str] = (
-            sha256_urlsafe_base64(os.path.abspath(self.ssh_config_file), padding=False) if self.ssh_config_file else ""
-        )
-        self.ssh_extra_opts: list[str] = (
-            ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] if ssh_extra_opts is None else ssh_extra_opts.copy()
-        )
-        self.ssh_extra_opts += ["-v"] if ssh_verbose else []
-        self.ssh_extra_opts += ["-F", self.ssh_config_file] if self.ssh_config_file else []
-        self.ssh_extra_opts += ["-c", ssh_cipher] if ssh_cipher else []
-        self.ssh_extra_opts += ["-p", str(self.ssh_port)] if self.ssh_port is not None else []
-        self.reuse_ssh_connection: bool = reuse_ssh_connection
-        assert ssh_control_persist_secs >= 1
-        self.ssh_control_persist_secs: int = ssh_control_persist_secs
-        self.ssh_control_persist_margin_secs: int = ssh_control_persist_margin_secs
-        self.ssh_exit_on_shutdown: bool = False
-        self.ssh_socket_dir: str = ssh_socket_dir
-        assert location in ("src", "dst"), "location must be 'src' or 'dst'"
-        self.location: str = location
-
-    def local_ssh_command(self, socket_file: str | None) -> list[str]:
-        """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
-        command to run on the remote host, which will be appended later."""
-        if not self.ssh_user_host:
-            return []  # local mode
-        ssh_cmd: list[str] = [self.params.ssh_program] + self.ssh_extra_opts
-        if self.reuse_ssh_connection and socket_file:
-            ssh_cmd += ["-S", socket_file]
-        ssh_cmd += [self.ssh_user_host]
-        return ssh_cmd
-
-    def cache_namespace(self) -> str:
-        """Returns cache namespace string which is a stable, unique directory component for caches that distinguishes
-        endpoints by username+host+port+ssh_config_file where applicable, and uses '-' when no user/host is present (local
-        mode)."""
-        if not self.ssh_user_host:
-            return "-"  # local mode
-        return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"
-
+    @dataclass(frozen=True)
     class SimpleMiniParams(MiniParams):
-        """Simple implementation of MiniParams interface."""
-
-        def __init__(self, log: logging.Logger, ssh_program: str, timeout_duration_nanos: int | None) -> None:
-            assert log is not None
-            self.log: logging.Logger = log
-            assert ssh_program
-            self.ssh_program: str = ssh_program
-            self.timeout_duration_nanos: int | None = timeout_duration_nanos  # duration (not a timestamp); for logging only
+        log: logging.Logger
+        ssh_program: str
+        timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
 
         def is_program_available(self, program: str, location: str) -> bool:
-            """Return True; this minimal implementation assumes availability."""
             return True
+
+    @dataclass(frozen=True)
+    class SimpleMiniRemote(MiniRemote):
+        params: MiniParams
+        location: str  # "src" or "dst"
+        ssh_user_host: str
+        ssh_extra_opts: tuple[str, ...]
+        reuse_ssh_connection: bool
+        ssh_control_persist_secs: int
+        ssh_control_persist_margin_secs: int
+        ssh_exit_on_shutdown: bool
+        ssh_socket_dir: str
+        ssh_port: int | None
+        ssh_config_file: str
+        ssh_config_file_hash: str
+
+        def local_ssh_command(self, socket_file: str | None) -> list[str]:
+            if not self.ssh_user_host:
+                return []  # local mode
+            ssh_cmd: list[str] = [self.params.ssh_program]
+            ssh_cmd.extend(self.ssh_extra_opts)
+            if self.reuse_ssh_connection and socket_file:
+                ssh_cmd += ["-S", socket_file]
+            ssh_cmd += [self.ssh_user_host]
+            return ssh_cmd
+
+        def cache_namespace(self) -> str:
+            if not self.ssh_user_host:
+                return "-"  # local mode
+            return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"
+
+    if log is None:
+        raise ValueError("log must not be None")
+    if not ssh_program:
+        raise ValueError("ssh_program must be a non-empty string")
+    if location not in ("src", "dst"):
+        raise ValueError("location must be 'src' or 'dst'")
+    if ssh_control_persist_secs < 1:
+        raise ValueError("ssh_control_persist_secs must be >= 1")
+    params = SimpleMiniParams(log=log, ssh_program=ssh_program, timeout_duration_nanos=timeout_duration_nanos)
+    # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
+    _ssh_extra_opts: list[str] = (
+        ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] if ssh_extra_opts is None else list(ssh_extra_opts)
+    )
+    _ssh_extra_opts += ["-v"] if ssh_verbose else []
+    _ssh_extra_opts += ["-F", ssh_config_file] if ssh_config_file else []
+    _ssh_extra_opts += ["-c", ssh_cipher] if ssh_cipher else []
+    _ssh_extra_opts += ["-p", str(ssh_port)] if ssh_port is not None else []
+    ssh_config_file_hash = sha256_urlsafe_base64(os.path.abspath(ssh_config_file), padding=False) if ssh_config_file else ""
+    return SimpleMiniRemote(
+        params=params,
+        location=location,
+        ssh_user_host=ssh_user_host,
+        ssh_extra_opts=tuple(_ssh_extra_opts),
+        reuse_ssh_connection=reuse_ssh_connection,
+        ssh_control_persist_secs=ssh_control_persist_secs,
+        ssh_control_persist_margin_secs=ssh_control_persist_margin_secs,
+        ssh_exit_on_shutdown=False,
+        ssh_socket_dir=ssh_socket_dir,
+        ssh_port=ssh_port,
+        ssh_config_file=ssh_config_file,
+        ssh_config_file_hash=ssh_config_file_hash,
+    )
+
+
+def create_simple_mini_job(remote: MiniRemote, timeout_nanos: int | None = None) -> MiniJob:
+    """Factory that returns a simple implementation of the MiniJob interface."""
+
+    @dataclass(frozen=True)
+    class SimpleMiniJobImpl(MiniJob):
+        params: MiniParams
+        timeout_nanos: int | None
+        subprocesses: Subprocesses
+
+    return SimpleMiniJobImpl(params=remote.params, timeout_nanos=timeout_nanos, subprocesses=Subprocesses())
 
 
 #############################################################################
