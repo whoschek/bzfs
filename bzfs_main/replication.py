@@ -72,7 +72,9 @@ from bzfs_main.util.connection import (
     DEDICATED,
     SHARED,
     ConnectionPool,
+    dquote,
     refresh_ssh_connection_if_necessary,
+    squote,
     timeout,
 )
 from bzfs_main.util.parallel_iterator import (
@@ -618,7 +620,7 @@ def _prepare_zfs_send_receive(
     if src_pipe:
         src_pipe = f"{send_cmd_str} | {src_pipe}"
         if p.src.ssh_user_host:
-            src_pipe = p.shell_program + " -c " + _dquote(src_pipe)
+            src_pipe = p.shell_program + " -c " + dquote(src_pipe)
     else:
         src_pipe = send_cmd_str
 
@@ -655,7 +657,7 @@ def _prepare_zfs_send_receive(
     if dst_pipe:
         dst_pipe = f"{dst_pipe} | {recv_cmd_str}"
         if p.dst.ssh_user_host:
-            dst_pipe = p.shell_program + " -c " + _dquote(dst_pipe)
+            dst_pipe = p.shell_program + " -c " + dquote(dst_pipe)
     else:
         dst_pipe = recv_cmd_str
 
@@ -666,8 +668,8 @@ def _prepare_zfs_send_receive(
     if not p.is_program_available("sh", "dst"):
         dst_pipe = recv_cmd_str
 
-    src_pipe = _squote(p.src, src_pipe)
-    dst_pipe = _squote(p.dst, dst_pipe)
+    src_pipe = squote(p.src, src_pipe)
+    dst_pipe = squote(p.dst, dst_pipe)
     return src_pipe, local_pipe, dst_pipe
 
 
@@ -893,17 +895,6 @@ def _pv_cmd(
         return f"LC_ALL=C {shlex.join(pv_program_opts)} 2>> {shlex.quote(pv_log_file)}"
     else:
         return "cat"
-
-
-def _squote(remote: Remote, arg: str) -> str:
-    """Quotes an argument only when running remotely over ssh."""
-    assert arg is not None
-    return shlex.quote(arg) if remote.ssh_user_host else arg
-
-
-def _dquote(arg: str) -> str:
-    """Shell-escapes double quotes and dollar and backticks, then surrounds with double quotes."""
-    return '"' + arg.replace('"', '\\"').replace("$", "\\$").replace("`", "\\`") + '"'
 
 
 def delete_snapshots(job: Job, remote: Remote, dataset: str, snapshot_tags: list[str]) -> None:

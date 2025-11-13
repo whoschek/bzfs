@@ -353,6 +353,18 @@ def timeout(job: MiniJob) -> float | None:
     return delta_nanos / 1_000_000_000  # seconds
 
 
+def squote(remote: MiniRemote, arg: str) -> str:
+    """Quotes an argument only when running remotely over ssh."""
+    assert arg is not None
+    return shlex.quote(arg) if remote.ssh_user_host else arg
+
+
+def dquote(arg: str) -> str:
+    """Shell-escapes double quotes and dollar and backticks, then surrounds with double quotes; For an example how to safely
+    construct and quote complex shell pipeline commands for use over SSH, see replication.py:_prepare_zfs_send_receive()"""
+    return '"' + arg.replace('"', '\\"').replace("$", "\\$").replace("`", "\\`") + '"'
+
+
 #############################################################################
 @dataclass(order=True, repr=False)
 class Connection:

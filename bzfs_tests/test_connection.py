@@ -62,6 +62,8 @@ from bzfs_main.util.connection import (
     Connection,
     ConnectionPool,
     ConnectionPools,
+    dquote,
+    squote,
 )
 from bzfs_main.util.retry import (
     RetryableError,
@@ -80,6 +82,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestSimpleMiniRemote,
         TestSimpleMiniJob,
+        TestQuoting,
         TestConnectionPool,
         TestRunSshCommand,
         TestTrySshCommand,
@@ -513,6 +516,121 @@ class TestSimpleMiniJob(AbstractTestCase):
 
 
 #############################################################################
+class TestQuoting(AbstractTestCase):
+    """Covers quoting helpers used across modules."""
+
+    def test_squote_local_no_quote(self) -> None:
+        remote = MagicMock(ssh_user_host="")
+        self.assertEqual("foo bar", squote(remote, "foo bar"))
+
+    def test_squote_remote_quote(self) -> None:
+        remote = MagicMock(ssh_user_host="host")
+        self.assertEqual("'foo bar'", squote(remote, "foo bar"))
+
+    def test_dquote_empty_string(self) -> None:
+        """Empty arguments are quoted without escaping."""
+        self.assertEqual('""', dquote(""))
+
+    def test_dquote_preserves_single_quotes_and_spaces(self) -> None:
+        """Single quotes and spaces remain untouched inside the quotes."""
+        self.assertEqual("\"foo 'bar baz' qux\"", dquote("foo 'bar baz' qux"))
+
+    def test_dquote_multiple_specials(self) -> None:
+        """Every occurrence of special characters is escaped."""
+        cases = [
+            ('""', '"' + '\\"' * 2 + '"'),
+            ("$$$", '"' + "\\$" * 3 + '"'),
+            ("``", '"' + "\\`" * 2 + '"'),
+        ]
+        for arg, expected in cases:
+            with self.subTest(arg=arg):
+                self.assertEqual(expected, dquote(arg))
+
+    def test_dquote_backslash_before_quote(self) -> None:
+        """Backslashes preceding quotes are preserved correctly."""
+        self.assertEqual('"a\\\\"b"', dquote('a\\"b'))
+
+    def test_dquote_escapes(self) -> None:
+        self.assertEqual('"a\\"b\\$c\\`d"', dquote('a"b$c`d'))
+
+    @staticmethod
+    def _sh_roundtrip(arg: str) -> str:
+        quoted = dquote(arg)
+        return subprocess.run(["sh", "-c", f"printf %s {quoted}"], capture_output=True, text=True, check=True).stdout
+
+    def test_dquote_prevents_command_substitution(self) -> None:
+        """Escaping ensures the shell prints literals rather than executing."""
+        for arg in ["$(echo hacked)", "`echo hacked`"]:
+            with self.subTest(arg=arg):
+                self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_roundtrip_empty_string(self) -> None:
+        """Ensures empty arguments survive shell evaluation unchanged."""
+        arg = ""
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_roundtrip_with_spaces(self) -> None:
+        """Verifies that spaces are preserved when passed through a shell."""
+        arg = "foo bar baz"
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_multiple_instances(self) -> None:
+        """All repeated special chars must be escaped and round-trip."""
+        arg = 'aa""bb$$cc``dd'
+        quoted = dquote(arg)
+        self.assertEqual(2, quoted.count('\\"'))
+        self.assertEqual(2, quoted.count("\\$"))
+        self.assertEqual(2, quoted.count("\\`"))
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_preserves_unrelated_chars(self) -> None:
+        """Characters outside the escape set remain intact after quoting."""
+        arg = "path/with 'single' and \\backslash"
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_preserves_dollars_backticks_quotes(self) -> None:
+        samples = [
+            r"a$b",  # $ should not expand
+            r"a`uname`b",  # backticks should not execute
+            r'a"b',  # embedded double quote
+            r"plain",  # trivial
+        ]
+        for s in samples:
+            with self.subTest(s=s):
+                self.assertEqual(s, self._sh_roundtrip(s))
+
+    def test_dquote_handles_spaces_and_newlines(self) -> None:
+        samples = [
+            "a b c",  # spaces must remain a single arg
+            "line1\nline2",  # newline stays literal
+            " tab\tsep ",  # tabs preserved
+        ]
+        for s in samples:
+            with self.subTest(s=s):
+                self.assertEqual(s, self._sh_roundtrip(s))
+
+    def test_dquote_does_not_require_backslash_escaping(self) -> None:
+        samples = [
+            r"a\b",  # normal backslash
+        ]
+        for s in samples:
+            with self.subTest(s=s):
+                self.assertEqual(s, self._sh_roundtrip(s))
+
+    def test_dquote_globally_escapes_specials(self) -> None:
+        s = "pre 'a\"b $USER `uname` \\ tail' post"
+        out = dquote(s)
+        payload = out[1:-1]  # strip outer double quotes
+
+        # Every occurrence of ", $, ` in the payload must be backslash-escaped
+        specials = {'"', "$", "`"}
+        for i, ch in enumerate(payload):
+            with self.subTest(i=i):
+                if ch in specials:
+                    self.assertTrue(i > 0)
+                    self.assertEqual("\\", payload[i - 1], f"unescaped {ch!r} at index {i}")
+
+
 def make_fake_params() -> Params:
     mock = MagicMock(spec=Params)
     mock.log = logging.getLogger(__name__)
