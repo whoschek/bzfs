@@ -267,7 +267,7 @@ class Job(MiniJob):
         self.progress_reporter: ProgressReporter = cast(ProgressReporter, None)
         self.is_first_replication_task: Final[SynchronizedBool] = SynchronizedBool(True)
         self.replication_start_time_nanos: int = time.monotonic_ns()
-        self.timeout_nanos: int | None = None
+        self.timeout_nanos: int | None = None  # timestamp aka instant in time
         self.cache: SnapshotCache = SnapshotCache(self)
         self.stats_lock: Final[threading.Lock] = threading.Lock()
         self.num_cache_hits: int = 0
@@ -407,7 +407,9 @@ class Job(MiniJob):
         with xfinally(lambda: self.progress_reporter.stop()):
             daemon_stoptime_nanos: int = time.monotonic_ns() + p.daemon_lifetime_nanos
             while True:  # loop for daemon mode
-                self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
+                self.timeout_nanos = (
+                    None if p.timeout_duration_nanos is None else time.monotonic_ns() + p.timeout_duration_nanos
+                )
                 self.all_dst_dataset_exists.clear()
                 self.progress_reporter.reset()
                 src, dst = p.src, p.dst
@@ -419,7 +421,9 @@ class Job(MiniJob):
                     dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
                     p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
                     if p.daemon_lifetime_nanos > 0:
-                        self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
+                        self.timeout_nanos = (
+                            None if p.timeout_duration_nanos is None else time.monotonic_ns() + p.timeout_duration_nanos
+                        )
                     recurs_sep = " " if p.recursive_flag else ""
                     task_description = f"{src.basis_root_dataset} {p.recursive_flag}{recurs_sep}--> {dst.basis_root_dataset}"
                     if len(p.root_dataset_pairs) > 1:

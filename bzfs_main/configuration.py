@@ -334,8 +334,8 @@ class Params(MiniParams):
         self.dedicated_tcp_connection_per_zfs_send: Final[bool] = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
         # threads: with --force-once we intentionally coerce to a single-threaded run to ensure deterministic serial behavior
         self.threads: Final[tuple[int, bool]] = (1, False) if self.force_once else args.threads
-        timeout_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
-        self.timeout_nanos: int | None = timeout_nanos
+        timeout_duration_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
+        self.timeout_duration_nanos: int | None = timeout_duration_nanos  # duration (not a timestamp); for logging only
         self.no_estimate_send_size: Final[bool] = args.no_estimate_send_size
         self.remote_conf_cache_ttl_nanos: Final[int] = 1_000_000 * parse_duration_to_milliseconds(
             args.daemon_remote_conf_cache_ttl
@@ -590,9 +590,9 @@ class Remote(MiniRemote):
         return self.location, self.ssh_user_host, self.ssh_port, self.ssh_config_file
 
     def cache_namespace(self) -> str:
-        """Returns cache namespace string which is a stable, unique directory component for snapshot caches that
-        distinguishes endpoints by username+host+port+ssh_config_file where applicable, and uses '-' when no user/host is
-        present (local mode)."""
+        """Returns cache namespace string which is a stable, unique directory component for caches that distinguishes
+        endpoints by username+host+port+ssh_config_file where applicable, and uses '-' when no user/host is present (local
+        mode)."""
         if not self.ssh_user_host:
             return "-"  # local mode
         return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"

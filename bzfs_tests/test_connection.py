@@ -518,7 +518,7 @@ def make_fake_params() -> Params:
     mock.log = logging.getLogger(__name__)
     mock.ssh_program = "ssh"
     mock.connection_pools = {}
-    mock.timeout_nanos = None
+    mock.timeout_duration_nanos = None
     return mock
 
 
@@ -808,7 +808,7 @@ class TestTimeout(AbstractTestCase):
         self.assertIsNone(connection.timeout(self.job))
 
     def test_expired_timeout_raises(self) -> None:
-        self.job.params.timeout_nanos = 1
+        self.job.params.timeout_duration_nanos = 1
         self.job.timeout_nanos = time.monotonic_ns() - 1
         with self.assertRaises(subprocess.TimeoutExpired):
             connection.timeout(self.job)

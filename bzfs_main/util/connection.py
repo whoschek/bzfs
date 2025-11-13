@@ -12,26 +12,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Network connection management is in run_ssh_command() and refresh_ssh_connection_if_necessary() and class ConnectionPool;
-They reuse multiplexed ssh connections for low latency.
+"""Efficient thread-safe SSH command client; See run_ssh_command() and refresh_ssh_connection_if_necessary() and class
+ConnectionPool.
+
+Can be configured to reuse multiplexed SSH connections for low latency, even on fresh process startup, for example leading to
+ballpark ~5ms total time for running `echo hello` end-to-end over SSH.
+Designed to work with the standard OpenSSH CLI. Also works with `hpnssh`. The latter uses larger TCP window sizes for best
+throughput over high speed long distance networks.
 
 Example usage:
 
-log = logging.getLogger(__name__)
-remote: MiniRemote = SimpleMiniRemote(log=log, ssh_user_host="alice@127.0.0.1")
-job: MiniJob = SimpleMiniJob(remote)
-conn_pool: ConnectionPool = ConnectionPool(remote, max_concurrent_ssh_sessions_per_tcp_connection=8, connpool_name="mypool")
-try:
-    retry_policy_args = argparse.Namespace(
-        retries=3,
-        retry_min_sleep_secs=0,
-        retry_initial_max_sleep_secs=0,
-        retry_max_sleep_secs=60,
-        retry_max_elapsed_secs=300,
-    )
-    retry_policy: RetryPolicy = RetryPolicy(retry_policy_args)
+import argparse
+import logging
+import threading
+from bzfs_main.util.connection import SimpleMiniRemote, SimpleMiniJob, ConnectionPool, run_ssh_command
+from bzfs_main.util.retry import RetryPolicy, run_with_retries
 
-    def run_cmd(*, retry: Retry) -> str:
+log = logging.getLogger(__name__)
+remote = SimpleMiniRemote(log=log, ssh_user_host="alice@127.0.0.1")
+job = SimpleMiniJob(remote)
+conn_pool = ConnectionPool(remote, max_concurrent_ssh_sessions_per_tcp_connection=8, connpool_name="example")
+try:
+    retry_policy = RetryPolicy(
+        argparse.Namespace(
+            retries=3,
+            retry_min_sleep_secs=0,
+            retry_initial_max_sleep_secs=0,
+            retry_max_sleep_secs=60,
+            retry_max_elapsed_secs=300,
+        )
+    )
+
+    def run_cmd(*, retry) -> str:
         with conn_pool.connection() as conn:
             return run_ssh_command(conn=conn, job=job, cmd=["echo", "hello"])
 
@@ -100,7 +112,7 @@ class MiniJob(Protocol):
     """Minimal Job interface required by the connections module; for loose coupling."""
 
     params: MiniParams
-    timeout_nanos: int | None
+    timeout_nanos: int | None  # timestamp aka instant in time
     subprocesses: Subprocesses
 
 
@@ -111,7 +123,7 @@ class MiniParams(Protocol):
 
     log: logging.Logger
     ssh_program: str
-    timeout_nanos: int | None
+    timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
 
     def is_program_available(self, program: str, location: str) -> bool:
         """Return True if program is available on location host."""
@@ -133,10 +145,13 @@ class MiniRemote(Protocol):
     ssh_socket_dir: str
 
     def local_ssh_command(self, socket_file: str | None) -> list[str]:
-        """Build the local ssh CLI command for talking to the remote host."""
+        """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
+        command to run on the remote host, which will be appended later."""
 
     def cache_namespace(self) -> str:
-        """Return a stable, unique cache namespace for this Remote."""
+        """Returns cache namespace string which is a stable, unique directory component for caches that distinguishes
+        endpoints by username+host+port+ssh_config_file where applicable, and uses '-' when no user/host is present (local
+        mode)."""
 
 
 #############################################################################
@@ -145,7 +160,7 @@ class SimpleMiniJob(MiniJob):
 
     def __init__(self, remote: MiniRemote, timeout_nanos: int | None = None) -> None:
         self.params: MiniParams = remote.params
-        self.timeout_nanos: int | None = timeout_nanos
+        self.timeout_nanos: int | None = timeout_nanos  # timestamp aka instant in time
         self.subprocesses: Subprocesses = Subprocesses()
 
 
@@ -156,14 +171,14 @@ class SimpleMiniRemote(MiniRemote):
     def __init__(
         self,
         log: logging.Logger,
-        ssh_user_host: str = "",
-        ssh_port: int | None = None,
-        ssh_extra_opts: list[str] | None = None,
-        ssh_verbose: bool = False,
-        ssh_config_file: str = "",
-        ssh_cipher: str = "^aes256-gcm@openssh.com",
-        ssh_program: str = "ssh",
-        timeout_nanos: int | None = None,
+        ssh_user_host: str = "",  # flag passed to `ssh` CLI
+        ssh_port: int | None = None,  # flag passed to `ssh` CLI
+        ssh_extra_opts: list[str] | None = None,  # optional CLI flags to be passed to `ssh` CLI
+        ssh_verbose: bool = False,  # flag passed to `ssh` CLI
+        ssh_config_file: str = "",  # e.g. /path/to/homedir/.ssh/config
+        ssh_cipher: str = "^aes256-gcm@openssh.com",  # flag passed to `ssh` CLI
+        ssh_program: str = "ssh",  # name or path of executable; "hpnssh" is also valid
+        timeout_duration_nanos: int | None = None,  # duration (not a timestamp); for logging only
         reuse_ssh_connection: bool = True,
         ssh_control_persist_secs: int = 90,
         ssh_control_persist_margin_secs: int = 2,
@@ -171,7 +186,7 @@ class SimpleMiniRemote(MiniRemote):
         location: str = "dst",
     ) -> None:
         self.params: MiniParams = SimpleMiniRemote.SimpleMiniParams(
-            log=log, ssh_program=ssh_program, timeout_nanos=timeout_nanos
+            log=log, ssh_program=ssh_program, timeout_duration_nanos=timeout_duration_nanos
         )
         self.ssh_user_host: str = ssh_user_host
         self.ssh_port: int | None = ssh_port
@@ -192,7 +207,7 @@ class SimpleMiniRemote(MiniRemote):
         self.ssh_control_persist_margin_secs: int = ssh_control_persist_margin_secs
         self.ssh_exit_on_shutdown: bool = False
         self.ssh_socket_dir: str = ssh_socket_dir
-        assert location == "src" or location == "dst", "location must be 'src' or 'dst'"
+        assert location in ("src", "dst"), "location must be 'src' or 'dst'"
         self.location: str = location
 
     def local_ssh_command(self, socket_file: str | None) -> list[str]:
@@ -207,9 +222,9 @@ class SimpleMiniRemote(MiniRemote):
         return ssh_cmd
 
     def cache_namespace(self) -> str:
-        """Returns cache namespace string which is a stable, unique directory component for snapshot caches that
-        distinguishes endpoints by username+host+port+ssh_config_file where applicable, and uses '-' when no user/host is
-        present (local mode)."""
+        """Returns cache namespace string which is a stable, unique directory component for caches that distinguishes
+        endpoints by username+host+port+ssh_config_file where applicable, and uses '-' when no user/host is present (local
+        mode)."""
         if not self.ssh_user_host:
             return "-"  # local mode
         return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"
@@ -217,12 +232,12 @@ class SimpleMiniRemote(MiniRemote):
     class SimpleMiniParams(MiniParams):
         """Simple implementation of MiniParams interface."""
 
-        def __init__(self, log: logging.Logger, ssh_program: str, timeout_nanos: int | None) -> None:
+        def __init__(self, log: logging.Logger, ssh_program: str, timeout_duration_nanos: int | None) -> None:
             assert log is not None
             self.log: logging.Logger = log
             assert ssh_program
             self.ssh_program: str = ssh_program
-            self.timeout_nanos: int | None = timeout_nanos
+            self.timeout_duration_nanos: int | None = timeout_duration_nanos  # duration (not a timestamp); for logging only
 
         def is_program_available(self, program: str, location: str) -> bool:
             """Return True; this minimal implementation assumes availability."""
@@ -333,8 +348,8 @@ def timeout(job: MiniJob) -> float | None:
         return None  # never raise a timeout
     delta_nanos: int = timeout_nanos - time.monotonic_ns()
     if delta_nanos <= 0:
-        assert job.params.timeout_nanos is not None
-        raise subprocess.TimeoutExpired("_timeout", timeout=job.params.timeout_nanos / 1_000_000_000)
+        assert job.params.timeout_duration_nanos is not None
+        raise subprocess.TimeoutExpired("_timeout", timeout=job.params.timeout_duration_nanos / 1_000_000_000)
     return delta_nanos / 1_000_000_000  # seconds
 
 
