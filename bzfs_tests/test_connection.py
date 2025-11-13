@@ -20,6 +20,7 @@ from __future__ import (
 import contextlib
 import itertools
 import logging
+import os
 import platform
 import random
 import subprocess
@@ -67,6 +68,7 @@ from bzfs_main.util.retry import (
 )
 from bzfs_main.util.utils import (
     LOG_TRACE,
+    sha256_urlsafe_base64,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
@@ -76,6 +78,8 @@ from bzfs_tests.abstract_testcase import (
 #############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
+        TestSimpleMiniRemote,
+        TestSimpleMiniJob,
         TestConnectionPool,
         TestRunSshCommand,
         TestTrySshCommand,
@@ -395,6 +399,117 @@ class TestConnectionPool(AbstractTestCase):
                 # log.log(bzfs.log_debug, "cpool: %s", cpool)
         elapsed_secs = (time.time_ns() - start_time_nanos) / 1000_000_000
         log.info("random_walk took %s secs", elapsed_secs)
+
+
+#############################################################################
+class TestSimpleMiniRemote(AbstractTestCase):
+    """Covers all control-flow branches in SimpleMiniRemote."""
+
+    def setUp(self) -> None:
+        self.log = MagicMock(logging.Logger)
+
+    def test_init_builds_expected_options_defaults(self) -> None:
+        r = connection.SimpleMiniRemote(log=self.log, ssh_user_host="")
+        self.assertListEqual(
+            ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T", "-c", "^aes256-gcm@openssh.com"], r.ssh_extra_opts
+        )
+        # SimpleMiniRemote always disables immediate master exit on shutdown
+        self.assertFalse(r.ssh_exit_on_shutdown)
+        self.assertEqual("-", r.cache_namespace())  # local mode
+        self.assertEqual([], r.local_ssh_command(socket_file=None))
+
+    def test_init_with_all_extras_and_port(self) -> None:
+        with get_tmpdir() as tmpdir:
+            with tempfile.NamedTemporaryFile(dir=tmpdir, delete=False) as cfg:
+                cfg_path = cfg.name
+            r = connection.SimpleMiniRemote(
+                log=self.log,
+                ssh_user_host="user@host",
+                ssh_port=2222,
+                ssh_verbose=True,
+                ssh_config_file=cfg_path,
+                ssh_cipher="aes128-gcm@openssh.com",
+                reuse_ssh_connection=True,
+            )
+            # Verify options order and presence
+            expected_prefix = [
+                "-oBatchMode=yes",
+                "-oServerAliveInterval=0",
+                "-x",
+                "-T",
+                "-v",
+                "-F",
+                cfg_path,
+                "-c",
+                "aes128-gcm@openssh.com",
+                "-p",
+                "2222",
+            ]
+            self.assertEqual(expected_prefix, r.ssh_extra_opts)
+            # cache namespace includes user@host, port and cfg hash
+            expected_hash = sha256_urlsafe_base64(os.path.abspath(cfg_path), padding=False)
+            self.assertEqual(f"user@host#2222#{expected_hash}", r.cache_namespace())
+            # local_ssh_command includes -S only when socket provided
+            cmd_no_sock = r.local_ssh_command(socket_file=None)
+            self.assertEqual([r.params.ssh_program] + expected_prefix + ["user@host"], cmd_no_sock)
+            cmd_with_sock = r.local_ssh_command(socket_file="/tmp/sock")
+            self.assertEqual(
+                [r.params.ssh_program] + expected_prefix + ["-S", "/tmp/sock", "user@host"],
+                cmd_with_sock,
+            )
+
+    def test_init_with_custom_extra_opts_is_copied(self) -> None:
+        custom = ["-K"]
+        r = connection.SimpleMiniRemote(
+            log=self.log,
+            ssh_user_host="user@h",
+            ssh_extra_opts=custom,
+            ssh_verbose=True,
+            ssh_cipher="^aes256-gcm@openssh.com",
+        )
+        # The instance copies and extends the provided list, leaving the caller's list untouched.
+        self.assertIsNot(custom, r.ssh_extra_opts)
+        self.assertListEqual(["-K", "-v", "-c", "^aes256-gcm@openssh.com"], r.ssh_extra_opts)
+        self.assertListEqual(["-K"], custom)
+
+    def test_no_cipher_no_config_no_port(self) -> None:
+        r = connection.SimpleMiniRemote(
+            log=self.log,
+            ssh_user_host="user@h",
+            ssh_cipher="",  # do not include -c
+            ssh_config_file="",  # do not include -F
+            ssh_port=None,  # do not include -p
+        )
+        opts = r.ssh_extra_opts
+        self.assertNotIn("-c", opts)
+        self.assertNotIn("-F", opts)
+        self.assertNotIn("-p", opts)
+        self.assertEqual("user@h##", r.cache_namespace())
+
+    def test_invalid_parameters_raise_assertions(self) -> None:
+        # ssh_control_persist_secs must be >= 1
+        with self.assertRaises(AssertionError):
+            connection.SimpleMiniRemote(log=self.log, ssh_control_persist_secs=0)
+        # location must be 'src' or 'dst'
+        with self.assertRaises(AssertionError):
+            connection.SimpleMiniRemote(log=self.log, location="invalid")
+
+    def test_local_ssh_command_branching(self) -> None:
+        r = connection.SimpleMiniRemote(log=self.log, ssh_user_host="user@h", reuse_ssh_connection=False)
+        # No -S because reuse is False
+        self.assertEqual([r.params.ssh_program] + r.ssh_extra_opts + ["user@h"], r.local_ssh_command("/tmp/s"))
+
+
+#############################################################################
+class TestSimpleMiniJob(AbstractTestCase):
+    """Smoke tests for SimpleMiniJob wiring to ensure attributes are set correctly."""
+
+    def test_initialization_copies_params_and_timeout(self) -> None:
+        r = connection.SimpleMiniRemote(log=logging.getLogger(__name__), ssh_user_host="u@h")
+        j = connection.SimpleMiniJob(remote=r, timeout_nanos=123)
+        self.assertIs(j.params, r.params)
+        self.assertEqual(123, j.timeout_nanos)
+        self.assertIsNotNone(j.subprocesses)
 
 
 #############################################################################

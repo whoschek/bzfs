@@ -17,14 +17,28 @@ They reuse multiplexed ssh connections for low latency.
 
 Example usage:
 
-conn_pool: ConnectionPool = ...
-with conn_pool.connection() as conn:
-    stdout: str = run_ssh_command(
-        conn=conn,
-        ...
-        cmd=["echo", "hello"],
+log = logging.getLogger(__name__)
+remote: MiniRemote = SimpleMiniRemote(log=log, ssh_user_host="alice@127.0.0.1")
+job: MiniJob = SimpleMiniJob(remote)
+conn_pool: ConnectionPool = ConnectionPool(remote, max_concurrent_ssh_sessions_per_tcp_connection=8, connpool_name="mypool")
+try:
+    retry_policy_args = argparse.Namespace(
+        retries=3,
+        retry_min_sleep_secs=0,
+        retry_initial_max_sleep_secs=0,
+        retry_max_sleep_secs=60,
+        retry_max_elapsed_secs=300,
     )
-    return stdout
+    retry_policy: RetryPolicy = RetryPolicy(retry_policy_args)
+
+    def run_cmd(*, retry: Retry) -> str:
+        with conn_pool.connection() as conn:
+            return run_ssh_command(conn=conn, job=job, cmd=["echo", "hello"])
+
+    stdout: str = run_with_retries(log, retry_policy, termination_event=threading.Event(), fn=run_cmd)
+    print(f"stdout: {stdout}")
+finally:
+    conn_pool.shutdown()
 """
 
 from __future__ import (
@@ -33,6 +47,7 @@ from __future__ import (
 import contextlib
 import copy
 import logging
+import os
 import shlex
 import subprocess
 import sys
@@ -67,7 +82,9 @@ from bzfs_main.util.utils import (
     SmallPriorityQueue,
     Subprocesses,
     die,
+    get_home_directory,
     list_formatter,
+    sha256_urlsafe_base64,
     stderr_to_str,
     xprint,
 )
@@ -120,6 +137,96 @@ class MiniRemote(Protocol):
 
     def cache_namespace(self) -> str:
         """Return a stable, unique cache namespace for this Remote."""
+
+
+#############################################################################
+class SimpleMiniJob(MiniJob):
+    """Simple implementation of MiniJob interface."""
+
+    def __init__(self, remote: MiniRemote, timeout_nanos: int | None = None) -> None:
+        self.params: MiniParams = remote.params
+        self.timeout_nanos: int | None = timeout_nanos
+        self.subprocesses: Subprocesses = Subprocesses()
+
+
+#############################################################################
+class SimpleMiniRemote(MiniRemote):
+    """Simple implementation of MiniRemote interface."""
+
+    def __init__(
+        self,
+        log: logging.Logger,
+        ssh_user_host: str = "",
+        ssh_port: int | None = None,
+        ssh_extra_opts: list[str] | None = None,
+        ssh_verbose: bool = False,
+        ssh_config_file: str = "",
+        ssh_cipher: str = "^aes256-gcm@openssh.com",
+        ssh_program: str = "ssh",
+        timeout_nanos: int | None = None,
+        reuse_ssh_connection: bool = True,
+        ssh_control_persist_secs: int = 90,
+        ssh_control_persist_margin_secs: int = 2,
+        ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs"),
+        location: str = "dst",
+    ) -> None:
+        self.params: MiniParams = SimpleMiniRemote.SimpleMiniParams(
+            log=log, ssh_program=ssh_program, timeout_nanos=timeout_nanos
+        )
+        self.ssh_user_host: str = ssh_user_host
+        self.ssh_port: int | None = ssh_port
+        self.ssh_config_file: str = ssh_config_file
+        self.ssh_config_file_hash: Final[str] = (
+            sha256_urlsafe_base64(os.path.abspath(self.ssh_config_file), padding=False) if self.ssh_config_file else ""
+        )
+        self.ssh_extra_opts: list[str] = (
+            ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] if ssh_extra_opts is None else ssh_extra_opts.copy()
+        )
+        self.ssh_extra_opts += ["-v"] if ssh_verbose else []
+        self.ssh_extra_opts += ["-F", self.ssh_config_file] if self.ssh_config_file else []
+        self.ssh_extra_opts += ["-c", ssh_cipher] if ssh_cipher else []
+        self.ssh_extra_opts += ["-p", str(self.ssh_port)] if self.ssh_port is not None else []
+        self.reuse_ssh_connection: bool = reuse_ssh_connection
+        assert ssh_control_persist_secs >= 1
+        self.ssh_control_persist_secs: int = ssh_control_persist_secs
+        self.ssh_control_persist_margin_secs: int = ssh_control_persist_margin_secs
+        self.ssh_exit_on_shutdown: bool = False
+        self.ssh_socket_dir: str = ssh_socket_dir
+        assert location == "src" or location == "dst", "location must be 'src' or 'dst'"
+        self.location: str = location
+
+    def local_ssh_command(self, socket_file: str | None) -> list[str]:
+        """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
+        command to run on the remote host, which will be appended later."""
+        if not self.ssh_user_host:
+            return []  # local mode
+        ssh_cmd: list[str] = [self.params.ssh_program] + self.ssh_extra_opts
+        if self.reuse_ssh_connection and socket_file:
+            ssh_cmd += ["-S", socket_file]
+        ssh_cmd += [self.ssh_user_host]
+        return ssh_cmd
+
+    def cache_namespace(self) -> str:
+        """Returns cache namespace string which is a stable, unique directory component for snapshot caches that
+        distinguishes endpoints by username+host+port+ssh_config_file where applicable, and uses '-' when no user/host is
+        present (local mode)."""
+        if not self.ssh_user_host:
+            return "-"  # local mode
+        return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"
+
+    class SimpleMiniParams(MiniParams):
+        """Simple implementation of MiniParams interface."""
+
+        def __init__(self, log: logging.Logger, ssh_program: str, timeout_nanos: int | None) -> None:
+            assert log is not None
+            self.log: logging.Logger = log
+            assert ssh_program
+            self.ssh_program: str = ssh_program
+            self.timeout_nanos: int | None = timeout_nanos
+
+        def is_program_available(self, program: str, location: str) -> bool:
+            """Return True; this minimal implementation assumes availability."""
+            return True
 
 
 #############################################################################
