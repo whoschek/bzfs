@@ -100,7 +100,7 @@ To validate your changes, you **must** follow this exact sequence:
 3. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite. If any test fails,
    iteratively fix the code until all unit tests pass (unless a test is expected to fail by TDD design). **Never proceed
    unless you SHOW PROOF with 100% reliability (without any shortcut whatsoever) that the test suite indeed exits with
-   zero exit code.** Spend time to make sure you get this check absolutely right because if you don't you endanger the
+   exit code 0.** Spend time to make sure you get this check absolutely right because if you don't you endanger the
    project and will immediately be replaced with a more reliable AI agent.
 
 4. **Stage Your Own Untracked Files (if any):** Run `git add <paths>` for the files **you** added or renamed, but
@@ -112,7 +112,7 @@ To validate your changes, you **must** follow this exact sequence:
    `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting with `ruff`, formatting with
    `black`, type checking with `mypy`. Fix any reported issues and repeat until all hooks pass. **Never proceed unless
    you SHOW PROOF with 100% reliability (without any shortcut whatsoever) that the pre-commit command indeed exits with
-   zero exit code.** Spend time to make sure you get this check absolutely right because if you don't you endanger the
+   exit code 0.** Spend time to make sure you get this check absolutely right because if you don't you endanger the
    project and will immediately be replaced with a more reliable AI agent.
 
 6. **Update Documentation (if needed):** Run `./update_readme.sh` if you changed any `argparse` help text in `.py`
