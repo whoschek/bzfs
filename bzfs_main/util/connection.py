@@ -26,12 +26,12 @@ Example usage:
 import argparse
 import logging
 import threading
-from bzfs_main.util.connection import ConnectionPool, create_simple_mini_job, create_simple_mini_remote, run_ssh_command
+from bzfs_main.util.connection import ConnectionPool, create_simple_minijob, create_simple_miniremote, run_ssh_command
 from bzfs_main.util.retry import RetryPolicy, run_with_retries
 
 log = logging.getLogger(__name__)
-remote = create_simple_mini_remote(log=log, ssh_user_host="alice@127.0.0.1")
-job = create_simple_mini_job(remote)
+remote = create_simple_miniremote(log=log, ssh_user_host="alice@127.0.0.1")
+job = create_simple_minijob(remote)
 conn_pool = ConnectionPool(remote, max_concurrent_ssh_sessions_per_tcp_connection=8, connpool_name="example")
 try:
     retry_policy = RetryPolicy(
@@ -157,7 +157,7 @@ class MiniRemote(Protocol):
 
 
 #############################################################################
-def create_simple_mini_remote(
+def create_simple_miniremote(
     log: logging.Logger,
     ssh_user_host: str = "",  # option passed to `ssh` CLI
     ssh_port: int | None = None,  # option passed to `ssh` CLI
@@ -248,7 +248,7 @@ def create_simple_mini_remote(
     )
 
 
-def create_simple_mini_job(remote: MiniRemote, timeout_nanos: int | None = None) -> MiniJob:
+def create_simple_minijob(remote: MiniRemote, timeout_nanos: int | None = None) -> MiniJob:
     """Factory that returns a simple implementation of the MiniJob interface."""
 
     @dataclass(frozen=True)
