@@ -98,10 +98,14 @@ To validate your changes, you **must** follow this exact sequence:
    tools and pre-commit hooks run consistently.
 
 3. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite. If any test fails,
-   iteratively fix the code until all unit tests pass (unless a test is expected to fail by TDD design). **Never proceed
-   unless you SHOW PROOF with 100% reliability (without any shortcut whatsoever) that the test suite indeed exits with
-   exit code 0.** Spend time to make sure you get this check absolutely right because if you don't you endanger the
-   project and will immediately be replaced with a more reliable AI agent.
+   iteratively fix the code until all unit tests pass (unless a test is expected to fail by TDD design).
+
+   - Reliably capture the test command's exit code and verify that it is exactly `0`. **Never proceed unless you have
+     actually run the test command, captured its exit code, reported both the exact command and its exit code in your
+     response, and explicitly SHOWN PROOF with 100% reliability that its exit code was `0` (no exceptions, shortcuts, or
+     assumptions).** Spend time to ensure this verification check is absolutely correct; treat any mistake in this
+     verification as a critical failure: you must stop, correct the mistake, and repeat the entire validation workflow
+     until the exit code is correctly verified as `0`.
 
 4. **Stage Your Own Untracked Files (if any):** Run `git add <paths>` for the files **you** added or renamed, but
    exclude the files in `lab/` and `_tmp/` and the files the user or a third party added or renamed. This ensures that
@@ -110,10 +114,14 @@ To validate your changes, you **must** follow this exact sequence:
 
 5. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run all hooks specified in
    `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting with `ruff`, formatting with
-   `black`, type checking with `mypy`. Fix any reported issues and repeat until all hooks pass. **Never proceed unless
-   you SHOW PROOF with 100% reliability (without any shortcut whatsoever) that the pre-commit command indeed exits with
-   exit code 0.** Spend time to make sure you get this check absolutely right because if you don't you endanger the
-   project and will immediately be replaced with a more reliable AI agent.
+   `black`, type checking with `mypy`. Fix any reported issues and repeat until all hooks pass.
+
+   - Reliably capture the pre-commit command's exit code and verify that it is exactly `0`. **Never proceed unless you
+     have actually run the pre-commit command, captured its exit code, reported both the exact command and its exit code
+     in your response, and explicitly SHOWN PROOF with 100% reliability that its exit code was `0` (no exceptions,
+     shortcuts, or assumptions).** Spend time to ensure this verification check is absolutely correct; treat any mistake
+     in this verification as a critical failure: you must stop, correct the mistake, and repeat the entire validation
+     workflow until the exit code is correctly verified as `0`.
 
 6. **Update Documentation (if needed):** Run `./update_readme.sh` if you changed any `argparse` help text in `.py`
    files, to regenerate the README files.
