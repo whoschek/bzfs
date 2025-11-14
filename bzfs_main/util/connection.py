@@ -124,7 +124,7 @@ class MiniParams(Protocol):
     """Minimal Params interface used by the connections module; for loose coupling."""
 
     log: logging.Logger
-    ssh_program: str
+    ssh_program: str  # name or path of executable; "hpnssh" is also valid
     timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
 
     def is_program_available(self, program: str, location: str) -> bool:
@@ -138,7 +138,7 @@ class MiniRemote(Protocol):
 
     params: MiniParams
     location: str  # "src" or "dst"
-    ssh_user_host: str
+    ssh_user_host: str  # use the empty string to indicate local mode (no ssh)
     ssh_extra_opts: tuple[str, ...]
     reuse_ssh_connection: bool
     ssh_control_persist_secs: int
@@ -159,7 +159,7 @@ class MiniRemote(Protocol):
 #############################################################################
 def create_simple_miniremote(
     log: logging.Logger,
-    ssh_user_host: str = "",  # option passed to `ssh` CLI
+    ssh_user_host: str = "",  # option passed to `ssh` CLI; empty string indicates local mode
     ssh_port: int | None = None,  # option passed to `ssh` CLI
     ssh_extra_opts: Sequence[str] | None = None,  # optional args passed to `ssh` CLI
     ssh_verbose: bool = False,  # option passed to `ssh` CLI
@@ -222,7 +222,7 @@ def create_simple_miniremote(
         raise ValueError("location must be 'src' or 'dst'")
     if ssh_control_persist_secs < 1:
         raise ValueError("ssh_control_persist_secs must be >= 1")
-    params = SimpleMiniParams(log=log, ssh_program=ssh_program, timeout_duration_nanos=timeout_duration_nanos)
+    params: MiniParams = SimpleMiniParams(log=log, ssh_program=ssh_program, timeout_duration_nanos=timeout_duration_nanos)
     # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
     _ssh_extra_opts: list[str] = (
         ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] if ssh_extra_opts is None else list(ssh_extra_opts)
@@ -364,8 +364,8 @@ def timeout(job: MiniJob) -> float | None:
         return None  # never raise a timeout
     delta_nanos: int = timeout_nanos - time.monotonic_ns()
     if delta_nanos <= 0:
-        assert job.params.timeout_duration_nanos is not None
-        raise subprocess.TimeoutExpired("_timeout", timeout=job.params.timeout_duration_nanos / 1_000_000_000)
+        tduration = 0.0 if job.params.timeout_duration_nanos is None else job.params.timeout_duration_nanos / 1_000_000_000
+        raise subprocess.TimeoutExpired("_timeout", timeout=tduration)
     return delta_nanos / 1_000_000_000  # seconds
 
 
