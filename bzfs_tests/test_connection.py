@@ -539,7 +539,7 @@ class TestSimpleMiniJob(AbstractTestCase):
 
     @patch("bzfs_main.util.connection.time.monotonic_ns", return_value=1_000_000_000)
     def test_timeout_fields_from_duration(self, mock_monotonic: MagicMock) -> None:
-        j = connection.create_simple_minijob(timeout_duration_nanos=987654321)
+        j = connection.create_simple_minijob(timeout_duration_secs=0.987654321)
         self.assertEqual(987654321, j.timeout_duration_nanos)
         self.assertEqual(1_000_000_000 + 987_654_321, j.timeout_nanos)
         mock_monotonic.assert_called_once_with()
