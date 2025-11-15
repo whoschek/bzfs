@@ -40,7 +40,8 @@ replicates ZFS snapshots from many (local or remote) source ZFS datasets and the
 datasets to (local or remote) destination ZFS datasets, using zfs send/receive/rollback/destroy
 and ssh, even at sub-second frequency across large fleets of hosts. bzfs can be used to
 incrementally replicate all ZFS snapshots since the most recent common snapshot from source to
-destination, in order to scale out or to help protect against data loss or ransomware.*
+destination, for DR/HA scenarios, in order to scale out, or to help protect against data loss or
+ransomware.*
 
 When run for the first time, bzfs replicates the dataset and all its snapshots from the source to
 the destination. On subsequent runs, bzfs transfers only the data that has changed since the

@@ -116,7 +116,7 @@ ZFS snapshots from many (local or remote) source ZFS datasets and their descenda
 destination ZFS datasets, using zfs send/receive/rollback/destroy and ssh, even at sub-second frequency across
 large fleets of hosts.
 {PROG_NAME} can be used to incrementally replicate all ZFS snapshots since the most recent common snapshot
-from source to destination, in order to scale out or to help protect against data loss or ransomware.*
+from source to destination, for DR/HA scenarios, in order to scale out, or to help protect against data loss or ransomware.*
 
 When run for the first time, {PROG_NAME} replicates the dataset and all its snapshots from the source to the
 destination. On subsequent runs, {PROG_NAME} transfers only the data that has changed since the previous run,
