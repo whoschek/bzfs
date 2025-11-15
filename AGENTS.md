@@ -94,11 +94,8 @@ To understand the system's architecture and features, follow these steps:
 
 - A "verification command" is a CLI command whose purpose is to check or validate changes (unit tests, integration
   tests, smoke tests, functional tests, `pre-commit`, etc.).
-
-- **Never fabricate having run a command or its results. Never fabricate exit code 0 or any other exit code.**
-
+- **Never fabricate having run a command or its results. Never fabricate exit code `0` or any other exit code.**
 - If it isn't feasible to run the command (e.g. missing tools, permissions, or environment restrictions), then
-
   - Explicitly state that the command was **not** run, why, and that validation is therefore incomplete.
   - Do not claim or imply that validation passed.
   - **Stop** making further code changes or running additional verification commands for this task.
