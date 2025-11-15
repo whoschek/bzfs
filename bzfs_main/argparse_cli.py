@@ -111,7 +111,7 @@ def argument_parser() -> argparse.ArgumentParser:
         allow_abbrev=False,
         formatter_class=argparse.RawTextHelpFormatter,
         description=f"""
-*{PROG_NAME} is a high-performance parallel backup and replication command line tool that reliably replicates
+*{PROG_NAME} is a near-realtime parallel backup and replication command line tool that reliably replicates
 ZFS snapshots from many (local or remote) source ZFS datasets and their descendant datasets to (local or remote)
 destination ZFS datasets, using zfs send/receive/rollback/destroy and ssh, even at sub-second frequency across
 large fleets of hosts.
