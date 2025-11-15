@@ -18,8 +18,8 @@ ConnectionPool.
 Can be configured to reuse multiplexed SSH connections for low latency, even on fresh process startup, for example leading to
 ballpark 3-5ms total time for running `/bin/echo hello` end-to-end over SSH on LAN, which requires two (sequential) network
 round trips (one for CHANNEL_OPEN, plus a subsequent one for CHANNEL_REQUEST).
-Requires the standard OpenSSH client CLI (`ssh`) to be installed. Also works with `hpnssh`. The latter uses larger TCP window
-sizes for best throughput over high speed long distance networks, aka paths with large bandwidth-delay product.
+Has zero dependencies beyond the standard OpenSSH client CLI (`ssh`); also works with `hpnssh`. The latter uses larger TCP
+window sizes for best throughput over high speed long distance networks, aka paths with large bandwidth-delay product.
 
 Example usage:
 
@@ -31,9 +31,9 @@ from bzfs_main.util.retry import RetryPolicy, run_with_retries
 
 log = logging.getLogger(__name__)
 remote = create_simple_miniremote(log=log, ssh_user_host="alice@127.0.0.1")
-job = create_simple_minijob(remote)
 conn_pool = ConnectionPool(remote, max_concurrent_ssh_sessions_per_tcp_connection=8, connpool_name="example")
 try:
+    job = create_simple_minijob()
     retry_policy = RetryPolicy(
         argparse.Namespace(
             retries=10,
@@ -113,8 +113,8 @@ DEDICATED: Final[str] = "dedicated"
 class MiniJob(Protocol):
     """Minimal Job interface required by the connections module; for loose coupling."""
 
-    params: MiniParams
     timeout_nanos: int | None  # timestamp aka instant in time
+    timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
     subprocesses: Subprocesses
 
 
@@ -125,10 +125,6 @@ class MiniParams(Protocol):
 
     log: logging.Logger
     ssh_program: str  # name or path of executable; "hpnssh" is also valid
-    timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
-
-    def is_program_available(self, program: str, location: str) -> bool:
-        """Return True if program is available on location host."""
 
 
 #############################################################################
@@ -145,6 +141,9 @@ class MiniRemote(Protocol):
     ssh_control_persist_margin_secs: int
     ssh_exit_on_shutdown: bool
     ssh_socket_dir: str
+
+    def is_ssh_available(self) -> bool:
+        """Return True if the ssh client program required for this remote is available on the local host."""
 
     def local_ssh_command(self, socket_file: str | None) -> list[str]:
         """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
@@ -166,7 +165,6 @@ def create_simple_miniremote(
     ssh_config_file: str = "",  # option passed to `ssh` CLI; example: /path/to/homedir/.ssh/config
     ssh_cipher: str = "^aes256-gcm@openssh.com",  # option passed to `ssh` CLI
     ssh_program: str = "ssh",  # name or path of executable; "hpnssh" is also valid
-    timeout_duration_nanos: int | None = None,  # duration (not a timestamp); for logging only
     reuse_ssh_connection: bool = True,
     ssh_control_persist_secs: int = 90,
     ssh_control_persist_margin_secs: int = 2,
@@ -179,10 +177,6 @@ def create_simple_miniremote(
     class SimpleMiniParams(MiniParams):
         log: logging.Logger
         ssh_program: str
-        timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
-
-        def is_program_available(self, program: str, location: str) -> bool:
-            return True
 
     @dataclass(frozen=True)
     class SimpleMiniRemote(MiniRemote):
@@ -199,14 +193,18 @@ def create_simple_miniremote(
         ssh_config_file: str
         ssh_config_file_hash: str
 
+        def is_ssh_available(self) -> bool:
+            return True
+
         def local_ssh_command(self, socket_file: str | None) -> list[str]:
             if not self.ssh_user_host:
                 return []  # local mode
             ssh_cmd: list[str] = [self.params.ssh_program]
             ssh_cmd.extend(self.ssh_extra_opts)
             if self.reuse_ssh_connection and socket_file:
-                ssh_cmd += ["-S", socket_file]
-            ssh_cmd += [self.ssh_user_host]
+                ssh_cmd.append("-S")
+                ssh_cmd.append(socket_file)
+            ssh_cmd.append(self.ssh_user_host)
             return ssh_cmd
 
         def cache_namespace(self) -> str:
@@ -222,9 +220,9 @@ def create_simple_miniremote(
         raise ValueError("location must be 'src' or 'dst'")
     if ssh_control_persist_secs < 1:
         raise ValueError("ssh_control_persist_secs must be >= 1")
-    params: MiniParams = SimpleMiniParams(log=log, ssh_program=ssh_program, timeout_duration_nanos=timeout_duration_nanos)
-    # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
-    _ssh_extra_opts: list[str] = (
+    params: MiniParams = SimpleMiniParams(log=log, ssh_program=ssh_program)
+
+    _ssh_extra_opts: list[str] = (  # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation
         ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] if ssh_extra_opts is None else list(ssh_extra_opts)
     )
     _ssh_extra_opts += ["-v"] if ssh_verbose else []
@@ -248,16 +246,19 @@ def create_simple_miniremote(
     )
 
 
-def create_simple_minijob(remote: MiniRemote, timeout_nanos: int | None = None) -> MiniJob:
+def create_simple_minijob(timeout_duration_nanos: int | None = None) -> MiniJob:
     """Factory that returns a simple implementation of the MiniJob interface."""
 
     @dataclass(frozen=True)
     class SimpleMiniJob(MiniJob):
-        params: MiniParams
         timeout_nanos: int | None  # timestamp aka instant in time
+        timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
         subprocesses: Subprocesses
 
-    return SimpleMiniJob(params=remote.params, timeout_nanos=timeout_nanos, subprocesses=Subprocesses())
+    timeout_nanos: int | None = None if timeout_duration_nanos is None else time.monotonic_ns() + timeout_duration_nanos
+    return SimpleMiniJob(
+        timeout_nanos=timeout_nanos, timeout_duration_nanos=timeout_duration_nanos, subprocesses=Subprocesses()
+    )
 
 
 #############################################################################
@@ -281,7 +282,7 @@ def run_ssh_command(
     mode (no remote.ssh_user_host) argv is executed directly without an intermediate shell.
     """
     assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
-    log = job.params.log
+    log: logging.Logger = conn.remote.params.log
     quoted_cmd: list[str] = [shlex.quote(arg) for arg in cmd]
     ssh_cmd: list[str] = conn.ssh_cmd
     if conn.remote.ssh_user_host:
@@ -309,11 +310,12 @@ def run_ssh_command(
 
 def refresh_ssh_connection_if_necessary(conn: Connection, job: MiniJob) -> None:
     """Maintain or create an ssh master connection for low latency reuse."""
-    p, log = job.params, job.params.log
-    remote = conn.remote
+    remote: MiniRemote = conn.remote
+    p: MiniParams = remote.params
+    log: logging.Logger = p.log
     if not remote.ssh_user_host:
         return  # we're in local mode; no ssh required
-    if not p.is_program_available("ssh", "local"):
+    if not remote.is_ssh_available():
         die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
     if not remote.reuse_ssh_connection:
         return
@@ -362,10 +364,10 @@ def timeout(job: MiniJob) -> float | None:
     timeout_nanos: int | None = job.timeout_nanos
     if timeout_nanos is None:
         return None  # never raise a timeout
+    assert job.timeout_duration_nanos is not None
     delta_nanos: int = timeout_nanos - time.monotonic_ns()
     if delta_nanos <= 0:
-        tduration = 0.0 if job.params.timeout_duration_nanos is None else job.params.timeout_duration_nanos / 1_000_000_000
-        raise subprocess.TimeoutExpired("_timeout", timeout=tduration)
+        raise subprocess.TimeoutExpired("_timeout", timeout=job.timeout_duration_nanos / 1_000_000_000)
     return delta_nanos / 1_000_000_000  # seconds
 
 
@@ -428,20 +430,21 @@ class Connection:
         """Records when the connection was last used."""
         self._last_modified = last_modified
 
-    def shutdown(self, msg_prefix: str, p: MiniParams) -> None:
+    def shutdown(self, msg_prefix: str) -> None:
         """Closes the underlying SSH master connection and releases the corresponding connection lease."""
         ssh_cmd: list[str] = self.ssh_cmd
         if ssh_cmd and self._reuse_ssh_connection:
             if self.connection_lease is None:
                 ssh_sock_cmd: list[str] = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
-                p.log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_sock_cmd))
+                log = self.remote.params.log
+                log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_sock_cmd))
                 try:
                     proc: CompletedProcess = subprocess.run(ssh_sock_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=0.1)
                 except subprocess.TimeoutExpired as e:  # harmless as master auto-exits after ssh_control_persist_secs anyway
-                    p.log.log(LOG_TRACE, "Harmless ssh master connection shutdown timeout: %s", e)
+                    log.log(LOG_TRACE, "Harmless ssh master connection shutdown timeout: %s", e)
                 else:
                     if proc.returncode != 0:  # harmless for the same reason
-                        p.log.log(LOG_TRACE, "Harmless ssh master connection shutdown issue: %s", proc.stderr.rstrip())
+                        log.log(LOG_TRACE, "Harmless ssh master connection shutdown issue: %s", proc.stderr.rstrip())
             else:
                 self.connection_lease.release()
 
@@ -516,12 +519,12 @@ class ConnectionPool:
 
     def shutdown(self, msg_prefix: str = "") -> None:
         """Closes all SSH connections managed by this pool."""
-        msg_prefix = msg_prefix + "/" + self._connpool_name
         with self._lock:
             try:
                 if self._remote.reuse_ssh_connection:
+                    msg_prefix = msg_prefix + "/" + self._connpool_name
                     for conn in self._priority_queue:
-                        conn.shutdown(msg_prefix, self._remote.params)
+                        conn.shutdown(msg_prefix)
             finally:
                 self._priority_queue.clear()
 

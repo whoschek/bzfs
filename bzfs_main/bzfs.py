@@ -268,6 +268,7 @@ class Job(MiniJob):
         self.is_first_replication_task: Final[SynchronizedBool] = SynchronizedBool(True)
         self.replication_start_time_nanos: int = time.monotonic_ns()
         self.timeout_nanos: int | None = None  # timestamp aka instant in time
+        self.timeout_duration_nanos: int | None = None  # duration (not a timestamp); for logging only
         self.cache: SnapshotCache = SnapshotCache(self)
         self.stats_lock: Final[threading.Lock] = threading.Lock()
         self.num_cache_hits: int = 0
@@ -341,6 +342,7 @@ class Job(MiniJob):
                 if self.is_test_mode:
                     log.log(LOG_TRACE, "Parsed CLI arguments: %s", args)
                 self.params = p = Params(args, sys_argv or [], log_params, log, self.inject_params)
+                self.timeout_duration_nanos = p.timeout_duration_nanos
                 lock_file: str = p.lock_file_name()
                 lock_fd = os.open(
                     lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, FILE_PERMISSIONS

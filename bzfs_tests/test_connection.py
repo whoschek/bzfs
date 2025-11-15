@@ -245,7 +245,7 @@ class TestConnectionPool(AbstractTestCase):
                 self.assertIsNotNone(cpool._lease_mgr)
                 self.assertIsNotNone(conn.connection_lease)
             finally:
-                conn.shutdown("test", p)
+                conn.shutdown("test")
 
     def test_multiple_tcp_connections(self) -> None:
         capacity = 2
@@ -521,22 +521,28 @@ class TestSimpleMiniRemote(AbstractTestCase):
         self.assertEqual("user@host", r.ssh_user_host)
         self.assertEqual(2222, cast(Any, r).ssh_port)
 
-    def test_simple_mini_params_is_program_available_always_true(self) -> None:
-        """Ensure SimpleMiniParams.is_program_available always reports True."""
+    def test_simple_mini_remote_is_ssh_available_always_true(self) -> None:
+        """Ensure SimpleMiniRemote.is_ssh_available always reports True."""
         r = connection.create_simple_miniremote(log=self.log, ssh_user_host="user@host")
-        self.assertTrue(r.params.is_program_available("nonexistent_program", r.location))
+        self.assertTrue(r.is_ssh_available())
 
 
 #############################################################################
 class TestSimpleMiniJob(AbstractTestCase):
     """Smoke tests for SimpleMiniJob wiring to ensure attributes are set correctly."""
 
-    def test_initialization_copies_params_and_timeout(self) -> None:
-        r = connection.create_simple_miniremote(log=logging.getLogger(__name__), ssh_user_host="u@h")
-        j = connection.create_simple_minijob(remote=r, timeout_nanos=123)
-        self.assertIs(j.params, r.params)
-        self.assertEqual(123, j.timeout_nanos)
+    def test_initialization_defaults(self) -> None:
+        j = connection.create_simple_minijob()
+        self.assertIsNone(j.timeout_nanos)
+        self.assertIsNone(j.timeout_duration_nanos)
         self.assertIsNotNone(j.subprocesses)
+
+    @patch("bzfs_main.util.connection.time.monotonic_ns", return_value=1_000_000_000)
+    def test_timeout_fields_from_duration(self, mock_monotonic: MagicMock) -> None:
+        j = connection.create_simple_minijob(timeout_duration_nanos=987654321)
+        self.assertEqual(987654321, j.timeout_duration_nanos)
+        self.assertEqual(1_000_000_000 + 987_654_321, j.timeout_nanos)
+        mock_monotonic.assert_called_once_with()
 
 
 #############################################################################
@@ -660,7 +666,6 @@ def make_fake_params() -> Params:
     mock.log = logging.getLogger(__name__)
     mock.ssh_program = "ssh"
     mock.connection_pools = {}
-    mock.timeout_duration_nanos = None
     return mock
 
 
@@ -670,6 +675,8 @@ class _FakeRemote(SimpleNamespace):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        if not hasattr(self, "params"):
+            self.params = make_fake_params()
         if not hasattr(self, "ssh_extra_opts"):
             self.ssh_extra_opts = ()
         if not hasattr(self, "ssh_socket_dir"):
@@ -683,6 +690,9 @@ class _FakeRemote(SimpleNamespace):
 
     def local_ssh_command(self, socket_path: str | None = None) -> list[str]:
         return ["ssh", self.ssh_user_host or "localhost"]
+
+    def is_ssh_available(self) -> bool:
+        return True
 
 
 #############################################################################
@@ -852,7 +862,7 @@ class TestRefreshSshConnection(AbstractTestCase):
 
     @patch("bzfs_main.util.connection.die", side_effect=SystemExit)
     def test_ssh_unavailable_dies(self, mock_die: MagicMock) -> None:
-        self.job.params.is_program_available = MagicMock(return_value=False)  # type: ignore[method-assign]
+        self.remote.is_ssh_available = MagicMock(return_value=False)  # type: ignore[method-assign]
         with self.assertRaises(SystemExit):
             connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_die.assert_called_once()
@@ -927,7 +937,7 @@ class TestRefreshSshConnection(AbstractTestCase):
                 self.assertIsNotNone(conn.connection_lease)
                 mock_utime.assert_called_once()
             finally:
-                conn.shutdown("test", self.job.params)
+                conn.shutdown("test")
 
     @patch("bzfs_main.util.connection_lease.ConnectionLease.set_socket_mtime_to_now")
     @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
@@ -949,17 +959,20 @@ class TestTimeout(AbstractTestCase):
         self.job.params = make_fake_params()
 
     def test_no_timeout_returns_none(self) -> None:
+        self.assertIsNone(connection.timeout(self.job))
         self.job.timeout_nanos = None
+        self.job.timeout_duration_nanos = None
         self.assertIsNone(connection.timeout(self.job))
 
     def test_expired_timeout_raises(self) -> None:
-        self.job.params.timeout_duration_nanos = 1
-        self.job.timeout_nanos = time.monotonic_ns() - 1
+        self.job.timeout_duration_nanos = 1
+        self.job.timeout_nanos = time.monotonic_ns() - self.job.timeout_duration_nanos
         with self.assertRaises(subprocess.TimeoutExpired):
             connection.timeout(self.job)
 
     def test_seconds_remaining_returned(self) -> None:
-        self.job.timeout_nanos = time.monotonic_ns() + 1_000_000_000
+        self.job.timeout_duration_nanos = 1_000_000_000
+        self.job.timeout_nanos = time.monotonic_ns() + self.job.timeout_duration_nanos
         result = connection.timeout(self.job)
         self.assertIsNotNone(result)
         self.assertGreaterEqual(cast(float, result), 0.0)
@@ -1045,7 +1058,7 @@ class TestSshExitOnShutdown(AbstractTestCase):
             ),
         )
         conn: Connection = Connection(r, 1, 0)
-        conn.shutdown("test", p)
+        conn.shutdown("test")
         self.assertTrue(mock_run.called)
         argv = mock_run.call_args[0][0]
         self.assertIn("-O", argv)
@@ -1084,7 +1097,7 @@ class TestSshExitOnShutdown(AbstractTestCase):
             )
             cpool = ConnectionPool(r, 1, SHARED)
             conn: Connection = cpool.get_connection()
-            conn.shutdown("test", p)
+            conn.shutdown("test")
             # No call to run expected when immediate exit is false
             self.assertFalse(mock_run.called)
 

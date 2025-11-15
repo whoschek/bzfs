@@ -18,6 +18,8 @@ snapshot deletion.
 
 This module contains only generic scheduling and coordination (the "algorithm"). Error handling, retries, and skip policies
 are customizable and implemented by callers via the CompletionCallback API or wrappers such as ``parallel_tasktree_policy``.
+
+Has zero dependencies beyond the Python standard library.
 """
 
 from __future__ import (
