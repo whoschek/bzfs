@@ -598,6 +598,10 @@ class Remote(MiniRemote):
             return "-"  # local mode
         return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"
 
+    def is_ssh_available(self) -> bool:
+        """Return True if the ssh client program required for this remote is available on the local host."""
+        return self.params.is_program_available("ssh", "local")
+
     def __repr__(self) -> str:
         return str(self.__dict__)
 

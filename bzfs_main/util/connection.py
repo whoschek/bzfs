@@ -115,6 +115,7 @@ class MiniJob(Protocol):
 
     params: MiniParams
     timeout_nanos: int | None  # timestamp aka instant in time
+    timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
     subprocesses: Subprocesses
 
 
@@ -124,11 +125,7 @@ class MiniParams(Protocol):
     """Minimal Params interface used by the connections module; for loose coupling."""
 
     log: logging.Logger
-    ssh_program: str
-    timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
-
-    def is_program_available(self, program: str, location: str) -> bool:
-        """Return True if program is available on location host."""
+    ssh_program: str  # name or path of executable; "hpnssh" is also valid
 
 
 #############################################################################
@@ -138,13 +135,16 @@ class MiniRemote(Protocol):
 
     params: MiniParams
     location: str  # "src" or "dst"
-    ssh_user_host: str
+    ssh_user_host: str  # use the empty string to indicate local mode (no ssh)
     ssh_extra_opts: tuple[str, ...]
     reuse_ssh_connection: bool
     ssh_control_persist_secs: int
     ssh_control_persist_margin_secs: int
     ssh_exit_on_shutdown: bool
     ssh_socket_dir: str
+
+    def is_ssh_available(self) -> bool:
+        """Return True if the ssh client program required for this remote is available on the local host."""
 
     def local_ssh_command(self, socket_file: str | None) -> list[str]:
         """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
@@ -159,14 +159,13 @@ class MiniRemote(Protocol):
 #############################################################################
 def create_simple_miniremote(
     log: logging.Logger,
-    ssh_user_host: str = "",  # option passed to `ssh` CLI
+    ssh_user_host: str = "",  # option passed to `ssh` CLI; empty string indicates local mode
     ssh_port: int | None = None,  # option passed to `ssh` CLI
     ssh_extra_opts: Sequence[str] | None = None,  # optional args passed to `ssh` CLI
     ssh_verbose: bool = False,  # option passed to `ssh` CLI
     ssh_config_file: str = "",  # option passed to `ssh` CLI; example: /path/to/homedir/.ssh/config
     ssh_cipher: str = "^aes256-gcm@openssh.com",  # option passed to `ssh` CLI
     ssh_program: str = "ssh",  # name or path of executable; "hpnssh" is also valid
-    timeout_duration_nanos: int | None = None,  # duration (not a timestamp); for logging only
     reuse_ssh_connection: bool = True,
     ssh_control_persist_secs: int = 90,
     ssh_control_persist_margin_secs: int = 2,
@@ -179,10 +178,6 @@ def create_simple_miniremote(
     class SimpleMiniParams(MiniParams):
         log: logging.Logger
         ssh_program: str
-        timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
-
-        def is_program_available(self, program: str, location: str) -> bool:
-            return True
 
     @dataclass(frozen=True)
     class SimpleMiniRemote(MiniRemote):
@@ -198,6 +193,9 @@ def create_simple_miniremote(
         ssh_port: int | None
         ssh_config_file: str
         ssh_config_file_hash: str
+
+        def is_ssh_available(self) -> bool:
+            return True
 
         def local_ssh_command(self, socket_file: str | None) -> list[str]:
             if not self.ssh_user_host:
@@ -222,7 +220,8 @@ def create_simple_miniremote(
         raise ValueError("location must be 'src' or 'dst'")
     if ssh_control_persist_secs < 1:
         raise ValueError("ssh_control_persist_secs must be >= 1")
-    params = SimpleMiniParams(log=log, ssh_program=ssh_program, timeout_duration_nanos=timeout_duration_nanos)
+
+    params: MiniParams = SimpleMiniParams(log=log, ssh_program=ssh_program)
     # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
     _ssh_extra_opts: list[str] = (
         ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] if ssh_extra_opts is None else list(ssh_extra_opts)
@@ -248,16 +247,23 @@ def create_simple_miniremote(
     )
 
 
-def create_simple_minijob(remote: MiniRemote, timeout_nanos: int | None = None) -> MiniJob:
+def create_simple_minijob(remote: MiniRemote, timeout_duration_nanos: int | None = None) -> MiniJob:
     """Factory that returns a simple implementation of the MiniJob interface."""
 
     @dataclass(frozen=True)
     class SimpleMiniJob(MiniJob):
         params: MiniParams
         timeout_nanos: int | None  # timestamp aka instant in time
+        timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
         subprocesses: Subprocesses
 
-    return SimpleMiniJob(params=remote.params, timeout_nanos=timeout_nanos, subprocesses=Subprocesses())
+    timeout_nanos: int | None = None if timeout_duration_nanos is None else time.monotonic_ns() + timeout_duration_nanos
+    return SimpleMiniJob(
+        params=remote.params,
+        timeout_nanos=timeout_nanos,
+        timeout_duration_nanos=timeout_duration_nanos,
+        subprocesses=Subprocesses(),
+    )
 
 
 #############################################################################
@@ -313,7 +319,7 @@ def refresh_ssh_connection_if_necessary(conn: Connection, job: MiniJob) -> None:
     remote = conn.remote
     if not remote.ssh_user_host:
         return  # we're in local mode; no ssh required
-    if not p.is_program_available("ssh", "local"):
+    if not remote.is_ssh_available():
         die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
     if not remote.reuse_ssh_connection:
         return
@@ -362,10 +368,10 @@ def timeout(job: MiniJob) -> float | None:
     timeout_nanos: int | None = job.timeout_nanos
     if timeout_nanos is None:
         return None  # never raise a timeout
+    assert job.timeout_duration_nanos is not None
     delta_nanos: int = timeout_nanos - time.monotonic_ns()
     if delta_nanos <= 0:
-        assert job.params.timeout_duration_nanos is not None
-        raise subprocess.TimeoutExpired("_timeout", timeout=job.params.timeout_duration_nanos / 1_000_000_000)
+        raise subprocess.TimeoutExpired("_timeout", timeout=job.timeout_duration_nanos / 1_000_000_000)
     return delta_nanos / 1_000_000_000  # seconds
 
 
