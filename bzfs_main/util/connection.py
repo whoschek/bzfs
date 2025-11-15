@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 remote = create_simple_miniremote(log=log, ssh_user_host="alice@127.0.0.1")
 conn_pool = ConnectionPool(remote, max_concurrent_ssh_sessions_per_tcp_connection=8, connpool_name="example")
 try:
-    job = create_simple_minijob(remote)
+    job = create_simple_minijob()
     retry_policy = RetryPolicy(
         argparse.Namespace(
             retries=10,
@@ -113,7 +113,6 @@ DEDICATED: Final[str] = "dedicated"
 class MiniJob(Protocol):
     """Minimal Job interface required by the connections module; for loose coupling."""
 
-    params: MiniParams
     timeout_nanos: int | None  # timestamp aka instant in time
     timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
     subprocesses: Subprocesses
@@ -247,22 +246,18 @@ def create_simple_miniremote(
     )
 
 
-def create_simple_minijob(remote: MiniRemote, timeout_duration_nanos: int | None = None) -> MiniJob:
+def create_simple_minijob(timeout_duration_nanos: int | None = None) -> MiniJob:
     """Factory that returns a simple implementation of the MiniJob interface."""
 
     @dataclass(frozen=True)
     class SimpleMiniJob(MiniJob):
-        params: MiniParams
         timeout_nanos: int | None  # timestamp aka instant in time
         timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
         subprocesses: Subprocesses
 
     timeout_nanos: int | None = None if timeout_duration_nanos is None else time.monotonic_ns() + timeout_duration_nanos
     return SimpleMiniJob(
-        params=remote.params,
-        timeout_nanos=timeout_nanos,
-        timeout_duration_nanos=timeout_duration_nanos,
-        subprocesses=Subprocesses(),
+        timeout_nanos=timeout_nanos, timeout_duration_nanos=timeout_duration_nanos, subprocesses=Subprocesses()
     )
 
 
@@ -287,7 +282,7 @@ def run_ssh_command(
     mode (no remote.ssh_user_host) argv is executed directly without an intermediate shell.
     """
     assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
-    log = job.params.log
+    log = conn.remote.params.log
     quoted_cmd: list[str] = [shlex.quote(arg) for arg in cmd]
     ssh_cmd: list[str] = conn.ssh_cmd
     if conn.remote.ssh_user_host:
@@ -315,8 +310,8 @@ def run_ssh_command(
 
 def refresh_ssh_connection_if_necessary(conn: Connection, job: MiniJob) -> None:
     """Maintain or create an ssh master connection for low latency reuse."""
-    p, log = job.params, job.params.log
     remote = conn.remote
+    p, log = remote.params, remote.params.log
     if not remote.ssh_user_host:
         return  # we're in local mode; no ssh required
     if not remote.is_ssh_available():

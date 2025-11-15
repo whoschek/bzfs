@@ -532,20 +532,14 @@ class TestSimpleMiniJob(AbstractTestCase):
     """Smoke tests for SimpleMiniJob wiring to ensure attributes are set correctly."""
 
     def test_initialization_defaults(self) -> None:
-        r = connection.create_simple_miniremote(log=logging.getLogger(__name__), ssh_user_host="u@h")
-        j = connection.create_simple_minijob(remote=r)
-        self.assertIs(j.params, r.params)
+        j = connection.create_simple_minijob()
         self.assertIsNone(j.timeout_nanos)
         self.assertIsNone(j.timeout_duration_nanos)
         self.assertIsNotNone(j.subprocesses)
 
     @patch("bzfs_main.util.connection.time.monotonic_ns", return_value=1_000_000_000)
     def test_timeout_fields_from_duration(self, mock_monotonic: MagicMock) -> None:
-        r = connection.create_simple_miniremote(
-            log=logging.getLogger(__name__),
-            ssh_user_host="u@h",
-        )
-        j = connection.create_simple_minijob(remote=r, timeout_duration_nanos=987654321)
+        j = connection.create_simple_minijob(timeout_duration_nanos=987654321)
         self.assertEqual(987654321, j.timeout_duration_nanos)
         self.assertEqual(1_000_000_000 + 987_654_321, j.timeout_nanos)
         mock_monotonic.assert_called_once_with()
@@ -681,6 +675,8 @@ class _FakeRemote(SimpleNamespace):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        if not hasattr(self, "params"):
+            self.params = make_fake_params()
         if not hasattr(self, "ssh_extra_opts"):
             self.ssh_extra_opts = ()
         if not hasattr(self, "ssh_socket_dir"):
