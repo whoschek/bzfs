@@ -35,13 +35,12 @@
 # Introduction
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN DESCRIPTION SECTION -->
-*bzfs is a near-realtime parallel backup and replication command line tool that reliably
-replicates ZFS snapshots from many (local or remote) source ZFS datasets and their descendant
-datasets to (local or remote) destination ZFS datasets, using zfs send/receive/rollback/destroy
-and ssh, even at sub-second frequency across large fleets of hosts. bzfs can be used to
-incrementally replicate all ZFS snapshots since the most recent common snapshot from source to
-destination, for DR/HA scenarios, in order to scale out, or to help protect against data loss or
-ransomware.*
+*bzfs is a reliable near real-time, parallel replication and backup command-line tool for ZFS. It
+replicates snapshots from many local or remote source ZFS datasets (and their descendants) to
+local or remote destination datasets, using zfs send/receive and ssh, and can operate at
+sub-second intervals across large fleets of hosts. bzfs incrementally replicates all ZFS snapshots
+since the most recent common snapshot, supporting disaster recovery and high availability (DR/HA),
+scale-out deployments, and protection against data loss or ransomware.*
 
 When run for the first time, bzfs replicates the dataset and all its snapshots from the source to
 the destination. On subsequent runs, bzfs transfers only the data that has changed since the
