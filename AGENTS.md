@@ -92,24 +92,17 @@ To understand the system's architecture and features, follow these steps:
 
 # Command Verification Rules
 
-- A "verification command" is any CLI command whose purpose is to check or validate your changes (unit tests,
-  integration tests, smoke tests, functional tests, `pre-commit`, etc.)
-- Whenever you run a verification command you **must** follow this exact sequence:
+- A "verification command" is a CLI command whose purpose is to check or validate changes (unit tests, integration
+  tests, smoke tests, functional tests, `pre-commit`, etc.).
 
-1. Run the exact command specified (do not substitute or simplify it).
-2. Capture the command's numeric exit code from the execution environment.
-3. In your response, explicitly report:
-   - The exact command you ran (full shell line).
-   - The exact exit code as an integer.
-4. Treat the exit code as the sole source of truth:
-   - Exit code `0` ⇒ success.
-   - Exit code ≠ `0` ⇒ failure.
-5. Never infer success or failure from log text alone, and never fabricate having run a command or its results.
-6. If it isn't feasible to run the command (e.g. missing tools, permissions, or environment restrictions), then
-   - Explicitly state that the command was **not** run, why, and that validation is therefore incomplete.
-   - Do not claim or imply that validation passed.
-   - **Stop** making further code changes or running additional verification commands for this task.
-   - **Ask the User how to proceed**.
+- **Never fabricate having run a command or its results. Never fabricate exit code 0 or any other exit code.**
+
+- If it isn't feasible to run the command (e.g. missing tools, permissions, or environment restrictions), then
+
+  - Explicitly state that the command was **not** run, why, and that validation is therefore incomplete.
+  - Do not claim or imply that validation passed.
+  - **Stop** making further code changes or running additional verification commands for this task.
+  - **Ask the User how to proceed**.
 
 # Change Validation Workflow
 
