@@ -90,8 +90,8 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     metadata.
 
     Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and any number of
-    snapshots. Time complexity is O(max(N log N, M log M)) where N is the number of datasets and M is the number of snapshots
-    per dataset. Space complexity is O(max(N, M)). Assumes that both src_datasets and dst_datasets are sorted.
+    snapshots. Time complexity is O((N log N) + (N * M log M)) where N is the number of datasets and M is the number of
+    snapshots per dataset. Space complexity is O(max(N, M)). Assumes that both src_datasets and dst_datasets are sorted.
     """
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst

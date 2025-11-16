@@ -777,8 +777,8 @@ class Job(MiniJob):
         command line invocations, respecting the limits that the operating system places on the maximum length of a single
         command line, per `getconf ARG_MAX`.
 
-        Time complexity is O(max(N log N, M log M)) where N is the number of datasets and M is the number of snapshots per
-        dataset. Space complexity is O(max(N, M)).
+        Time complexity is O((N log N) + (N * M log M)) where N is the number of datasets and M is the number of snapshots
+        per dataset. Space complexity is O(max(N, M)).
         """
         p, log = self.params, self.params.log
         src = p.src
@@ -1038,8 +1038,8 @@ class Job(MiniJob):
         are successfully taken on schedule, successfully replicated on schedule, and successfully pruned on schedule. Process
         exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
 
-        Time complexity is O(max(N log N, M log M)) where N is the number of datasets and M is the number of snapshots per
-        dataset. Space complexity is O(max(N, M)).
+        Time complexity is O((N log N) + (N * M log M)) where N is the number of datasets and M is the number of snapshots
+        per dataset. Space complexity is O(max(N, M)).
         """
         p, log = self.params, self.params.log
         alerts: list[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
