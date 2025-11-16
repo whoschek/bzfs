@@ -38,10 +38,10 @@ The `bzfs` project consists of two primary command-line tools:
 
 - **`bzfs`:** The core engine for replicating ZFS snapshots. It handles the low-level mechanics of `zfs send/receive`,
   data transfer, and snapshot management between two hosts.
-- **`bzfs_jobrunner`:** A high-level orchestrator that invokes `bzfs` as part of scheduled workflows to manage backup,
-  replication, pruning and monitoring jobs across a fleet of multiple source and destination hosts. The tool is driven
-  by a simple, version-controllable, fleet-wide job configuration file (e.g., `bzfs_job_example.py`). Understanding this
-  distinction between `bzfs_jobrunner` and `bzfs` is critical.
+- **`bzfs_jobrunner`:** A high-level orchestrator that invokes `bzfs` as part of scheduled workflows to manage
+  replication, backup, pruning and monitoring jobs across a fleet of multiple source and destination hosts. The tool is
+  driven by a simple, version-controllable, fleet-wide job configuration file (e.g., `bzfs_job_example.py`).
+  Understanding this distinction between `bzfs_jobrunner` and `bzfs` is critical.
 
 ## Repository Layout
 
@@ -63,8 +63,8 @@ To understand the system's architecture and features, follow these steps:
 - **Instruction Precedence:** If there is any conflict, the User's explicit requests for the current session take
   precedence over any `AGENTS.md` rule.
 - For tasks that only involve analysis, explanation, documentation review, or design proposals without modifying
-  repository files, you may ignore the Change Validation Workflow, Core Software Development Workflow, and Commit
-  Workflow. Instead, apply the Step by Step Reasoning Workflow and focus on correctness of reasoning.
+  repository files, you may ignore the *Change Validation Workflow*, *Core Software Development Workflow*, and *Commit
+  Workflow*. Instead, apply the *Step by Step Reasoning Workflow* and focus on correctness of reasoning.
 
 # Step by Step Reasoning Workflow
 
@@ -92,13 +92,15 @@ To understand the system's architecture and features, follow these steps:
 
 # Command Verification Rules
 
-- A "verification command" is a CLI command whose purpose is to check or validate changes (unit tests, integration
-  tests, smoke tests, functional tests, `pre-commit`, etc.).
+- A *verification command* is a CLI command whose purpose is to check or validate changes, e.g. unit tests, integration
+  tests, smoke tests, functional tests, `pre-commit`.
 - **Never fabricate having run a command or its results. Never fabricate exit code `0` or any other exit code.**
-- If it isn't feasible to run the command (e.g. missing tools, permissions, or environment restrictions), then
-  - Explicitly state that the command was **not** run, why, and that validation is therefore incomplete.
-  - Do not claim or imply that validation passed.
-  - **Stop** making further code changes or running additional verification commands for this task.
+- If it isn't feasible to run the command (e.g. missing tools, permissions, or environment restrictions), then you
+  **must** do all of the following:
+  - Explicitly report that the command was **not** run, why, and that validation is therefore incomplete.
+  - Do not claim or imply that validation somehow passed.
+  - **Stop** making further code changes.
+  - **Do not run** additional verification commands for this task.
   - **Ask the User how to proceed**.
 
 # Change Validation Workflow
