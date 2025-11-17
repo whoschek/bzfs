@@ -177,7 +177,8 @@ For tasks that change code, tests, or scripts in this repository, you **must** f
 6. **Write User Documentation:** If necessary, specify and apply user-facing doc changes, then re-run the
    [Change Validation Workflow](#change-validation-workflow).
 
-7. **Iterate:** Recall the tasks that you previously put into the backlog, and repeat the workflow starting with Step 1.
+7. **Iterate:** Recall and report the tasks that you previously put into the backlog, and repeat the workflow starting
+   with Step 1.
 
 # Commit Workflow
 
