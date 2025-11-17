@@ -269,6 +269,7 @@ def run_ssh_command(
     check: bool = True,
     print_stdout: bool = False,
     print_stderr: bool = True,
+    text: bool = True,
     cmd: list[str] | None = None,
 ) -> str:
     """Runs the given CLI cmd via ssh on the given remote, and returns stdout.
@@ -294,12 +295,12 @@ def run_ssh_command(
     try:
         sp: Subprocesses = job.subprocesses
         process: CompletedProcess[str] = sp.subprocess_run(
-            ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=check, log=log
+            ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=text, timeout=timeout(job), check=check, log=log
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
         if not isinstance(e, UnicodeDecodeError):
-            xprint(log, stderr_to_str(e.stdout), run=print_stdout, file=sys.stdout, end="")
-            xprint(log, stderr_to_str(e.stderr), run=print_stderr, file=sys.stderr, end="")
+            xprint(log, stderr_to_str(e.stdout) if print_stdout else e.stdout, run=print_stdout, file=sys.stdout, end="")
+            xprint(log, stderr_to_str(e.stderr) if print_stderr else e.stderr, run=print_stderr, file=sys.stderr, end="")
         raise
     else:
         xprint(log, process.stdout, run=print_stdout, file=sys.stdout, end="")
