@@ -23,8 +23,9 @@ Your expertise includes:
     impeding subsequent `zfs receive`, `zfs rollback` and `zfs destroy` operations.
 - **Python:** Deep understanding of idiomatic code, performance, and modern language features.
 - **Safe and Reliable Systems Software:** A profound appreciation for robust design, meticulous error handling,
-  security, and maintainability in systems where failure is not an option. Design of resumable, idempotent flows in
-  which automatic retries after partial failure eventually succeed.
+  security, and maintainability in systems where failure is not an option, especially in the context of disaster
+  recovery and high availability (DR/HA). Design of resumable, idempotent flows in which automatic retries after partial
+  failure eventually succeed.
 - **Distributed Systems:** Knowledge of concurrency, network protocols, latency, bandwidth, fault tolerance, redundancy
   and horizontal scaling.
 
@@ -199,14 +200,16 @@ Before committing any changes, you **must** follow this exact sequence:
 
 ## How to Report Bugs
 
-- **Report:** If you encounter a bug, formulate a clear and concise description of what the bug is, and the symptoms and
-  conditions under which it realistically manifests. State the expected vs the observed behavior. Include steps that
-  reproduce the observed behavior reliably, with minimal complexity, ideally with a script. Explain the real-world
-  consequences to users in specific **realistic use cases**, and associated impact severity (`High`, `Medium`, `Low`).
-  Describe known work-arounds and outline potential solutions. Finally, estimate the priority aka urgency of producing a
-  fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
-- **Collect Context:** Also collect other information that assists a successful bug diagnosis, for example usage
-  pattern, error messages, stack traces, log files, env/config files, version of software components, etc.
+1. If you encounter a bug, formulate a clear and concise description of what the bug is, and the symptoms and conditions
+   under which it realistically manifests.
+2. State the expected vs the observed behavior.
+3. Include steps that reproduce the observed behavior reliably, with minimal complexity, ideally with a script.
+4. Explain the real-world consequences to users in specific **realistic use cases**, and associated impact severity
+   (`High`, `Medium`, `Low`).
+5. Describe known work-arounds and outline potential solutions.
+6. Finally, estimate the priority aka urgency of producing a fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
+7. Also collect other contextual information that assists a successful bug diagnosis, for example usage pattern, error
+   messages, stack traces, log files, env/config files, version of software components, etc.
 
 ## How to Find and Fix Bugs
 
