@@ -77,7 +77,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
         Job,
     )
 
-T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 def run_ssh_cmd_batched(
@@ -98,10 +98,10 @@ def itr_ssh_cmd_batched(
     r: MiniRemote,
     cmd: list[str],
     cmd_args: Iterable[str],
-    fn: Callable[[list[str]], T],
+    fn: Callable[[list[str]], _T],
     max_batch_items: int = 2**29,
     sep: str = " ",
-) -> Iterator[T]:
+) -> Iterator[_T]:
     """Runs fn(cmd_args) in sequential batches w/ cmd, without creating a cmdline that's too big for the OS to handle."""
     max_bytes: int = _max_batch_bytes(job, r, cmd, sep)
     return batch_cmd_iterator(cmd_args=cmd_args, fn=fn, max_batch_items=max_batch_items, max_batch_bytes=max_bytes, sep=sep)
@@ -122,10 +122,10 @@ def itr_ssh_cmd_parallel(
     job: Job,
     r: MiniRemote,
     cmd_args_list: Iterable[tuple[list[str], Iterable[str]]],
-    fn: Callable[[list[str], list[str]], T],
+    fn: Callable[[list[str], list[str]], _T],
     max_batch_items: int = 2**29,
     ordered: bool = True,
-) -> Iterator[T]:
+) -> Iterator[_T]:
     """Streams results from multiple parallel (batched) SSH commands.
 
     When ordered=True, preserves the order of the batches as provided by cmd_args_list (i.e. yields results in the same order

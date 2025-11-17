@@ -136,19 +136,19 @@ def drain(iterable: Iterable[Any]) -> None:
         _ = None  # help gc (iterable can block)
 
 
-K_ = TypeVar("K_")
-V_ = TypeVar("V_")
-R_ = TypeVar("R_")
+_K_ = TypeVar("_K_")
+_V_ = TypeVar("_V_")
+_R_ = TypeVar("_R_")
 
 
-def shuffle_dict(dictionary: dict[K_, V_], rand: random.Random = random.SystemRandom()) -> dict[K_, V_]:  # noqa: B008
+def shuffle_dict(dictionary: dict[_K_, _V_], rand: random.Random = random.SystemRandom()) -> dict[_K_, _V_]:  # noqa: B008
     """Returns a new dict with items shuffled randomly."""
-    items: list[tuple[K_, V_]] = list(dictionary.items())
+    items: list[tuple[_K_, _V_]] = list(dictionary.items())
     rand.shuffle(items)
     return dict(items)
 
 
-def sorted_dict(dictionary: dict[K_, V_]) -> dict[K_, V_]:
+def sorted_dict(dictionary: dict[_K_, _V_]) -> dict[_K_, _V_]:
     """Returns a new dict with items sorted primarily by key and secondarily by value."""
     return dict(sorted(dictionary.items()))
 
@@ -336,12 +336,12 @@ def close_quietly(fd: int) -> None:
             pass
 
 
-P = TypeVar("P")
+_P = TypeVar("_P")
 
 
 def find_match(
-    seq: Sequence[P],
-    predicate: Callable[[P], bool],
+    seq: Sequence[_P],
+    predicate: Callable[[_P], bool],
     start: int | None = None,
     end: int | None = None,
     reverse: bool = False,
@@ -446,10 +446,10 @@ def replace_in_lines(lines: list[str], old: str, new: str, count: int = -1) -> N
         lines[i] = lines[i].replace(old, new, count)
 
 
-TAPPEND = TypeVar("TAPPEND")
+_TAPPEND = TypeVar("_TAPPEND")
 
 
-def append_if_absent(lst: list[TAPPEND], *items: TAPPEND) -> list[TAPPEND]:
+def append_if_absent(lst: list[_TAPPEND], *items: _TAPPEND) -> list[_TAPPEND]:
     """Appends items to list if they are not already present."""
     for item in items:
         if item not in lst:
@@ -457,7 +457,7 @@ def append_if_absent(lst: list[TAPPEND], *items: TAPPEND) -> list[TAPPEND]:
     return lst
 
 
-def xappend(lst: list[TAPPEND], *items: TAPPEND | Iterable[TAPPEND]) -> list[TAPPEND]:
+def xappend(lst: list[_TAPPEND], *items: _TAPPEND | Iterable[_TAPPEND]) -> list[_TAPPEND]:
     """Appends each of the items to the given list if the item is "truthy", for example not None and not an empty string; If
     an item is an iterable does so recursively, flattening the output."""
     for item in items:
@@ -1031,10 +1031,10 @@ class Comparable(Protocol):
     def __lt__(self, other: Any) -> bool: ...
 
 
-T = TypeVar("T", bound=Comparable)  # Generic type variable for elements stored in a SmallPriorityQueue
+TComparable = TypeVar("TComparable", bound=Comparable)  # Generic type variable for elements stored in a SmallPriorityQueue
 
 
-class SmallPriorityQueue(Generic[T]):
+class SmallPriorityQueue(Generic[TComparable]):
     """A priority queue that can handle updates to the priority of any element that is already contained in the queue, and
     does so very efficiently if there are a small number of elements in the queue (no more than thousands), as is the case
     for us.
@@ -1050,26 +1050,26 @@ class SmallPriorityQueue(Generic[T]):
 
     def __init__(self, reverse: bool = False) -> None:
         """Creates an empty queue; sort order flips when ``reverse`` is True."""
-        self._lst: Final[list[T]] = []
+        self._lst: Final[list[TComparable]] = []
         self._reverse: Final[bool] = reverse
 
     def clear(self) -> None:
         """Removes all elements from the queue."""
         self._lst.clear()
 
-    def push(self, element: T) -> None:
+    def push(self, element: TComparable) -> None:
         """Inserts ``element`` while maintaining sorted order."""
         bisect.insort(self._lst, element)
 
-    def pop(self) -> T:
+    def pop(self) -> TComparable:
         """Removes and returns the smallest (or largest if reverse == True) element from the queue."""
         return self._lst.pop() if self._reverse else self._lst.pop(0)
 
-    def peek(self) -> T:
+    def peek(self) -> TComparable:
         """Returns the smallest (or largest if reverse == True) element without removing it."""
         return self._lst[-1] if self._reverse else self._lst[0]
 
-    def remove(self, element: T) -> bool:
+    def remove(self, element: TComparable) -> bool:
         """Removes the first occurrence of ``element`` and returns True if it was present."""
         lst = self._lst
         i = bisect.bisect_left(lst, element)
@@ -1082,13 +1082,13 @@ class SmallPriorityQueue(Generic[T]):
         """Returns the number of queued elements."""
         return len(self._lst)
 
-    def __contains__(self, element: T) -> bool:
+    def __contains__(self, element: TComparable) -> bool:
         """Returns ``True`` if ``element`` is present."""
         lst = self._lst
         i = bisect.bisect_left(lst, element)
         return i < len(lst) and lst[i] == element
 
-    def __iter__(self) -> Iterator[T]:
+    def __iter__(self) -> Iterator[TComparable]:
         """Iterates over queued elements in priority order."""
         return reversed(self._lst) if self._reverse else iter(self._lst)
 
@@ -1098,24 +1098,24 @@ class SmallPriorityQueue(Generic[T]):
 
 
 ###############################################################################
-class SortedInterner(Generic[T]):
+class SortedInterner(Generic[TComparable]):
     """Same as sys.intern() except that it isn't global and that it assumes the input list is sorted (for binary search)."""
 
-    def __init__(self, sorted_list: list[T]) -> None:
-        self._lst: Final[list[T]] = sorted_list
+    def __init__(self, sorted_list: list[TComparable]) -> None:
+        self._lst: Final[list[TComparable]] = sorted_list
 
-    def interned(self, element: T) -> T:
+    def interned(self, element: TComparable) -> TComparable:
         """Returns the interned (aka deduped) item if an equal item is contained, else returns the non-interned item."""
         lst = self._lst
         i = binary_search(lst, element)
         return lst[i] if i >= 0 else element
 
-    def __contains__(self, element: T) -> bool:
+    def __contains__(self, element: TComparable) -> bool:
         """Returns ``True`` if ``element`` is present."""
         return binary_search(self._lst, element) >= 0
 
 
-def binary_search(sorted_list: list[T], item: T) -> int:
+def binary_search(sorted_list: list[TComparable], item: TComparable) -> int:
     """Java-style binary search; Returns index >=0 if an equal item is found in list, else '-insertion_point-1'; If it
     returns index >=0, the index will be the left-most index in case multiple such equal items are contained."""
     i = bisect.bisect_left(sorted_list, item)
@@ -1123,24 +1123,24 @@ def binary_search(sorted_list: list[T], item: T) -> int:
 
 
 ###############################################################################
-S = TypeVar("S")
+_S = TypeVar("_S")
 
 
-class Interner(Generic[S]):
+class Interner(Generic[_S]):
     """Same as sys.intern() except that it isn't global and can also be used for types other than str."""
 
-    def __init__(self, items: Iterable[S] = frozenset()) -> None:
-        self._items: Final[dict[S, S]] = {v: v for v in items}
+    def __init__(self, items: Iterable[_S] = frozenset()) -> None:
+        self._items: Final[dict[_S, _S]] = {v: v for v in items}
 
-    def intern(self, item: S) -> S:
+    def intern(self, item: _S) -> _S:
         """Interns the given item."""
         return self._items.setdefault(item, item)
 
-    def interned(self, item: S) -> S:
+    def interned(self, item: _S) -> _S:
         """Returns the interned (aka deduped) item if an equal item is contained, else returns the non-interned item."""
         return self._items.get(item, item)
 
-    def __contains__(self, item: S) -> bool:
+    def __contains__(self, item: _S) -> bool:
         return item in self._items
 
 
@@ -1191,31 +1191,31 @@ class SynchronizedBool:
 
 
 #############################################################################
-K = TypeVar("K")
-V = TypeVar("V")
+_K = TypeVar("_K")
+_V = TypeVar("_V")
 
 
-class SynchronizedDict(Generic[K, V]):
+class SynchronizedDict(Generic[_K, _V]):
     """Thread-safe wrapper around a regular dict."""
 
-    def __init__(self, val: dict[K, V]) -> None:
+    def __init__(self, val: dict[_K, _V]) -> None:
         assert isinstance(val, dict)
         self._lock: Final[threading.Lock] = threading.Lock()
-        self._dict: Final[dict[K, V]] = val
+        self._dict: Final[dict[_K, _V]] = val
 
-    def __getitem__(self, key: K) -> V:
+    def __getitem__(self, key: _K) -> _V:
         with self._lock:
             return self._dict[key]
 
-    def __setitem__(self, key: K, value: V) -> None:
+    def __setitem__(self, key: _K, value: _V) -> None:
         with self._lock:
             self._dict[key] = value
 
-    def __delitem__(self, key: K) -> None:
+    def __delitem__(self, key: _K) -> None:
         with self._lock:
             self._dict.pop(key)
 
-    def __contains__(self, key: K) -> bool:
+    def __contains__(self, key: _K) -> bool:
         with self._lock:
             return key in self._dict
 
@@ -1231,12 +1231,12 @@ class SynchronizedDict(Generic[K, V]):
         with self._lock:
             return str(self._dict)
 
-    def get(self, key: K, default: V | None = None) -> V | None:
+    def get(self, key: _K, default: _V | None = None) -> _V | None:
         """Returns ``self[key]`` or ``default`` if missing."""
         with self._lock:
             return self._dict.get(key, default)
 
-    def pop(self, key: K, default: V | None = None) -> V | None:
+    def pop(self, key: _K, default: _V | None = None) -> _V | None:
         """Removes ``key`` and returns its value."""
         with self._lock:
             return self._dict.pop(key, default)
@@ -1246,7 +1246,7 @@ class SynchronizedDict(Generic[K, V]):
         with self._lock:
             self._dict.clear()
 
-    def items(self) -> ItemsView[K, V]:
+    def items(self) -> ItemsView[_K, _V]:
         """Returns a snapshot of dictionary items."""
         with self._lock:
             return self._dict.copy().items()
@@ -1293,13 +1293,13 @@ class SynchronousExecutor(Executor):
     def __init__(self) -> None:
         self._shutdown: bool = False
 
-    def submit(self, fn: Callable[..., R_], /, *args: Any, **kwargs: Any) -> Future[R_]:
+    def submit(self, fn: Callable[..., _R_], /, *args: Any, **kwargs: Any) -> Future[_R_]:
         """Executes `fn(*args, **kwargs)` immediately and returns its Future."""
-        future: Future[R_] = Future()
+        future: Future[_R_] = Future()
         if self._shutdown:
             raise RuntimeError("cannot schedule new futures after shutdown")
         try:
-            result: R_ = fn(*args, **kwargs)
+            result: _R_ = fn(*args, **kwargs)
         except BaseException as exc:
             future.set_exception(exc)
         else:

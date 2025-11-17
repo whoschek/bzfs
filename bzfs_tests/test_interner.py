@@ -27,7 +27,7 @@ from typing import (
 from bzfs_main.util.utils import (
     Interner,
     SortedInterner,
-    T,
+    TComparable,
 )
 
 
@@ -41,9 +41,9 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class InternerProtocol(Protocol[T]):
-    def interned(self, item: T) -> T: ...
-    def __contains__(self, item: T) -> bool: ...
+class InternerProtocol(Protocol[TComparable]):
+    def interned(self, item: TComparable) -> TComparable: ...
+    def __contains__(self, item: TComparable) -> bool: ...
 
 
 InternerFactory = Callable[[list[str]], InternerProtocol[str]]

@@ -56,7 +56,7 @@ from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     Interner,
-    T,
+    TComparable,
     human_readable_bytes,
     human_readable_duration,
     isotime_from_unixtime,
@@ -302,9 +302,9 @@ def _print_datasets(groups: itertools.groupby, fn: Callable[[str, Iterable], Non
 def _merge_sorted_iterators(
     choices: Sequence[str],  # ["src", "dst", "all"]
     choice: str,  # Example: "src+dst+all"
-    src_itr: Iterator[T],
-    dst_itr: Iterator[T],
-) -> Iterator[tuple[str, T] | tuple[str, T, T]]:
+    src_itr: Iterator[TComparable],
+    dst_itr: Iterator[TComparable],
+) -> Iterator[tuple[str, TComparable] | tuple[str, TComparable, TComparable]]:
     """The typical pipelined merge algorithm of a merge sort, slightly adapted to our specific use case."""
     assert len(choices) == 3
     assert choice

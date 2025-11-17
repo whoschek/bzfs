@@ -207,8 +207,6 @@ MIN_PYTHON_VERSION: Final[tuple[int, int]] = (3, 9)
 if sys.version_info < MIN_PYTHON_VERSION:
     print(f"ERROR: {PROG_NAME} requires Python version >= {'.'.join(map(str, MIN_PYTHON_VERSION))}!")
     sys.exit(DIE_STATUS)
-CREATE_SRC_SNAPSHOTS_PREFIX_DFLT: Final[str] = PROG_NAME + "_"
-CREATE_SRC_SNAPSHOTS_SUFFIX_DFLT: Final[str] = "_adhoc"
 MATURITY_TIME_THRESHOLD_SECS: Final[float] = 1.1  # 1 sec ZFS creation time resolution + NTP clock skew is typically < 10ms
 
 

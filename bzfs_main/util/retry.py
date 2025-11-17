@@ -90,12 +90,12 @@ class RetryPolicy:
 
 
 #############################################################################
-T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 def run_with_retries(
-    log: Logger, policy: RetryPolicy, termination_event: threading.Event, fn: Callable[..., T], *args: Any, **kwargs: Any
-) -> T:  # thread-safe
+    log: Logger, policy: RetryPolicy, termination_event: threading.Event, fn: Callable[..., _T], *args: Any, **kwargs: Any
+) -> _T:  # thread-safe
     """Runs the given function with the given arguments, and retries on failure as indicated by policy; The termination_event
     allows for early async cancellation of the retry loop."""
     c_max_sleep_nanos: int = policy.initial_max_sleep_nanos

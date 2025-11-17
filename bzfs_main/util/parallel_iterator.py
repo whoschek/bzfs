@@ -45,15 +45,15 @@ from bzfs_main.util.utils import (
     SynchronousExecutor,
 )
 
-T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 def parallel_iterator(
-    iterator_builder: Callable[[Executor], Iterable[Iterable[Future[T]]]],
+    iterator_builder: Callable[[Executor], Iterable[Iterable[Future[_T]]]],
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
     termination_event: threading.Event | None = None,  # optional event to request early async termination
-) -> Iterator[T]:
+) -> Iterator[_T]:
     """Executes multiple iterators in parallel/concurrently, with explicit backpressure and configurable result ordering;
     avoids pre-submitting the entire workload.
 
@@ -141,11 +141,11 @@ def parallel_iterator(
 
 
 def parallel_iterator_results(
-    iterator: Iterator[Future[T]],
+    iterator: Iterator[Future[_T]],
     max_workers: int,
     ordered: bool,
     termination_event: threading.Event | None = None,  # optional event to request early async termination
-) -> Iterator[T]:
+) -> Iterator[_T]:
     """Yield results from an iterator of Future[T] using sliding-window parallelism with optional ordered delivery."""
     assert max_workers >= 0
     max_workers = max(1, max_workers)
@@ -153,9 +153,9 @@ def parallel_iterator_results(
     if termination_event.is_set():
         return
     # Materialize the next N=max_workers futures into a buffer, causing submission + parallel execution of their CLI calls
-    fifo_buffer: deque[Future[T]] = deque(itertools.islice(iterator, max_workers))
-    sentinel: Future[T] = Future()
-    next_future: Future[T]
+    fifo_buffer: deque[Future[_T]] = deque(itertools.islice(iterator, max_workers))
+    sentinel: Future[_T] = Future()
+    next_future: Future[_T]
 
     if ordered:
         while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
@@ -163,15 +163,15 @@ def parallel_iterator_results(
                 for future in fifo_buffer:
                     future.cancel()
                 return
-            curr_future: Future[T] = fifo_buffer.popleft()
+            curr_future: Future[_T] = fifo_buffer.popleft()
             next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
             if next_future is not sentinel:
                 fifo_buffer.append(next_future)
             yield curr_future.result()  # blocks until CLI returns
     else:
-        todo_futures: set[Future[T]] = set(fifo_buffer)
+        todo_futures: set[Future[_T]] = set(fifo_buffer)
         fifo_buffer.clear()  # help gc
-        done_futures: set[Future[T]]
+        done_futures: set[Future[_T]]
         while todo_futures:
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
             while done_futures:  # submit the next CLI call whenever a CLI call returns
@@ -186,26 +186,26 @@ def parallel_iterator_results(
     assert next(iterator, sentinel) is sentinel
 
 
-K = TypeVar("K")
-V = TypeVar("V")
+_K = TypeVar("_K")
+_V = TypeVar("_V")
 
 
-def run_in_parallel(fn1: Callable[[], K], fn2: Callable[[], V]) -> tuple[K, V]:
+def run_in_parallel(fn1: Callable[[], _K], fn2: Callable[[], _V]) -> tuple[_K, _V]:
     """perf: Runs both I/O functions in parallel/concurrently."""
     with ThreadPoolExecutor(max_workers=1) as executor:
-        future: Future[V] = executor.submit(fn2)  # async fn2
-        result1: K = fn1()  # blocks until fn1 call returns
-        result2: V = future.result()  # blocks until fn2 call returns
+        future: Future[_V] = executor.submit(fn2)  # async fn2
+        result1: _K = fn1()  # blocks until fn1 call returns
+        result2: _V = future.result()  # blocks until fn2 call returns
         return result1, result2
 
 
 def batch_cmd_iterator(
     cmd_args: Iterable[str],  # list of arguments to be split across one or more commands
-    fn: Callable[[list[str]], T],  # callback that runs a CLI command with a single batch
+    fn: Callable[[list[str]], _T],  # callback that runs a CLI command with a single batch
     max_batch_items: int = 2**29,  # max number of args per batch
     max_batch_bytes: int = 127 * 1024,  # max number of bytes per batch
     sep: str = " ",  # separator between batch args
-) -> Iterator[T]:
+) -> Iterator[_T]:
     """Returns an iterator that runs fn(cmd_args) in sequential batches, without creating a cmdline that's too big for the OS
     to handle; Can be seen as a Pythonic xargs -n / -s with OS-aware safety margin.
 

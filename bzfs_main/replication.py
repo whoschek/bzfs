@@ -116,7 +116,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 
 # constants:
 INJECT_DST_PIPE_FAIL_KBYTES: Final[int] = 400  # for testing only
-RIGHT_JUST: Final[int] = 7
+_RIGHT_JUST: Final[int] = 7
 
 
 def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
@@ -424,7 +424,7 @@ def _replicate_dataset_fully(
         done_checking = done_checking or _check_zfs_dataset_busy(job, dst, dst_dataset)
         dry_run_no_send = dry_run_no_send or p.dry_run_no_send
         job.maybe_inject_params(error_trigger="full_zfs_send_params")
-        humansize = humansize.rjust(RIGHT_JUST * 3 + 2)
+        humansize = humansize.rjust(_RIGHT_JUST * 3 + 2)
         _run_zfs_send_receive(
             job, src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "full_zfs_send"
         )
@@ -559,7 +559,7 @@ def _replicate_dataset_incrementally(
 
 def _format_size(num_bytes: int) -> str:
     """Formats a byte count for human-readable logs."""
-    return human_readable_bytes(num_bytes, separator="").rjust(RIGHT_JUST)
+    return human_readable_bytes(num_bytes, separator="").rjust(_RIGHT_JUST)
 
 
 def _prepare_zfs_send_receive(
@@ -860,14 +860,14 @@ def _decompress_cmd(p: Params, loc: str, size_estimate_bytes: int) -> str:
         return "cat"
 
 
-WORKER_THREAD_NUMBER_REGEX: Final[re.Pattern[str]] = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
+_WORKER_THREAD_NUMBER_REGEX: Final[re.Pattern[str]] = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
 
 
 def _pv_cmd(
     job: Job, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar: bool = False
 ) -> str:
     """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'; Progress can be
-    viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
+    viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current/current.pv or similar."""
     p = job.params
     if p.is_program_available("pv", loc):
         size: str = f"--size={size_estimate_bytes}"
@@ -875,7 +875,7 @@ def _pv_cmd(
             size = ""
         pv_log_file: str = p.log_params.pv_log_file
         thread_name: str = threading.current_thread().name
-        if match := WORKER_THREAD_NUMBER_REGEX.fullmatch(thread_name):
+        if match := _WORKER_THREAD_NUMBER_REGEX.fullmatch(thread_name):
             worker = int(match.group(1))
             if worker > 0:
                 pv_log_file += PV_FILE_THREAD_SEPARATOR + f"{worker:04}"
@@ -1241,14 +1241,14 @@ def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send
         raise RetryableError("dst currently busy with zfs mutation op") from e
 
 
-ZFS_DATASET_BUSY_PREFIX: Final[str] = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
-ZFS_DATASET_BUSY_IF_MODS: Final[re.Pattern[str]] = re.compile((ZFS_DATASET_BUSY_PREFIX + ") .*").replace("(", "(?:"))
-ZFS_DATASET_BUSY_IF_SEND: Final[re.Pattern[str]] = re.compile((ZFS_DATASET_BUSY_PREFIX + "|send) .*").replace("(", "(?:"))
+_ZFS_DATASET_BUSY_PREFIX: Final[str] = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
+_ZFS_DATASET_BUSY_IF_MODS: Final[re.Pattern[str]] = re.compile((_ZFS_DATASET_BUSY_PREFIX + ") .*").replace("(", "(?:"))
+_ZFS_DATASET_BUSY_IF_SEND: Final[re.Pattern[str]] = re.compile((_ZFS_DATASET_BUSY_PREFIX + "|send) .*").replace("(", "(?:"))
 
 
 def _is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> bool:
     """Checks if any process list entry indicates ZFS activity on dataset."""
-    regex: re.Pattern[str] = ZFS_DATASET_BUSY_IF_SEND if busy_if_send else ZFS_DATASET_BUSY_IF_MODS
+    regex: re.Pattern[str] = _ZFS_DATASET_BUSY_IF_SEND if busy_if_send else _ZFS_DATASET_BUSY_IF_MODS
     suffix: str = " " + dataset
     infix: str = " " + dataset + "@"
     return any((proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc) for proc in procs)

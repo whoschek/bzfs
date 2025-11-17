@@ -1246,10 +1246,10 @@ def _dedupe(root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return list(dict.fromkeys(root_dataset_pairs))
 
 
-T = TypeVar("T")
+_T = TypeVar("_T")
 
 
-def _flatten(root_dataset_pairs: Iterable[Iterable[T]]) -> list[T]:
+def _flatten(root_dataset_pairs: Iterable[Iterable[_T]]) -> list[_T]:
     """Flattens an iterable of pairs into a single list."""
     return [item for pair in root_dataset_pairs for item in pair]
 
