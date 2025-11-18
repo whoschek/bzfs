@@ -1246,11 +1246,20 @@ class Job(MiniJob):
             cache_files = {}
             cmsg = ""
 
+        done_src_datasets: list[str] = []
+        done_src_datasets_lock: threading.Lock = threading.Lock()
+
+        def _process_dataset_fn(src_dataset: str, tid: str, retry: Retry) -> bool:
+            result: bool = replicate_dataset(job=self, src_dataset=src_dataset, tid=tid, retry=retry)
+            with done_src_datasets_lock:
+                done_src_datasets.append(src_dataset)  # record datasets that were actually replicated (not skipped)
+            return result
+
         # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
         failed: bool = process_datasets_in_parallel_and_fault_tolerant(
             log=log,
             datasets=stale_src_datasets,
-            process_dataset=lambda src_dataset, tid, retry: replicate_dataset(self, src_dataset, tid, retry),
+            process_dataset=_process_dataset_fn,
             skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[src2dst(dataset)],
             skip_on_error=p.skip_on_error,
             max_workers=max_workers,
@@ -1264,9 +1273,9 @@ class Job(MiniJob):
             is_test_mode=self.is_test_mode,
         )
 
-        if is_caching_snapshots(p, src) and not failed:
+        if is_caching_snapshots(p, src) and len(done_src_datasets) > 0:
             # refresh "snapshots_changed" ZFS dataset property from dst
-            stale_dst_datasets: list[str] = [src2dst(src_dataset) for src_dataset in stale_src_datasets]
+            stale_dst_datasets: list[str] = [src2dst(src_dataset) for src_dataset in sorted(done_src_datasets)]
             dst_snapshots_changed_dict: dict[str, int] = self.cache.zfs_get_snapshots_changed(dst, stale_dst_datasets)
             for dst_dataset in stale_dst_datasets:  # update local cache
                 dst_snapshots_changed: int = dst_snapshots_changed_dict.get(dst_dataset, 0)

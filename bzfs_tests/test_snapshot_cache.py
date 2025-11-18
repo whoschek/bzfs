@@ -55,6 +55,7 @@ import logging
 import os
 import random
 import string
+import subprocess
 import tempfile
 import threading
 import time
@@ -99,6 +100,9 @@ from bzfs_main.snapshot_cache import (
     set_last_modification_time,
     set_last_modification_time_safe,
 )
+from bzfs_main.util.retry import (
+    Retry,
+)
 from bzfs_main.util.utils import (
     sha256_85_urlsafe_base64,
     sha256_128_urlsafe_base64,
@@ -109,7 +113,6 @@ from bzfs_tests.abstract_testcase import (
 
 if TYPE_CHECKING:  # type-only imports for annotations
     from bzfs_main.util.retry import (
-        Retry,
         RetryPolicy,
     )
 
@@ -2219,6 +2222,83 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Must fall back to handler due to mtime mismatch
             self.assertListEqual([dataset], received)
+
+    def test_replication_cache_updates_done_datasets_despite_partial_failure(self) -> None:
+        """Ensure partial replication failures still refresh caches for done datasets.
+
+        Purpose: A mixed-success batch must not block cache refresh for datasets that actually completed replication
+        (the "done_datasets" set), or future runs would pay repeated "zfs list -t snapshot" costs. This test models
+        a two-dataset replication where one dataset fails and the other succeeds, and verifies cache files are
+        updated for the done dataset.
+        """
+
+        with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
+            job.params.src.root_dataset = SRC_DATASET
+            job.params.dst.root_dataset = DST_DATASET
+
+            ds_ok = f"{SRC_DATASET}/ok"
+            ds_fail = f"{SRC_DATASET}/fail"
+            datasets = [ds_ok, ds_fail]
+
+            # Pre-populate properties and existence for both datasets
+            snapshots_changed_value = 2_000_000_000
+            for ds in datasets:
+                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed_value)
+                job.dst_dataset_exists[ds.replace("src", "dst")] = True
+
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
+                """Simulate replicate_dataset(job, src_dataset, tid, retry) with one failing dataset."""
+                if src_dataset == ds_fail:
+                    raise subprocess.CalledProcessError(1, "fail")
+                return True
+
+            def fake_zfs_get_snapshots_changed(_remote: Remote, datasets_arg: list[str]) -> dict[str, int]:
+                """Return dst snapshots_changed timestamps mirroring the provided src datasets list."""
+
+                return {src_dataset.replace("src", "dst"): snapshots_changed_value for src_dataset in datasets_arg}
+
+            def fake_process_datasets(
+                log: logging.Logger,
+                datasets: list[str],
+                process_dataset: Callable[[str, str, Retry], bool],
+                skip_tree_on_error: Callable[[str], bool],
+                **_: object,
+            ) -> bool:
+                """Call process_dataset for each dataset and report whether any raised an exception."""
+
+                del log, skip_tree_on_error
+                any_failed = False
+                for idx, dataset in enumerate(datasets):
+                    try:
+                        process_dataset(dataset, "tid", Retry(idx))
+                    except Exception:
+                        any_failed = True
+                return any_failed
+
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                patch("bzfs_main.bzfs.replicate_dataset", side_effect=fake_replicate_dataset),
+                patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed),
+                patch("bzfs_main.bzfs.set_last_modification_time_safe") as mock_set_time,
+                patch(
+                    "bzfs_main.bzfs.process_datasets_in_parallel_and_fault_tolerant",
+                    side_effect=fake_process_datasets,
+                ),
+            ):
+                failed = job.replicate_datasets(datasets, "desc", max_workers=2)
+                self.assertTrue(failed)
+
+                # Identify cache files for the done dataset only
+                cache_label = self.replication_cache_label(job, ds_ok.replace("src", "dst"))
+                src_repl_file = SnapshotCache(job).last_modified_cache_file(job.params.src, ds_ok, cache_label)
+                dst_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.dst, ds_ok.replace("src", "dst"))
+
+                calls = mock_set_time.call_args_list
+                src_calls = [call for call in calls if call.args[0] == src_repl_file]
+                dst_calls = [call for call in calls if call.args[0] == dst_eq_file]
+
+                self.assertTrue(src_calls, "Should update src replication cache for successful dataset")
+                self.assertTrue(dst_calls, "Should update dst equality cache for successful dataset")
 
     def test_replication_cache_must_not_collide_across_dst_ports(self) -> None:
         """Purpose: Prove that replication-scoped caches (the src-side "==" markers) must be namespaced by
