@@ -205,12 +205,13 @@ Before committing any changes, you **must** follow this exact sequence:
    under which it realistically manifests.
 2. State the expected vs the observed behavior.
 3. Include steps that reproduce the observed behavior reliably, with minimal complexity, ideally with a script.
-4. Explain the real-world consequences to users in specific **realistic use cases**, and associated impact severity
-   (`High`, `Medium`, `Low`).
-5. Describe known work-arounds and outline potential solutions.
-6. Finally, estimate the priority aka urgency of producing a fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
-7. Also collect other contextual information that assists a successful bug diagnosis, for example usage pattern, error
-   messages, stack traces, log files, env/config files, version of software components, etc.
+4. Do not fabricate failure states that cannot be reached through real use of the system's public interface aka CLI.
+5. Carefully explain the real-world consequences to users in **clear, specific, detailed, realistic use cases**, and
+   associate impact severity (`High`, `Medium`, `Low`).
+6. Describe known work-arounds and outline potential solutions.
+7. Finally, estimate the priority aka urgency of producing a fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
+8. Also collect any additional context relevant for diagnosing the bug, for example usage pattern, error messages, stack
+   traces, log files, env/config files, and software component versions.
 
 ## How to Find and Fix Bugs
 
@@ -297,7 +298,7 @@ If asked to improve coverage:
 
 - **Focus on adding meaningful high-value tests:** Do not add low-value tests just to increase a coverage percentage.
 
-- **Report:** In your response or PR, state the **before vs. after** coverage percentage so the impact is clear.
+- **Report:** In your response, state the **before vs. after** coverage percentage so the impact is clear.
 
 ## How to Add Dependencies
 
