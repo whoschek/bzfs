@@ -23,7 +23,9 @@ import logging
 import os
 import platform
 import random
+import shlex
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -576,18 +578,6 @@ class TestQuoting(AbstractTestCase):
             with self.subTest(arg=arg):
                 self.assertEqual(expected, dquote(arg))
 
-    def test_dquote_backslash_before_quote(self) -> None:
-        """Backslashes preceding quotes are preserved correctly."""
-        self.assertEqual('"a\\\\"b"', dquote('a\\"b'))
-
-    def test_dquote_escapes(self) -> None:
-        self.assertEqual('"a\\"b\\$c\\`d"', dquote('a"b$c`d'))
-
-    @staticmethod
-    def _sh_roundtrip(arg: str) -> str:
-        quoted = dquote(arg)
-        return subprocess.run(["sh", "-c", f"printf %s {quoted}"], capture_output=True, text=True, check=True).stdout
-
     def test_dquote_prevents_command_substitution(self) -> None:
         """Escaping ensures the shell prints literals rather than executing."""
         for arg in ["$(echo hacked)", "`echo hacked`"]:
@@ -659,6 +649,56 @@ class TestQuoting(AbstractTestCase):
                 if ch in specials:
                     self.assertTrue(i > 0)
                     self.assertEqual("\\", payload[i - 1], f"unescaped {ch!r} at index {i}")
+
+    @staticmethod
+    def _sh_roundtrip(arg: str) -> str:
+        quoted = dquote(arg)
+        return subprocess.run(["sh", "-c", f"printf %s {quoted}"], capture_output=True, text=True, check=True).stdout
+
+    @staticmethod
+    def _nested_sh_roundtrip(arg: str) -> str:
+        """Simulates nested 'sh -c' usage for dquote as in replication pipelines.
+
+        Builds a command list with ``arg`` as the final argv element, joins it via
+        ``shlex.join``, wraps it with ``dquote`` and executes it through an outer
+        ``sh -c`` that invokes an inner ``sh -c``. Returns the string observed by
+        the inner Python process so tests can assert end-to-end preservation.
+        """
+        recv_cmd: list[str] = [
+            sys.executable,
+            "-c",
+            "import sys; print(sys.argv[-1])",
+            arg,
+        ]
+        recv_cmd_str: str = shlex.join(recv_cmd)
+        script: str = dquote(recv_cmd_str)
+        completed = subprocess.run(["sh", "-c", f"sh -c {script}"], stdout=subprocess.PIPE, text=True, check=True)
+        return completed.stdout.rstrip("\n")
+
+    def test_dquote_backslash_before_quote(self) -> None:
+        """Backslashes immediately before a quote survive shell evaluation."""
+        arg = r"a\"b"
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_escapes(self) -> None:
+        self.assertEqual('"a\\"b\\$c\\`d"', dquote('a"b$c`d'))
+
+    def test_dquote_nested_sh_backslash_backtick(self) -> None:
+        """Nested sh -c round-trips values with backslash+backtick."""
+        value = r"/tmp/foo\`bar"
+        prop_arg = f"prop={value}"
+        self.assertEqual(prop_arg, self._nested_sh_roundtrip(prop_arg))
+
+    def test_dquote_preserves_double_backslashes_in_nested_sh(self) -> None:
+        """Ensures nested sh -c round-trips values containing double backslashes."""
+        samples = [
+            r"\\server\share",  # UNC-style path
+            r"\\path\\with\\many",  # multiple segments
+        ]
+        for value in samples:
+            with self.subTest(value=value):
+                prop_arg: str = f"foo={value}"
+                self.assertEqual(prop_arg, self._nested_sh_roundtrip(prop_arg))
 
 
 def make_fake_params() -> Params:

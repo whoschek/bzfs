@@ -31,6 +31,7 @@ import platform
 import pwd
 import random
 import re
+import shlex
 import shutil
 import socket
 import stat
@@ -87,6 +88,9 @@ from bzfs_main.replication import (
 )
 from bzfs_main.util import (
     utils,
+)
+from bzfs_main.util.connection import (
+    dquote,
 )
 from bzfs_main.util.utils import (
     DIE_STATUS,
@@ -661,6 +665,8 @@ class IntegrationTestCase(ParametrizedTestCase):
             "bzfs:prop5": '/tmp/foo"ba\'r"baz',
             "bzfs:prop6": "/tmp/foo  bar\t\t\nbaz\n\n\n",
             "bzfs:prop7": "/tmp/foo\\bar",
+            "bzfs:prop8": "\\\\server\\share",  # UNC-style path with leading double backslashes
+            "bzfs:prop9": "/tmp/foo\\`bar",  # backslash + backtick sequence exercises dquote edge case
         }
 
     def generate_recv_resume_token(self, from_snapshot: str | None, to_snapshot: str, dst_dataset: str) -> None:
@@ -2602,6 +2608,43 @@ class LocalTestCase(IntegrationTestCase):
         )
         for name, value in props.items():
             self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
+
+    def test_dquote_over_real_ssh_backslash_backtick(self) -> None:
+        """Exercises dquote via the real ssh CLI with a backslash+backtick payload.
+
+        Builds a nested shell command of the form
+
+            sh -c "ssh -F SSH_CONFIG_FILE 127.0.0.1 sh -c \"<script>\""
+
+        where <script> is constructed via dquote(shlex.join([...])) and the final argument contains "/tmp/foo\\`bar".
+        With the correct dquote implementation (which escapes backslashes), the command succeeds and the payload
+        round-trips unchanged.
+        """
+        if shutil.which("ssh") is None:
+            self.skipTest("ssh client not available")
+
+        bad_value = r"/tmp/foo\`bar"
+        prop_arg = f"prop={bad_value}"
+        recv_cmd = [
+            sys.executable,
+            "-c",
+            "import sys; print(sys.argv[-1])",
+            prop_arg,
+        ]
+        recv_cmd_str = shlex.join(recv_cmd)
+
+        # Build the remote script using the same dquote helper used in replication.
+        script = dquote(recv_cmd_str)
+
+        # Use the same SSH config and port as the integration harness so that
+        # authentication works consistently on localhost.
+        cmd: list[str] = [ssh_program, "-F", SSH_CONFIG_FILE]
+        port = getenv_any("test_ssh_port")
+        if port is not None:
+            cmd += ["-p", str(port)]
+        cmd += ["127.0.0.1", "sh", "-c", script]
+        completed = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        self.assertEqual(prop_arg, completed.stdout.rstrip("\n"))
 
     @staticmethod
     def zfs_recv_x_excludes() -> list[str]:
@@ -5447,6 +5490,9 @@ class MinimalRemoteTestCase(IntegrationTestCase):
     def test_delete_dst_datasets_recursive_with_dummy_src(self) -> None:
         LocalTestCase(param=self.param).test_delete_dst_datasets_recursive_with_dummy_src()
 
+    def test_zfs_set_via_recv_o(self) -> None:
+        LocalTestCase(param=self.param).test_zfs_set_via_recv_o()
+
     def test_basic_replication_recursive_parallel(self) -> None:
         LocalTestCase(param=self.param).test_basic_replication_recursive_parallel()
 
@@ -5518,9 +5564,6 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_zfs_set(self) -> None:
         LocalTestCase(param=self.param).test_zfs_set()
-
-    def test_zfs_set_via_recv_o(self) -> None:
-        LocalTestCase(param=self.param).test_zfs_set_via_recv_o()
 
     def test_zfs_set_via_set_include(self) -> None:
         LocalTestCase(param=self.param).test_zfs_set_via_set_include()
