@@ -72,7 +72,10 @@ from pathlib import (
     Path,
 )
 from subprocess import (
+    DEVNULL,
+    PIPE,
     CalledProcessError,
+    CompletedProcess,
 )
 from typing import (
     Any,
@@ -196,6 +199,7 @@ from bzfs_main.util.utils import (
     validate_property_name,
     xappend,
     xfinally,
+    xprint,
 )
 
 # constants:
@@ -1591,18 +1595,33 @@ class Job(MiniJob):
         cmd: list[str] | None = None,
     ) -> str:
         """Runs the given CLI cmd via ssh on the given remote, and returns stdout."""
+        assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         conn_pool: ConnectionPool = self.params.connection_pools[remote.location].pool(SHARED)
         with conn_pool.connection() as conn:
-            return run_ssh_command(
-                conn=conn,
-                job=self,
-                loglevel=loglevel,
-                is_dry=is_dry,
-                check=check,
-                print_stdout=print_stdout,
-                print_stderr=print_stderr,
-                cmd=cmd,
-            )
+            log: logging.Logger = conn.remote.params.log
+            try:
+                process: CompletedProcess[str] = run_ssh_command(
+                    conn=conn,
+                    job=self,
+                    loglevel=loglevel,
+                    is_dry=is_dry,
+                    cmd=cmd,
+                    check=check,
+                    stdin=DEVNULL,
+                    stdout=PIPE,
+                    stderr=PIPE,
+                    text=True,
+                )
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                xprint(log, stderr_to_str(e.stdout) if print_stdout else e.stdout, run=print_stdout, file=sys.stdout, end="")
+                xprint(log, stderr_to_str(e.stderr) if print_stderr else e.stderr, run=print_stderr, file=sys.stderr, end="")
+                raise
+            else:
+                if is_dry:
+                    return ""
+                xprint(log, process.stdout, run=print_stdout, file=sys.stdout, end="")
+                xprint(log, process.stderr, run=print_stderr, file=sys.stderr, end="")
+                return process.stdout
 
     def try_ssh_command(
         self,

@@ -26,6 +26,7 @@ Example usage:
 import argparse
 import logging
 import threading
+from subprocess import DEVNULL, PIPE
 from bzfs_main.util.connection import ConnectionPool, create_simple_minijob, create_simple_miniremote, run_ssh_command
 from bzfs_main.util.retry import RetryPolicy, run_with_retries
 
@@ -46,9 +47,11 @@ try:
 
     def run_cmd(*, retry) -> str:
         with conn_pool.connection() as conn:
-            return run_ssh_command(conn=conn, job=job, cmd=["echo", "hello"])
+            return run_ssh_command(
+                conn=conn, job=job, cmd=["echo", "hello"], check=True, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True
+            ).stdout
 
-    stdout: str = run_with_retries(log, retry_policy, termination_event=threading.Event(), fn=run_cmd)
+    stdout = run_with_retries(log, retry_policy, termination_event=threading.Event(), fn=run_cmd)
     print(f"stdout: {stdout}")
 finally:
     conn_pool.shutdown()
@@ -63,7 +66,6 @@ import logging
 import os
 import shlex
 import subprocess
-import sys
 import threading
 import time
 from collections.abc import (
@@ -79,6 +81,7 @@ from subprocess import (
     CompletedProcess,
 )
 from typing import (
+    Any,
     Final,
     Protocol,
     runtime_checkable,
@@ -100,7 +103,6 @@ from bzfs_main.util.utils import (
     list_formatter,
     sha256_urlsafe_base64,
     stderr_to_str,
-    xprint,
 )
 
 # constants:
@@ -266,13 +268,10 @@ def run_ssh_command(
     job: MiniJob,
     loglevel: int = logging.INFO,
     is_dry: bool = False,
-    check: bool = True,
-    print_stdout: bool = False,
-    print_stderr: bool = True,
-    text: bool = True,
     cmd: list[str] | None = None,
-) -> str:
-    """Runs the given CLI cmd via ssh on the given remote, and returns stdout.
+    **kwargs: Any,  # optional low-level keyword args to be forwarded to subprocess.run()
+) -> CompletedProcess:
+    """Runs the given CLI cmd via ssh on the given remote, and returns CompletedProcess including stdout and stderr.
 
     The full command is the concatenation of both the command to run on the localhost in order to talk to the remote host
     ($remote.local_ssh_command()) and the command to run on the given remote host ($cmd).
@@ -291,21 +290,10 @@ def run_ssh_command(
     msg: str = "Would execute: %s" if is_dry else "Executing: %s"
     log.log(loglevel, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
     if is_dry:
-        return ""
-    try:
-        sp: Subprocesses = job.subprocesses
-        process: CompletedProcess[str] = sp.subprocess_run(
-            ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=text, timeout=timeout(job), check=check, log=log
-        )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-        if not isinstance(e, UnicodeDecodeError):
-            xprint(log, stderr_to_str(e.stdout) if print_stdout else e.stdout, run=print_stdout, file=sys.stdout, end="")
-            xprint(log, stderr_to_str(e.stderr) if print_stderr else e.stderr, run=print_stderr, file=sys.stderr, end="")
-        raise
+        return CompletedProcess(ssh_cmd + cmd, returncode=0, stdout=None, stderr=None)
     else:
-        xprint(log, process.stdout, run=print_stdout, file=sys.stdout, end="")
-        xprint(log, process.stderr, run=print_stderr, file=sys.stderr, end="")
-        return process.stdout
+        sp: Subprocesses = job.subprocesses
+        return sp.subprocess_run(ssh_cmd + cmd, timeout=timeout(job), log=log, **kwargs)
 
 
 def refresh_ssh_connection_if_necessary(conn: Connection, job: MiniJob) -> None:
