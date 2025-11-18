@@ -13,7 +13,7 @@
 # limitations under the License.
 #
 """Efficient thread-safe SSH command client; See run_ssh_command() and refresh_ssh_connection_if_necessary() and class
-ConnectionPool.
+ConnectionPool and class ConnectionLease.
 
 Can be configured to reuse multiplexed SSH connections for low latency, even on fresh process startup, for example leading to
 ballpark 3-5ms total time for running `/bin/echo hello` end-to-end over SSH on LAN, which requires two (sequential) network

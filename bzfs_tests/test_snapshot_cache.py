@@ -794,8 +794,8 @@ class TestSnapshotCache(AbstractTestCase):
             # Helper to run replicate and count invocations
             called: list[str] = []
 
-            def fake_replicate_dataset(job_: Job, ds: str, tid: str, retry: RetryPolicy) -> bool:
-                called.append(ds)
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: RetryPolicy) -> bool:
+                called.append(src_dataset)
                 return True
 
             # Case 1: too recent on src -> no skip
@@ -927,7 +927,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Use time patch to ensure maturity for equality/skip decisions
             mature_now = max(a_src_changed, a_dst_changed) + bzfs.MATURITY_TIME_THRESHOLD_SECS + 5.0
 
-            def fake_replicate_dataset(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
                 # Simple phase markers for test determinism
                 if job is job_a:
                     a_repl_started.set()
@@ -1068,7 +1068,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_111_111_111, if_more_recent=True)
             mature_now = max(repl_src_changed_a, repl_dst_changed_a) + bzfs.MATURITY_TIME_THRESHOLD_SECS + 5.0
 
-            def fake_replicate_dataset(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
                 if job is job_r:
                     r_repl_done.set()
                 return True
@@ -1202,7 +1202,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_222_222_222, if_more_recent=True)
             mature_now2 = max(repl_src_changed, repl_dst_changed) + bzfs.MATURITY_TIME_THRESHOLD_SECS + 5.0
 
-            def fake_replicate_dataset(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
                 if job is job_r:
                     r_repl_done2.set()
                 return True
@@ -1387,7 +1387,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_333_333_333, if_more_recent=True)
             mature_now3 = max(r_src_sc, r_dst_sc) + bzfs.MATURITY_TIME_THRESHOLD_SECS + 5.0
 
-            def fake_replicate_dataset(job: Job, _src_dataset: str, _tid: str, _retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
                 if job is job_r:
                     r3_repl_done.set()
                 return True
@@ -2294,8 +2294,8 @@ class TestSnapshotCache(AbstractTestCase):
 
             called: list[str] = []
 
-            def fake_replicate_dataset(job_: Job, ds: str, tid: str, retry: RetryPolicy) -> bool:
-                called.append(ds)
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: RetryPolicy) -> bool:
+                called.append(src_dataset)
                 return True
 
             # zfs_get_snapshots_changed(dst) returns t_dst for dst_dataset (equal to cached dst '=')
@@ -2354,8 +2354,8 @@ class TestSnapshotCache(AbstractTestCase):
 
             called: list[str] = []
 
-            def fake_replicate_dataset(job_: Job, ds: str, tid: str, retry: RetryPolicy) -> bool:
-                called.append(ds)
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: RetryPolicy) -> bool:
+                called.append(src_dataset)
                 return True
 
             # First run: populate caches (expect misses == N, hits == 0; replicate called N times)
@@ -2743,8 +2743,8 @@ class TestSnapshotCache(AbstractTestCase):
             # Phase 1: src is in the future -> miss; no cheap skip
             called: list[str] = []
 
-            def fake_replicate_dataset(job_: Job, ds: str, tid: str, retry: Retry) -> bool:
-                called.append(ds)
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
+                called.append(src_dataset)
                 return True
 
             job.num_cache_hits = job.num_cache_misses = 0
