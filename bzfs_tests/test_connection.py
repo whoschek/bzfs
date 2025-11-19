@@ -653,27 +653,21 @@ class TestQuoting(AbstractTestCase):
     @staticmethod
     def _sh_roundtrip(arg: str) -> str:
         quoted = dquote(arg)
-        return subprocess.run(["sh", "-c", f"printf %s {quoted}"], capture_output=True, text=True, check=True).stdout
+        return subprocess.run(["sh", "-c", f"printf %s {quoted}"], stdout=subprocess.PIPE, text=True, check=True).stdout
 
     @staticmethod
     def _nested_sh_roundtrip(arg: str) -> str:
         """Simulates nested 'sh -c' usage for dquote as in replication pipelines.
 
-        Builds a command list with ``arg`` as the final argv element, joins it via
-        ``shlex.join``, wraps it with ``dquote`` and executes it through an outer
-        ``sh -c`` that invokes an inner ``sh -c``. Returns the string observed by
-        the inner Python process so tests can assert end-to-end preservation.
+        Builds a command list with ``arg`` as the final argv element, joins it via ``shlex.join``, wraps it with ``dquote``
+        and executes it through an outer ``sh -c`` that invokes an inner ``sh -c``. Returns the string observed by the inner
+        Python process so tests can assert end-to-end preservation.
         """
-        recv_cmd: list[str] = [
-            sys.executable,
-            "-c",
-            "import sys; print(sys.argv[-1])",
-            arg,
-        ]
+        recv_cmd: list[str] = [sys.executable, "-c", "import sys; print(sys.argv[-1])", arg]
         recv_cmd_str: str = shlex.join(recv_cmd)
         script: str = dquote(recv_cmd_str)
-        completed = subprocess.run(["sh", "-c", f"sh -c {script}"], stdout=subprocess.PIPE, text=True, check=True)
-        return completed.stdout.rstrip("\n")
+        stdout: str = subprocess.run(["sh", "-c", f"sh -c {script}"], stdout=subprocess.PIPE, text=True, check=True).stdout
+        return stdout.rstrip("\n")
 
     def test_dquote_backslash_before_quote(self) -> None:
         """Backslashes immediately before a quote survive shell evaluation."""

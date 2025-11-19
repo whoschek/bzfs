@@ -28,7 +28,7 @@ import logging
 import threading
 from subprocess import DEVNULL, PIPE
 from bzfs_main.util.connection import ConnectionPool, create_simple_minijob, create_simple_miniremote, run_ssh_command
-from bzfs_main.util.retry import RetryPolicy, run_with_retries
+from bzfs_main.util.retry import Retry, RetryPolicy, run_with_retries
 
 log = logging.getLogger(__name__)
 remote = create_simple_miniremote(log=log, ssh_user_host="alice@127.0.0.1")
@@ -45,11 +45,12 @@ try:
         )
     )
 
-    def run_cmd(*, retry) -> str:
+    def run_cmd(*, retry: Retry) -> str:
         with conn_pool.connection() as conn:
-            return run_ssh_command(
+            stdout: str = run_ssh_command(
                 conn=conn, job=job, cmd=["echo", "hello"], check=True, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True
             ).stdout
+            return stdout
 
     stdout = run_with_retries(log, retry_policy, termination_event=threading.Event(), fn=run_cmd)
     print(f"stdout: {stdout}")
