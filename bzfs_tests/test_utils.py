@@ -33,9 +33,6 @@ import tempfile
 import threading
 import time
 import unittest
-from argparse import (
-    Namespace,
-)
 from collections.abc import (
     Sequence,
 )
@@ -55,7 +52,6 @@ from logging import (
 from subprocess import (
     DEVNULL,
     PIPE,
-    CompletedProcess,
 )
 from typing import (
     Any,
@@ -277,7 +273,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("\"{'a': 1}\"", format_dict({"a": 1}))
 
     def test_pretty_print_formatter(self) -> None:
-        self.assertIsNotNone(str(pretty_print_formatter(Namespace(src="src", dst="dst"))))
+        self.assertIsNotNone(str(pretty_print_formatter(argparse.Namespace(src="src", dst="dst"))))
 
     def test_xprint(self) -> None:
         log = MagicMock(spec=Logger)
@@ -1288,7 +1284,7 @@ class TestSubprocessRunWithSubprocesses(unittest.TestCase):
     def test_terminate_all_kills_running_child(self) -> None:
         """terminate_process_subtrees kills child and clears tracking."""
         sp = Subprocesses()
-        result: CompletedProcess | None = None
+        result: subprocess.CompletedProcess | None = None
 
         def run_sleep() -> None:
             nonlocal result

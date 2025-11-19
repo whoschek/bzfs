@@ -455,7 +455,7 @@ class Job(MiniJob):
             self.print_replication_stats(self.replication_start_time_nanos)
         error_count = self.all_exceptions_count
         if error_count > 0 and p.daemon_lifetime_nanos == 0:
-            msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
+            msgs = "\n".join(f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions))
             log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
             assert self.first_exception is not None
             raise self.first_exception
@@ -1311,7 +1311,7 @@ class Job(MiniJob):
     def recv_option_property_names(recv_opts: list[str]) -> set[str]:
         """Extracts -o and -x property names that are already specified on the command line; This can be used to check for
         dupes because 'zfs receive' does not accept multiple -o or -x options with the same property name."""
-        propnames = set()
+        propnames: set[str] = set()
         i = 0
         n = len(recv_opts)
         while i < n:
@@ -1601,11 +1601,11 @@ class Job(MiniJob):
             log: logging.Logger = conn.remote.params.log
             try:
                 process: CompletedProcess[str] = run_ssh_command(
+                    cmd=cmd,
                     conn=conn,
                     job=self,
                     loglevel=loglevel,
                     is_dry=is_dry,
-                    cmd=cmd,
                     check=check,
                     stdin=DEVNULL,
                     stdout=PIPE,

@@ -48,7 +48,7 @@ try:
     def run_cmd(*, retry: Retry) -> str:
         with conn_pool.connection() as conn:
             stdout: str = run_ssh_command(
-                conn=conn, job=job, cmd=["echo", "hello"], check=True, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True
+                cmd=["echo", "hello"], conn=conn, job=job, check=True, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True
             ).stdout
             return stdout
 
@@ -79,7 +79,6 @@ from dataclasses import (
 from subprocess import (
     DEVNULL,
     PIPE,
-    CompletedProcess,
 )
 from typing import (
     Any,
@@ -167,7 +166,7 @@ def create_simple_miniremote(
     ssh_verbose: bool = False,  # option passed to `ssh` CLI
     ssh_config_file: str = "",  # option passed to `ssh` CLI; example: /path/to/homedir/.ssh/config
     ssh_cipher: str = "^aes256-gcm@openssh.com",  # option passed to `ssh` CLI
-    ssh_program: str = "ssh",  # name or path of executable; "hpnssh" is also valid
+    ssh_program: str = "ssh",  # name or path of CLI executable; "hpnssh" is also valid
     reuse_ssh_connection: bool = True,
     ssh_control_persist_secs: int = 90,
     ssh_control_persist_margin_secs: int = 2,
@@ -265,13 +264,13 @@ def create_simple_minijob(timeout_duration_secs: float | None = None) -> MiniJob
 
 #############################################################################
 def run_ssh_command(
+    cmd: list[str],
     conn: Connection,
     job: MiniJob,
     loglevel: int = logging.INFO,
     is_dry: bool = False,
-    cmd: list[str] | None = None,
     **kwargs: Any,  # optional low-level keyword args to be forwarded to subprocess.run()
-) -> CompletedProcess:
+) -> subprocess.CompletedProcess:
     """Runs the given CLI cmd via ssh on the given remote, and returns CompletedProcess including stdout and stderr.
 
     The full command is the concatenation of both the command to run on the localhost in order to talk to the remote host
@@ -281,7 +280,8 @@ def run_ssh_command(
     safely traverse the ssh "remote shell" boundary, as ssh concatenates argv into a single remote shell string. In local
     mode (no remote.ssh_user_host) argv is executed directly without an intermediate shell.
     """
-    assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
+    if not cmd:
+        raise ValueError("run_ssh_command requires a non-empty cmd list")
     log: logging.Logger = conn.remote.params.log
     quoted_cmd: list[str] = [shlex.quote(arg) for arg in cmd]
     ssh_cmd: list[str] = conn.ssh_cmd
@@ -291,7 +291,7 @@ def run_ssh_command(
     msg: str = "Would execute: %s" if is_dry else "Executing: %s"
     log.log(loglevel, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
     if is_dry:
-        return CompletedProcess(ssh_cmd + cmd, returncode=0, stdout=None, stderr=None)
+        return subprocess.CompletedProcess(ssh_cmd + cmd, returncode=0, stdout=None, stderr=None)
     else:
         sp: Subprocesses = job.subprocesses
         return sp.subprocess_run(ssh_cmd + cmd, timeout=timeout(job), log=log, **kwargs)
@@ -308,6 +308,7 @@ def refresh_ssh_connection_if_necessary(conn: Connection, job: MiniJob) -> None:
         die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
     if not remote.reuse_ssh_connection:
         return
+
     # Performance: reuse ssh connection for low latency startup of frequent ssh invocations via the 'ssh -S' and
     # 'ssh -S -M -oControlPersist=90s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
     # and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
@@ -318,8 +319,8 @@ def refresh_ssh_connection_if_necessary(conn: Connection, job: MiniJob) -> None:
         ssh_cmd: list[str] = conn.ssh_cmd
         ssh_socket_cmd: list[str] = ssh_cmd[0:-1]  # omit trailing ssh_user_host
         ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
-        # extend lifetime of ssh master by $ssh_control_persist_secs via 'ssh -O check' if master is still running.
-        # 'ssh -S /path/to/socket -O check' doesn't talk over the network, hence is still a low latency fast path.
+        # extend lifetime of ssh master by $ssh_control_persist_secs via `ssh -O check` if master is still running.
+        # `ssh -S /path/to/socket -O check` doesn't talk over the network, hence is still a low latency fast path.
         sp: Subprocesses = job.subprocesses
         t: float | None = timeout(job)
         if sp.subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, timeout=t, log=log).returncode == 0:
@@ -340,8 +341,8 @@ def refresh_ssh_connection_if_necessary(conn: Connection, job: MiniJob) -> None:
             except subprocess.CalledProcessError as e:
                 log.error("%s", stderr_to_str(e.stderr).rstrip())
                 raise RetryableError(
-                    f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
-                    f"first, considering diagnostic log file output from running with -v -v -v."
+                    f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration first, "
+                    "considering diagnostic log file output from running with -v -v -v."
                 ) from e
         conn.last_refresh_time = time.monotonic_ns()
         if conn.connection_lease is not None:
@@ -429,7 +430,9 @@ class Connection:
                 log = self.remote.params.log
                 log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_sock_cmd))
                 try:
-                    proc: CompletedProcess = subprocess.run(ssh_sock_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=0.1)
+                    proc: subprocess.CompletedProcess = subprocess.run(
+                        ssh_sock_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=0.1
+                    )
                 except subprocess.TimeoutExpired as e:  # harmless as master auto-exits after ssh_control_persist_secs anyway
                     log.log(LOG_TRACE, "Harmless ssh master connection shutdown timeout: %s", e)
                 else:

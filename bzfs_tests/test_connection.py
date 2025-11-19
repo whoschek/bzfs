@@ -759,6 +759,12 @@ class TestRunSshCommand(AbstractTestCase):
         pool_wrapper = MagicMock(pool=MagicMock(return_value=self.conn_pool))
         self.job.params.connection_pools = {"dst": pool_wrapper}
 
+    def test_empty_cmd_raises_value_error(self) -> None:
+        job = connection.create_simple_minijob()
+        conn = MagicMock()
+        with self.assertRaises(ValueError):
+            connection.run_ssh_command(cmd=[], conn=conn, job=job)
+
     @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_dry_run_skips_execution(self, mock_run: MagicMock) -> None:
         result = self.job.run_ssh_command(self.remote, cmd=["ls"], is_dry=True)
