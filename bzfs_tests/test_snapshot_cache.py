@@ -210,6 +210,28 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(file, unixtime_in_secs=expected, if_more_recent=True)
             self.assertEqual(expected, round(os.stat(file).st_mtime))
 
+    def test_monotonic_guard_updates_creation_time_when_mtime_equal(self) -> None:
+        """Ensures equal snapshots_changed still allow updating cached creation time.
+
+        Scenario: A cache file initially encodes (creation=90, snapshots_changed=100). A new snapshot is discovered
+        within the same snapshots_changed second with (creation=100, snapshots_changed=100). The guard must update
+        atime from 90 to 100 instead of skipping, so per-label/monitor caches don't retain stale creation timestamps.
+        """
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "cachefile")
+            # Simulate an existing cache file with older creation time but the same snapshots_changed value.
+            with open(path, "wb") as _:
+                pass
+            os.utime(path, (90, 100))  # atime=90, mtime=100
+
+            # Now write a newer creation time in the same snapshots_changed second.
+            set_last_modification_time(path, unixtime_in_secs=(100, 100), if_more_recent=True)
+
+            st = os.stat(path)
+            self.assertEqual(100, round(st.st_mtime))  # snapshots_changed anchor unchanged
+            self.assertEqual(100, round(st.st_atime))  # creation time must be updated
+
     def test_set_last_modification_time_with_file_not_found_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             file = os.path.join(tmpdir, "foo")

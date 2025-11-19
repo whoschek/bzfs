@@ -328,8 +328,12 @@ def set_last_modification_time(
             raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
 
         # Monotonic guard: only skip when the file pre-existed, to not skip the very first write.
-        if preexisted and if_more_recent and unixtimes[1] <= round(stats.st_mtime):
-            return
+        if preexisted and if_more_recent:
+            st_mtime: int = round(stats.st_mtime)
+            if unixtimes[1] < st_mtime:
+                return
+            if unixtimes[1] == st_mtime and unixtimes[0] == round(stats.st_atime):
+                return
         os.utime(fd, times=unixtimes)  # write timestamps
     finally:
         os.close(fd)
