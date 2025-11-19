@@ -177,8 +177,8 @@ For tasks that change code, tests, or scripts in this repository, you **must** f
 6. **Write User Documentation:** If necessary, specify and apply user-facing doc changes, then re-run the
    [Change Validation Workflow](#change-validation-workflow).
 
-7. **Iterate:** Recall and report the tasks that you previously put into the backlog, and repeat the workflow starting
-   with Step 1.
+7. **Iterate:** Report the tasks that are not yet complete or currently still in the backlog, and repeat the workflow
+   starting with Step 1.
 
 # Commit Workflow
 
@@ -223,7 +223,8 @@ Before committing any changes, you **must** follow this exact sequence:
 - **Use Tree of Thought with Verbalized Sampling for Non-trivial Bugs:** Simultaneously explore five completely distinct
   promising approaches, and include their corresponding numeric probabilities in your response, sampled from the full
   distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver success, and explain
-  your choice. Perform a thorough root cause analysis.
+  your choice. **Perform a thorough root cause analysis**. You have plenty of time; go slow and make sure everything is
+  correct.
 - **Test First, Then Fix:** Use TDD: You **must** follow the sequence of steps described above in
   [Core Software Development Workflow](#core-software-development-workflow).
 
@@ -255,7 +256,8 @@ Before committing any changes, you **must** follow this exact sequence:
 Your goal is to improve quality with zero functional regressions.
 
 - **Plan First:** Think hard and take substantial time to plan. Write a structured step-by-step plan (≤ 300 words)
-  summarizing the intended actions and changes, chosen tool, and validation steps.
+  summarizing the intended actions and changes, chosen tool, and validation steps. You have plenty of time; go slow and
+  make sure everything is correct.
 
 - **Tree of Thought with Verbalized Sampling for Non-trivial Refactors:** Simultaneously explore five completely
   distinct promising approaches, and include their corresponding numeric probabilities in your response, sampled from
