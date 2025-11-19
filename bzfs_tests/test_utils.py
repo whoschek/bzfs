@@ -40,6 +40,9 @@ from concurrent.futures import (
     Future,
     ThreadPoolExecutor,
 )
+from dataclasses import (
+    dataclass,
+)
 from datetime import (
     datetime,
     timedelta,
@@ -1728,6 +1731,92 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.assertEqual(2, self.pq_reverse.pop())
         self.assertEqual(1, self.pq_reverse.pop())
         self.assertEqual(0, len(self.pq_reverse))
+
+    def assert_list_equal_ids(self, lst1: list, lst2: list) -> None:
+        self.assertListEqual(lst1, lst2)
+        for i, value in enumerate(lst1):
+            self.assertIs(value, lst2[i])
+
+    def test_duplicates_order(self) -> None:
+        v1 = IntHolder(1)
+        v2a = IntHolder(2)
+        v2b = IntHolder(2)
+        self.assertTrue(v2a is not v2b)
+        self.assertTrue(v2a == v2b)
+        self.assertTrue(v1 < v2a)
+        self.assertTrue(v1 < v2b)
+        pq: SmallPriorityQueue[IntHolder] = SmallPriorityQueue()
+        pq.push(v2a)
+        pq.push(v2b)
+        pq.push(v1)
+        self.assert_list_equal_ids([v1, v2a, v2b], pq._lst)
+
+        # Pop should remove the smallest element first
+        self.assertIs(v1, pq.peek())
+        self.assertIs(v1, pq.pop())
+        self.assert_list_equal_ids([v2a, v2b], pq._lst)
+
+        # Remove first duplicate, leaving another
+        self.assertTrue(pq.remove(v2a))
+        self.assert_list_equal_ids([v2b], pq._lst)
+
+        # Reinsertion of a duplicate preserves insertion order
+        pq.push(v2a)
+        self.assert_list_equal_ids([v2b, v2a], pq._lst)
+
+        # Remove first duplicate, leaving another
+        self.assertTrue(pq.remove(v2a))
+        self.assert_list_equal_ids([v2a], pq._lst)
+
+        # Peek and pop should now work on the remaining duplicate
+        self.assertIs(v2a, pq.peek())
+        self.assertIs(v2a, pq.pop())
+        self.assertEqual(0, len(pq))
+
+    def test_reverse_with_duplicates_order(self) -> None:
+        v1 = IntHolder(1)
+        v2a = IntHolder(2)
+        v2b = IntHolder(2)
+        self.assertTrue(v2a is not v2b)
+        self.assertTrue(v2a == v2b)
+        self.assertTrue(v1 < v2a)
+        self.assertTrue(v1 < v2b)
+        pq: SmallPriorityQueue[IntHolder] = SmallPriorityQueue(reverse=True)
+        pq.push(v2a)
+        pq.push(v2b)
+        pq.push(v1)
+        self.assert_list_equal_ids([v1, v2a, v2b], pq._lst)
+
+        # Pop should remove the largest element first
+        self.assertIs(v2b, pq.peek())
+        self.assertIs(v2b, pq.pop())
+        self.assert_list_equal_ids([v1, v2a], pq._lst)
+
+        # Reinsertion of a duplicate preserves insertion order
+        pq.push(v2b)
+        self.assert_list_equal_ids([v1, v2a, v2b], pq._lst)
+
+        # Remove first duplicate, leaving another
+        self.assertTrue(pq.remove(v2a))
+        self.assert_list_equal_ids([v1, v2b], pq._lst)
+
+        # Reinsertion of a duplicate preserves insertion order
+        pq.push(v2a)
+        self.assert_list_equal_ids([v1, v2b, v2a], pq._lst)
+
+        # Remove first duplicate, leaving another
+        self.assertTrue(pq.remove(v2a))
+        self.assert_list_equal_ids([v1, v2a], pq._lst)
+
+        # Peek and pop should now work on the remaining duplicate
+        self.assertIs(v2a, pq.peek())
+        self.assertIs(v2a, pq.pop())
+        self.assertEqual(1, len(pq))
+
+
+@dataclass(order=True, frozen=True)
+class IntHolder:
+    value: int
 
 
 #############################################################################

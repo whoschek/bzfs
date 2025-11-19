@@ -1070,7 +1070,7 @@ class SmallPriorityQueue(Generic[TComparable]):
         return self._lst[-1] if self._reverse else self._lst[0]
 
     def remove(self, element: TComparable) -> bool:
-        """Removes the first occurrence of ``element`` and returns True if it was present."""
+        """Removes the first occurrence (in insertion order aka FIFO) of ``element`` and returns True if it was present."""
         lst = self._lst
         i = bisect.bisect_left(lst, element)
         is_contained = i < len(lst) and lst[i] == element
