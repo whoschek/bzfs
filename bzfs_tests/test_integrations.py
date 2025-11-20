@@ -86,6 +86,9 @@ from bzfs_main.parallel_batch_cmd import (
 from bzfs_main.replication import (
     INJECT_DST_PIPE_FAIL_KBYTES,
 )
+from bzfs_main.snapshot_cache import (
+    MATURITY_TIME_THRESHOLD_SECS,
+)
 from bzfs_main.util import (
     utils,
 )
@@ -4937,7 +4940,7 @@ class LocalTestCase(IntegrationTestCase):
         def _run_bzfs(*args: str, **kwargs: Any) -> bzfs.Job:
             return self.run_bzfs(*args, **kwargs, cache_snapshots=True, force_stable_cache_namespace=True)
 
-        delay_secs = 2 * bzfs.MATURITY_TIME_THRESHOLD_SECS
+        delay_secs = 2 * MATURITY_TIME_THRESHOLD_SECS
         create_filesystem(src_root_dataset, "foo1")
         take_snapshot(src_root_dataset + "/foo1", fix("s1"))
 
@@ -5003,7 +5006,7 @@ class LocalTestCase(IntegrationTestCase):
         def _run_bzfs(*args: str, **kwargs: Any) -> bzfs.Job:
             return self.run_bzfs(*args, **kwargs, cache_snapshots=True, force_stable_cache_namespace=True)
 
-        delay_secs = 2 * bzfs.MATURITY_TIME_THRESHOLD_SECS
+        delay_secs = 2 * MATURITY_TIME_THRESHOLD_SECS
         create_filesystem(src_root_dataset, "foo1")
         take_snapshot(src_root_dataset + "/foo1", fix("s1"))
 
@@ -5054,7 +5057,7 @@ class LocalTestCase(IntegrationTestCase):
                 self.tearDownAndSetup()
                 self.assert_snapshots(src_root_dataset, 0)
                 loopback = "127.0.0.2" if platform.system() == "Linux" else "127.0.0.1"
-                delay_secs = bzfs.MATURITY_TIME_THRESHOLD_SECS
+                delay_secs = MATURITY_TIME_THRESHOLD_SECS
                 localhostname = socket.gethostname()
                 src_hosts = [localhostname]  # for local mode (no ssh, no network)
                 dst_hosts_pull = {localhostname: ["", "onsite"]}

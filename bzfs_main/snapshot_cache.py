@@ -22,6 +22,34 @@ metadata in fast local inodes (no external DB, no daemon). Instead of repeatedly
 per-dataset files whose inode atime/mtime atomically encode what we need to know. This reduces latency, load on ZFS, and
 network chatter, while remaining dependency free and robust under crashes or concurrent runs.
 
+Correctness scope and analysis guidance
+=======================================
+The cache files described here are an internal implementation detail of the ``--cache-snapshots`` feature. The supported
+contract is that only ``bzfs`` itself creates and updates these files via its documented CLI flows; third-party tools or
+manual edits under ``.cache/mods`` are outside the design and correctness model.
+
+From a correctness perspective, the *current* design is deliberately fail-safe under *benign* external modifications:
+
+- Deleting any subset of cache files or directories (including wiping the entire ``.cache`` tree) is safe. ``bzfs`` will
+  simply fall back to live ``zfs list -t snapshot`` and repopulate caches conservatively.
+- Touching existing cache files so their timestamps move away from the true ZFS properties (for example via ``touch`` or
+  copying cache files without preserving timestamps) cannot cause incorrect behavior. Such changes only make cache
+  entries look stale; all ``bzfs`` consumers re-validate cached timestamps against live ZFS properties plus maturity
+  checks and treat any mismatch as a cache miss, at the cost of extra ZFS I/O and latency but never weakening safety.
+
+The cache directories themselves are created with strict Unix permissions: ``--log-dir`` and its subdirectories (including
+``.cache``) use ``DIR_PERMISSIONS`` (``rwx------``), and cache files are written with ``FILE_PERMISSIONS`` (``rw-------``),
+with the process-wide ``UMASK`` set accordingly. As a result, only the same Unix user account (and root) can read or
+modify the cache tree; other users and groups have no access by default. Analyses shall therefore not assume arbitrary
+hostile writes coming from other unprivileged users on the same system.
+
+When reasoning about correctness, or when searching for bugs, analyses shall be restricted to states that can be reached
+via real use of the public CLIs plus standard ZFS operations. Fabricated scenarios that assume arbitrary or adversarial
+rewrites of cache files (for example, scripts that deliberately write hand-crafted timestamps into ``.cache/mods`` or
+invoke internal helpers directly) are explicitly out of scope and shall not be treated as bugs in ``--cache-snapshots``.
+Under the stated assumptions and invariants below, the fast paths never weaken the safety guarantees of snapshot
+creation, replication, or monitoring; at worst they cause extra ``zfs list -t snapshot`` calls.
+
 Assumptions
 ===========
 - OpenZFS >= 2.2 provides two key UTC times with integer-second resolution: ``snapshots_changed`` (dataset level)
@@ -162,6 +190,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 DATASET_CACHE_FILE_PREFIX: Final[str] = "="
 REPLICATION_CACHE_FILE_PREFIX: Final[str] = "=="
 MONITOR_CACHE_FILE_PREFIX: Final[str] = "==="
+MATURITY_TIME_THRESHOLD_SECS: Final[float] = 1.1  # 1 sec ZFS creation time resolution + NTP clock skew is typically < 10ms
 
 
 #############################################################################
@@ -293,8 +322,8 @@ def set_last_modification_time(
     """Atomically sets the atime/mtime of the file with the given ``path``, with a monotonic guard.
 
     if_more_recent=True is a concurrency control mechanism that prevents us from overwriting a newer (monotonically
-    increasing) snapshots_changed value (which is a UTC Unix time in integer seconds) that might have been written to the
-    cache file by a different, more up-to-date bzfs process.
+    increasing) mtime=snapshots_changed value (which is a UTC Unix time in integer seconds) that might have been written to
+    the cache file by a different, more up-to-date bzfs process.
 
     For a brand-new file created by this call, we always update the file's timestamp to avoid retaining the file's implicit
     creation time ("now") instead of the intended timestamp.

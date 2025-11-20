@@ -140,6 +140,7 @@ from bzfs_main.replication import (
     replicate_dataset,
 )
 from bzfs_main.snapshot_cache import (
+    MATURITY_TIME_THRESHOLD_SECS,
     MONITOR_CACHE_FILE_PREFIX,
     REPLICATION_CACHE_FILE_PREFIX,
     SnapshotCache,
@@ -211,7 +212,6 @@ MIN_PYTHON_VERSION: Final[tuple[int, int]] = (3, 9)
 if sys.version_info < MIN_PYTHON_VERSION:
     print(f"ERROR: {PROG_NAME} requires Python version >= {'.'.join(map(str, MIN_PYTHON_VERSION))}!")
     sys.exit(DIE_STATUS)
-MATURITY_TIME_THRESHOLD_SECS: Final[float] = 1.1  # 1 sec ZFS creation time resolution + NTP clock skew is typically < 10ms
 
 
 #############################################################################
