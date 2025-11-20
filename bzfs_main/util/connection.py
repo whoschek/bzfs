@@ -71,7 +71,6 @@ import threading
 import time
 from collections.abc import (
     Iterator,
-    Sequence,
 )
 from dataclasses import (
     dataclass,
@@ -162,7 +161,7 @@ def create_simple_miniremote(
     log: logging.Logger,
     ssh_user_host: str = "",  # option passed to `ssh` CLI; empty string indicates local mode
     ssh_port: int | None = None,  # option passed to `ssh` CLI
-    ssh_extra_opts: Sequence[str] | None = None,  # optional args passed to `ssh` CLI
+    ssh_extra_opts: list[str] | None = None,  # optional args passed to `ssh` CLI
     ssh_verbose: bool = False,  # option passed to `ssh` CLI
     ssh_config_file: str = "",  # option passed to `ssh` CLI; example: /path/to/homedir/.ssh/config
     ssh_cipher: str = "^aes256-gcm@openssh.com",  # option passed to `ssh` CLI
