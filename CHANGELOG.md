@@ -2,6 +2,16 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - Not yet released
+
+- [bzfs] [perf] `--cache-snapshots`: Update the cache for the datasets that were actually replicated even if some
+  datasets were skipped.
+- [bzfs] `--cache-snapshots`: Ensure equal snapshots_changed still allows updating cached creation time.
+- [bzfs] [security] Properly round-trip backslash characters in a ZFS property name.
+- [bzfs] Decouple `run_ssh_command()` SSH client utility from the rest of the program.
+- [bzfs] Decouple `process_datasets_in_parallel()` parallel task tree scheduler utility from the rest of the program.
+- [bzfs] Also run nightly tests on zfs-2.3.5.
+
 ## [1.14.0] - November 7, 2025
 
 - [bzfs_jobrunner] [perf] Improve latency by enabling bzfs_jobrunner to safely execute multiple bzfs jobs in parallel
