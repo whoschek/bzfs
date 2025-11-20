@@ -174,12 +174,12 @@ def create_simple_miniremote(
 ) -> MiniRemote:
     """Factory that returns a simple implementation of the MiniRemote interface."""
 
-    @dataclass(frozen=True)
+    @dataclass(frozen=True)  # aka immutable
     class SimpleMiniParams(MiniParams):
         log: logging.Logger
         ssh_program: str
 
-    @dataclass(frozen=True)
+    @dataclass(frozen=True)  # aka immutable
     class SimpleMiniRemote(MiniRemote):
         params: MiniParams
         location: str  # "src" or "dst"
@@ -250,7 +250,7 @@ def create_simple_miniremote(
 def create_simple_minijob(timeout_duration_secs: float | None = None) -> MiniJob:
     """Factory that returns a simple implementation of the MiniJob interface."""
 
-    @dataclass(frozen=True)
+    @dataclass(frozen=True)  # aka immutable
     class SimpleMiniJob(MiniJob):
         timeout_nanos: int | None  # timestamp aka instant in time
         timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
