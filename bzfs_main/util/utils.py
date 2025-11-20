@@ -1126,7 +1126,7 @@ def binary_search(sorted_list: list[TComparable], item: TComparable) -> int:
 _S = TypeVar("_S")
 
 
-class Interner(Generic[_S]):
+class HashedInterner(Generic[_S]):
     """Same as sys.intern() except that it isn't global and can also be used for types other than str."""
 
     def __init__(self, items: Iterable[_S] = frozenset()) -> None:

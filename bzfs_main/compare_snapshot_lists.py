@@ -55,8 +55,7 @@ from bzfs_main.util.parallel_iterator import (
 from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
-    Interner,
-    TComparable,
+    HashedInterner,
     human_readable_bytes,
     human_readable_duration,
     isotime_from_unixtime,
@@ -250,7 +249,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     dst_snapshot_itr: Iterator = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
     merge_itr = _merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snapshot_itr, dst_snapshot_itr)
 
-    interner: Interner[str] = Interner()  # reduces memory footprint
+    interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint
     rel_datasets: dict[str, set[str]] = defaultdict(set)
     for datasets, remote in (src_datasets, src), (dst_datasets, dst):
         for dataset in datasets:  # rel_dataset=/foo, root_dataset=tank1/src
@@ -302,9 +301,9 @@ def _print_datasets(groups: itertools.groupby, fn: Callable[[str, Iterable], Non
 def _merge_sorted_iterators(
     choices: Sequence[str],  # ["src", "dst", "all"]
     choice: str,  # Example: "src+dst+all"
-    src_itr: Iterator[TComparable],
-    dst_itr: Iterator[TComparable],
-) -> Iterator[tuple[str, TComparable] | tuple[str, TComparable, TComparable]]:
+    src_itr: Iterator[_ComparableSnapshot],
+    dst_itr: Iterator[_ComparableSnapshot],
+) -> Iterator[tuple[str, _ComparableSnapshot] | tuple[str, _ComparableSnapshot, _ComparableSnapshot]]:
     """The typical pipelined merge algorithm of a merge sort, slightly adapted to our specific use case."""
     assert len(choices) == 3
     assert choice

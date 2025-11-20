@@ -25,7 +25,7 @@ from typing import (
 )
 
 from bzfs_main.util.utils import (
-    Interner,
+    HashedInterner,
     SortedInterner,
     TComparable,
 )
@@ -111,5 +111,5 @@ class TestSortedInterner(MyInternerTest):
 
 #############################################################################
 class TestDictInterner(MyInternerTest):
-    INTERNER_FACTORY: ClassVar[InternerFactory] = Interner
+    INTERNER_FACTORY: ClassVar[InternerFactory] = HashedInterner
     duplicate_prefers_first: ClassVar[bool] = False  # dict keeps last dup

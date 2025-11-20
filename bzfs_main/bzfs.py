@@ -75,7 +75,6 @@ from subprocess import (
     DEVNULL,
     PIPE,
     CalledProcessError,
-    CompletedProcess,
 )
 from typing import (
     Any,
@@ -175,7 +174,7 @@ from bzfs_main.util.utils import (
     SHELL_CHARS,
     UMASK,
     YEAR_WITH_FOUR_DIGITS_REGEX,
-    Interner,
+    HashedInterner,
     SortedInterner,
     Subprocesses,
     SynchronizedBool,
@@ -442,7 +441,7 @@ class Job(MiniJob):
                             cause: BaseException | None = retryable_error.__cause__
                             assert cause is not None
                             raise cause.with_traceback(cause.__traceback__)  # noqa: B904 re-raise of cause without chaining
-                    except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                         if p.skip_on_error == "fail" or (
                             isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0
                         ):
@@ -1408,7 +1407,7 @@ class Job(MiniJob):
         config: CreateSrcSnapshotConfig = p.create_src_snapshots_config
         datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         is_caching: bool = False
-        interner: Interner[datetime] = Interner()  # reduces memory footprint
+        interner: HashedInterner[datetime] = HashedInterner()  # reduces memory footprint
         msgs: list[tuple[datetime, str, SnapshotLabel, str]] = []
 
         def create_snapshot_if_latest_is_too_old(
@@ -1609,7 +1608,7 @@ class Job(MiniJob):
         with conn_pool.connection() as conn:
             log: logging.Logger = conn.remote.params.log
             try:
-                process: CompletedProcess[str] = run_ssh_command(
+                process: subprocess.CompletedProcess[str] = run_ssh_command(
                     cmd=cmd,
                     conn=conn,
                     job=self,

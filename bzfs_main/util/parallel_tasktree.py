@@ -48,7 +48,7 @@ from typing import (
 from bzfs_main.util.utils import (
     DONT_SKIP_DATASET,
     Comparable,
-    Interner,
+    HashedInterner,
     SortedInterner,
     SynchronousExecutor,
     has_duplicates,
@@ -68,7 +68,7 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
     """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names, in the
     form of nested dicts."""
     tree: _Tree = {}
-    interner: Interner[str] = Interner()  # reduces memory footprint
+    interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint
     for dataset in sorted_datasets:
         current: _Tree = tree
         for component in dataset.split("/"):
