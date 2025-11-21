@@ -48,9 +48,6 @@ from unittest.mock import (
 from bzfs_main import (
     bzfs_jobrunner,
 )
-from bzfs_main.bzfs_jobrunner import (
-    _ROOT_SUBJOB,
-)
 from bzfs_main.util.utils import (
     DIE_STATUS,
 )
@@ -1044,7 +1041,7 @@ class TestErrorPropagation(AbstractTestCase):
         with patch.object(self.job, "run_worker_job_in_current_thread", side_effect=CalledProcessError(1, "boom")):
             with suppress_output():
                 self.job.run_subjobs(
-                    subjobs={_ROOT_SUBJOB + "/000000src-host/replicate": ["bzfs", "--no-argument-file"]},
+                    subjobs={"000000src-host/replicate": ["bzfs", "--no-argument-file"]},
                     max_workers=1,
                     timeout_secs=None,
                     work_period_seconds=0,
@@ -1069,7 +1066,6 @@ class TestSpawnProcessPerJobDecision(AbstractTestCase):
     def _capture_spawn_flags(self, subjobs: dict[str, list[str]], spawn_process_per_job: bool) -> list[bool]:
         self.job.spawn_process_per_job = spawn_process_per_job
         flags: list[bool] = []
-        subjobs = {_ROOT_SUBJOB + "/" + key: value for key, value in subjobs.items()}
 
         def fake_run_subjob(cmd: list[str], name: str, timeout_secs: float | None, spawn_process_per_job: bool) -> int:
             flags.append(spawn_process_per_job)
@@ -1084,7 +1080,7 @@ class TestSpawnProcessPerJobDecision(AbstractTestCase):
                     work_period_seconds=0,
                     jitter=False,
                 )
-        return flags[1:]
+        return flags
 
     def test_no_siblings_spawn_flag_false_runs_in_process(self) -> None:
         subjobs = {"000000src-host/replicate": ["bzfs"]}
@@ -1135,8 +1131,8 @@ class TestScopedTerminationInProcess(AbstractTestCase):
         kill B to emulate a failing subjob, which should trigger termination of B's children, not trigger killing A.
         """
         subjobs: dict[str, list[str]] = {
-            _ROOT_SUBJOB + "/000000src-host/replicate_A": ["bzfs", "srcA", "dstA"],
-            _ROOT_SUBJOB + "/000000src-host/replicate_B": ["bzfs", "srcB", "dstB"],
+            "000000src-host/replicate_A": ["bzfs", "srcA", "dstA"],
+            "000000src-host/replicate_B": ["bzfs", "srcB", "dstB"],
         }
         children: dict[str, subprocess.Popen[Any]] = {}
 

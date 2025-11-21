@@ -4,7 +4,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [1.15.0] - Not yet released
 
-- [bzfs_jobrunner] Fixed: In some edge cases, subjobs run in parallel when they should run sequentially.
 - [bzfs] [perf] `--cache-snapshots`: Update the cache for the datasets that were actually replicated even if some
   datasets were skipped.
 - [bzfs] `--cache-snapshots`: Ensure equal snapshots_changed still allows updating cached creation time.

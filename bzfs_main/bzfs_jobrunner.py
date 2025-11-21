@@ -118,7 +118,6 @@ SRC_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^SRC_HOST"  # noqa: S105
 DST_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^DST_HOST"  # noqa: S105
 SEP: Final[str] = ","
 POSIX_END_OF_OPTIONS_MARKER: Final[str] = "--"  # args following -- are treated as operands, even if they begin with a hyphen
-_ROOT_SUBJOB: Final[str] = "root"
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -654,7 +653,7 @@ class Job:
         bzfs_prog_header: Final[list[str]] = [BZFS_PROG_NAME, "--no-argument-file"] + unknown_args
         subjobs: dict[str, list[str]] = {}
         for i, src_host in enumerate(src_hosts):
-            subjob_name: str = _ROOT_SUBJOB + "/" + zero_pad(i) + "src-host"
+            subjob_name: str = zero_pad(i) + "src-host"
             src_log_suffix: str = _log_suffix(localhostname, src_host, "")
             j: int = 0
             opts: list[str]
@@ -955,9 +954,9 @@ class Job:
         log.log(LOG_TRACE, "%s: %s", "spawn_process_per_job", spawn_process_per_job)
         if process_datasets_in_parallel_and_fault_tolerant(
             log=log,
-            datasets=[_ROOT_SUBJOB] + sorted_subjobs,
+            datasets=sorted_subjobs,
             process_dataset=lambda subjob, tid, retry: self.run_subjob(
-                subjobs.get(subjob, []), name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=spawn_process_per_job
+                subjobs[subjob], name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=spawn_process_per_job
             )
             == 0,
             skip_tree_on_error=lambda subjob: True,
@@ -987,10 +986,6 @@ class Job:
         self, cmd: list[str], name: str, timeout_secs: float | None, spawn_process_per_job: bool
     ) -> int | None:  # thread-safe
         """Executes one worker job and updates shared Stats."""
-        if name == _ROOT_SUBJOB:
-            assert len(cmd) == 0
-            return 0  # root node has no actual job attached
-        assert len(cmd) > 0
         start_time_nanos = time.monotonic_ns()
         returncode = None
         log = self.log
