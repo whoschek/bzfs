@@ -33,6 +33,7 @@ from functools import (
 )
 from typing import (
     Any,
+    Callable,
 )
 from unittest.mock import (
     MagicMock,
@@ -42,15 +43,14 @@ from bzfs_main.util.parallel_tasktree import (
     BARRIER_CHAR,
     CompletionCallback,
     CompletionCallbackResult,
+    ParallelTaskTree,
     _build_dataset_tree,
-    _complete_job_with_barriers,
     _make_tree_node,
     _Tree,
     _TreeNode,
-    process_datasets_in_parallel,
 )
 from bzfs_main.util.utils import (
-    SortedInterner,
+    Comparable,
     SynchronousExecutor,
 )
 
@@ -66,6 +66,32 @@ def suite() -> unittest.TestSuite:
         TestParallelTaskTreeBenchmark,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
+
+
+#############################################################################
+def run_parallel_tasktree(**kwargs: Any) -> bool:
+    return ParallelTaskTree(**kwargs).process_datasets_in_parallel()
+
+
+def _run_complete_job_with_barriers(
+    node: _TreeNode,
+    no_skip: bool,
+    priority: Callable[[str], Comparable],
+) -> None:
+    """Access the internal barrier handler without requiring full scheduler setup."""
+
+    def _noop_process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        return lambda todo_futures: CompletionCallbackResult(no_skip=True, fail=False)
+
+    tasktree = ParallelTaskTree(
+        log=MagicMock(logging.Logger),
+        datasets=[],
+        process_dataset=_noop_process_dataset,
+        priority=priority,
+        enable_barriers=True,
+        is_test_mode=True,
+    )
+    tasktree._complete_job_with_barriers(node, no_skip)
 
 
 #############################################################################
@@ -212,7 +238,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         termination_event = threading.Event()
         termination_event.set()
 
-        failed = process_datasets_in_parallel(
+        failed = run_parallel_tasktree(
             log=log,
             datasets=datasets,
             process_dataset=process_dataset,
@@ -258,7 +284,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         t = threading.Thread(target=trigger_termination)
         t.start()
 
-        failed = process_datasets_in_parallel(
+        failed = run_parallel_tasktree(
             log=log,
             datasets=datasets,
             process_dataset=process_dataset,
@@ -285,7 +311,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             raise AssertionError("process_dataset should not be called for invalid input")
 
         with self.assertRaises(ValueError):
-            process_datasets_in_parallel(
+            run_parallel_tasktree(
                 log=log,
                 datasets=datasets,
                 process_dataset=process_dataset,
@@ -303,7 +329,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             raise AssertionError("process_dataset should not be called for invalid input")
 
         with self.assertRaisesRegex(ValueError, r"Invalid dataset name: /a"):
-            process_datasets_in_parallel(
+            run_parallel_tasktree(
                 log=log,
                 datasets=datasets,
                 process_dataset=process_dataset,
@@ -348,7 +374,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
             return _completion_callback_after
 
-        failed = process_datasets_in_parallel(
+        failed = run_parallel_tasktree(
             log=log,
             datasets=datasets,
             process_dataset=process_dataset,
@@ -395,7 +421,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
             return _completion_callback2
 
-        failed = process_datasets_in_parallel(
+        failed = run_parallel_tasktree(
             log=log,
             datasets=datasets,
             process_dataset=process_dataset,
@@ -430,7 +456,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
             return _completion_callback
 
-        failed = process_datasets_in_parallel(
+        failed = run_parallel_tasktree(
             log=log,
             datasets=datasets,
             process_dataset=process_dataset,
@@ -486,7 +512,7 @@ class TestCustomPriorityOrder(unittest.TestCase):
 
             return _completion_callback
 
-        failed = process_datasets_in_parallel(
+        failed = run_parallel_tasktree(
             log=log,
             datasets=datasets,
             process_dataset=process_dataset,
@@ -530,27 +556,23 @@ class TestBarriersCleared(unittest.TestCase):
         a.mut.pending = 0
         b.mut.pending = 0
 
-        priority_queue: list = []
-        datasets_set: SortedInterner[str] = SortedInterner([])
-        empty_barrier = make_tree_node("empty_barrier", {})
-
         # First failure at deepest node
-        _complete_job_with_barriers(
-            c,
-            no_skip=False,
-            priority_queue=priority_queue,
-            priority=lambda dataset: dataset,
-            datasets_set=datasets_set,
-            empty_barrier=empty_barrier,
-        )
+        _run_complete_job_with_barriers(c, no_skip=False, priority=lambda dataset: dataset)
 
         # Check that the node and its ancestors have barriers cleared and point to the empty_barrier
         self.assertTrue(c.mut.barriers_cleared)
         self.assertTrue(b.mut.barriers_cleared)
         self.assertTrue(a.mut.barriers_cleared)
-        self.assertIs(c.mut.barrier, empty_barrier)
-        self.assertIs(b.mut.barrier, empty_barrier)
-        self.assertIs(a.mut.barrier, empty_barrier)
+        c_barrier = c.mut.barrier
+        b_barrier = b.mut.barrier
+        a_barrier = a.mut.barrier
+        self.assertIsNotNone(c_barrier)
+        self.assertIsNotNone(b_barrier)
+        self.assertIsNotNone(a_barrier)
+        assert c_barrier is not None and b_barrier is not None and a_barrier is not None
+        self.assertEqual("empty_barrier", c_barrier.dataset)
+        self.assertEqual("empty_barrier", b_barrier.dataset)
+        self.assertEqual("empty_barrier", a_barrier.dataset)
 
     def test_ancestor_walking_stops_at_cleared_ancestor(self) -> None:
         """Second failure in the same subtree should stop clearing at the first ancestor with barriers_cleared set.
@@ -566,17 +588,7 @@ class TestBarriersCleared(unittest.TestCase):
 
         # First failure clears barriers up to root
         c.mut.pending = 1  # suppress while-loop
-        priority_queue: list = []
-        datasets_set: SortedInterner[str] = SortedInterner([])
-        empty_barrier = make_tree_node("empty_barrier", {})
-        _complete_job_with_barriers(
-            c,
-            no_skip=False,
-            priority_queue=priority_queue,
-            priority=lambda dataset: dataset,
-            datasets_set=datasets_set,
-            empty_barrier=empty_barrier,
-        )
+        _run_complete_job_with_barriers(c, no_skip=False, priority=lambda dataset: dataset)
 
         # Verify barriers cleared
         self.assertTrue(a.mut.barriers_cleared)
@@ -590,14 +602,7 @@ class TestBarriersCleared(unittest.TestCase):
         # Now fail deeper sibling 'd' under 'b' and ensure 'a' stays untouched by the barrier-clearing loop
         d = make_tree_node("a/b/d", {}, parent=b)
         d.mut.pending = 1  # suppress while-loop
-        _complete_job_with_barriers(
-            d,
-            no_skip=False,
-            priority_queue=priority_queue,
-            priority=lambda dataset: dataset,
-            datasets_set=datasets_set,
-            empty_barrier=empty_barrier,
-        )
+        _run_complete_job_with_barriers(d, no_skip=False, priority=lambda dataset: dataset)
 
         # 'd' gets barriers cleared; 'b' and 'a' remain with barriers cleared but 'a' barrier should still be the custom marker
         self.assertTrue(d.mut.barriers_cleared)
@@ -655,7 +660,7 @@ class TestBarriersCleared(unittest.TestCase):
 
             return _completion_callback
 
-        failed = process_datasets_in_parallel(
+        failed = run_parallel_tasktree(
             log=log,
             datasets=datasets,
             process_dataset=process_dataset,
@@ -716,7 +721,7 @@ class TestProcessPoolExecutor(unittest.TestCase):
         datasets = ["a", "a/b", "a/c"]  # siblings under 'a'
         main_pid = os.getpid()
 
-        failed = process_datasets_in_parallel(
+        failed = run_parallel_tasktree(
             log=log,
             datasets=datasets,
             process_dataset=pp_process_dataset,
@@ -792,7 +797,7 @@ class TestParallelTaskTreeBenchmark(unittest.TestCase):
         gc.collect()
         start_time = time.monotonic()
 
-        failed = process_datasets_in_parallel(
+        failed = run_parallel_tasktree(
             log=log,
             datasets=datasets,
             process_dataset=dummy_process_dataset,

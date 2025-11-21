@@ -90,23 +90,6 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
     return tree
 
 
-def _build_dataset_tree_and_find_roots(
-    sorted_datasets: list[str],
-    priority: Callable[[str], Comparable],
-    barriers_enabled: bool,
-    datasets_set: SortedInterner[str],
-    empty_barrier: _TreeNode,
-) -> list[_TreeNode]:
-    """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
-    priority_queue: list[_TreeNode] = []
-    tree: _Tree = _build_dataset_tree(sorted_datasets)  # tree consists of nested dictionaries
-    # use synthetic root node (dataset="") to simplify and ensure all enqueueing is routed through the same code paths
-    root_node: _TreeNode = _make_tree_node("", "", tree)
-    no_skip: bool = True
-    _complete_dataset(root_node, no_skip, barriers_enabled, priority_queue, priority, datasets_set, empty_barrier)
-    return priority_queue
-
-
 class _TreeNodeMutableAttributes:
     """Container for mutable attributes, stored space efficiently."""
 
@@ -171,292 +154,290 @@ until they exit or time out.
 
 
 #############################################################################
-def process_datasets_in_parallel(
-    log: Logger,
-    datasets: list[str],  # (sorted) list of datasets to process
-    process_dataset: Callable[[str, int], CompletionCallback],  # lambda: dataset, tid; must be thread-safe
-    priority: Callable[[str], Comparable] = lambda dataset: dataset,  # lexicographical order by default
-    max_workers: int = os.cpu_count() or 1,
-    executor: Executor | None = None,  # the Executor to submit tasks to; None means 'auto-choose'
-    interval_nanos: Callable[
-        [int, str, int], int
-    ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
-    termination_event: threading.Event | None = None,  # optional event to request early async termination
-    enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
-    is_test_mode: bool = False,
-) -> bool:  # returns True if any dataset processing failed, False if all succeeded; thread-safe
-    """Executes dataset processing operations in parallel with dependency-aware scheduling and fault tolerance.
+class ParallelTaskTree:
+    """Main class for dependency-aware scheduling of dataset jobs with optional barriers and priority ordering."""
 
-    This function orchestrates parallel execution of dataset operations while maintaining strict hierarchical dependencies.
-    Processing of a dataset only starts after processing of all its ancestor datasets has completed, ensuring data
-    consistency during operations like ZFS replication or snapshot deletion.
+    def __init__(
+        self,
+        log: Logger,
+        datasets: list[str],  # (sorted) list of datasets to process
+        process_dataset: Callable[[str, int], CompletionCallback],  # lambda: dataset, tid; must be thread-safe
+        priority: Callable[[str], Comparable] = lambda dataset: dataset,  # lexicographical order by default
+        max_workers: int = os.cpu_count() or 1,
+        executor: Executor | None = None,  # the Executor to submit tasks to; None means 'auto-choose'
+        interval_nanos: Callable[
+            [int, str, int], int
+        ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
+        termination_event: threading.Event | None = None,  # optional event to request early async termination
+        enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
+        is_test_mode: bool = False,
+    ) -> None:
+        """Prepares to process datasets in parallel with dependency-aware scheduling and fault tolerance.
 
-    Purpose:
-    --------
-    - Process hierarchical datasets in parallel while respecting parent-child dependencies
-    - Provide dependency-aware scheduling; error handling and retries are implemented by callers via ``CompletionCallback``
-      or thin wrappers
-    - Maximize throughput by processing independent dataset subtrees in parallel
-    - Support complex job scheduling patterns via optional barrier synchronization
+        This class orchestrates parallel execution of dataset operations while maintaining strict hierarchical dependencies.
+        Processing of a dataset only starts after processing of all its ancestor datasets has completed, ensuring data
+        consistency during operations like ZFS replication or snapshot deletion.
 
-    Assumptions:
-    -----------------
-    - Input `datasets` list is sorted in lexicographical order (enforced in test mode)
-    - Input `datasets` list contains no duplicate entries (enforced in test mode)
-    - Input `datasets` list contains no empty dataset names and none that start with '/'
-    - Dataset hierarchy is determined by slash-separated path components
-    - The `process_dataset` callable is thread-safe and can be executed in parallel
+        Purpose:
+        --------
+        - Process hierarchical datasets in parallel while respecting parent-child dependencies
+        - Provide dependency-aware scheduling; error handling and retries are implemented by callers via
+        ``CompletionCallback`` or thin wrappers
+        - Maximize throughput by processing independent dataset subtrees in parallel
+        - Support complex job scheduling patterns via optional barrier synchronization
 
-    Design Rationale:
-    -----------------
-    - The implementation uses a priority queue-based scheduler that maintains two key invariants:
+        Assumptions:
+        -----------------
+        - Input `datasets` list is sorted in lexicographical order (enforced in test mode)
+        - Input `datasets` list contains no duplicate entries (enforced in test mode)
+        - Input `datasets` list contains no empty dataset names and none that start with '/'
+        - Dataset hierarchy is determined by slash-separated path components
+        - The `process_dataset` callable is thread-safe and can be executed in parallel
 
-    - Dependency Ordering: Children are only made available for start of processing after their parent completes,
-        preventing inconsistent dataset states.
+        Design Rationale:
+        -----------------
+        - The implementation uses a priority queue-based scheduler that maintains two key invariants:
 
-    - Priority: Among the datasets available for start of processing, the "smallest" is always processed next, according to a
-        customizable priority callback function, which by default sorts by lexicographical order (not dataset size), ensuring
-        more deterministic execution order.
+        - Dependency Ordering: Children are only made available for start of processing after their parent completes,
+            preventing inconsistent dataset states.
 
-    Algorithm Selection:
-    --------------------
-    - Simple Algorithm (default): Used when no barriers ('~') are detected in dataset names. Provides efficient
-        scheduling for standard parent-child dependencies via recursive child enqueueing after parent completion.
+        - Priority: Among the datasets available for start of processing, the "smallest" is always processed next, according
+            to a customizable priority callback function, which by default sorts by lexicographical order (not dataset size),
+            ensuring more deterministic execution order.
 
-    - Barrier Algorithm (advanced): Activated when barriers are detected or explicitly enabled. Supports complex
-        synchronization scenarios where jobs must wait for completion of entire subtrees before proceeding. Essential
-        for advanced job scheduling patterns like "complete all parallel replications before starting pruning phase."
+        Algorithm Selection:
+        --------------------
+        - Simple Algorithm (default): Used when no barriers ('~') are detected in dataset names. Provides efficient
+            scheduling for standard parent-child dependencies via recursive child enqueueing after parent completion.
 
-    - Both algorithms are CPU and memory efficient. They require main memory proportional to the number of datasets
-        (~400 bytes per dataset), and easily scale to millions of datasets. Time complexity is O(N log N), where
-        N is the number of datasets.
+        - Barrier Algorithm (advanced): Activated when barriers are detected or explicitly enabled. Supports complex
+            synchronization scenarios where jobs must wait for completion of entire subtrees before proceeding. Essential
+            for advanced job scheduling patterns like "complete all parallel replications before starting pruning phase."
 
-    Concurrency Design:
-    -------------------
-    By default uses ThreadPoolExecutor with configurable worker limits to balance parallelism against resource consumption.
-    Optionally, plug in a custom Executor to submit tasks to scale-out clusters via frameworks like Ray Core or Dask, etc.
-    The single-threaded coordination loop prevents race conditions while worker threads execute dataset operations in parallel.
+        - Both algorithms are CPU and memory efficient. They require main memory proportional to the number of datasets
+            (~400 bytes per dataset), and easily scale to millions of datasets. Time complexity is O(N log N), where
+            N is the number of datasets.
 
-    Params:
-    -------
-    - datasets: Sorted list of dataset names to process (must not contain duplicates)
-    - process_dataset: Thread-safe Callback function to execute on each dataset; returns a CompletionCallback determining if
-      to fail or skip subtree on error; CompletionCallback runs in the (single) main thread as part of the coordination loop.
-    - priority: Callback function to determine dataset processing order; defaults to lexicographical order.
-    - interval_nanos: Callback that returns a non-negative delay (ns) to add to ``next_update_nanos`` for
-      jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submitted_count)``
-    - max_workers: Maximum number of parallel worker threads
-    - executor: the Executor to submit tasks to; None means 'auto-choose'
-    - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
-    - termination_event: Optional event to request early async termination; stops new submissions and cancels in-flight tasks
+        Concurrency Design:
+        -------------------
+        By default uses ThreadPoolExecutor with configurable worker limits to balance parallelism against resource
+        consumption. Optionally, plug in a custom Executor to submit tasks to scale-out clusters via frameworks like
+        Ray Core or Dask, etc.
+        The single-threaded coordination loop prevents race conditions while worker threads execute dataset operations in
+        parallel.
 
-    Returns:
-    --------
-        bool: True if any dataset processing failed, False if all succeeded
+        Params:
+        -------
+        - datasets: Sorted list of dataset names to process (must not contain duplicates)
+        - process_dataset: Thread-safe Callback function to execute on each dataset; returns a CompletionCallback determining
+          if to fail or skip subtree on error; CompletionCallback runs in the (single) main thread as part of the
+          coordination loop.
+        - priority: Callback function to determine dataset processing order; defaults to lexicographical order.
+        - interval_nanos: Callback that returns a non-negative delay (ns) to add to ``next_update_nanos`` for
+          jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submitted_count)``
+        - max_workers: Maximum number of parallel worker threads
+        - executor: the Executor to submit tasks to; None means 'auto-choose'
+        - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
+        - termination_event: Optional event to request early async termination; stops new submissions and cancels in-flight
+          tasks
+        """
+        assert log is not None
+        assert (not is_test_mode) or datasets == sorted(datasets), "List is not sorted"
+        assert (not is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
+        for dataset in datasets:
+            if dataset.startswith("/") or not dataset:
+                raise ValueError(f"Invalid dataset name: {dataset}")
+        assert callable(process_dataset)
+        assert callable(priority)
+        assert max_workers > 0
+        assert callable(interval_nanos)
+        has_barrier: Final[bool] = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
+        assert (enable_barriers is not False) or not has_barrier, "Barrier seen in datasets but barriers explicitly disabled"
 
-    Raises:
-    -------
-        AssertionError: If input validation fails (sorted order, no duplicates, etc.)
-        Various exceptions: Propagated from process_dataset and its CompletionCallback
-    """
-    assert log is not None
-    assert (not is_test_mode) or datasets == sorted(datasets), "List is not sorted"
-    assert (not is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
-    for dataset in datasets:
-        if dataset.startswith("/") or not dataset:
-            raise ValueError(f"Invalid dataset name: {dataset}")
-    assert callable(process_dataset)
-    assert callable(priority)
-    assert max_workers > 0
-    assert callable(interval_nanos)
-    termination_event = threading.Event() if termination_event is None else termination_event
-    has_barrier: Final[bool] = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
-    assert (enable_barriers is not False) or not has_barrier, "Barriers seen in datasets but barriers explicitly disabled"
-    barriers_enabled: Final[bool] = bool(has_barrier or enable_barriers)
+        self._barriers_enabled: Final[bool] = bool(has_barrier or enable_barriers)
+        self._log: Final[Logger] = log
+        self._datasets: Final[list[str]] = datasets
+        self._process_dataset: Final[Callable[[str, int], CompletionCallback]] = process_dataset
+        self._priority: Final[Callable[[str], Comparable]] = priority
+        self._max_workers: Final[int] = max_workers
+        self._interval_nanos: Final[Callable[[int, str, int], int]] = interval_nanos
+        self._termination_event: Final[threading.Event] = (
+            threading.Event() if termination_event is None else termination_event
+        )
+        self._is_test_mode: Final[bool] = is_test_mode
 
-    empty_barrier: Final[_TreeNode] = _make_tree_node("empty_barrier", "empty_barrier", {})  # immutable!
-    datasets_set: Final[SortedInterner[str]] = SortedInterner(datasets)  # reduces memory footprint
-    priority_queue: Final[list[_TreeNode]] = _build_dataset_tree_and_find_roots(
-        datasets, priority, barriers_enabled=barriers_enabled, datasets_set=datasets_set, empty_barrier=empty_barrier
-    )
-    if executor is None:
-        is_parallel: bool = max_workers > 1 and len(datasets) > 1 and has_siblings(datasets)  # siblings can run in parallel
-        executor = ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()
-    with executor:
-        todo_futures: set[Future[CompletionCallback]] = set()
-        future_to_node: dict[Future[CompletionCallback], _TreeNode] = {}
-        submitted_count: int = 0
-        next_update_nanos: int = time.monotonic_ns()
-        wait_timeout: float | None = None
-        failed: bool = False
+        self._empty_barrier: Final[_TreeNode] = _make_tree_node("empty_barrier", "empty_barrier", {})  # immutable!
+        self._datasets_set: Final[SortedInterner[str]] = SortedInterner(datasets)  # reduces memory footprint
+        self._priority_queue: Final[list[_TreeNode]] = []
+        self._build_dataset_tree_and_find_roots()
+        if executor is None:
+            is_parallel: bool = max_workers > 1 and len(datasets) > 1 and has_siblings(datasets)  # siblings can run in par
+            executor = ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()
+        self._executor: Final[Executor] = executor
 
-        def submit_datasets() -> bool:
-            """Submits available datasets to worker threads and returns False if all tasks have been completed."""
-            nonlocal wait_timeout
-            wait_timeout = None  # indicates to use blocking flavor of concurrent.futures.wait()
-            while len(priority_queue) > 0 and len(todo_futures) < max_workers:
-                # pick "smallest" dataset (wrt. sort order) available for start of processing; submit to thread pool
-                nonlocal next_update_nanos
-                sleep_nanos: int = next_update_nanos - time.monotonic_ns()
-                if sleep_nanos > 0:
-                    termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
-                if termination_event.is_set():
-                    break
-                if sleep_nanos > 0 and len(todo_futures) > 0:
-                    wait_timeout = 0  # indicates to use non-blocking flavor of concurrent.futures.wait()
-                    # It's possible an even "smaller" dataset (wrt. sort order) has become available while we slept.
-                    # If so it's preferable to submit to the thread pool the smaller one first.
-                    break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
-                node: _TreeNode = heapq.heappop(priority_queue)  # pick "smallest" dataset (wrt. sort order)
-                nonlocal submitted_count
-                submitted_count += 1
-                next_update_nanos += max(0, interval_nanos(next_update_nanos, node.dataset, submitted_count))
-                future: Future[CompletionCallback] = executor.submit(process_dataset, node.dataset, submitted_count)
-                future_to_node[future] = node
-                todo_futures.add(future)
-            return len(todo_futures) > 0 and not termination_event.is_set()
+    def process_datasets_in_parallel(self) -> bool:
+        """Executes the configured tasks and returns True if any dataset processing failed, False if all succeeded."""
+        with self._executor:
+            todo_futures: set[Future[CompletionCallback]] = set()
+            future_to_node: dict[Future[CompletionCallback], _TreeNode] = {}
+            submitted_count: int = 0
+            next_update_nanos: int = time.monotonic_ns()
+            wait_timeout: float | None = None
+            failed: bool = False
 
-        def complete_datasets() -> None:
-            """Waits for completed futures, processes results and errors, then enqueues follow-up tasks per policy."""
-            nonlocal failed
-            nonlocal todo_futures
-            done_futures: set[Future[CompletionCallback]]
-            done_futures, todo_futures = concurrent.futures.wait(todo_futures, wait_timeout, return_when=FIRST_COMPLETED)
-            for done_future in done_futures:
-                done_node: _TreeNode = future_to_node.pop(done_future)
-                c_callback: CompletionCallback = done_future.result()  # does not block as processing has already completed
-                c_callback_result: CompletionCallbackResult = c_callback(todo_futures)
-                no_skip: bool = c_callback_result.no_skip
-                fail: bool = c_callback_result.fail
-                failed = failed or fail
-                _complete_dataset(
-                    done_node, no_skip, barriers_enabled, priority_queue, priority, datasets_set, empty_barrier
-                )
+            def submit_datasets() -> bool:
+                """Submits available datasets to worker threads and returns False if all tasks have been completed."""
+                nonlocal wait_timeout
+                wait_timeout = None  # indicates to use blocking flavor of concurrent.futures.wait()
+                while len(self._priority_queue) > 0 and len(todo_futures) < self._max_workers:
+                    # pick "smallest" dataset (wrt. sort order) available for start of processing; submit to thread pool
+                    nonlocal next_update_nanos
+                    sleep_nanos: int = next_update_nanos - time.monotonic_ns()
+                    if sleep_nanos > 0:
+                        self._termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
+                    if self._termination_event.is_set():
+                        break
+                    if sleep_nanos > 0 and len(todo_futures) > 0:
+                        wait_timeout = 0  # indicates to use non-blocking flavor of concurrent.futures.wait()
+                        # It's possible an even "smaller" dataset (wrt. sort order) has become available while we slept.
+                        # If so it's preferable to submit to the thread pool the smaller one first.
+                        break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
+                    node: _TreeNode = heapq.heappop(self._priority_queue)  # pick "smallest" dataset (wrt. sort order)
+                    nonlocal submitted_count
+                    submitted_count += 1
+                    next_update_nanos += max(0, self._interval_nanos(next_update_nanos, node.dataset, submitted_count))
+                    future: Future[CompletionCallback] = self._executor.submit(
+                        self._process_dataset, node.dataset, submitted_count
+                    )
+                    future_to_node[future] = node
+                    todo_futures.add(future)
+                return len(todo_futures) > 0 and not self._termination_event.is_set()
 
-        # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
-        while submit_datasets():
-            complete_datasets()
+            def complete_datasets() -> None:
+                """Waits for completed futures, processes results and errors, then enqueues follow-up tasks per policy."""
+                nonlocal failed
+                nonlocal todo_futures
+                done_futures: set[Future[CompletionCallback]]
+                done_futures, todo_futures = concurrent.futures.wait(todo_futures, wait_timeout, return_when=FIRST_COMPLETED)
+                for done_future in done_futures:
+                    done_node: _TreeNode = future_to_node.pop(done_future)
+                    c_callback: CompletionCallback = done_future.result()  # does not block as processing already completed
+                    c_callback_result: CompletionCallbackResult = c_callback(todo_futures)
+                    no_skip: bool = c_callback_result.no_skip
+                    fail: bool = c_callback_result.fail
+                    failed = failed or fail
+                    self._complete_dataset(done_node, no_skip=no_skip)
 
-        if termination_event.is_set():
-            for todo_future in todo_futures:
-                todo_future.cancel()
-            failed = failed or len(priority_queue) > 0 or len(todo_futures) > 0
-            priority_queue.clear()
-            todo_futures.clear()
-            future_to_node.clear()
-        assert len(priority_queue) == 0
-        assert len(todo_futures) == 0
-        assert len(future_to_node) == 0
-        return failed
+            # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
+            while submit_datasets():
+                complete_datasets()
 
+            if self._termination_event.is_set():
+                for todo_future in todo_futures:
+                    todo_future.cancel()
+                failed = failed or len(self._priority_queue) > 0 or len(todo_futures) > 0
+                self._priority_queue.clear()
+                todo_futures.clear()
+                future_to_node.clear()
+            assert len(self._priority_queue) == 0
+            assert len(todo_futures) == 0
+            assert len(future_to_node) == 0
+            return failed
 
-def _complete_dataset(
-    node: _TreeNode,
-    no_skip: bool,
-    barriers_enabled: bool,
-    priority_queue: list[_TreeNode],
-    priority: Callable[[str], Comparable],
-    datasets_set: SortedInterner[str],
-    empty_barrier: _TreeNode,
-) -> None:
-    """Dispatches child enqueueing after a node completes, using the appropriate algorithm."""
-    if barriers_enabled:  # This barrier-based algorithm is for more general job scheduling, as in bzfs_jobrunner
-        _complete_job_with_barriers(node, no_skip, priority_queue, priority, datasets_set, empty_barrier)
-    elif no_skip:  # This simple algorithm is sufficient for most uses
-        _simple_enqueue_children(node, priority_queue, priority, datasets_set)
+    def _build_dataset_tree_and_find_roots(self) -> None:
+        """Builds initial priority queue of available root nodes for this task tree; converts the dataset list into a
+        dependency tree and enqueues roots, ensuring the scheduler starts from a synthetic root node while honoring
+        barriers."""
+        tree: _Tree = _build_dataset_tree(self._datasets)  # tree consists of nested dictionaries
+        root_node: _TreeNode = _make_tree_node("", "", tree)  # synthetic root simplifies enqueue flow
+        self._complete_dataset(root_node, no_skip=True)
 
+    def _complete_dataset(self, node: _TreeNode, no_skip: bool) -> None:
+        """Dispatches child enqueueing after a node completes, using the appropriate algorithm."""
+        if self._barriers_enabled:  # This barrier-based algorithm is for more general job scheduling, as in bzfs_jobrunner
+            self._complete_job_with_barriers(node, no_skip)
+        elif no_skip:  # This simple algorithm is sufficient for most uses
+            self._simple_enqueue_children(node)
 
-def _simple_enqueue_children(
-    node: _TreeNode,
-    priority_queue: list[_TreeNode],
-    priority: Callable[[str], Comparable],
-    datasets_set: SortedInterner[str],
-) -> None:
-    """Enqueues child nodes for start of processing."""
-    for child, grandchildren in node.children.items():  # as processing of parent has now completed
-        child_abs_dataset: str = datasets_set.interned(_join_dataset(node.dataset, child))
-        child_node: _TreeNode = _make_tree_node(priority(child_abs_dataset), child_abs_dataset, grandchildren)
-        if child_abs_dataset in datasets_set:
-            heapq.heappush(priority_queue, child_node)  # make it available for start of processing
-        else:  # it's an intermediate node that has no job attached; pass the enqueue operation
-            _simple_enqueue_children(child_node, priority_queue, priority, datasets_set)  # ... recursively down the tree
+    def _simple_enqueue_children(self, node: _TreeNode) -> None:
+        """Enqueues child nodes for start of processing."""
+        for child, grandchildren in node.children.items():  # as processing of parent has now completed
+            child_abs_dataset: str = self._datasets_set.interned(_join_dataset(node.dataset, child))
+            child_node: _TreeNode = _make_tree_node(self._priority(child_abs_dataset), child_abs_dataset, grandchildren)
+            if child_abs_dataset in self._datasets_set:
+                heapq.heappush(self._priority_queue, child_node)  # make it available for start of processing
+            else:  # it's an intermediate node that has no job attached; pass the enqueue operation
+                self._simple_enqueue_children(child_node)  # ... recursively down the tree
 
+    def _complete_job_with_barriers(self, node: _TreeNode, no_skip: bool) -> None:
+        """After successful completion, enqueues children, opens barriers, and propagates completion upwards.
 
-def _complete_job_with_barriers(
-    node: _TreeNode,
-    no_skip: bool,
-    priority_queue: list[_TreeNode],
-    priority: Callable[[str], Comparable],
-    datasets_set: SortedInterner[str],
-    empty_barrier: _TreeNode,
-) -> None:
-    """After successful completion, enqueues children, opens barriers, and propagates completion upwards.
+        The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner. Here, a "dataset" string
+        is treated as an identifier for any kind of job rather than a reference to a concrete ZFS object. An example
+        "dataset" job string is "src_host1/createsnapshots/replicate_to_hostA". Jobs can depend on another job via a
+        parent/child relationship formed by '/' directory separators within the dataset string, and multiple "datasets" form
+        a job dependency tree by way of common dataset directory prefixes. Jobs that do not depend on each other can be
+        executed in parallel, and jobs can be told to first wait for other jobs to complete successfully. The algorithm is
+        based on a barrier primitive and is typically disabled. It is only required for rare jobrunner configs.
 
-    The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner. Here, a "dataset" string is
-    treated as an identifier for any kind of job rather than a reference to a concrete ZFS object. An example "dataset" job
-    string is "src_host1/createsnapshots/replicate_to_hostA". Jobs can depend on another job via a parent/child relationship
-    formed by '/' directory separators within the dataset string, and multiple "datasets" form a job dependency tree by way
-    of common dataset directory prefixes. Jobs that do not depend on each other can be executed in parallel, and jobs can be
-    told to first wait for other jobs to complete successfully. The algorithm is based on a barrier primitive and is
-    typically disabled. It is only required for rare jobrunner configs.
+        For example, a job scheduler can specify that all parallel replications jobs to multiple destinations must succeed
+        before the jobs of the pruning phase can start. More generally, with this algo, a job scheduler can specify that all
+        jobs within a given job subtree (containing any nested combination of sequential and/or parallel jobs) must
+        successfully complete before a certain other job within the job tree is started. This is specified via the barrier
+        directory named '~'. An example is "src_host1/createsnapshots/~/prune".
 
-    For example, a job scheduler can specify that all parallel replications jobs to multiple destinations must succeed before
-    the jobs of the pruning phase can start. More generally, with this algo, a job scheduler can specify that all jobs within
-    a given job subtree (containing any nested combination of sequential and/or parallel jobs) must successfully complete
-    before a certain other job within the job tree is started. This is specified via the barrier directory named '~'. An
-    example is "src_host1/createsnapshots/~/prune".
+        Note that '~' is unambiguous as it is not a valid ZFS dataset name component per the naming rules enforced by the
+        'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs.
+        """
 
-    Note that '~' is unambiguous as it is not a valid ZFS dataset name component per the naming rules enforced by the 'zfs
-    create', 'zfs snapshot' and 'zfs bookmark' CLIs.
-    """
-
-    def enqueue_children(node: _TreeNode) -> int:
-        """Returns number of jobs that were added to priority_queue for immediate start of processing."""
-        n: int = 0
-        children: _Tree = node.children
-        for child, grandchildren in children.items():
-            abs_dataset: str = datasets_set.interned(_join_dataset(node.dataset, child))
-            child_node: _TreeNode = _make_tree_node(priority(abs_dataset), abs_dataset, grandchildren, parent=node)
-            k: int
-            if child != BARRIER_CHAR:
-                if abs_dataset in datasets_set:
-                    # it's not a barrier; make job available for immediate start of processing
-                    heapq.heappush(priority_queue, child_node)
-                    k = 1
-                else:  # it's an intermediate node that has no job attached; pass the enqueue operation
+        def enqueue_children(node: _TreeNode) -> int:
+            """Returns number of jobs that were added to priority_queue for immediate start of processing."""
+            n: int = 0
+            children: _Tree = node.children
+            for child, grandchildren in children.items():
+                abs_dataset: str = self._datasets_set.interned(_join_dataset(node.dataset, child))
+                child_node: _TreeNode = _make_tree_node(self._priority(abs_dataset), abs_dataset, grandchildren, parent=node)
+                k: int
+                if child != BARRIER_CHAR:
+                    if abs_dataset in self._datasets_set:
+                        # it's not a barrier; make job available for immediate start of processing
+                        heapq.heappush(self._priority_queue, child_node)
+                        k = 1
+                    else:  # it's an intermediate node that has no job attached; pass the enqueue operation
+                        k = enqueue_children(child_node)  # ... recursively down the tree
+                elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
                     k = enqueue_children(child_node)  # ... recursively down the tree
-            elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
-                k = enqueue_children(child_node)  # ... recursively down the tree
-            else:  # park the barrier node within the (still closed) barrier for the time being
-                assert node.mut.barrier is None
-                node.mut.barrier = child_node
-                k = 0
-            node.mut.pending += min(1, k)
-            n += k
-        assert n >= 0
-        return n
+                else:  # park the barrier node within the (still closed) barrier for the time being
+                    assert node.mut.barrier is None
+                    node.mut.barrier = child_node
+                    k = 0
+                node.mut.pending += min(1, k)
+                n += k
+            assert n >= 0
+            return n
 
-    if no_skip:
-        enqueue_children(node)  # make child datasets available for start of processing
-    else:  # job completed without success
-        # ... thus, opening the barrier shall always do nothing in node and its ancestors.
-        # perf: Irrevocably mark (exactly once) barriers of this node and all its ancestors as cleared due to subtree skip,
-        # via barriers_cleared=True. This enables to avoid redundant re-walking the entire ancestor chain on subsequent skip.
-        tmp: _TreeNode | None = node
-        while tmp is not None and not tmp.mut.barriers_cleared:
-            tmp.mut.barriers_cleared = True
-            tmp.mut.barrier = empty_barrier
-            tmp = tmp.parent
-    assert node.mut.pending >= 0
-    while node.mut.pending == 0:  # have all jobs in subtree of current node completed?
-        if no_skip:  # ... if so open the barrier, if it exists, and enqueue jobs waiting on it
-            if not (node.mut.barrier is None or node.mut.barrier is empty_barrier):
-                node.mut.pending += min(1, enqueue_children(node.mut.barrier))
-        node.mut.barrier = empty_barrier
-        if node.mut.pending > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
-            break  # ... if so we have not yet completed the subtree, so don't mark the subtree as completed yet
-        if node.parent is None:
-            break  # we've reached the root node
-        node = node.parent  # recurse up the tree to propagate completion upward
-        node.mut.pending -= 1  # mark subtree as completed
+        if no_skip:
+            enqueue_children(node)  # make child datasets available for start of processing
+        else:  # job completed without success
+            # ... thus, opening the barrier shall always do nothing in node and its ancestors.
+            # perf: Irrevocably mark (exactly once) barriers of this node and all its ancestors as cleared due to subtree
+            # skip, via barriers_cleared=True. This enables to avoid redundant re-walking the entire ancestor chain on
+            # subsequent skip.
+            tmp: _TreeNode | None = node
+            while tmp is not None and not tmp.mut.barriers_cleared:
+                tmp.mut.barriers_cleared = True
+                tmp.mut.barrier = self._empty_barrier
+                tmp = tmp.parent
         assert node.mut.pending >= 0
+        while node.mut.pending == 0:  # have all jobs in subtree of current node completed?
+            if no_skip:  # ... if so open the barrier, if it exists, and enqueue jobs waiting on it
+                if not (node.mut.barrier is None or node.mut.barrier is self._empty_barrier):
+                    node.mut.pending += min(1, enqueue_children(node.mut.barrier))
+            node.mut.barrier = self._empty_barrier
+            if node.mut.pending > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
+                break  # ... if so we have not yet completed the subtree, so don't mark the subtree as completed yet
+            if node.parent is None:
+                break  # we've reached the root node
+            node = node.parent  # recurse up the tree to propagate completion upward
+            node.mut.pending -= 1  # mark subtree as completed
+            assert node.mut.pending >= 0

@@ -45,7 +45,7 @@ from typing import (
 from bzfs_main.util.parallel_tasktree import (
     CompletionCallback,
     CompletionCallbackResult,
-    process_datasets_in_parallel,
+    ParallelTaskTree,
 )
 from bzfs_main.util.retry import (
     Retry,
@@ -133,7 +133,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
 
         return _completion_callback
 
-    return process_datasets_in_parallel(
+    tasktree: ParallelTaskTree = ParallelTaskTree(
         log=log,
         datasets=datasets,
         process_dataset=_process_dataset,
@@ -143,3 +143,4 @@ def process_datasets_in_parallel_and_fault_tolerant(
         enable_barriers=enable_barriers,
         is_test_mode=is_test_mode,
     )
+    return tasktree.process_datasets_in_parallel()
