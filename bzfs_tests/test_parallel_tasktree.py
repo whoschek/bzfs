@@ -275,6 +275,138 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         # Exactly one submission is expected: first submitted before sleep, then termination prevents further submissions
         self.assertEqual(1, len(calls), f"Expected 1 submitted dataset, got {len(calls)}: {calls}")
 
+    def test_rejects_empty_dataset_name(self) -> None:
+        """An empty dataset string is invalid input."""
+
+        log = MagicMock(logging.Logger)
+        datasets = ["", "a"]
+
+        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+            raise AssertionError("process_dataset should not be called for invalid input")
+
+        with self.assertRaises(ValueError):
+            process_datasets_in_parallel(
+                log=log,
+                datasets=datasets,
+                process_dataset=process_dataset,
+                max_workers=2,
+                is_test_mode=True,
+            )
+
+    def test_rejects_leading_slash_dataset_name(self) -> None:
+        """A dataset name must not start with '/'."""
+
+        log = MagicMock(logging.Logger)
+        datasets = ["/a"]
+
+        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+            raise AssertionError("process_dataset should not be called for invalid input")
+
+        with self.assertRaisesRegex(ValueError, r"Invalid dataset name: /a"):
+            process_datasets_in_parallel(
+                log=log,
+                datasets=datasets,
+                process_dataset=process_dataset,
+                max_workers=2,
+                is_test_mode=True,
+            )
+
+    def test_barrier_jobs_wait_for_missing_parent_node(self) -> None:
+        """Barrier descendants must not start before sibling work finishes, even if their parent has no job."""
+
+        log = MagicMock(logging.Logger)
+        br = BARRIER_CHAR
+        datasets = ["a/b/before", f"a/b/{br}/after"]
+
+        started: list[str] = []
+        started_too_early = threading.Event()
+        parent_done = threading.Event()
+        lock = threading.Lock()
+
+        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+            with lock:
+                started.append(dataset)
+
+            if dataset == "a/b/before":
+                time.sleep(0.05)  # keep the sibling runnable while this job executes
+
+                def _completion_callback_before(
+                    todo_futures: set[Future[CompletionCallback]],
+                ) -> CompletionCallbackResult:
+                    parent_done.set()
+                    return CompletionCallbackResult(no_skip=True, fail=False)
+
+                return _completion_callback_before
+
+            if dataset == f"a/b/{br}/after" and not parent_done.is_set():
+                started_too_early.set()
+
+            def _completion_callback_after(
+                todo_futures: set[Future[CompletionCallback]],
+            ) -> CompletionCallbackResult:
+                return CompletionCallbackResult(no_skip=True, fail=False)
+
+            return _completion_callback_after
+
+        failed = process_datasets_in_parallel(
+            log=log,
+            datasets=datasets,
+            process_dataset=process_dataset,
+            max_workers=2,
+            enable_barriers=True,
+            is_test_mode=True,
+        )
+
+        self.assertFalse(failed)
+        self.assertCountEqual(datasets, started)
+        self.assertFalse(
+            started_too_early.is_set(),
+            msg=f"Barrier descendant started before parent branch completed: started={started}",
+        )
+
+    def test_root_level_barrier_waits_for_root(self) -> None:
+        """A barrier child under the root must not start before the root completes."""
+
+        log = MagicMock(logging.Logger)
+        br = BARRIER_CHAR
+        datasets = ["root", f"root/{br}/after"]
+
+        started: list[str] = []
+        root_done = threading.Event()
+        started_too_early = threading.Event()
+        lock = threading.Lock()
+
+        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+            with lock:
+                started.append(dataset)
+            if dataset == "root":
+
+                def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                    root_done.set()
+                    return CompletionCallbackResult(no_skip=True, fail=False)
+
+                return _completion_callback
+
+            if not root_done.is_set():
+                started_too_early.set()
+
+            def _completion_callback2(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                return CompletionCallbackResult(no_skip=True, fail=False)
+
+            return _completion_callback2
+
+        failed = process_datasets_in_parallel(
+            log=log,
+            datasets=datasets,
+            process_dataset=process_dataset,
+            max_workers=2,
+            is_test_mode=True,
+        )
+
+        self.assertFalse(failed)
+        self.assertEqual(["root", f"root/{br}/after"], started)
+        self.assertFalse(started_too_early.is_set(), msg=f"Barrier child ran before root: started={started}")
+
     def test_explicit_sync_executor_runs_inline_on_main_thread(self) -> None:
         """With an explicit SynchronousExecutor, tasks execute inline on the main thread.
 
