@@ -59,74 +59,6 @@ BARRIER_CHAR: Final[str] = "~"
 
 
 #############################################################################
-_Tree = dict[str, "_Tree"]  # Type alias
-
-
-def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
-    """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names, in the
-    form of nested dicts."""
-    tree: _Tree = {}
-    interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint
-    for dataset in sorted_datasets:
-        current: _Tree = tree
-        for component in dataset.split("/"):
-            child: _Tree | None = current.get(component)
-            if child is None:
-                child = {}
-                component = interner.intern(component)
-                current[component] = child
-            current = child
-    shared_empty_leaf: _Tree = {}
-
-    def compact(node: _Tree) -> None:
-        """Tree with shared empty leaf nodes has some 30% lower memory footprint than the non-compacted version."""
-        for key, child_node in node.items():
-            if len(child_node) == 0:
-                node[key] = shared_empty_leaf  # sharing is safe because the tree is treated as immutable henceforth
-            else:
-                compact(child_node)
-
-    compact(tree)
-    return tree
-
-
-class _TreeNodeMutableAttributes:
-    """Container for mutable attributes, stored space efficiently."""
-
-    __slots__ = ("barrier", "barriers_cleared", "pending")  # uses more compact memory layout than __dict__
-
-    def __init__(self) -> None:
-        self.barrier: _TreeNode | None = None  # zero or one barrier TreeNode waiting for this node to complete
-        self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
-        self.barriers_cleared: bool = False  # irrevocably mark barriers of this node and all its ancestors as cleared?
-
-
-class _TreeNode(NamedTuple):
-    """Node in dataset dependency tree used by the scheduler; _TreeNodes are ordered by priority and dataset name within a
-    priority queue, via __lt__ comparisons."""
-
-    priority: Comparable  # determines the processing order once this dataset has become available for start of processing
-    dataset: str  # each dataset name is unique; attribs other than `priority` and `dataset` are never used for comparisons
-    children: _Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
-    parent: _TreeNode | None
-    mut: _TreeNodeMutableAttributes
-
-    def __repr__(self) -> str:
-        priority, dataset, pending, barrier = self.priority, self.dataset, self.mut.pending, self.mut.barrier
-        return str({"priority": priority, "dataset": dataset, "pending": pending, "barrier": barrier is not None})
-
-
-def _make_tree_node(priority: Comparable, dataset: str, children: _Tree, parent: _TreeNode | None = None) -> _TreeNode:
-    """Creates a TreeNode with mutable state container."""
-    return _TreeNode(priority, dataset, children, parent, _TreeNodeMutableAttributes())
-
-
-def _join_dataset(parent: str, child: str) -> str:
-    """Concatenates parent and child dataset names; accommodates synthetic root node without losing interning efficiency."""
-    return f"{parent}/{child}" if parent else child
-
-
-#############################################################################
 class CompletionCallbackResult(NamedTuple):
     """Result of a CompletionCallback invocation."""
 
@@ -265,9 +197,10 @@ class ParallelTaskTree:
             threading.Event() if termination_event is None else termination_event
         )
         self._is_test_mode: Final[bool] = is_test_mode
+        self._priority_queue: Final[list[_TreeNode]] = []
+        self._tree: Final[_Tree] = _build_dataset_tree(datasets)  # tree consists of nested dictionaries and is immutable
         self._empty_barrier: Final[_TreeNode] = _make_tree_node("empty_barrier", "empty_barrier", {})  # immutable!
         self._datasets_set: Final[SortedInterner[str]] = SortedInterner(datasets)  # reduces memory footprint
-        self._priority_queue: Final[list[_TreeNode]] = []
         if executors is None:
             is_parallel: bool = max_workers > 1 and len(datasets) > 1 and has_siblings(datasets)  # siblings can run in par
 
@@ -280,8 +213,7 @@ class ParallelTaskTree:
 
     def process_datasets_in_parallel(self) -> bool:
         """Executes the configured tasks and returns True if any dataset processing failed, False if all succeeded."""
-        self._priority_queue.clear()
-        self._build_dataset_tree_and_find_roots()
+        self._build_priority_queue()
         executor: Executor = self._executors()
         with executor:
             todo_futures: set[Future[CompletionCallback]] = set()
@@ -350,18 +282,17 @@ class ParallelTaskTree:
             assert len(future_to_node) == 0
             return failed
 
-    def _build_dataset_tree_and_find_roots(self) -> None:
-        """Builds initial priority queue of available root nodes for this task tree; converts the dataset list into a
-        dependency tree and enqueues roots, ensuring the scheduler starts from a synthetic root node while honoring
-        barriers."""
-        tree: _Tree = _build_dataset_tree(self._datasets)  # tree consists of nested dictionaries
-        root_node: _TreeNode = _make_tree_node(priority="", dataset="", children=tree)  # synthetic root simplifies enqueue
+    def _build_priority_queue(self) -> None:
+        """Builds and fills initial priority queue of available root nodes for this task tree, ensuring the scheduler starts
+        from a synthetic root node while honoring barriers; the synthetic root simplifies enqueueing logic."""
+        self._priority_queue.clear()
+        root_node: _TreeNode = _make_tree_node(priority="", dataset="", children=self._tree)
         self._complete_dataset(root_node, no_skip=True)
 
     def _complete_dataset(self, node: _TreeNode, no_skip: bool) -> None:
-        """Dispatches child enqueueing after a node completes, using the appropriate algorithm."""
+        """Enqueues child nodes for start of processing, using the appropriate algorithm."""
         if self._barriers_enabled:  # This barrier-based algorithm is for more general job scheduling, as in bzfs_jobrunner
-            self._complete_job_with_barriers(node, no_skip=no_skip)
+            self._complete_dataset_with_barriers(node, no_skip=no_skip)
         elif no_skip:  # This simple algorithm is sufficient for most uses
             self._simple_enqueue_children(node)
 
@@ -375,7 +306,7 @@ class ParallelTaskTree:
             else:  # it's an intermediate node that has no job attached; pass the enqueue operation
                 self._simple_enqueue_children(child_node)  # ... recursively down the tree
 
-    def _complete_job_with_barriers(self, node: _TreeNode, no_skip: bool) -> None:
+    def _complete_dataset_with_barriers(self, node: _TreeNode, no_skip: bool) -> None:
         """After successful completion, enqueues children, opens barriers, and propagates completion upwards.
 
         The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner. Here, a "dataset" string
@@ -447,3 +378,72 @@ class ParallelTaskTree:
             node = node.parent  # recurse up the tree to propagate completion upward
             node.mut.pending -= 1  # mark subtree as completed
             assert node.mut.pending >= 0
+
+
+#############################################################################
+class _TreeNodeMutableAttributes:
+    """Container for mutable attributes, stored space efficiently."""
+
+    __slots__ = ("barrier", "barriers_cleared", "pending")  # uses more compact memory layout than __dict__
+
+    def __init__(self) -> None:
+        self.barrier: _TreeNode | None = None  # zero or one barrier TreeNode waiting for this node to complete
+        self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
+        self.barriers_cleared: bool = False  # irrevocably mark barriers of this node and all its ancestors as cleared?
+
+
+class _TreeNode(NamedTuple):
+    """Node in dataset dependency tree used by the scheduler; _TreeNodes are ordered by priority and dataset name within a
+    priority queue, via __lt__ comparisons."""
+
+    priority: Comparable  # determines the processing order once this dataset has become available for start of processing
+    dataset: str  # each dataset name is unique; attribs other than `priority` and `dataset` are never used for comparisons
+    children: _Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
+    parent: _TreeNode | None
+    mut: _TreeNodeMutableAttributes
+
+    def __repr__(self) -> str:
+        priority, dataset, pending, barrier = self.priority, self.dataset, self.mut.pending, self.mut.barrier
+        return str({"priority": priority, "dataset": dataset, "pending": pending, "barrier": barrier is not None})
+
+
+def _make_tree_node(priority: Comparable, dataset: str, children: _Tree, parent: _TreeNode | None = None) -> _TreeNode:
+    """Creates a TreeNode with mutable state container."""
+    return _TreeNode(priority, dataset, children, parent, _TreeNodeMutableAttributes())
+
+
+def _join_dataset(parent: str, child: str) -> str:
+    """Concatenates parent and child dataset names; accommodates synthetic root node without losing interning efficiency."""
+    return f"{parent}/{child}" if parent else child
+
+
+#############################################################################
+_Tree = dict[str, "_Tree"]  # Type alias
+
+
+def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
+    """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names, in the
+    form of nested dicts; This converts the dataset list into a dependency tree."""
+    tree: _Tree = {}
+    interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint
+    for dataset in sorted_datasets:
+        current: _Tree = tree
+        for component in dataset.split("/"):
+            child: _Tree | None = current.get(component)
+            if child is None:
+                child = {}
+                component = interner.intern(component)
+                current[component] = child
+            current = child
+    shared_empty_leaf: _Tree = {}
+
+    def compact(node: _Tree) -> None:
+        """Tree with shared empty leaf nodes has some 30% lower memory footprint than the non-compacted version."""
+        for key, child_node in node.items():
+            if len(child_node) == 0:
+                node[key] = shared_empty_leaf  # sharing is safe because the tree is treated as immutable henceforth
+            else:
+                compact(child_node)
+
+    compact(tree)
+    return tree

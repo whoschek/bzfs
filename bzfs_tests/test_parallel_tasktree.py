@@ -73,7 +73,7 @@ def run_parallel_tasktree(**kwargs: Any) -> bool:
     return ParallelTaskTree(**kwargs).process_datasets_in_parallel()
 
 
-def _run_complete_job_with_barriers(
+def _run_complete_dataset_with_barriers(
     node: _TreeNode,
     no_skip: bool,
     priority: Callable[[str], Comparable],
@@ -91,7 +91,7 @@ def _run_complete_job_with_barriers(
         enable_barriers=True,
         is_test_mode=True,
     )
-    tasktree._complete_job_with_barriers(node, no_skip)
+    tasktree._complete_dataset_with_barriers(node, no_skip)
 
 
 #############################################################################
@@ -598,7 +598,7 @@ class TestBarriersCleared(unittest.TestCase):
         b.mut.pending = 0
 
         # First failure at deepest node
-        _run_complete_job_with_barriers(c, no_skip=False, priority=lambda dataset: dataset)
+        _run_complete_dataset_with_barriers(c, no_skip=False, priority=lambda dataset: dataset)
 
         # Check that the node and its ancestors have barriers cleared and point to the empty_barrier
         self.assertTrue(c.mut.barriers_cleared)
@@ -629,7 +629,7 @@ class TestBarriersCleared(unittest.TestCase):
 
         # First failure clears barriers up to root
         c.mut.pending = 1  # suppress while-loop
-        _run_complete_job_with_barriers(c, no_skip=False, priority=lambda dataset: dataset)
+        _run_complete_dataset_with_barriers(c, no_skip=False, priority=lambda dataset: dataset)
 
         # Verify barriers cleared
         self.assertTrue(a.mut.barriers_cleared)
@@ -643,7 +643,7 @@ class TestBarriersCleared(unittest.TestCase):
         # Now fail deeper sibling 'd' under 'b' and ensure 'a' stays untouched by the barrier-clearing loop
         d = make_tree_node("a/b/d", {}, parent=b)
         d.mut.pending = 1  # suppress while-loop
-        _run_complete_job_with_barriers(d, no_skip=False, priority=lambda dataset: dataset)
+        _run_complete_dataset_with_barriers(d, no_skip=False, priority=lambda dataset: dataset)
 
         # 'd' gets barriers cleared; 'b' and 'a' remain with barriers cleared but 'a' barrier should still be the custom marker
         self.assertTrue(d.mut.barriers_cleared)
