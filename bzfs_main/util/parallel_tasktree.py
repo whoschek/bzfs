@@ -27,6 +27,7 @@ from __future__ import (
 )
 import concurrent
 import heapq
+import logging
 import os
 import threading
 import time
@@ -35,9 +36,6 @@ from concurrent.futures import (
     Executor,
     Future,
     ThreadPoolExecutor,
-)
-from logging import (
-    Logger,
 )
 from typing import (
     Callable,
@@ -69,6 +67,7 @@ class CompletionCallbackResult(NamedTuple):
     """True marks overall run as failed; exceptions may be raised here."""
 
 
+#############################################################################
 CompletionCallback = Callable[[set[Future["CompletionCallback"]]], CompletionCallbackResult]  # Type alias
 """Callable that is run by the main coordination thread after a ``process_dataset()`` task finishes.
 
@@ -91,7 +90,7 @@ class ParallelTaskTree:
 
     def __init__(
         self,
-        log: Logger,
+        log: logging.Logger,
         datasets: list[str],  # (sorted) list of datasets to process
         process_dataset: Callable[[str, int], CompletionCallback],  # lambda: dataset, tid; must be thread-safe
         priority: Callable[[str], Comparable] = lambda dataset: dataset,  # lexicographical order by default
@@ -187,7 +186,7 @@ class ParallelTaskTree:
         assert (enable_barriers is not False) or not has_barrier, "Barrier seen in datasets but barriers explicitly disabled"
 
         self._barriers_enabled: Final[bool] = bool(has_barrier or enable_barriers)
-        self._log: Final[Logger] = log
+        self._log: Final[logging.Logger] = log
         self._datasets: Final[list[str]] = datasets
         self._process_dataset: Final[Callable[[str, int], CompletionCallback]] = process_dataset
         self._priority: Final[Callable[[str], Comparable]] = priority
@@ -359,7 +358,7 @@ class ParallelTaskTree:
             # skip, via barriers_cleared=True. This enables to avoid redundant re-walking the entire ancestor chain on
             # subsequent skip.
             tmp: _TreeNode | None = node
-            while tmp is not None and not tmp.mut.barriers_cleared:
+            while (tmp is not None) and not tmp.mut.barriers_cleared:
                 tmp.mut.barriers_cleared = True
                 tmp.mut.barrier = self._empty_barrier
                 tmp = tmp.parent
@@ -394,6 +393,7 @@ class _TreeNodeMutableAttributes:
         self.barriers_cleared: bool = False  # irrevocably mark barriers of this node and all its ancestors as cleared?
 
 
+#############################################################################
 class _TreeNode(NamedTuple):
     """Node in dataset dependency tree used by the scheduler; _TreeNodes are ordered by priority and dataset name within a
     priority queue, via __lt__ comparisons."""

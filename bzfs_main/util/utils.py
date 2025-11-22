@@ -1116,8 +1116,8 @@ class SortedInterner(Generic[TComparable]):
 
 
 def binary_search(sorted_list: list[TComparable], item: TComparable) -> int:
-    """Java-style binary search; Returns index >=0 if an equal item is found in list, else '-insertion_point-1'; If it
-    returns index >=0, the index will be the left-most index in case multiple such equal items are contained."""
+    """Java-style binary search; Returns index >= 0 if an equal item is found in list, else '-insertion_point-1'; If it
+    returns index >= 0, the index will be the left-most index in case multiple such equal items are contained."""
     i = bisect.bisect_left(sorted_list, item)
     return i if i < len(sorted_list) and sorted_list[i] == item else -i - 1
 
