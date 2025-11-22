@@ -962,7 +962,7 @@ class Job:
             skip_tree_on_error=lambda subjob: True,
             skip_on_error="dataset",
             max_workers=max_workers,
-            interval_nanos=lambda last_update_nanos, dataset, submitted_count: interval_nanos,
+            interval_nanos=lambda last_update_nanos, dataset, submit_count: interval_nanos,
             termination_event=self.termination_event,
             termination_handler=self.subprocesses.terminate_process_subtrees,
             task_name="Subjob",

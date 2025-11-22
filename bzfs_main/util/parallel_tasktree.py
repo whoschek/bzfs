@@ -99,7 +99,7 @@ class ParallelTaskTree:
         executors: Callable[[], Executor] | None = None,  # factory producing Executor; None means 'auto-choose'
         interval_nanos: Callable[
             [int, str, int], int
-        ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
+        ] = lambda last_update_nanos, dataset, submit_count: 0,  # optionally spread tasks out over time; e.g. for jitter
         termination_event: threading.Event | None = None,  # optional event to request early async termination
         enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
         is_test_mode: bool = False,
@@ -166,7 +166,7 @@ class ParallelTaskTree:
           coordination loop.
         - priority: Callback function to determine dataset processing order; defaults to lexicographical order.
         - interval_nanos: Callback that returns a non-negative delay (ns) to add to ``next_update_nanos`` for
-          jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submitted_count)``
+          jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submit_count)``
         - max_workers: Maximum number of parallel worker threads
         - executors: Factory returning an Executor to submit tasks to; None means 'auto-choose'
         - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
@@ -218,7 +218,7 @@ class ParallelTaskTree:
         with executor:
             todo_futures: set[Future[CompletionCallback]] = set()
             future_to_node: dict[Future[CompletionCallback], _TreeNode] = {}
-            submitted_count: int = 0
+            submit_count: int = 0
             next_update_nanos: int = time.monotonic_ns()
             wait_timeout: float | None = None
             failed: bool = False
@@ -241,12 +241,10 @@ class ParallelTaskTree:
                         # If so it's preferable to submit to the thread pool the smaller one first.
                         break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
                     node: _TreeNode = heapq.heappop(self._priority_queue)  # pick "smallest" dataset (wrt. sort order)
-                    nonlocal submitted_count
-                    submitted_count += 1
-                    next_update_nanos += max(0, self._interval_nanos(next_update_nanos, node.dataset, submitted_count))
-                    future: Future[CompletionCallback] = executor.submit(
-                        self._process_dataset, node.dataset, submitted_count
-                    )
+                    nonlocal submit_count
+                    submit_count += 1
+                    next_update_nanos += max(0, self._interval_nanos(next_update_nanos, node.dataset, submit_count))
+                    future: Future[CompletionCallback] = executor.submit(self._process_dataset, node.dataset, submit_count)
                     future_to_node[future] = node
                     todo_futures.add(future)
                 return len(todo_futures) > 0 and not self._termination_event.is_set()
@@ -299,7 +297,7 @@ class ParallelTaskTree:
     def _simple_enqueue_children(self, node: _TreeNode) -> None:
         """Enqueues child nodes for start of processing."""
         for child, grandchildren in node.children.items():  # as processing of parent has now completed
-            child_abs_dataset: str = self._datasets_set.interned(_join_dataset(node.dataset, child))
+            child_abs_dataset: str = self._join_dataset(node.dataset, child)
             child_node: _TreeNode = _make_tree_node(self._priority(child_abs_dataset), child_abs_dataset, grandchildren)
             if child_abs_dataset in self._datasets_set:
                 heapq.heappush(self._priority_queue, child_node)  # make it available for start of processing
@@ -332,7 +330,7 @@ class ParallelTaskTree:
             n: int = 0
             children: _Tree = node.children
             for child, grandchildren in children.items():
-                abs_dataset: str = self._datasets_set.interned(_join_dataset(node.dataset, child))
+                abs_dataset: str = self._join_dataset(node.dataset, child)
                 child_node: _TreeNode = _make_tree_node(self._priority(abs_dataset), abs_dataset, grandchildren, parent=node)
                 k: int
                 if child != BARRIER_CHAR:
@@ -379,6 +377,10 @@ class ParallelTaskTree:
             node.mut.pending -= 1  # mark subtree as completed
             assert node.mut.pending >= 0
 
+    def _join_dataset(self, parent: str, child: str) -> str:
+        """Concatenates parent and child dataset names; accommodates synthetic root node; interns for memory footprint."""
+        return self._datasets_set.interned(f"{parent}/{child}" if parent else child)
+
 
 #############################################################################
 class _TreeNodeMutableAttributes:
@@ -410,11 +412,6 @@ class _TreeNode(NamedTuple):
 def _make_tree_node(priority: Comparable, dataset: str, children: _Tree, parent: _TreeNode | None = None) -> _TreeNode:
     """Creates a TreeNode with mutable state container."""
     return _TreeNode(priority, dataset, children, parent, _TreeNodeMutableAttributes())
-
-
-def _join_dataset(parent: str, child: str) -> str:
-    """Concatenates parent and child dataset names; accommodates synthetic root node without losing interning efficiency."""
-    return f"{parent}/{child}" if parent else child
 
 
 #############################################################################

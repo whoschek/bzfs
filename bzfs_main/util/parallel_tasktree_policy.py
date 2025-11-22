@@ -69,7 +69,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     max_workers: int = os.cpu_count() or 1,
     interval_nanos: Callable[
         [int, str, int], int
-    ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
+    ] = lambda last_update_nanos, dataset, submit_count: 0,  # optionally spread tasks out over time; e.g. for jitter
     termination_event: threading.Event | None = None,  # optional event to request early async termination
     termination_handler: Callable[[], None] = lambda: None,
     task_name: str = "Task",
@@ -99,9 +99,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
     len_datasets: int = len(datasets)
     is_debug: bool = log.isEnabledFor(logging.DEBUG)
 
-    def _process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+    def _process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
         """Wrapper around process_dataset(); adds retries plus a callback determining if to fail or skip subtree on error."""
-        tid: str = f"{submitted_count}/{len_datasets}"
+        tid: str = f"{submit_count}/{len_datasets}"
         start_time_nanos: int = time.monotonic_ns()
         exception = None
         no_skip: bool = False

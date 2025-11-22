@@ -80,7 +80,7 @@ def _run_complete_dataset_with_barriers(
 ) -> None:
     """Access the internal barrier handler without requiring full scheduler setup."""
 
-    def _noop_process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+    def _noop_process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
         return lambda todo_futures: CompletionCallbackResult(no_skip=True, fail=False)
 
     tasktree = ParallelTaskTree(
@@ -227,7 +227,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         datasets = ["a", "b", "c"]
         calls: list[str] = []
 
-        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             calls.append(dataset)
 
             def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
@@ -260,11 +260,11 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         termination_event = threading.Event()
 
         # Ensure the scheduler sleeps between submissions to hit the termination_event.wait() path
-        def interval_nanos(last_update_nanos: int, dataset: str, submitted_count: int) -> int:
+        def interval_nanos(last_update_nanos: int, dataset: str, submit_count: int) -> int:
             # Large enough to allow the background thread to set the event and wake the wait early
             return 500_000_000  # 0.5s
 
-        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             calls.append(dataset)
 
             def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
@@ -307,7 +307,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         log = MagicMock(logging.Logger)
         datasets = ["", "a"]
 
-        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             raise AssertionError("process_dataset should not be called for invalid input")
 
         with self.assertRaises(ValueError):
@@ -325,7 +325,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         log = MagicMock(logging.Logger)
         datasets = ["/a"]
 
-        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             raise AssertionError("process_dataset should not be called for invalid input")
 
         with self.assertRaisesRegex(ValueError, r"Invalid dataset name: /a"):
@@ -349,7 +349,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         parent_done = threading.Event()
         lock = threading.Lock()
 
-        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             with lock:
                 started.append(dataset)
 
@@ -402,7 +402,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         started_too_early = threading.Event()
         lock = threading.Lock()
 
-        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             with lock:
                 started.append(dataset)
             if dataset == "root":
@@ -447,7 +447,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         main_ident: int = threading.get_ident()
         calls: list[tuple[str, int]] = []
 
-        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             with lock:
                 calls.append((dataset, threading.get_ident()))
 
@@ -481,7 +481,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         lock = threading.Lock()
         run_id = 0
 
-        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             nonlocal run_id
             with lock:
                 calls.append((run_id, dataset))
@@ -545,7 +545,7 @@ class TestCustomPriorityOrder(unittest.TestCase):
 
         calls: list[str] = []
 
-        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             calls.append(dataset)
 
             def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
@@ -684,7 +684,7 @@ class TestBarriersCleared(unittest.TestCase):
             with lock:
                 calls.append(dataset)
 
-        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             # Simulate long-running sibling to keep ancestor 'x' pending > 0 during failure handling
             if dataset == "x/other":
                 time.sleep(0.05)  # give others a head start
@@ -735,7 +735,7 @@ def pp_completion_callback(
     return CompletionCallbackResult(no_skip=True, fail=False)
 
 
-def pp_process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+def pp_process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
     """Top-level worker used by process pool tests; returns a pickleable callback.
 
     Binds only simple values (dataset, worker_pid) into the partial so unpickling is reliable across processes.
@@ -817,7 +817,7 @@ class TestParallelTaskTreeBenchmark(unittest.TestCase):
 
     def _run_benchmark(self, num_datasets: int, enable_barriers: bool, max_workers: int = 2 * (os.cpu_count() or 1)) -> None:
 
-        def dummy_process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+        def dummy_process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             """A dummy function that does nothing, to benchmark the framework overhead."""
 
             def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
