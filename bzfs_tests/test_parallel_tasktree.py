@@ -461,7 +461,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             datasets=datasets,
             process_dataset=process_dataset,
             max_workers=4,
-            executor=SynchronousExecutor(),
+            executors=lambda: SynchronousExecutor(),
             enable_barriers=False,
             is_test_mode=True,
         )
@@ -470,6 +470,47 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         # Expected order: root 'a' first, then its children in lexicographic order
         self.assertEqual([d for d, _ in calls], ["a", "a/b", "a/c"])
         self.assertTrue(all(tid == main_ident for _, tid in calls), msg=f"Calls not on main thread: {calls}")
+
+    def test_parallel_tasktree_can_be_reused_across_runs(self) -> None:
+        """A ParallelTaskTree instance can be used for multiple runs with fresh executors."""
+
+        log = MagicMock(logging.Logger)
+        datasets = ["a", "a/b", "a/c"]
+
+        calls: list[tuple[int, str]] = []
+        lock = threading.Lock()
+        run_id = 0
+
+        def process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
+            nonlocal run_id
+            with lock:
+                calls.append((run_id, dataset))
+
+            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                return CompletionCallbackResult(no_skip=True, fail=False)
+
+            return _completion_callback
+
+        tasktree = ParallelTaskTree(
+            log=log,
+            datasets=datasets,
+            process_dataset=process_dataset,
+            max_workers=2,
+            executors=lambda: SynchronousExecutor(),
+            enable_barriers=False,
+            is_test_mode=True,
+        )
+
+        for i in range(2):
+            run_id = i
+            failed = tasktree.process_datasets_in_parallel()
+            self.assertFalse(failed)
+
+        # Expect each dataset to have been processed once per run
+        self.assertEqual(2 * len(datasets), len(calls))
+        for i in range(2):
+            run_datasets = sorted(ds for rid, ds in calls if rid == i)
+            self.assertEqual(sorted(datasets), run_datasets)
 
 
 #############################################################################
@@ -726,7 +767,7 @@ class TestProcessPoolExecutor(unittest.TestCase):
             datasets=datasets,
             process_dataset=pp_process_dataset,
             max_workers=2,
-            executor=ProcessPoolExecutor(max_workers=2),
+            executors=lambda: ProcessPoolExecutor(max_workers=2),
             enable_barriers=False,
             is_test_mode=True,
         )

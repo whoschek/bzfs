@@ -164,7 +164,7 @@ class ParallelTaskTree:
         process_dataset: Callable[[str, int], CompletionCallback],  # lambda: dataset, tid; must be thread-safe
         priority: Callable[[str], Comparable] = lambda dataset: dataset,  # lexicographical order by default
         max_workers: int = os.cpu_count() or 1,
-        executor: Executor | None = None,  # the Executor to submit tasks to; None means 'auto-choose'
+        executors: Callable[[], Executor] | None = None,  # factory producing Executor; None means 'auto-choose'
         interval_nanos: Callable[
             [int, str, int], int
         ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
@@ -236,7 +236,7 @@ class ParallelTaskTree:
         - interval_nanos: Callback that returns a non-negative delay (ns) to add to ``next_update_nanos`` for
           jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submitted_count)``
         - max_workers: Maximum number of parallel worker threads
-        - executor: the Executor to submit tasks to; None means 'auto-choose'
+        - executors: Factory returning an Executor to submit tasks to; None means 'auto-choose'
         - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
         - termination_event: Optional event to request early async termination; stops new submissions and cancels in-flight
           tasks
@@ -265,19 +265,25 @@ class ParallelTaskTree:
             threading.Event() if termination_event is None else termination_event
         )
         self._is_test_mode: Final[bool] = is_test_mode
-
         self._empty_barrier: Final[_TreeNode] = _make_tree_node("empty_barrier", "empty_barrier", {})  # immutable!
         self._datasets_set: Final[SortedInterner[str]] = SortedInterner(datasets)  # reduces memory footprint
         self._priority_queue: Final[list[_TreeNode]] = []
-        self._build_dataset_tree_and_find_roots()
-        if executor is None:
+        if executors is None:
             is_parallel: bool = max_workers > 1 and len(datasets) > 1 and has_siblings(datasets)  # siblings can run in par
-            executor = ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()
-        self._executor: Final[Executor] = executor
+
+            def _default_executor_factory() -> Executor:
+                return ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()
+
+            executors = _default_executor_factory
+        self._executors: Final[Callable[[], Executor]] = executors
+        assert callable(executors)
 
     def process_datasets_in_parallel(self) -> bool:
         """Executes the configured tasks and returns True if any dataset processing failed, False if all succeeded."""
-        with self._executor:
+        self._priority_queue.clear()
+        self._build_dataset_tree_and_find_roots()
+        executor: Executor = self._executors()
+        with executor:
             todo_futures: set[Future[CompletionCallback]] = set()
             future_to_node: dict[Future[CompletionCallback], _TreeNode] = {}
             submitted_count: int = 0
@@ -306,7 +312,7 @@ class ParallelTaskTree:
                     nonlocal submitted_count
                     submitted_count += 1
                     next_update_nanos += max(0, self._interval_nanos(next_update_nanos, node.dataset, submitted_count))
-                    future: Future[CompletionCallback] = self._executor.submit(
+                    future: Future[CompletionCallback] = executor.submit(
                         self._process_dataset, node.dataset, submitted_count
                     )
                     future_to_node[future] = node
@@ -349,13 +355,13 @@ class ParallelTaskTree:
         dependency tree and enqueues roots, ensuring the scheduler starts from a synthetic root node while honoring
         barriers."""
         tree: _Tree = _build_dataset_tree(self._datasets)  # tree consists of nested dictionaries
-        root_node: _TreeNode = _make_tree_node("", "", tree)  # synthetic root simplifies enqueue flow
+        root_node: _TreeNode = _make_tree_node(priority="", dataset="", children=tree)  # synthetic root simplifies enqueue
         self._complete_dataset(root_node, no_skip=True)
 
     def _complete_dataset(self, node: _TreeNode, no_skip: bool) -> None:
         """Dispatches child enqueueing after a node completes, using the appropriate algorithm."""
         if self._barriers_enabled:  # This barrier-based algorithm is for more general job scheduling, as in bzfs_jobrunner
-            self._complete_job_with_barriers(node, no_skip)
+            self._complete_job_with_barriers(node, no_skip=no_skip)
         elif no_skip:  # This simple algorithm is sufficient for most uses
             self._simple_enqueue_children(node)
 
