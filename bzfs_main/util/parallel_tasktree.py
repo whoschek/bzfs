@@ -294,14 +294,17 @@ class ParallelTaskTree:
             self._simple_enqueue_children(node)
 
     def _simple_enqueue_children(self, node: _TreeNode) -> None:
-        """Enqueues child nodes for start of processing."""
-        for child, grandchildren in node.children.items():  # as processing of parent has now completed
-            child_abs_dataset: str = self._join_dataset(node.dataset, child)
-            child_node: _TreeNode = _make_tree_node(self._priority(child_abs_dataset), child_abs_dataset, grandchildren)
-            if child_abs_dataset in self._datasets_set:
-                heapq.heappush(self._priority_queue, child_node)  # make it available for start of processing
-            else:  # it's an intermediate node that has no job attached; pass the enqueue operation
-                self._simple_enqueue_children(child_node)  # ... recursively down the tree
+        """Enqueues child nodes for start of processing (using iteration to avoid potentially hitting recursion limits)."""
+        stack: list[_TreeNode] = [node]
+        while stack:
+            current_node: _TreeNode = stack.pop()
+            for child, grandchildren in current_node.children.items():  # as processing of parent has now completed
+                child_abs_dataset: str = self._join_dataset(current_node.dataset, child)
+                child_node: _TreeNode = _make_tree_node(self._priority(child_abs_dataset), child_abs_dataset, grandchildren)
+                if child_abs_dataset in self._datasets_set:
+                    heapq.heappush(self._priority_queue, child_node)  # make it available for start of processing
+                else:  # it's an intermediate node that has no job attached; pass the enqueue operation
+                    stack.append(child_node)  # ... recursively down the tree
 
     def _complete_dataset_with_barriers(self, node: _TreeNode, no_skip: bool) -> None:
         """After successful completion, enqueues children, opens barriers, and propagates completion upwards.
@@ -436,11 +439,14 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
 
     def compact(node: _Tree) -> None:
         """Tree with shared empty leaf nodes has some 30% lower memory footprint than the non-compacted version."""
-        for key, child_node in node.items():
-            if len(child_node) == 0:
-                node[key] = shared_empty_leaf  # sharing is safe because the tree is treated as immutable henceforth
-            else:
-                compact(child_node)
+        stack: list[_Tree] = [node]
+        while stack:  # algo implemented using iteration to avoid hitting recursion limits with pathologically deep trees
+            current_node: _Tree = stack.pop()
+            for key, child_node in current_node.items():
+                if len(child_node) == 0:
+                    current_node[key] = shared_empty_leaf  # sharing is safe as the tree is treated as immutable henceforth
+                else:
+                    stack.append(child_node)  # recurse down the tree
 
     compact(tree)
     return tree
