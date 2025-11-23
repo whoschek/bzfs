@@ -73,7 +73,7 @@ class TestRunWithRetries(unittest.TestCase):
         def fn(*, retry: Retry) -> str:
             calls.append(retry.count)
             if retry.count < 2:
-                raise RetryableError("fail", no_sleep=(retry.count == 0)) from ValueError("boom")
+                raise RetryableError("fail", display_msg="connect", no_sleep=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
         self.assertEqual("ok", run_with_retries(MagicMock(spec=Logger), retry_policy, threading.Event(), fn))

@@ -347,7 +347,7 @@ def _rollback_dst_dataset_if_necessary(
             stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
             no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-            raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
+            raise RetryableError("Subprocess failed", display_msg="zfs rollback", no_sleep=no_sleep) from e
 
     if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
         log.info(f"{tid} Already up-to-date: %s", dst_dataset)
@@ -716,7 +716,7 @@ def _run_zfs_send_receive(
                 if isinstance(e, subprocess.CalledProcessError):
                     no_sleep = _clear_resumable_recv_state_if_necessary(job, dst_dataset, e.stderr)
                 # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-                raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
+                raise RetryableError("Subprocess failed", display_msg="zfs send/receive", no_sleep=no_sleep) from e
             else:
                 xprint(log, process.stdout, file=sys.stdout)
                 xprint(log, process.stderr, file=sys.stderr)
@@ -927,7 +927,7 @@ def _delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str
         stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
         no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
         # op isn't idempotent so retries regather current state from the start
-        raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
+        raise RetryableError("Subprocess failed", display_msg="zfs destroy snapshot", no_sleep=no_sleep) from e
 
 
 def _delete_snapshot_cmd(p: Params, r: Remote, snapshots_to_delete: str) -> list[str]:
@@ -1189,7 +1189,7 @@ def _add_recv_property_options(
                 for propnames in user_propnames:
                     props.update(_zfs_get(job, p.src, dataset, config.sources, "property,value", propnames, False, cache))
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-                raise RetryableError("Subprocess failed") from e
+                raise RetryableError("Subprocess failed", display_msg="zfs get") from e
             for propname in sorted(props.keys()):
                 if config is p.zfs_recv_o_config:
                     if not (propname in ox_names or propname in x_names_set):
@@ -1238,7 +1238,7 @@ def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send
         die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
     except SystemExit as e:
         log.warning("%s", e)
-        raise RetryableError("dst currently busy with zfs mutation op") from e
+        raise RetryableError("dst currently busy with zfs mutation op", display_msg="replication") from e
 
 
 _ZFS_DATASET_BUSY_PREFIX: Final[str] = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"

@@ -341,7 +341,8 @@ def refresh_ssh_connection_if_necessary(conn: Connection, job: MiniJob) -> None:
                 log.error("%s", stderr_to_str(e.stderr).rstrip())
                 raise RetryableError(
                     f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration first, "
-                    "considering diagnostic log file output from running with -v -v -v."
+                    "considering diagnostic log file output from running with -v -v -v.",
+                    display_msg="ssh connect",
                 ) from e
         conn.last_refresh_time = time.monotonic_ns()
         if conn.connection_lease is not None:
