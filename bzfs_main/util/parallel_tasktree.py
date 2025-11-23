@@ -403,7 +403,7 @@ class _TreeNode(NamedTuple):
 
     priority: Comparable  # determines the processing order once this dataset has become available for start of processing
     dataset: str  # each dataset name is unique; attribs other than `priority` and `dataset` are never used for comparisons
-    children: _Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
+    children: _Tree  # dataset "directory" tree consists of nested dicts; aka dict[str, dict]
     parent: _TreeNode | None
     mut: _TreeNodeMutableAttributes
 

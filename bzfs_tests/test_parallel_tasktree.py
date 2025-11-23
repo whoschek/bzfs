@@ -817,7 +817,7 @@ class TestParallelTaskTreeBenchmark(unittest.TestCase):
 
     def _run_benchmark(self, num_datasets: int, enable_barriers: bool, max_workers: int = 2 * (os.cpu_count() or 1)) -> None:
 
-        def dummy_process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+        def _dummy_process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
             """A dummy function that does nothing, to benchmark the framework overhead."""
 
             def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
@@ -831,17 +831,17 @@ class TestParallelTaskTreeBenchmark(unittest.TestCase):
         if not log.handlers:
             log.addHandler(logging.StreamHandler())
 
-        datasets = self.generate_unique_datasets(num_datasets=num_datasets, length=100)
+        datasets: list[str] = self.generate_unique_datasets(num_datasets=num_datasets, length=100)
 
         import gc
 
         gc.collect()
         start_time = time.monotonic()
 
-        failed = run_parallel_tasktree(
+        failed: bool = run_parallel_tasktree(
             log=log,
             datasets=datasets,
-            process_dataset=dummy_process_dataset,
+            process_dataset=_dummy_process_dataset,
             max_workers=max_workers,
             enable_barriers=enable_barriers,
             is_test_mode=False,

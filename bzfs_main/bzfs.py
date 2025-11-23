@@ -1695,8 +1695,9 @@ class DatasetProperties:
         self.snapshots_changed: int = snapshots_changed
 
 
+#############################################################################
 # Input format is [[user@]host:]dataset
-#                                                            1234         5          6
+#                                                             1234         5          6
 _DATASET_LOCATOR_REGEX: Final[re.Pattern[str]] = re.compile(r"(((([^@]*)@)?([^:]+)):)?(.*)", flags=re.DOTALL)
 
 
