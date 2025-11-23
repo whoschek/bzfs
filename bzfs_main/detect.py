@@ -247,12 +247,14 @@ def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: s
     except (FileNotFoundError, PermissionError):  # location is local and program file was not found
         die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
     except subprocess.CalledProcessError as e:
-        if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
-            die(f"Unsupported ZFS platform: {e.stderr}")  # solaris is unsupported
-        elif not e.stdout.startswith("zfs"):
+        stderr: str = stderr_to_str(e.stderr)
+        stdout: str = stderr_to_str(e.stdout)
+        if "unrecognized command '--version'" in stderr and "run: zfs help" in stderr:
+            die(f"Unsupported ZFS platform: {stderr}")  # solaris is unsupported
+        elif not stdout.startswith("zfs"):
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         else:
-            lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
+            lines = stdout  # FreeBSD if the zfs kernel module is not loaded
             assert lines
     if lines:
         # Examples that should parse: "zfs-2.1.5~rc5-ubuntu3", "zfswin-2.2.3rc5"
@@ -271,7 +273,7 @@ def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: s
     if p.shell_program != DISABLE_PRG:
         try:
             cmd: list[str] = [p.shell_program, "-c", _find_available_programs(p)]
-            stdout: str = job.run_ssh_command(remote, LOG_TRACE, cmd=cmd)
+            stdout = job.run_ssh_command(remote, LOG_TRACE, cmd=cmd)
             available_programs.update(dict.fromkeys(stdout.splitlines(), ""))
             return available_programs
         except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found

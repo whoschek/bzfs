@@ -27,6 +27,10 @@ from typing import (
     cast,
 )
 
+from bzfs_main.util.utils import (
+    stderr_to_str,
+)
+
 sudo_cmd: list[str] = []
 
 
@@ -388,12 +392,14 @@ def zfs_version() -> str:
         lines = subprocess.run(["zfs", "--version"], capture_output=True, text=True, check=True).stdout
         assert lines
     except subprocess.CalledProcessError as e:
-        if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
+        stderr: str = stderr_to_str(e.stderr)
+        stdout: str = stderr_to_str(e.stdout)
+        if "unrecognized command '--version'" in stderr and "run: zfs help" in stderr:
             raise
-        elif not e.stdout.startswith("zfs"):
+        elif not stdout.startswith("zfs"):
             raise
         else:
-            lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
+            lines = stdout  # FreeBSD if the zfs kernel module is not loaded
             assert lines
 
     line = lines.splitlines()[0]

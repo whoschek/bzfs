@@ -714,7 +714,7 @@ def _run_zfs_send_receive(
                     xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
                     log.warning("%s", stderr_to_str(e.stderr).rstrip())
                 if isinstance(e, subprocess.CalledProcessError):
-                    no_sleep = _clear_resumable_recv_state_if_necessary(job, dst_dataset, e.stderr)
+                    no_sleep = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr_to_str(e.stderr))
                 # op isn't idempotent so retries regather current state from the start of replicate_dataset()
                 raise RetryableError("Subprocess failed", display_msg="zfs send/receive", no_sleep=no_sleep) from e
             else:
@@ -995,11 +995,12 @@ def _create_zfs_filesystem(job: Job, filesystem: str) -> None:
                 job.run_ssh_command(p.dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             except subprocess.CalledProcessError as e:
                 # ignore harmless error caused by 'zfs create' without the -u flag, or by dataset already existing
+                stderr: str = stderr_to_str(e.stderr)
                 if not (
-                    "filesystem successfully created, but it may only be mounted by root" in e.stderr
-                    or "filesystem successfully created, but not mounted" in e.stderr  # SolarisZFS
-                    or "dataset already exists" in e.stderr
-                    or "filesystem already exists" in e.stderr  # SolarisZFS?
+                    "filesystem successfully created, but it may only be mounted by root" in stderr
+                    or "filesystem successfully created, but not mounted" in stderr  # SolarisZFS
+                    or "dataset already exists" in stderr
+                    or "filesystem already exists" in stderr  # SolarisZFS?
                 ):
                     raise
             if not p.dry_run:
@@ -1020,8 +1021,9 @@ def _create_zfs_bookmarks(job: Job, remote: Remote, dataset: str, snapshots: lis
             job.run_ssh_command(remote, LOG_DEBUG, is_dry=p.dry_run, print_stderr=False, cmd=bookmark_cmd)
         except subprocess.CalledProcessError as e:
             # ignore harmless zfs error caused by bookmark with the same name already existing
-            if ": bookmark exists" not in e.stderr:
-                xprint(p.log, stderr_to_str(e.stderr), file=sys.stderr, end="")
+            stderr: str = stderr_to_str(e.stderr)
+            if ": bookmark exists" not in stderr:
+                xprint(p.log, stderr, file=sys.stderr, end="")
                 raise
 
     if p.create_bookmarks != "none" and are_bookmarks_enabled(p, remote):
