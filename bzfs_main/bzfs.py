@@ -1654,6 +1654,7 @@ class Job(MiniJob):
                     ": dataset does not exist" in stderr
                     or ": filesystem does not exist" in stderr  # solaris 11.4.0
                     or ": no such pool" in stderr
+                    or "does not have any resumable receive state to abort" in stderr  # harmless `zfs receive -A` race
                 ):
                     return None
                 log.warning("%s", stderr.rstrip())
