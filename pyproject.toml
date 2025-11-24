@@ -58,15 +58,15 @@ Distribution = "https://pypi.org/project/bzfs"
 dev = [  # for development only
   "argparse-manpage==4.7",          # see https://github.com/praiskup/argparse-manpage
   # "pandoc", # instead use this for pandoc >= 3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
-  "genbadge[coverage]==1.1.2",      # see https://smarie.github.io/python-genbadge/
-  "commitizen==4.9.1",              # see https://github.com/commitizen-tools/commitizen
-  "pre-commit==4.4.0",              # see https://github.com/pre-commit/pre-commit
+  "genbadge[coverage]==1.1.3",      # see https://smarie.github.io/python-genbadge/
+  "commitizen==4.10.0",             # see https://github.com/commitizen-tools/commitizen
+  "pre-commit==4.5.0",              # see https://github.com/pre-commit/pre-commit
   "black==25.11.0",                 # see https://github.com/psf/black
   "ruff==0.14.6",                   # see https://github.com/astral-sh/ruff
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
   "mypy==1.18.2",                   # see https://github.com/python/mypy
   "shellcheck-py==0.11.0.1",        # see https://github.com/shellcheck-py/shellcheck-py
-  "ast-grep-cli==0.39.9",           # see https://github.com/ast-grep/ast-grep
+  # "ast-grep-cli==0.39.9",         # see https://github.com/ast-grep/ast-grep
 ]
 # Example that installs the optional python development dependencies (see above) into a venv:
 # cd ~/devel/bzfs
