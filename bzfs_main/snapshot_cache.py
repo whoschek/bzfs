@@ -157,7 +157,6 @@ from __future__ import (
 import errno
 import fcntl
 import os
-import stat
 from subprocess import (
     CalledProcessError,
 )
@@ -171,6 +170,7 @@ from bzfs_main.parallel_batch_cmd import (
 )
 from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
+    FILE_PERMISSIONS,
     LOG_TRACE,
     SortedInterner,
     sha256_urlsafe_base64,
@@ -272,7 +272,7 @@ class SnapshotCache:
         """For each given dataset, returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer
         seconds; See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
 
-        def try_zfs_list_command(_cmd: list[str], batch: list[str]) -> list[str]:
+        def _run_zfs_list_command(_cmd: list[str], batch: list[str]) -> list[str]:
             try:
                 return self.job.run_ssh_command_with_retries(r, LOG_TRACE, print_stderr=False, cmd=_cmd + batch).splitlines()
             except CalledProcessError as e:
@@ -286,7 +286,7 @@ class SnapshotCache:
         results: dict[str, int] = {}
         interner: SortedInterner[str] = SortedInterner(sorted_datasets)  # reduces memory footprint
         for lines in itr_ssh_cmd_parallel(
-            self.job, r, [(cmd, sorted_datasets)], lambda _cmd, batch: try_zfs_list_command(_cmd, batch), ordered=False
+            self.job, r, [(cmd, sorted_datasets)], lambda _cmd, batch: _run_zfs_list_command(_cmd, batch), ordered=False
         ):
             for line in lines:
                 if "\t" not in line:
@@ -333,7 +333,6 @@ def set_last_modification_time(
     timestamp write unconditionally. This preserves concurrency safety and prevents silent skips on first write.
     """
     unixtimes = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
-    perm: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
     flags_base: int = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
     preexisted: bool = True
 
@@ -341,7 +340,7 @@ def set_last_modification_time(
         fd = os.open(path, flags_base)
     except FileNotFoundError:
         try:
-            fd = os.open(path, flags_base | os.O_CREAT | os.O_EXCL, mode=perm)
+            fd = os.open(path, flags_base | os.O_CREAT | os.O_EXCL, mode=FILE_PERMISSIONS)
             preexisted = False
         except FileExistsError:
             fd = os.open(path, flags_base)  # we lost the race, open existing file

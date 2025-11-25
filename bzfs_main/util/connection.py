@@ -371,7 +371,8 @@ def dquote(arg: str) -> str:
     """Shell-escapes backslash and double quotes and dollar and backticks, then surrounds with double quotes; For an example
     how to safely construct and quote complex shell pipeline commands for use over SSH, see
     replication.py:_prepare_zfs_send_receive()"""
-    return '"' + arg.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`") + '"'
+    arg = arg.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
+    return '"' + arg + '"'
 
 
 #############################################################################

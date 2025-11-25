@@ -94,7 +94,12 @@ _T = TypeVar("_T")
 
 
 def run_with_retries(
-    log: Logger, policy: RetryPolicy, termination_event: threading.Event, fn: Callable[..., _T], *args: Any, **kwargs: Any
+    log: Logger,
+    policy: RetryPolicy,
+    termination_event: threading.Event,
+    fn: Callable[..., _T],
+    *args: Any,
+    **kwargs: Any,
 ) -> _T:  # thread-safe
     """Runs the given function with the given arguments, and retries on failure as indicated by policy; The termination_event
     allows for early async cancellation of the retry loop."""
@@ -125,7 +130,7 @@ def run_with_retries(
                     log.warning(
                         f"Giving up {msg}because the last [{retry_count}/{policy.retries}] retries across "
                         f"[{human_readable_duration(elapsed_nanos)}/{human_readable_duration(policy.max_elapsed_nanos)}] "
-                        "for the current request failed!"
+                        "for the current request failed"
                     )
                 cause: BaseException | None = retryable_error.__cause__
                 assert cause is not None
