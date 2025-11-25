@@ -162,6 +162,7 @@ from bzfs_main.util.parallel_tasktree_policy import (
 from bzfs_main.util.retry import (
     Retry,
     RetryableError,
+    run_with_retries,
 )
 from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
@@ -1601,6 +1602,7 @@ class Job(MiniJob):
         print_stdout: bool = False,
         print_stderr: bool = True,
         cmd: list[str] | None = None,
+        retry_on_generic_ssh_error: bool = True,
     ) -> str:
         """Runs the given CLI cmd via ssh on the given remote, and returns stdout."""
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
@@ -1623,6 +1625,11 @@ class Job(MiniJob):
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 xprint(log, stderr_to_str(e.stdout) if print_stdout else e.stdout, run=print_stdout, file=sys.stdout, end="")
                 xprint(log, stderr_to_str(e.stderr) if print_stderr else e.stderr, run=print_stderr, file=sys.stderr, end="")
+                if retry_on_generic_ssh_error and isinstance(e, subprocess.CalledProcessError):
+                    stderr: str = stderr_to_str(e.stderr)
+                    if stderr.startswith("ssh: "):
+                        assert e.returncode == 255, e.returncode  # error within SSH itself (not during the remote command)
+                        raise RetryableError("Subprocess failed", display_msg="ssh") from e
                 raise
             else:
                 if is_dry:
@@ -1659,6 +1666,26 @@ class Job(MiniJob):
                     return None
                 log.warning("%s", stderr.rstrip())
             raise RetryableError("Subprocess failed") from e
+
+    def try_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str | None:
+        """Convenience method that auto-retries try_ssh_command() on failure."""
+        p = self.params
+        return run_with_retries(
+            log=p.log,
+            policy=p.retry_policy,
+            termination_event=self.termination_event,
+            fn=lambda retry: self.try_ssh_command(*args, **kwargs),
+        )
+
+    def run_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str:
+        """Convenience method that auto-retries run_ssh_command() on transport failure (not on remote command failure)."""
+        p = self.params
+        return run_with_retries(
+            log=p.log,
+            policy=p.retry_policy,
+            termination_event=self.termination_event,
+            fn=lambda retry: self.run_ssh_command(*args, **kwargs),
+        )
 
     def maybe_inject_error(self, cmd: list[str], error_trigger: str | None = None) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""

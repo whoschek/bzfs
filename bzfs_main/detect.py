@@ -242,7 +242,7 @@ def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: s
         # on Linux, 'zfs --version' returns with zero status and prints the correct info
         # on FreeBSD, 'zfs --version' always prints the same (correct) info as Linux, but nonetheless sometimes
         # returns with non-zero status (sometimes = if the zfs kernel module is not loaded)
-        lines = job.run_ssh_command(remote, LOG_TRACE, print_stderr=False, cmd=[p.zfs_program, "--version"])
+        lines = job.run_ssh_command_with_retries(remote, LOG_TRACE, print_stderr=False, cmd=[p.zfs_program, "--version"])
         assert lines
     except (FileNotFoundError, PermissionError):  # location is local and program file was not found
         die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
@@ -251,6 +251,9 @@ def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: s
         stdout: str = stderr_to_str(e.stdout)
         if "unrecognized command '--version'" in stderr and "run: zfs help" in stderr:
             die(f"Unsupported ZFS platform: {stderr}")  # solaris is unsupported
+        elif stderr.startswith("ssh: "):
+            assert e.returncode == 255, e.returncode  # error within SSH itself (not during the remote command)
+            die(f"ssh exit code {e.returncode}: {stderr.rstrip()}")
         elif not stdout.startswith("zfs"):
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         else:
@@ -273,7 +276,7 @@ def _detect_available_programs_remote(job: Job, remote: Remote, ssh_user_host: s
     if p.shell_program != DISABLE_PRG:
         try:
             cmd: list[str] = [p.shell_program, "-c", _find_available_programs(p)]
-            stdout = job.run_ssh_command(remote, LOG_TRACE, cmd=cmd)
+            stdout = job.run_ssh_command_with_retries(remote, LOG_TRACE, cmd=cmd)
             available_programs.update(dict.fromkeys(stdout.splitlines(), ""))
             return available_programs
         except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
@@ -302,7 +305,7 @@ def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict) -
     if params.zpool_program != DISABLE_PRG and (params.shell_program == DISABLE_PRG or "zpool" in available_programs):
         cmd: list[str] = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
         try:
-            lines = job.run_ssh_command(remote, LOG_TRACE, check=False, cmd=cmd).splitlines()
+            lines = job.run_ssh_command_with_retries(remote, LOG_TRACE, check=False, cmd=cmd).splitlines()
         except (FileNotFoundError, PermissionError) as e:
             if e.filename != params.zpool_program:
                 raise
@@ -312,7 +315,7 @@ def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict) -
             features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
     if len(lines) == 0:
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
-        if job.try_ssh_command(remote, LOG_TRACE, cmd=cmd) is None:
+        if job.try_ssh_command_with_retries(remote, LOG_TRACE, cmd=cmd) is None:
             die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
     return features
 
