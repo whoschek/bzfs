@@ -77,6 +77,9 @@ from bzfs_main.util.utils import (
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
+from bzfs_tests.tools import (
+    suppress_output,
+)
 
 
 #############################################################################
@@ -794,6 +797,23 @@ class TestRunSshCommand(AbstractTestCase):
             self.job.run_ssh_command(self.remote, cmd=["boom"], print_stdout=True)
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
+
+    def test_real_ssh_transport_error_raises_retryable_error(self) -> None:
+        """Uses the real ssh CLI to trigger a transport error and exercise RetryableError wrapping."""
+        # Use real Subprocesses.subprocess_run (no patch) and a host name that cannot resolve.
+        self.remote.ssh_user_host = ""
+        self.conn.ssh_cmd = ["ssh", "-T", "-x", "-oBatchMode=yes", "-oConnectTimeout=1"]
+
+        with self.assertRaises(RetryableError) as cm, suppress_output():
+            # Pass an invalid host name as the first argument so ssh treats it as the remote host.
+            self.job.run_ssh_command(self.remote, cmd=["nonexistent.invalid"], print_stdout=False, print_stderr=True)
+
+        self.conn_pool.connection.assert_called_once()
+        self.assertEqual("ssh", cm.exception.display_msg)
+        cause = cm.exception.__cause__
+        self.assertIsNotNone(cause)
+        assert isinstance(cause, subprocess.CalledProcessError)
+        self.assertEqual(255, cause.returncode)
 
     @patch("bzfs_main.util.connection.refresh_ssh_connection_if_necessary")
     @patch(

@@ -21,6 +21,7 @@ import contextlib
 import logging
 import re
 import subprocess
+import threading
 import time
 import unittest
 from collections.abc import (
@@ -1393,6 +1394,65 @@ class TestJobMethods(AbstractTestCase):
         msg = cast(MagicMock, p.log.info).call_args[0][1]
         self.assertIn("zfs sent 5 snapshots in 2s.", msg)
         self.assertIn("zfs sent 1 MiB [512 KiB/s].", msg)
+
+    def test_run_main_blockingioerror_uses_die_with_still_running_status(self) -> None:
+        """Verifies Job.run_main exits with STILL_RUNNING_STATUS when a prior job holds the lock."""
+        args = self.argparser_parse_args(args=["src", "dst"])
+        job1 = bzfs.Job()
+        job2 = bzfs.Job()
+
+        lock_acquired = threading.Event()
+        release_lock = threading.Event()
+
+        def blocking_run_tasks(*_args: object, **_kwargs: object) -> None:
+            # Called after lock acquisition and lock file unlink setup.
+            lock_acquired.set()
+            release_lock.wait()
+
+        with patch.object(job1, "run_tasks", side_effect=blocking_run_tasks):
+            thread = threading.Thread(target=job1.run_main, args=(args,), daemon=True)
+            thread.start()
+
+            # Ensure the first job has reached run_tasks(), meaning the lock is held.
+            self.assertTrue(lock_acquired.wait(timeout=5), "Job.run_main did not reach run_tasks in time")
+
+            with self.assertRaises(SystemExit) as cm, suppress_output():
+                job2.run_main(args)
+
+            release_lock.set()
+            thread.join(timeout=5)
+
+        self.assertEqual(bzfs.STILL_RUNNING_STATUS, cm.exception.code)
+        msg = str(cm.exception)
+        self.assertIn(
+            "Exiting as same previous periodic job is still running without completion yet per ",
+            msg,
+        )
+
+    def test_run_main_log_init_value_error_logs_with_exc_info(self) -> None:
+        """Ensures Job.run_main logs unexpected log-init errors with exc_info enabled."""
+        args = self.argparser_parse_args(args=["src", "dst"])
+        job = bzfs.Job()
+
+        simple_log = MagicMock(spec=logging.Logger)
+
+        with (
+            patch("bzfs_main.bzfs.LogParams", side_effect=ValueError("boom")),
+            patch("bzfs_main.bzfs.get_simple_logger", return_value=simple_log) as mock_get_simple_logger,
+            patch("bzfs_main.bzfs.reset_logger") as mock_reset_logger,
+        ):
+            with self.assertRaises(ValueError), suppress_output():
+                job.run_main(args)
+
+        mock_get_simple_logger.assert_called_once()
+        simple_log.error.assert_called_once()
+        msg, err = simple_log.error.call_args[0]
+        kw = simple_log.error.call_args.kwargs
+        self.assertEqual("Log init: %s", msg)
+        self.assertIsInstance(err, ValueError)
+        self.assertEqual({"exc_info": True}, kw)
+
+        mock_reset_logger.assert_called_once_with(simple_log)
 
 
 #############################################################################
