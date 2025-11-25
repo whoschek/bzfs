@@ -95,7 +95,7 @@ _T = TypeVar("_T")
 def run_with_retries(
     log: Logger,
     policy: RetryPolicy,
-    fn: Callable[[Retry], _T],
+    fn: Callable[[Retry], _T],  # typically a lambda
     display_msg: str = "",
     termination_event: threading.Event | None = None,
 ) -> _T:  # thread-safe
@@ -104,13 +104,13 @@ def run_with_retries(
     c_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     retry_count: int = 0
     sysrandom: random.SystemRandom | None = None
-    termination_event = threading.Event() if termination_event is None else termination_event
     start_time_nanos: int = time.monotonic_ns()
     while True:
         try:
             return fn(Retry(retry_count))  # Call the target function and supply retry attempt number
         except RetryableError as retryable_error:
             elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
+            termination_event = threading.Event() if termination_event is None else termination_event
             msg: str = display_msg + " " if display_msg else ""
             msg = msg + retryable_error.display_msg + " " if retryable_error.display_msg else msg
             will_retry: bool = False
@@ -118,19 +118,22 @@ def run_with_retries(
                 will_retry = True
                 retry_count += 1
                 if retryable_error.no_sleep and retry_count <= 1:
-                    log.info(f"Retrying {msg}[{retry_count}/{policy.retries}] immediately ...")
+                    log.info("%s", f"Retrying {msg}[{retry_count}/{policy.retries}] immediately ...")
                 else:  # jitter: pick a random sleep duration within the range [min_sleep_nanos, c_max_sleep_nanos] as delay
                     sysrandom = random.SystemRandom() if sysrandom is None else sysrandom
                     sleep_nanos: int = sysrandom.randint(policy.min_sleep_nanos, c_max_sleep_nanos)
-                    log.info(f"Retrying {msg}[{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
+                    log.info(
+                        "%s", f"Retrying {msg}[{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ..."
+                    )
                     termination_event.wait(sleep_nanos / 1_000_000_000)
                     c_max_sleep_nanos = min(policy.max_sleep_nanos, 2 * c_max_sleep_nanos)  # exponential backoff with cap
             if termination_event.is_set() or not will_retry:
                 if policy.retries > 0:
                     log.warning(
+                        "%s",
                         f"Giving up {msg}because the last [{retry_count}/{policy.retries}] retries across "
                         f"[{human_readable_duration(elapsed_nanos)}/{human_readable_duration(policy.max_elapsed_nanos)}] "
-                        "for the current request failed"
+                        "for the current request failed",
                     )
                 cause: BaseException | None = retryable_error.__cause__
                 assert cause is not None

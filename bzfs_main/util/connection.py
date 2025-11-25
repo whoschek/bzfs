@@ -25,7 +25,6 @@ Example usage:
 
 import argparse
 import logging
-import threading
 from subprocess import DEVNULL, PIPE
 from bzfs_main.util.connection import ConnectionPool, create_simple_minijob, create_simple_miniremote, run_ssh_command
 from bzfs_main.util.retry import Retry, RetryPolicy, run_with_retries
@@ -45,14 +44,14 @@ try:
         )
     )
 
-    def run_cmd(*, retry: Retry) -> str:
+    def run_cmd(retry: Retry) -> str:
         with conn_pool.connection() as conn:
             stdout: str = run_ssh_command(
                 cmd=["echo", "hello"], conn=conn, job=job, check=True, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True
             ).stdout
             return stdout
 
-    stdout = run_with_retries(log, retry_policy, termination_event=threading.Event(), fn=run_cmd)
+    stdout = run_with_retries(log=log, retry_policy=retry_policy, fn=run_cmd)
     print(f"stdout: {stdout}")
 finally:
     conn_pool.shutdown()
