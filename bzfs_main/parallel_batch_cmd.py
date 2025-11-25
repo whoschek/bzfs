@@ -164,7 +164,7 @@ def zfs_list_snapshots_in_parallel(
         job,
         r,
         [(cmd, datasets)],
-        fn=lambda cmd, batch: (job.try_ssh_command(r, LOG_TRACE, cmd=cmd + batch) or "").splitlines(),
+        fn=lambda cmd, batch: (job.try_ssh_command_with_retries(r, LOG_TRACE, cmd=cmd + batch) or "").splitlines(),
         max_batch_items=max_batch_items,
         ordered=ordered,
     )

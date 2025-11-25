@@ -116,7 +116,7 @@ def _filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_datase
         # TODO perf: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset)
         job.maybe_inject_delete(remote, dataset=dataset, delete_trigger="zfs_list_exclude_property")
-        property_value: str | None = job.try_ssh_command(remote, LOG_TRACE, cmd=cmd)
+        property_value: str | None = job.try_ssh_command_with_retries(remote, LOG_TRACE, cmd=cmd)
         if property_value is None:
             log.warning(f"Third party deleted {remote.location}: %s", dataset)
             skip_dataset = dataset

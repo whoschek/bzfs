@@ -268,13 +268,13 @@ class SnapshotCache:
                         dataset_cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True
                     )
 
-    def zfs_get_snapshots_changed(self, remote: Remote, sorted_datasets: list[str]) -> dict[str, int]:
+    def zfs_get_snapshots_changed(self, r: Remote, sorted_datasets: list[str]) -> dict[str, int]:
         """For each given dataset, returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer
         seconds; See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
 
         def try_zfs_list_command(_cmd: list[str], batch: list[str]) -> list[str]:
             try:
-                return self.job.run_ssh_command(remote, LOG_TRACE, print_stderr=False, cmd=_cmd + batch).splitlines()
+                return self.job.run_ssh_command_with_retries(r, LOG_TRACE, print_stderr=False, cmd=_cmd + batch).splitlines()
             except CalledProcessError as e:
                 return stderr_to_str(e.stdout).splitlines()
             except UnicodeDecodeError:
@@ -286,7 +286,7 @@ class SnapshotCache:
         results: dict[str, int] = {}
         interner: SortedInterner[str] = SortedInterner(sorted_datasets)  # reduces memory footprint
         for lines in itr_ssh_cmd_parallel(
-            self.job, remote, [(cmd, sorted_datasets)], lambda _cmd, batch: try_zfs_list_command(_cmd, batch), ordered=False
+            self.job, r, [(cmd, sorted_datasets)], lambda _cmd, batch: try_zfs_list_command(_cmd, batch), ordered=False
         ):
             for line in lines:
                 if "\t" not in line:

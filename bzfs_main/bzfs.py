@@ -729,7 +729,7 @@ class Job(MiniJob):
         cmd: list[str] = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
         )
-        for line in (self.try_ssh_command(src, LOG_DEBUG, cmd=cmd) or "").splitlines():
+        for line in (self.try_ssh_command_with_retries(src, LOG_DEBUG, cmd=cmd) or "").splitlines():
             cols: list[str] = line.split("\t")
             snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
             self.src_properties[src_dataset] = DatasetProperties(
@@ -751,7 +751,7 @@ class Job(MiniJob):
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", dst.root_dataset
         )
         basis_dst_datasets: list[str] = []
-        basis_dst_datasets_str: str | None = self.try_ssh_command(dst, LOG_TRACE, cmd=cmd)
+        basis_dst_datasets_str: str | None = self.try_ssh_command_with_retries(dst, LOG_TRACE, cmd=cmd)
         if basis_dst_datasets_str is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
         else:
@@ -806,7 +806,9 @@ class Job(MiniJob):
             self,
             src,
             ((commands[lbl], (f"{ds}@{lbl}" for ds in datasets)) for lbl, datasets in datasets_to_snapshot.items()),
-            fn=lambda cmd, batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
+            fn=lambda cmd, batch: self.run_ssh_command_with_retries(
+                src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch, retry_on_generic_ssh_error=False
+            ),  # retry_on_generic_ssh_error=False means only retry on SSH connect errors b/c `zfs snapshot` isn't idempotent
             max_batch_items=2**29,
         )
         if is_caching_snapshots(p, src):
