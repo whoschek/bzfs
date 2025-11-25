@@ -7,6 +7,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs_jobrunner] Fixed: In some edge cases, subjobs run in parallel when they should run sequentially.
 - [bzfs] [perf] `--cache-snapshots`: Update the cache for the datasets that were actually replicated even if some
   datasets were skipped.
+- [bzfs] More reliable retries when connecting to remote server.
 - [bzfs] `--cache-snapshots`: Ensure equal snapshots_changed still allows updating cached creation time.
 - [bzfs] [security] Properly round-trip backslash characters in ZFS property values.
 - [bzfs] Decouple `run_ssh_command()` SSH client utility from the rest of the program.
