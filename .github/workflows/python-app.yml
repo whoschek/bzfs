@@ -40,6 +40,7 @@ on:
         - test_ubuntu_24_04
         - test_ubuntu_22_04
         - test_ubuntu_22_04_zfs_0_8_x
+        - test_freebsd_15_0
         - test_freebsd_14_3
         - test_freebsd_13_4
         - none
@@ -487,6 +488,32 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
+  test_freebsd_15_0:  # currently uses zfs-2.4.0rcX
+    needs: create_iteration_test_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_15_0' || contains(github.event.inputs.job_names, 'test_freebsd_15_0')
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
+      fail-fast: false
+    timeout-minutes: 110
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+      id: test
+      uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
+      with:
+        release: "15.0"
+        envs: "bzfs_test_mode"
+        run: |
+          ./.github-workflow-scripts/test_freebsd_14_1.sh
+    - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+      uses: ./.github/actions/coverage-upload
+
+
   test_freebsd_14_3:  # currently uses zfs-2.2.7
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_14_3' || contains(github.event.inputs.job_names, 'test_freebsd_14_3')
@@ -552,6 +579,7 @@ jobs:
       - test_ubuntu_24_04
       - test_ubuntu_22_04
       - test_ubuntu_22_04_zfs_0_8_x
+      - test_freebsd_15_0
       - test_freebsd_14_3
       - test_freebsd_13_4
     steps:
@@ -593,6 +621,11 @@ jobs:
         with:
           name: coverage-test_ubuntu_22_04_zfs_0_8_x
           path: coverage-test_ubuntu_22_04_zfs_0_8_x
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: coverage-test_freebsd_15_0
+          path: coverage-test_freebsd_15_0
       - name: Download coverage artifact
         uses: actions/download-artifact@v6
         with:
