@@ -32,7 +32,6 @@ from logging import (
     Logger,
 )
 from typing import (
-    Any,
     Callable,
     Final,
     TypeVar,
@@ -96,23 +95,24 @@ _T = TypeVar("_T")
 def run_with_retries(
     log: Logger,
     policy: RetryPolicy,
-    termination_event: threading.Event,
-    fn: Callable[..., _T],
-    *args: Any,
-    **kwargs: Any,
+    fn: Callable[[Retry], _T],
+    display_msg: str = "",
+    termination_event: threading.Event | None = None,
 ) -> _T:  # thread-safe
-    """Runs the given function with the given arguments, and retries on failure as indicated by policy; The termination_event
-    allows for early async cancellation of the retry loop."""
+    """Runs the given function and retries on failure as indicated by policy; The termination_event allows for early async
+    cancellation of the retry loop."""
     c_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     retry_count: int = 0
     sysrandom: random.SystemRandom | None = None
+    termination_event = threading.Event() if termination_event is None else termination_event
     start_time_nanos: int = time.monotonic_ns()
     while True:
         try:
-            return fn(*args, **kwargs, retry=Retry(retry_count))  # Call the target function with provided args
+            return fn(Retry(retry_count))  # Call the target function and supply retry attempt number
         except RetryableError as retryable_error:
             elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
-            msg: str = retryable_error.display_msg + " " if retryable_error.display_msg else ""
+            msg: str = display_msg + " " if display_msg else ""
+            msg = msg + retryable_error.display_msg + " " if retryable_error.display_msg else msg
             will_retry: bool = False
             if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos and not termination_event.is_set():
                 will_retry = True

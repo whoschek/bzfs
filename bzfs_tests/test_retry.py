@@ -70,13 +70,13 @@ class TestRunWithRetries(unittest.TestCase):
         )
         retry_policy = RetryPolicy(args)
 
-        def fn(*, retry: Retry) -> str:
+        def fn(retry: Retry) -> str:
             calls.append(retry.count)
             if retry.count < 2:
                 raise RetryableError("fail", display_msg="connect", no_sleep=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", run_with_retries(MagicMock(spec=Logger), retry_policy, threading.Event(), fn))
+        self.assertEqual("ok", run_with_retries(MagicMock(spec=Logger), retry_policy, fn, display_msg="foo"))
         self.assertEqual([0, 1, 2], calls)
 
     @patch("time.sleep")
@@ -90,22 +90,22 @@ class TestRunWithRetries(unittest.TestCase):
         )
         retry_policy = RetryPolicy(args)
 
-        def fn(*, retry: Retry) -> None:
+        def fn(retry: Retry) -> None:
             raise RetryableError("fail", no_sleep=True) from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            run_with_retries(MagicMock(spec=Logger), retry_policy, threading.Event(), fn)
+            run_with_retries(MagicMock(spec=Logger), retry_policy, fn)
 
     @patch("time.sleep")
     def test_run_with_retries_no_retries(self, mock_sleep: MagicMock) -> None:
         retry_policy = RetryPolicy.no_retries()
         mock_log = MagicMock(spec=Logger)
 
-        def fn(*, retry: Retry) -> None:
+        def fn(retry: Retry) -> None:
             raise RetryableError("fail") from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            run_with_retries(mock_log, retry_policy, threading.Event(), fn)
+            run_with_retries(mock_log, retry_policy, fn)
         mock_log.warning.assert_not_called()
         mock_sleep.assert_not_called()
 
@@ -124,9 +124,9 @@ class TestRunWithRetries(unittest.TestCase):
 
         with patch("time.monotonic_ns", side_effect=[0, max_elapsed + 1]):
 
-            def fn(*, retry: Retry) -> None:
+            def fn(retry: Retry) -> None:
                 raise RetryableError("fail", no_sleep=True) from ValueError("boom")
 
             with self.assertRaises(ValueError):
-                run_with_retries(mock_log, retry_policy, threading.Event(), fn)
+                run_with_retries(mock_log, retry_policy, fn, termination_event=threading.Event())
         mock_log.warning.assert_called_once()

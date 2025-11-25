@@ -1675,8 +1675,8 @@ class Job(MiniJob):
         return run_with_retries(
             log=p.log,
             policy=p.retry_policy,
-            termination_event=self.termination_event,
             fn=lambda retry: self.try_ssh_command(*args, **kwargs),
+            termination_event=self.termination_event,
         )
 
     def run_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str:
@@ -1685,8 +1685,8 @@ class Job(MiniJob):
         return run_with_retries(
             log=p.log,
             policy=p.retry_policy,
-            termination_event=self.termination_event,
             fn=lambda retry: self.run_ssh_command(*args, **kwargs),
+            termination_event=self.termination_event,
         )
 
     def maybe_inject_error(self, cmd: list[str], error_trigger: str | None = None) -> None:

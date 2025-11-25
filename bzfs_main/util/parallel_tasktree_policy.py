@@ -106,7 +106,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
         exception = None
         no_skip: bool = False
         try:
-            no_skip = run_with_retries(log, retry_policy, termination_event, process_dataset, dataset, tid)
+            no_skip = run_with_retries(
+                log, retry_policy, lambda retry: process_dataset(dataset, tid, retry), termination_event=termination_event
+            )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
             exception = e  # may be reraised later
         finally:
