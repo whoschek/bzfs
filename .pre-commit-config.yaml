@@ -103,7 +103,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.42.0']
+        additional_dependencies: ['pyrefly==0.43.0']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.18.2
@@ -153,11 +153,10 @@ repos:
     rev: 1.0.0
     hooks:
       - id: mdformat                       # Auto-format Markdown files - see https://github.com/hukkin/mdformat
-        args: [--wrap=120, --number, --compact-tables, --no-sort-front-matter]
-        exclude: '^(README.*|prd)\.md$'
+        args: [--wrap=120, --number, --compact-tables]
+        exclude: '^(README.*|prd|.*/bug_report|.*/feature_request)\.md$'
         additional_dependencies:           # see https://mdformat.readthedocs.io/en/stable/users/plugins.html
           - mdformat-gfm                   # GitHub-Flavored Markdown support - see https://github.github.com/gfm
-          - mdformat-front-matters==0.1.0  # YAML frontmatter support
           - mdformat-toc                   # auto-generate Table-of-Contents via this directive: <!-- mdformat-toc start -->
           - mdformat-shfmt                 # format embedded bash, sh
           - mdformat-black                 # format embedded python
