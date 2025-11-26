@@ -108,7 +108,7 @@ TEST_DIR_PREFIX: str = "t_bzfs"
 class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better implementation against this baseline
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int) -> None:
-        super().__init__(remote, max_concurrent_ssh_sessions_per_tcp_connection, SHARED)
+        super().__init__(remote, SHARED, max_concurrent_ssh_sessions_per_tcp_connection)
         self._priority_queue: list[Connection] = []  # type: ignore
 
     def get_connection(self) -> Connection:
@@ -182,10 +182,10 @@ class TestConnectionPool(AbstractTestCase):
         self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: [str(next(counter))]  # type: ignore
 
         with self.assertRaises(AssertionError):
-            ConnectionPool(self.src, 0, SHARED)
+            ConnectionPool(self.src, SHARED, 0)
 
         capacity = 2
-        cpool = ConnectionPool(self.src, capacity, SHARED)
+        cpool = ConnectionPool(self.src, SHARED, capacity)
         dpool = SlowButCorrectConnectionPool(self.src2, capacity)
         self.assert_priority_queue(cpool, 0)
         self.assertIsNotNone(repr(cpool))
@@ -244,7 +244,7 @@ class TestConnectionPool(AbstractTestCase):
                     ssh_socket_dir=ssh_socket_dir,
                 ),
             )
-            cpool = ConnectionPool(remote, 1, SHARED)
+            cpool = ConnectionPool(remote, SHARED, 1)
             try:
                 conn = cpool.get_connection()
                 self.assertIsNotNone(cpool._lease_mgr)
@@ -254,7 +254,7 @@ class TestConnectionPool(AbstractTestCase):
 
     def test_multiple_tcp_connections(self) -> None:
         capacity = 2
-        cpool = ConnectionPool(self.remote, capacity, SHARED)
+        cpool = ConnectionPool(self.remote, SHARED, capacity)
 
         conn1 = cpool.get_connection()
         self.assertEqual((capacity - 1) * 1, conn1._free)
@@ -338,7 +338,7 @@ class TestConnectionPool(AbstractTestCase):
         maxsessions = 10
         items = 10
         for j in range(3):
-            cpool = ConnectionPool(self.src, maxsessions, SHARED)
+            cpool = ConnectionPool(self.src, SHARED, maxsessions)
             dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
             rng = random.Random(12345)
             conns = [self.get_connection(cpool, dpool) for _ in range(items)]
@@ -361,9 +361,9 @@ class TestConnectionPool(AbstractTestCase):
                 counter1b = itertools.count()
                 self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: [str(next(counter))]  # type: ignore
                 self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: [str(next(counter))]  # type: ignore
-                cpool = ConnectionPool(self.src, maxsessions, SHARED)
+                cpool = ConnectionPool(self.src, SHARED, maxsessions)
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
-                # dpool = ConnectionPool(self.src2, maxsessions)
+                # dpool = ConnectionPool(self.src2, SHARED, maxsessions)
                 rng = random.Random(12345)
                 conns = []
                 try:
@@ -988,7 +988,7 @@ class TestRefreshSshConnection(AbstractTestCase):
                     ssh_socket_dir=ssh_socket_dir,
                 ),
             )
-            cpool = ConnectionPool(remote, 1, SHARED)
+            cpool = ConnectionPool(remote, SHARED, 1)
             conn = cpool.get_connection()
             try:
                 conn.last_refresh_time = 0  # avoid fast return
@@ -1155,7 +1155,7 @@ class TestSshExitOnShutdown(AbstractTestCase):
                     ssh_socket_dir=ssh_socket_dir,
                 ),
             )
-            cpool = ConnectionPool(r, 1, SHARED)
+            cpool = ConnectionPool(r, SHARED, 1)
             conn: Connection = cpool.get_connection()
             conn.shutdown("test")
             # No call to run expected when immediate exit is false

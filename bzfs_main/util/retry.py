@@ -22,14 +22,12 @@ from __future__ import (
     annotations,
 )
 import argparse
+import logging
 import random
 import threading
 import time
 from dataclasses import (
     dataclass,
-)
-from logging import (
-    Logger,
 )
 from typing import (
     Callable,
@@ -93,14 +91,14 @@ _T = TypeVar("_T")
 
 
 def run_with_retries(
-    log: Logger,
+    log: logging.Logger,
     policy: RetryPolicy,
     fn: Callable[[Retry], _T],  # typically a lambda
     display_msg: str = "",
     termination_event: threading.Event | None = None,
 ) -> _T:  # thread-safe
-    """Runs the given function and retries on failure as indicated by policy; The termination_event allows for early async
-    cancellation of the retry loop."""
+    """Runs the given function and retries on failure as indicated by policy; The optional termination_event allows for early
+    async cancellation of the retry loop."""
     c_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     retry_count: int = 0
     sysrandom: random.SystemRandom | None = None

@@ -35,9 +35,6 @@ import time
 from concurrent.futures import (
     Future,
 )
-from logging import (
-    Logger,
-)
 from typing import (
     Callable,
 )
@@ -59,7 +56,7 @@ from bzfs_main.util.utils import (
 
 
 def process_datasets_in_parallel_and_fault_tolerant(
-    log: Logger,
+    log: logging.Logger,
     datasets: list[str],  # (sorted) list of datasets to process
     process_dataset: Callable[
         [str, str, Retry], bool  # lambda: dataset, tid, Retry; return False to skip subtree; must be thread-safe

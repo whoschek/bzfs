@@ -31,7 +31,7 @@ from bzfs_main.util.retry import Retry, RetryPolicy, run_with_retries
 
 log = logging.getLogger(__name__)
 remote = create_simple_miniremote(log=log, ssh_user_host="alice@127.0.0.1")
-conn_pool = ConnectionPool(remote, max_concurrent_ssh_sessions_per_tcp_connection=8, connpool_name="example")
+conn_pool = ConnectionPool(remote, connpool_name="example")
 try:
     job = create_simple_minijob()
     retry_policy = RetryPolicy(
@@ -51,7 +51,7 @@ try:
             ).stdout
             return stdout
 
-    stdout = run_with_retries(log=log, retry_policy=retry_policy, fn=run_cmd)
+    stdout = run_with_retries(log=log, policy=retry_policy, fn=run_cmd)
     print(f"stdout: {stdout}")
 finally:
     conn_pool.shutdown()
@@ -446,7 +446,9 @@ class Connection:
 class ConnectionPool:
     """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse."""
 
-    def __init__(self, remote: MiniRemote, max_concurrent_ssh_sessions_per_tcp_connection: int, connpool_name: str) -> None:
+    def __init__(
+        self, remote: MiniRemote, connpool_name: str, max_concurrent_ssh_sessions_per_tcp_connection: int = 8
+    ) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self._remote: Final[MiniRemote] = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self._capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
@@ -534,7 +536,7 @@ class ConnectionPools:
     def __init__(self, remote: MiniRemote, capacities: dict[str, int]) -> None:
         """Creates one connection pool per name with the given capacities."""
         self._pools: Final[dict[str, ConnectionPool]] = {
-            name: ConnectionPool(remote, capacity, name) for name, capacity in capacities.items()
+            name: ConnectionPool(remote, name, capacity) for name, capacity in capacities.items()
         }
 
     def __repr__(self) -> str:
