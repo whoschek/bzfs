@@ -150,18 +150,18 @@ repos:
         entry: '…|—|–|“|”|‘|’|→'             # replace ambiguous with unambiguous characters (em dash, curly quotes, etc)
         types: [python]
   - repo: https://github.com/hukkin/mdformat
-    rev: 0.7.22
+    rev: 1.0.0
     hooks:
-      - id: mdformat              # Auto-format Markdown files - see https://github.com/hukkin/mdformat
-        args: [--wrap=120, --number, --compact-tables]
+      - id: mdformat                       # Auto-format Markdown files - see https://github.com/hukkin/mdformat
+        args: [--wrap=120, --number, --compact-tables, --no-sort-front-matter]
         exclude: '^(README.*|prd)\.md$'
-        additional_dependencies:  # see https://mdformat.readthedocs.io/en/stable/users/plugins.html
-          - mdformat-gfm          # GitHub-Flavored Markdown support - see https://github.github.com/gfm
-          - mdformat-frontmatter  # YAML frontmatter support
-          - mdformat-toc          # auto-generate Table-of-Contents via this directive: <!-- mdformat-toc start -->
-          - mdformat-shfmt        # format embedded bash, sh
-          - mdformat-black        # format embedded python
-          - mdformat-config       # format embedded json, toml, yaml
+        additional_dependencies:           # see https://mdformat.readthedocs.io/en/stable/users/plugins.html
+          - mdformat-gfm                   # GitHub-Flavored Markdown support - see https://github.github.com/gfm
+          - mdformat-front-matters==0.1.0  # YAML frontmatter support
+          - mdformat-toc                   # auto-generate Table-of-Contents via this directive: <!-- mdformat-toc start -->
+          - mdformat-shfmt                 # format embedded bash, sh
+          - mdformat-black                 # format embedded python
+          - mdformat-config                # format embedded json, toml, yaml
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
     hooks:
