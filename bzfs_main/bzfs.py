@@ -1493,7 +1493,7 @@ class Job(MiniJob):
             create_snapshot_if_latest_is_too_old(datasets_to_snapshot, dataset, labels[i], creation_unixtime_secs)
 
         def on_finish_dataset(dataset: str) -> None:
-            if is_caching and not p.dry_run:
+            if is_caching_snapshots(p, src) and not p.dry_run:
                 set_last_modification_time_safe(
                     self.cache.last_modified_cache_file(src, dataset),
                     unixtime_in_secs=self.src_properties[dataset].snapshots_changed,

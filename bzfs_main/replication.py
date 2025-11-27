@@ -723,7 +723,18 @@ def _run_zfs_send_receive(
 
 
 def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr: str) -> bool:
-    """Deletes leftover state when resume tokens fail to apply."""
+    """Deletes leftover ZFS resume tokens state on the receiving dataset if necessary to continue operations.
+
+    To make resumable ZFS receive a reliable feature, we cope with the following ZFS facts:
+    - A failed `zfs receive -s` prohibits the following subsequent operations, until the situation is explicitly resolved
+      via a successful subsequent `zfs receive`, or cleared via `zfs receive -A`:
+        - `zfs receive` without the resumable receive token (`zfs sent -t <token>` is now required)
+        - `zfs destroy <snapshot>`
+        - `zfs rollback`
+    - `zfs send -t` does not support sending more than a single snapshot; e.g. https://github.com/openzfs/zfs/issues/16764
+    - A stale receive token prohibits subsequent `zfs send -t` if not handled (meanwhile, state changed on src or dst).
+    - `zfs receive -A` fails if the receiving dataset has no ZFS resume token (anymore).
+    """
 
     def clear_resumable_recv_state() -> bool:
         log.warning(p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset)

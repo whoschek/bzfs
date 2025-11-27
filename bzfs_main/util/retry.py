@@ -115,23 +115,22 @@ def run_with_retries(
             if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos and not termination_event.is_set():
                 will_retry = True
                 retry_count += 1
+                retry_msg: str = f"Retrying {msg}[{retry_count}/{policy.retries}]"
                 if retryable_error.no_sleep and retry_count <= 1:
-                    log.info("%s", f"Retrying {msg}[{retry_count}/{policy.retries}] immediately ...")
+                    log.info("%s", f"{retry_msg} immediately ...")
                 else:  # jitter: pick a random sleep duration within the range [min_sleep_nanos, c_max_sleep_nanos] as delay
                     sysrandom = random.SystemRandom() if sysrandom is None else sysrandom
                     sleep_nanos: int = sysrandom.randint(policy.min_sleep_nanos, c_max_sleep_nanos)
-                    log.info(
-                        "%s", f"Retrying {msg}[{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ..."
-                    )
-                    termination_event.wait(sleep_nanos / 1_000_000_000)
-                    c_max_sleep_nanos = min(policy.max_sleep_nanos, 2 * c_max_sleep_nanos)  # exponential backoff with cap
+                    log.info("%s", f"{retry_msg} in {human_readable_duration(sleep_nanos)} ...")
+                    termination_event.wait(sleep_nanos / 1_000_000_000)  # seconds
+                    c_max_sleep_nanos = min(2 * c_max_sleep_nanos, policy.max_sleep_nanos)  # exponential backoff with cap
             if termination_event.is_set() or not will_retry:
                 if policy.retries > 0:
                     log.warning(
                         "%s",
                         f"Giving up {msg}because the last [{retry_count}/{policy.retries}] retries across "
                         f"[{human_readable_duration(elapsed_nanos)}/{human_readable_duration(policy.max_elapsed_nanos)}] "
-                        "for the current request failed",
+                        "failed",
                     )
                 cause: BaseException | None = retryable_error.__cause__
                 assert cause is not None
