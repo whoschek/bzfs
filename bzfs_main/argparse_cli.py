@@ -1317,7 +1317,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--ssh-program", default="ssh", choices=["ssh", "hpnssh", DISABLE_PRG],
         help=hlp("ssh") + msg)
     parser.add_argument(
-        "--sudo-program", default="sudo", choices=["sudo", DISABLE_PRG],
+        "--sudo-program", default="sudo", choices=["sudo", "doas", DISABLE_PRG],
         help=hlp("sudo") + msg)
     parser.add_argument(
         "--zpool-program", default="zpool", choices=["zpool", DISABLE_PRG],
