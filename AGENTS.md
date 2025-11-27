@@ -198,6 +198,9 @@ Before committing any changes, you **must** follow this exact sequence:
   --foo CLI option', using the following Type and (optional) Scope categories:
   - **Types:** `build`, `bump`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `style`, `test`
   - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`
+- The body of the commit message should include the **Issue number** (if available), and, if non-trivial, address
+  **What** the commit does, **Why** it is needed, and **How** it does what it does.
+- Optionally, also include any other relevant context.
 
 # Guidelines and Best Practices
 
