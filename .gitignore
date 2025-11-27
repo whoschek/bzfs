@@ -157,3 +157,4 @@ pip-selfcheck.json
 trained_model.*
 tmp*/
 _tmp*/
+progress.md

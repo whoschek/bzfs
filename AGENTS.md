@@ -151,18 +151,20 @@ To validate your changes, you **must** follow this exact sequence:
 
 For tasks that change code, tests, or scripts in this repository, you **must** follow this exact sequence:
 
-1. **Stop if Already Done:** Determine if the acceptance criteria are already satisfied. If so, stop.
+1. **Getting up to Speed:** Read the git log to get up to speed on what was recently worked on.
 
-2. **Restate and Plan (Use TDD):** Clearly restate the task's purpose, assumptions, constraints, and explicit acceptance
+2. **Stop if Already Done:** Determine if the acceptance criteria are already satisfied. If so, stop.
+
+3. **Restate and Plan (Use TDD):** Clearly restate the task's purpose, assumptions, constraints, and explicit acceptance
    criteria. Define a test plan (without writing code in this phase).
 
-3. **Split complex tasks into effective subtasks:** Before starting to implement code, estimate the size of the effort
+4. **Split complex tasks into effective subtasks:** Before starting to implement code, estimate the size of the effort
    including the time you'll need to get the task done, to avoid biting off too much in any given iteration. If the task
    is complex, break it into smaller subtasks with bounded scope. Choose the scope of the first subtask such that it is
    challenging but feasible in ~5-10 minutes. Pick the first subtask. Defer the remaining tasks to the next iteration by
    putting them into the backlog. Output the backlog and the chosen (first) subtask.
 
-4. **Write Tests First:** Using **TDD**, translate the chosen subtask's test specs into test code. Then run to see red
+5. **Write Tests First:** Using **TDD**, translate the chosen subtask's test specs into test code. Then run to see red
    (tests must initially fail as expected) using the [Change Validation Workflow](#change-validation-workflow) with
    `bzfs_test_mode=unit` by default. Implement minimal code to reach green (tests must pass). Then re-run the
    [Change Validation Workflow](#change-validation-workflow).
@@ -171,13 +173,13 @@ For tasks that change code, tests, or scripts in this repository, you **must** f
      existing tests as sufficient and skip adding new tests, but you must still run the
      [Change Validation Workflow](#change-validation-workflow). Err on the side of treating tasks as non‑trivial.
 
-5. **Refactor:** Improve the design and quality of the code changes while keeping tests green, then re-run the
+6. **Refactor:** Improve the design and quality of the code changes while keeping tests green, then re-run the
    [Change Validation Workflow](#change-validation-workflow).
 
-6. **Write User Documentation:** If necessary, specify and apply user-facing doc changes, then re-run the
+7. **Write User Documentation:** If necessary, specify and apply user-facing doc changes, then re-run the
    [Change Validation Workflow](#change-validation-workflow).
 
-7. **Iterate:** Report the tasks that are not yet complete or currently still in the backlog, and repeat the workflow
+8. **Iterate:** Report the tasks that are not yet complete or currently still in the backlog, and repeat the workflow
    starting with Step 1.
 
 # Commit Workflow
