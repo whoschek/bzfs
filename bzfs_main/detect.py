@@ -350,5 +350,5 @@ def _validate_default_shell(path_to_default_shell: str, location: str, ssh_user_
             f"Cowardly refusing to proceed because {PROG_NAME} is not compatible with csh-style quoting of special "
             f"characters. The safe workaround is to first manually set 'sh' instead of '{path_to_default_shell}' as "
             f"the default shell of the Unix user on {location} host: {ssh_user_host or 'localhost'}, like so: "
-            "chsh -s /bin/sh YOURUSERNAME"
+            "chsh -s /bin/sh <YOURUSERNAME>"
         )
