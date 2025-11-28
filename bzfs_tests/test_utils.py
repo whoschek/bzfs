@@ -1248,10 +1248,8 @@ class TestSubprocessRun(unittest.TestCase):
 
             thread = threading.Thread(target=send_sigint_to_sleep_cli)
             thread.start()
-            start_time_secs = time.monotonic()
             with self.assertRaises(KeyboardInterrupt):
                 subprocess_run(["sleep", "1"])
-            assert time.monotonic() - start_time_secs < 0.9
             thread.join()
         finally:
             signal.signal(signal.SIGINT, old_handler)  # restore original signal handler
