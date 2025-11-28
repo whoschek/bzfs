@@ -94,7 +94,7 @@ def run_with_retries(
     log: logging.Logger,
     policy: RetryPolicy,
     fn: Callable[[Retry], _T],  # typically a lambda
-    display_msg: str = "",
+    display_msg: str = "Retrying",
     termination_event: threading.Event | None = None,
 ) -> _T:  # thread-safe
     """Runs the given function and retries on failure as indicated by policy; The optional termination_event allows for early
@@ -111,11 +111,12 @@ def run_with_retries(
             termination_event = threading.Event() if termination_event is None else termination_event
             msg: str = display_msg + " " if display_msg else ""
             msg = msg + retryable_error.display_msg + " " if retryable_error.display_msg else msg
+            msg = msg if msg else "Retrying "
             will_retry: bool = False
             if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos and not termination_event.is_set():
                 will_retry = True
                 retry_count += 1
-                retry_msg: str = f"Retrying {msg}[{retry_count}/{policy.retries}]"
+                retry_msg: str = f"{msg}[{retry_count}/{policy.retries}]"
                 if retryable_error.no_sleep and retry_count <= 1:
                     log.info("%s", f"{retry_msg} immediately ...")
                 else:  # jitter: pick a random sleep duration within the range [min_sleep_nanos, c_max_sleep_nanos] as delay
@@ -128,7 +129,7 @@ def run_with_retries(
                 if policy.retries > 0:
                     log.warning(
                         "%s",
-                        f"Giving up {msg}because the last [{retry_count}/{policy.retries}] retries across "
+                        f"Giving up {msg.lower()}because the last [{retry_count}/{policy.retries}] retries across "
                         f"[{human_readable_duration(elapsed_nanos)}/{human_readable_duration(policy.max_elapsed_nanos)}] "
                         "failed",
                     )

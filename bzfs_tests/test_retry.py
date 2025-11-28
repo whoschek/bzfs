@@ -130,3 +130,26 @@ class TestRunWithRetries(unittest.TestCase):
             with self.assertRaises(ValueError):
                 run_with_retries(mock_log, retry_policy, fn, termination_event=threading.Event())
         mock_log.warning.assert_called_once()
+
+    @patch("time.sleep")
+    def test_run_with_retries_empty_display_msg_uses_default(self, mock_sleep: MagicMock) -> None:
+        """Ensures default 'Retrying ' message is used when display_msg is empty."""
+        args = argparse.Namespace(
+            retries=1,
+            retry_min_sleep_secs=0,
+            retry_initial_max_sleep_secs=0,
+            retry_max_sleep_secs=0,
+            retry_max_elapsed_secs=1,
+        )
+        retry_policy = RetryPolicy(args)
+        mock_log = MagicMock(spec=Logger)
+
+        def fn(retry: Retry) -> None:
+            raise RetryableError("fail", no_sleep=True) from ValueError("boom")
+
+        with self.assertRaises(ValueError):
+            run_with_retries(mock_log, retry_policy, fn, display_msg="")
+
+        mock_log.warning.assert_called_once()
+        warning_msg = mock_log.warning.call_args[0][1]
+        self.assertIn("Giving up retrying because", warning_msg)
