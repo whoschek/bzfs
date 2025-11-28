@@ -76,7 +76,7 @@ class TestRunWithRetries(unittest.TestCase):
                 raise RetryableError("fail", display_msg="connect", no_sleep=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", run_with_retries(MagicMock(spec=Logger), retry_policy, fn, display_msg="foo"))
+        self.assertEqual("ok", run_with_retries(fn, retry_policy, MagicMock(spec=Logger), display_msg="foo"))
         self.assertEqual([0, 1, 2], calls)
 
     @patch("time.sleep")
@@ -94,7 +94,7 @@ class TestRunWithRetries(unittest.TestCase):
             raise RetryableError("fail", no_sleep=True) from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            run_with_retries(MagicMock(spec=Logger), retry_policy, fn)
+            run_with_retries(fn, retry_policy, MagicMock(spec=Logger))
 
     @patch("time.sleep")
     def test_run_with_retries_no_retries(self, mock_sleep: MagicMock) -> None:
@@ -105,7 +105,7 @@ class TestRunWithRetries(unittest.TestCase):
             raise RetryableError("fail") from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            run_with_retries(mock_log, retry_policy, fn)
+            run_with_retries(fn, retry_policy, mock_log)
         mock_log.warning.assert_not_called()
         mock_sleep.assert_not_called()
 
@@ -128,7 +128,7 @@ class TestRunWithRetries(unittest.TestCase):
                 raise RetryableError("fail", no_sleep=True) from ValueError("boom")
 
             with self.assertRaises(ValueError):
-                run_with_retries(mock_log, retry_policy, fn, termination_event=threading.Event())
+                run_with_retries(fn, retry_policy, mock_log, termination_event=threading.Event())
         mock_log.warning.assert_called_once()
 
     @patch("time.sleep")
@@ -148,7 +148,7 @@ class TestRunWithRetries(unittest.TestCase):
             raise RetryableError("fail", no_sleep=True) from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            run_with_retries(mock_log, retry_policy, fn, display_msg="")
+            run_with_retries(fn, retry_policy, mock_log, display_msg="")
 
         mock_log.warning.assert_called_once()
         warning_msg = mock_log.warning.call_args[0][1]

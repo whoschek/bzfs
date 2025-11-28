@@ -1673,9 +1673,9 @@ class Job(MiniJob):
         """Convenience method that auto-retries try_ssh_command() on failure."""
         p = self.params
         return run_with_retries(
-            log=p.log,
-            policy=p.retry_policy,
             fn=lambda retry: self.try_ssh_command(*args, **kwargs),
+            policy=p.retry_policy,
+            log=p.log,
             termination_event=self.termination_event,
         )
 
@@ -1683,9 +1683,9 @@ class Job(MiniJob):
         """Convenience method that auto-retries run_ssh_command() on transport failure (not on remote command failure)."""
         p = self.params
         return run_with_retries(
-            log=p.log,
-            policy=p.retry_policy,
             fn=lambda retry: self.run_ssh_command(*args, **kwargs),
+            policy=p.retry_policy,
+            log=p.log,
             termination_event=self.termination_event,
         )
 

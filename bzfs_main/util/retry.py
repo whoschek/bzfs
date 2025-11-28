@@ -88,17 +88,18 @@ class RetryPolicy:
 
 #############################################################################
 _T = TypeVar("_T")
+_NO_TERMINATION_EVENT: Final[threading.Event] = threading.Event()  # constant
 
 
 def run_with_retries(
-    log: logging.Logger,
-    policy: RetryPolicy,
     fn: Callable[[Retry], _T],  # typically a lambda
+    policy: RetryPolicy,
+    log: logging.Logger,
     display_msg: str = "Retrying",
     termination_event: threading.Event | None = None,
-) -> _T:  # thread-safe
+) -> _T:
     """Runs the given function and retries on failure as indicated by policy; The optional termination_event allows for early
-    async cancellation of the retry loop."""
+    async cancellation of the retry loop; Thread-safe."""
     c_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     retry_count: int = 0
     sysrandom: random.SystemRandom | None = None
@@ -108,7 +109,7 @@ def run_with_retries(
             return fn(Retry(retry_count))  # Call the target function and supply retry attempt number
         except RetryableError as retryable_error:
             elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
-            termination_event = threading.Event() if termination_event is None else termination_event
+            termination_event = _NO_TERMINATION_EVENT if termination_event is None else termination_event
             msg: str = display_msg + " " if display_msg else ""
             msg = msg + retryable_error.display_msg + " " if retryable_error.display_msg else msg
             msg = msg if msg else "Retrying "
@@ -127,9 +128,10 @@ def run_with_retries(
                     c_max_sleep_nanos = min(2 * c_max_sleep_nanos, policy.max_sleep_nanos)  # exponential backoff with cap
             if termination_event.is_set() or not will_retry:
                 if policy.retries > 0:
+                    msg = msg[0].lower() + msg[1:]
                     log.warning(
                         "%s",
-                        f"Giving up {msg.lower()}because the last [{retry_count}/{policy.retries}] retries across "
+                        f"Giving up {msg}because the last [{retry_count}/{policy.retries}] retries across "
                         f"[{human_readable_duration(elapsed_nanos)}/{human_readable_duration(policy.max_elapsed_nanos)}] "
                         "failed",
                     )
