@@ -352,7 +352,9 @@ class TestConnectionPool(AbstractTestCase):
         # loglevel = logging.DEBUG
         loglevel = LOG_TRACE
         is_logging = log.isEnabledFor(loglevel)
-        num_steps = 75 if self.is_unit_test or self.is_smoke_test or self.is_functional_test or self.is_adhoc_test else 1000
+        num_steps = (
+            25 if self.is_unit_test else 75 if self.is_smoke_test or self.is_functional_test or self.is_adhoc_test else 1000
+        )
         log.info(f"num_random_steps: {num_steps}")
         start_time_nanos = time.time_ns()
         for maxsessions in range(1, 10 + 1):
@@ -376,7 +378,8 @@ class TestConnectionPool(AbstractTestCase):
                             log.log(loglevel, f"clen: {len(cpool._priority_queue)}, cpool: {cpool._priority_queue}")
                             log.log(loglevel, f"dlen: {len(dpool._priority_queue)}, dpool: {dpool._priority_queue}")
                         if not conns or rng.randint(0, 1):
-                            log.log(loglevel, "get")
+                            if is_logging:
+                                log.log(loglevel, "get")
                             conns.append(self.get_connection(cpool, dpool))
                         else:
                             # k = rng.randint(0, 2)

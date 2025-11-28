@@ -856,6 +856,11 @@ class TestParallelTaskTreeBenchmark(unittest.TestCase):
         log.info(f"Throughput: {throughput} datasets/second")
         self.assertFalse(failed, "The process should not report failure.")
 
+    def test_benchmark_1k_datasets(self) -> None:
+        for enable_barriers in [False, True]:
+            self._run_benchmark(num_datasets=1_000, enable_barriers=enable_barriers)
+
+    @unittest.skip("benchmark; enable for performance comparison")
     def test_benchmark_10k_datasets(self) -> None:
         for enable_barriers in [False, True]:
             self._run_benchmark(num_datasets=10_000, enable_barriers=enable_barriers)
