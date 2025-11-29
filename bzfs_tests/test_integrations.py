@@ -4882,7 +4882,8 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_syslog(self) -> None:
-        if "Ubuntu" not in platform.version():
+        syslog_path = "/var/log/syslog"
+        if "Ubuntu" not in platform.version() or not os.path.exists(syslog_path) or not os.access(syslog_path, os.R_OK):
             self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
         for i in range(2):
             if i > 0:
@@ -4901,7 +4902,7 @@ class LocalTestCase(IntegrationTestCase):
                     "--log-syslog-prefix=" + syslog_prefix,
                     "--skip-replication",
                 )
-                lines = list(utils.tail("/var/log/syslog", 100, errors="surrogateescape"))
+                lines = list(utils.tail(syslog_path, 100, errors="surrogateescape"))
                 k = -1
                 for kk, line in enumerate(lines):
                     if syslog_prefix in line and "Log file is:" in line:
