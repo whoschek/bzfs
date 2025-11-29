@@ -142,6 +142,7 @@ from bzfs_main.snapshot_cache import (
     MATURITY_TIME_THRESHOLD_SECS,
     MONITOR_CACHE_FILE_PREFIX,
     REPLICATION_CACHE_FILE_PREFIX,
+    SNAPSHOT_COUNT_SENTINEL,
     SnapshotCache,
     set_last_modification_time_safe,
 )
@@ -725,16 +726,28 @@ class Job(MiniJob):
         basis_src_datasets: list[str] = []
         is_caching: bool = is_caching_snapshots(p, src)
         props: str = "volblocksize,recordsize,name"
-        props = "snapshots_changed," + props if is_caching else props
+        props = "snapshots_changed,snapshot_count," + props if is_caching else props
         cmd: list[str] = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
         )
         for line in (self.try_ssh_command_with_retries(src, LOG_DEBUG, cmd=cmd) or "").splitlines():
             cols: list[str] = line.split("\t")
-            snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
+            if is_caching:
+                snapshots_changed_str, snapshot_count_str, volblocksize, recordsize, src_dataset = cols
+            else:
+                snapshots_changed_str, snapshot_count_str, volblocksize, recordsize, src_dataset = "-", "-", *cols
+            snapshots_changed: int = (
+                int(snapshots_changed_str) if snapshots_changed_str and snapshots_changed_str != "-" else 0
+            )
+            if snapshot_count_str in ("", "-", "none"):
+                snapshot_count_raw = SNAPSHOT_COUNT_SENTINEL
+            else:
+                snapshot_count_raw = int(snapshot_count_str)
+            snapshot_count: int = min(snapshot_count_raw, SNAPSHOT_COUNT_SENTINEL)
             self.src_properties[src_dataset] = DatasetProperties(
                 recordsize=int(recordsize) if recordsize != "-" else -int(volblocksize),
-                snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
+                snapshots_changed=snapshots_changed,
+                snapshot_count=snapshot_count,
             )
             basis_src_datasets.append(src_dataset)
         assert (not self.is_test_mode) or basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
@@ -746,7 +759,8 @@ class Job(MiniJob):
         dst = p.dst
         is_caching: bool = is_caching_snapshots(p, dst) and p.monitor_snapshots_config.enable_monitor_snapshots
         props: str = "name"
-        props = "snapshots_changed," + props if is_caching else props
+        if is_caching:
+            props = "snapshots_changed,snapshot_count," + props
         cmd: list[str] = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", dst.root_dataset
         )
@@ -757,10 +771,22 @@ class Job(MiniJob):
         else:
             for line in basis_dst_datasets_str.splitlines():
                 cols: list[str] = line.split("\t")
-                snapshots_changed, dst_dataset = cols if is_caching else ["-"] + cols
+                if is_caching:
+                    snapshots_changed_str, snapshot_count_str, dst_dataset = cols
+                else:
+                    snapshots_changed_str, snapshot_count_str, dst_dataset = "-", "-", cols[0]
+                snapshots_changed: int = (
+                    int(snapshots_changed_str) if snapshots_changed_str and snapshots_changed_str != "-" else 0
+                )
+                if snapshot_count_str in ("", "-", "none"):
+                    snapshot_count_raw = SNAPSHOT_COUNT_SENTINEL
+                else:
+                    snapshot_count_raw = int(snapshot_count_str)
+                snapshot_count: int = min(snapshot_count_raw, SNAPSHOT_COUNT_SENTINEL)
                 self.dst_properties[dst_dataset] = DatasetProperties(
                     recordsize=0,
-                    snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
+                    snapshots_changed=snapshots_changed,
+                    snapshot_count=snapshot_count,
                 )
                 basis_dst_datasets.append(dst_dataset)
         assert (not self.is_test_mode) or basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
@@ -1053,6 +1079,7 @@ class Job(MiniJob):
         if is_caching_snapshots(p, remote):
             props: dict[str, DatasetProperties] = self.dst_properties if remote is p.dst else self.src_properties
             snapshots_changed_dict: dict[str, int] = {dataset: vals.snapshots_changed for dataset, vals in props.items()}
+            snapshot_count_dict: dict[str, int] = {dataset: vals.snapshot_count for dataset, vals in props.items()}
             alerts_hash: str = sha256_128_urlsafe_base64(str(tuple(alerts)))
             label_hashes: dict[SnapshotLabel, str] = {
                 label: sha256_128_urlsafe_base64(label.notimestamp_str()) for label in labels
@@ -1126,24 +1153,37 @@ class Job(MiniJob):
             for dataset in sorted_datasets:
                 is_stale_dataset: bool = False
                 snapshots_changed: int = snapshots_changed_dict.get(dataset, 0)
+                snapshot_count: int = snapshot_count_dict.get(dataset, 0)
+                # Dataset-level signature from '=' cache (atime=snapshot_count, mtime=snapshots_changed)
+                cached_count, cached_changed = self.cache.get_snapshots_changed2(
+                    self.cache.last_modified_cache_file(remote, dataset)
+                )
+                supports_count: bool = (
+                    snapshot_count != SNAPSHOT_COUNT_SENTINEL
+                    and cached_count not in (0, SNAPSHOT_COUNT_SENTINEL)
+                    and cached_count != cached_changed
+                )
                 for alert in alerts:
                     for cfg in (alert.latest, alert.oldest):
                         if cfg is None:
                             continue
+                        cached_unix_times = self.cache.get_snapshots_changed2(
+                            monitor_last_modified_cache_file(remote, dataset, alert.label, cfg)
+                        )
                         if (
                             snapshots_changed != 0
                             and snapshots_changed < time_threshold
-                            and (  # always True
-                                cached_unix_times := self.cache.get_snapshots_changed2(
-                                    monitor_last_modified_cache_file(remote, dataset, alert.label, cfg)
-                                )
-                            )
-                            and snapshots_changed == cached_unix_times[1]  # cached snapshots_changed aka last modified time
-                            and snapshots_changed >= cached_unix_times[0]  # creation time of minmax snapshot aka access time
-                        ):  # cached state is still valid; emit an alert if the latest/oldest snapshot is too old
+                            and cached_unix_times[0] != 0
+                            and cached_unix_times[1] != 0
+                            and snapshots_changed == cached_unix_times[1]
+                            and snapshots_changed >= cached_unix_times[0]
+                            and (snapshot_count == cached_count or not supports_count)
+                        ):
+                            # Cached state is still valid; emit an alert if the latest/oldest snapshot is too old
                             lbl = alert.label
                             check_alert(lbl, cfg, creation_unixtime_secs=cached_unix_times[0], dataset=dataset, snapshot="")
-                        else:  # cached state is no longer valid; fallback to 'zfs list -t snapshot'
+                        else:
+                            # Cached state is no longer valid; fallback to 'zfs list -t snapshot'
                             is_stale_dataset = True
                 if is_stale_dataset:
                     stale_datasets.append(dataset)
@@ -1206,11 +1246,20 @@ class Job(MiniJob):
                 )
                 cache_file: str = self.cache.last_modified_cache_file(src, src_dataset, cache_label)
                 cache_files[src_dataset] = cache_file
-                snapshots_changed: int = self.src_properties[src_dataset].snapshots_changed  # get prop "for free"
+                src_props = self.src_properties[src_dataset]
+                snapshots_changed: int = src_props.snapshots_changed  # get prop "for free"
+                snapshot_count: int = src_props.snapshot_count
+                cached_count, cached_changed = self.cache.get_snapshots_changed2(cache_file)
+                supports_count_src: bool = (
+                    snapshot_count != SNAPSHOT_COUNT_SENTINEL
+                    and cached_count not in (0, SNAPSHOT_COUNT_SENTINEL)
+                    and cached_count != cached_changed
+                )
                 if (
                     snapshots_changed != 0
                     and time.time() > snapshots_changed + MATURITY_TIME_THRESHOLD_SECS
-                    and snapshots_changed == self.cache.get_snapshots_changed(cache_file)
+                    and snapshots_changed == cached_changed
+                    and (not supports_count_src or snapshot_count == cached_count)
                 ):
                     maybe_stale_dst_datasets.append(dst_dataset)
                 else:
@@ -1218,14 +1267,22 @@ class Job(MiniJob):
 
             # For each src dataset that hasn't changed, check if the corresponding dst dataset has changed
             stale_src_datasets2: list[str] = []
-            dst_snapshots_changed_dict: dict[str, int] = self.cache.zfs_get_snapshots_changed(dst, maybe_stale_dst_datasets)
+            dst_signatures: dict[str, tuple[int, int]] = self.cache.zfs_get_dataset_signature(dst, maybe_stale_dst_datasets)
             for dst_dataset in maybe_stale_dst_datasets:
-                snapshots_changed = dst_snapshots_changed_dict.get(dst_dataset, 0)
+                dst_snapshots_changed, dst_snapshot_count = dst_signatures.get(dst_dataset, (0, SNAPSHOT_COUNT_SENTINEL))
+                cached_count, cached_changed = self.cache.get_snapshots_changed2(
+                    self.cache.last_modified_cache_file(dst, dst_dataset)
+                )
+                supports_count_dst: bool = (
+                    dst_snapshot_count != SNAPSHOT_COUNT_SENTINEL
+                    and cached_count not in (0, SNAPSHOT_COUNT_SENTINEL)
+                    and cached_count != cached_changed
+                )
                 if (
-                    snapshots_changed != 0
-                    and time.time() > snapshots_changed + MATURITY_TIME_THRESHOLD_SECS
-                    and snapshots_changed
-                    == self.cache.get_snapshots_changed(self.cache.last_modified_cache_file(dst, dst_dataset))
+                    dst_snapshots_changed != 0
+                    and time.time() > dst_snapshots_changed + MATURITY_TIME_THRESHOLD_SECS
+                    and dst_snapshots_changed == cached_changed
+                    and (not supports_count_dst or dst_snapshot_count == cached_count)
                 ):
                     log.info("Already up-to-date [cached]: %s", dst_dataset)
                 else:
@@ -1278,18 +1335,24 @@ class Job(MiniJob):
         if is_caching_snapshots(p, src) and len(done_src_datasets) > 0:
             # refresh "snapshots_changed" ZFS dataset property from dst
             stale_dst_datasets: list[str] = [src2dst(src_dataset) for src_dataset in sorted(done_src_datasets)]
-            dst_snapshots_changed_dict: dict[str, int] = self.cache.zfs_get_snapshots_changed(dst, stale_dst_datasets)
+            dst_signatures: dict[str, tuple[int, int]] = self.cache.zfs_get_dataset_signature(dst, stale_dst_datasets)
             for dst_dataset in stale_dst_datasets:  # update local cache
-                dst_snapshots_changed: int = dst_snapshots_changed_dict.get(dst_dataset, 0)
+                dst_snapshots_changed, dst_snapshot_count = dst_signatures.get(dst_dataset, (0, SNAPSHOT_COUNT_SENTINEL))
                 dst_cache_file: str = self.cache.last_modified_cache_file(dst, dst_dataset)
                 src_dataset: str = dst2src(dst_dataset)
-                src_snapshots_changed: int = self.src_properties[src_dataset].snapshots_changed
+                src_props = self.src_properties[src_dataset]
+                src_snapshots_changed: int = src_props.snapshots_changed
+                src_snapshot_count: int = src_props.snapshot_count
                 if not p.dry_run:
                     set_last_modification_time_safe(
-                        cache_files[src_dataset], unixtime_in_secs=src_snapshots_changed, if_more_recent=True
+                        cache_files[src_dataset],
+                        unixtime_in_secs=(src_snapshot_count, src_snapshots_changed),
+                        if_more_recent=True,
                     )
                     set_last_modification_time_safe(
-                        dst_cache_file, unixtime_in_secs=dst_snapshots_changed, if_more_recent=True
+                        dst_cache_file,
+                        unixtime_in_secs=(dst_snapshot_count, dst_snapshots_changed),
+                        if_more_recent=True,
                     )
 
         elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
@@ -1457,16 +1520,32 @@ class Job(MiniJob):
             time_threshold: float = time.time() - MATURITY_TIME_THRESHOLD_SECS
             for dataset in sorted_datasets:
                 cache: SnapshotCache = self.cache
-                cached_snapshots_changed: int = cache.get_snapshots_changed(cache.last_modified_cache_file(src, dataset))
+                cache_file: str = cache.last_modified_cache_file(src, dataset)
+                cached_snapshot_count, cached_snapshots_changed = cache.get_snapshots_changed2(cache_file)
                 if cached_snapshots_changed == 0:
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
-                if cached_snapshots_changed != self.src_properties[dataset].snapshots_changed:  # get that prop "for free"
+                src_props = self.src_properties[dataset]
+                live_snapshots_changed: int = src_props.snapshots_changed
+                live_snapshot_count: int = src_props.snapshot_count
+                # Equality: dataset-level "=" mtime must equal live snapshots_changed.
+                if cached_snapshots_changed != live_snapshots_changed:
                     cache.invalidate_last_modified_cache_dataset(dataset)
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
-                if cached_snapshots_changed >= time_threshold:  # Avoid equal-second races: only trust matured cache entries
+                # Maturity: avoid equal-second races; only trust matured cache entries.
+                if cached_snapshots_changed >= time_threshold:
                     sorted_datasets_todo.append(dataset)  # cache entry isn't mature enough to be trusted; skip cache
+                    continue
+                # Optional count-based guard: only when we know cache encodes a real snapshot_count.
+                supports_count: bool = (
+                    live_snapshot_count != SNAPSHOT_COUNT_SENTINEL
+                    and cached_snapshot_count not in (0, SNAPSHOT_COUNT_SENTINEL)
+                    and cached_snapshot_count != cached_snapshots_changed
+                )
+                if supports_count and live_snapshot_count != cached_snapshot_count:
+                    # dataset changed within same snapshots_changed second or count context mismatched; force fallback
+                    sorted_datasets_todo.append(dataset)
                     continue
                 creation_unixtimes: list[int] = []
                 for label_hash in label_hashes.values():
@@ -1494,9 +1573,10 @@ class Job(MiniJob):
 
         def on_finish_dataset(dataset: str) -> None:
             if is_caching_snapshots(p, src) and not p.dry_run:
+                src_props = self.src_properties[dataset]
                 set_last_modification_time_safe(
                     self.cache.last_modified_cache_file(src, dataset),
-                    unixtime_in_secs=self.src_properties[dataset].snapshots_changed,
+                    unixtime_in_secs=(src_props.snapshot_count, src_props.snapshots_changed),
                     if_more_recent=True,
                 )
 
@@ -1511,6 +1591,15 @@ class Job(MiniJob):
                 datasets_to_snapshot[lbl] = list(  # inputs to merge() are sorted, and outputs are sorted too
                     heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl], datasets_without_snapshots)
                 )
+            # Deduplicate while preserving sort order; protects invariants even if a dataset appears in multiple sources.
+            deduped: list[str] = []
+            last: str | None = None
+            for ds in datasets_to_snapshot[lbl]:
+                if ds != last:
+                    deduped.append(ds)
+                    last = ds
+            datasets_to_snapshot[lbl] = deduped
+
         for label, datasets in datasets_to_snapshot.items():
             assert (not self.is_test_mode) or datasets == sorted(datasets), "List is not sorted"
             assert (not self.is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
@@ -1715,14 +1804,15 @@ class Job(MiniJob):
 class DatasetProperties:
     """Properties of a ZFS dataset."""
 
-    __slots__ = ("recordsize", "snapshots_changed")  # uses more compact memory layout than __dict__
+    __slots__ = ("recordsize", "snapshot_count", "snapshots_changed")  # uses more compact memory layout than __dict__
 
-    def __init__(self, recordsize: int, snapshots_changed: int) -> None:
+    def __init__(self, recordsize: int, snapshots_changed: int, snapshot_count: int = 0) -> None:
         # immutable variables:
         self.recordsize: Final[int] = recordsize
 
         # mutable variables:
         self.snapshots_changed: int = snapshots_changed
+        self.snapshot_count: int = snapshot_count
 
 
 #############################################################################

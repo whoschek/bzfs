@@ -191,6 +191,7 @@ DATASET_CACHE_FILE_PREFIX: Final[str] = "="
 REPLICATION_CACHE_FILE_PREFIX: Final[str] = "=="
 MONITOR_CACHE_FILE_PREFIX: Final[str] = "==="
 MATURITY_TIME_THRESHOLD_SECS: Final[float] = 1.1  # 1 sec ZFS creation time resolution + NTP clock skew is typically < 10ms
+SNAPSHOT_COUNT_SENTINEL: Final[int] = (1 << 32) - 1
 
 
 #############################################################################
@@ -252,10 +253,12 @@ class SnapshotCache:
             src_datasets_set.update(datasets)  # union
 
         sorted_datasets: list[str] = sorted(src_datasets_set)
-        snapshots_changed_dict: dict[str, int] = self.zfs_get_snapshots_changed(src, sorted_datasets)
+        # Refresh both snapshots_changed and snapshot_count from ZFS for these datasets.
+        signatures: dict[str, tuple[int, int]] = self.zfs_get_dataset_signature(src, sorted_datasets)
         for src_dataset in sorted_datasets:
-            snapshots_changed: int = snapshots_changed_dict.get(src_dataset, 0)
+            snapshots_changed, snapshot_count = signatures.get(src_dataset, (0, SNAPSHOT_COUNT_SENTINEL))
             self.job.src_properties[src_dataset].snapshots_changed = snapshots_changed
+            self.job.src_properties[src_dataset].snapshot_count = snapshot_count
             dataset_cache_file: str = self.last_modified_cache_file(src, src_dataset)
             if not p.dry_run:
                 if snapshots_changed == 0:
@@ -263,9 +266,13 @@ class SnapshotCache:
                         os.utime(dataset_cache_file, times=(0, 0))
                     except FileNotFoundError:
                         pass  # harmless
-                else:  # update dataset-level '=' cache monotonically; do NOT touch per-label creation caches here
+                else:
+                    # Update dataset-level "=" cache monotonically with composite (snapshot_count, snapshots_changed);
+                    # do NOT touch per-label creation caches here.
                     set_last_modification_time_safe(
-                        dataset_cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True
+                        dataset_cache_file,
+                        unixtime_in_secs=(snapshot_count, snapshots_changed),
+                        if_more_recent=True,
                     )
 
     def zfs_get_snapshots_changed(self, r: Remote, sorted_datasets: list[str]) -> dict[str, int]:
@@ -298,6 +305,53 @@ class SnapshotCache:
                 if snapshots_changed == "-" or not snapshots_changed:
                     snapshots_changed = "0"
                 results[dataset] = int(snapshots_changed)
+        return results
+
+    def zfs_get_dataset_signature(self, r: Remote, sorted_datasets: list[str]) -> dict[str, tuple[int, int]]:
+        """For each given dataset, returns a tuple (snapshots_changed, snapshot_count_normalized).
+
+        snapshots_changed is a UTC Unix time in integer seconds. snapshot_count_normalized is derived from the ZFS
+        snapshot_count property, with unavailable values mapped to SNAPSHOT_COUNT_SENTINEL and all values clamped to the
+        range [0, SNAPSHOT_COUNT_SENTINEL] so they can be round-tripped via os.utime().
+        """
+
+        def _run_zfs_list_command(_cmd: list[str], batch: list[str]) -> list[str]:
+            try:
+                return self.job.run_ssh_command_with_retries(r, LOG_TRACE, print_stderr=False, cmd=_cmd + batch).splitlines()
+            except CalledProcessError as e:
+                return stderr_to_str(e.stdout).splitlines()
+            except UnicodeDecodeError:
+                return []
+
+        assert (not self.job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
+        p = self.job.params
+        cmd: list[str] = p.split_args(
+            f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o snapshots_changed,snapshot_count,name"
+        )
+        results: dict[str, tuple[int, int]] = {}
+        interner: SortedInterner[str] = SortedInterner(sorted_datasets)  # reduces memory footprint
+        for lines in itr_ssh_cmd_parallel(
+            self.job, r, [(cmd, sorted_datasets)], lambda _cmd, batch: _run_zfs_list_command(_cmd, batch), ordered=False
+        ):
+            for line in lines:
+                if "\t" not in line:
+                    break  # partial output from failing 'zfs list' command; subsequent lines in curr batch cannot be trusted
+                parts = line.split("\t", 2)
+                if len(parts) != 3:
+                    break
+                snapshots_changed_str, snapshot_count_str, dataset = parts
+                if not dataset:
+                    break  # partial output from failing 'zfs list' command; subsequent lines in curr batch cannot be trusted
+                dataset = interner.interned(dataset)
+                if snapshots_changed_str == "-" or not snapshots_changed_str:
+                    snapshots_changed_str = "0"
+                snapshots_changed = int(snapshots_changed_str)
+                if snapshot_count_str in ("", "-", "none"):
+                    snapshot_count_raw = SNAPSHOT_COUNT_SENTINEL
+                else:
+                    snapshot_count_raw = int(snapshot_count_str)
+                snapshot_count: int = min(snapshot_count_raw, SNAPSHOT_COUNT_SENTINEL)
+                results[dataset] = (snapshots_changed, snapshot_count)
         return results
 
 

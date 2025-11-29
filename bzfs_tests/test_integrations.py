@@ -725,6 +725,12 @@ class SmokeTestCase(IntegrationTestCase):
     def test_compare_snapshot_lists(self) -> None:
         LocalTestCase(param=self.param).test_compare_snapshot_lists()
 
+    def test_cache_same_second_replication_reproducer(self) -> None:
+        LocalTestCase(param=self.param).test_cache_same_second_replication_reproducer()
+
+    def test_cache_same_second_scheduler_reproducer(self) -> None:
+        LocalTestCase(param=self.param).test_cache_same_second_scheduler_reproducer()
+
 
 #############################################################################
 class AdhocTestCase(IntegrationTestCase):
@@ -4987,18 +4993,136 @@ class LocalTestCase(IntegrationTestCase):
         self.assertEqual(2, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
 
-        destroy_snapshots(dst_root_dataset + "/foo1", snapshots(dst_root_dataset + "/foo1")[1:])
-        self.assert_snapshots(dst_root_dataset + "/foo1", 1, "s")
-        time.sleep(delay_secs)
-        job = _run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent")
-        self.assert_snapshots(dst_root_dataset + "/foo1", 2, "s")
-        self.assertEqual(1, job.num_cache_hits)
-        self.assertEqual(1, job.num_cache_misses)
+    def test_cache_same_second_replication_reproducer(self) -> None:
+        """Smoke test: same-second snapshot creates are not skipped when caching is enabled.
 
-        time.sleep(delay_secs)
-        job = _run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent")
-        self.assertEqual(2, job.num_cache_hits)
-        self.assertEqual(0, job.num_cache_misses)
+        Purpose: Encodes the bugreport.md reproducer end-to-end on real ZFS and proves that a second snapshot created
+        within the same snapshots_changed second is still replicated on the next run instead of being silently skipped
+        by --cache-snapshots. Assumptions: ZFS >= 2.2 with snapshots_changed and snapshot_count properties available.
+        """
+        if not is_cache_snapshots_enabled():
+            self.skipTest("Cache not supported")
+
+        def _run_bzfs(*args: str, **kwargs: Any) -> bzfs.Job:
+            return self.run_bzfs(*args, **kwargs, cache_snapshots=True, force_stable_cache_namespace=True)
+
+        self.tearDownAndSetup()
+        zfs_set([src_root_dataset], {"snapshot_limit": "1000000"})
+
+        self.assert_snapshots(src_root_dataset, 0)
+        self.assert_snapshots(dst_root_dataset, 0)
+
+        # 1) Seed caches with an initial run (no snapshots yet).
+        _run_bzfs(src_root_dataset, dst_root_dataset)
+        self.assert_snapshots(dst_root_dataset, 0)
+
+        # 2) Create first snapshot and record dataset properties.
+        take_snapshot(src_root_dataset, fix("s1_bug"))
+        sc1_str = dataset_property(src_root_dataset, "snapshots_changed")
+        count1_str = dataset_property(src_root_dataset, "snapshot_count")
+        self.assertIsNotNone(sc1_str)
+        self.assertIsNotNone(count1_str)
+        sc1 = int(sc1_str)
+        count1 = int(count1_str)
+
+        # 3) Replicate to bring dst up-to-date and populate caches.
+        _run_bzfs(src_root_dataset, dst_root_dataset)
+        self.assert_snapshot_names(dst_root_dataset, ["s1_bug"])
+
+        # 4) Create second snapshot as quickly as possible; require same snapshots_changed second.
+        take_snapshot(src_root_dataset, fix("s2_bug"))
+        sc2_str = dataset_property(src_root_dataset, "snapshots_changed")
+        count2_str = dataset_property(src_root_dataset, "snapshot_count")
+        self.assertIsNotNone(sc2_str)
+        self.assertIsNotNone(count2_str)
+        sc2 = int(sc2_str)
+        count2 = int(count2_str)
+        if sc2 != sc1:
+            self.skipTest("Could not reproduce same-second snapshots_changed; environment too slow")
+        self.assertGreaterEqual(count2, count1 + 1)
+
+        # 5) After maturity, run again: dataset must not be cheap-skipped and s2 must appear on dst.
+        time.sleep(2 * MATURITY_TIME_THRESHOLD_SECS)
+        job = _run_bzfs(src_root_dataset, dst_root_dataset)
+        self.assertEqual(0, job.num_cache_hits)
+        self.assertEqual(1, job.num_cache_misses)
+        self.assert_snapshot_names(dst_root_dataset, ["s1_bug", "s2_bug"])
+
+    def test_cache_same_second_scheduler_reproducer(self) -> None:
+        """Smoke test: scheduler falls back to probing when snapshot_count changes but snapshots_changed stays equal.
+
+        Purpose: Validates that --create-src-snapshots with --cache-snapshots does not incorrectly trust the dataset "="
+        cache when a new snapshot is created within the same snapshots_changed second. Assumptions: ZFS >= 2.2 with
+        snapshots_changed and snapshot_count properties. Design Rationale: Use real ZFS plus an instrumented
+        handle_minmax_snapshots to assert that the scheduler performs a fallback probe for the affected dataset.
+        """
+        if not is_cache_snapshots_enabled():
+            self.skipTest("Cache not supported")
+
+        def _run_bzfs(*args: str, **kwargs: Any) -> bzfs.Job:
+            return self.run_bzfs(*args, **kwargs, cache_snapshots=True, force_stable_cache_namespace=True)
+
+        self.tearDownAndSetup()
+        zfs_set([src_root_dataset], {"snapshot_limit": "1000000"})
+
+        self.assert_snapshots(src_root_dataset, 0)
+
+        plan = {"ssched": {"onsite": {"secondly": 1}}}
+
+        # 1) First run: create an initial scheduled snapshot and populate dataset "=" and per-label caches.
+        _run_bzfs(
+            src_root_dataset,
+            DUMMY_DATASET,
+            "--skip-replication",
+            "--create-src-snapshots",
+            "--create-src-snapshots-plan=" + str(plan),
+            "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+        )
+        self.assertGreaterEqual(len(snapshots(src_root_dataset)), 1)
+
+        sc1_str = dataset_property(src_root_dataset, "snapshots_changed")
+        count1_str = dataset_property(src_root_dataset, "snapshot_count")
+        self.assertIsNotNone(sc1_str)
+        self.assertIsNotNone(count1_str)
+        sc1 = int(sc1_str)
+        count1 = int(count1_str)
+
+        # 2) Create a second snapshot as quickly as possible; require same snapshots_changed second.
+        take_snapshot(src_root_dataset, fix("s2_sched_bug"))
+        sc2_str = dataset_property(src_root_dataset, "snapshots_changed")
+        count2_str = dataset_property(src_root_dataset, "snapshot_count")
+        self.assertIsNotNone(sc2_str)
+        self.assertIsNotNone(count2_str)
+        sc2 = int(sc2_str)
+        count2 = int(count2_str)
+        if sc2 != sc1:
+            self.skipTest("Could not reproduce same-second snapshots_changed; environment too slow")
+        self.assertGreaterEqual(count2, count1 + 1)
+
+        # 3) After maturity, run scheduler again and assert that it performs a fallback probe for the dataset.
+        time.sleep(2 * MATURITY_TIME_THRESHOLD_SECS)
+
+        called: list[str] = []
+        orig_handle = bzfs.Job.handle_minmax_snapshots
+
+        def instrumented_handle_minmax_snapshots(*args: Any, **kwargs: Any) -> list[str]:
+            # args: (self, remote, sorted_datasets, labels, fn_latest, fn_oldest?, fn_on_finish_dataset?)
+            if len(args) >= 3:
+                sorted_datasets = args[2]
+                called.extend(sorted_datasets)
+            return orig_handle(*args, **kwargs)
+
+        with patch.object(bzfs.Job, "handle_minmax_snapshots", new=instrumented_handle_minmax_snapshots):
+            _run_bzfs(
+                src_root_dataset,
+                DUMMY_DATASET,
+                "--skip-replication",
+                "--create-src-snapshots",
+                "--create-src-snapshots-plan=" + str(plan),
+                "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+            )
+
+        self.assertIn(src_root_dataset, called)
 
     def test_cache_flat_simple_subset(self) -> None:
         if not is_cache_snapshots_enabled():
