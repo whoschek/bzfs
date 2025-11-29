@@ -10,7 +10,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] More reliable retries when connecting to remote server.
 - [bzfs] `--cache-snapshots`: Ensure equal snapshots_changed still allows updating cached creation time.
 - [bzfs] [security] Properly round-trip backslash characters in ZFS property values.
-- [bzfs] [security] Enable use of `doas` as a replacement for `sudo`.
+- [bzfs] [security] Enable use of `doas` as a replacement for `sudo`, via `--sudo-program=doas`
 - [bzfs] Decouple `run_ssh_command()` SSH client utility from the rest of the program.
 - [bzfs] Decouple `process_datasets_in_parallel()` parallel task tree scheduler utility from the rest of the program.
 - [bzfs] Also run nightly tests on FreeBSD-15.0.
