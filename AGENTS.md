@@ -66,6 +66,9 @@ To understand the system's architecture and features, follow these steps:
 - For tasks that only involve analysis, explanation, documentation review, or design proposals without modifying
   repository files, you may ignore the *Change Validation Workflow*, *Core Software Development Workflow*, and *Commit
   Workflow*. Instead, apply the *Step by Step Reasoning Workflow* and focus on correctness of reasoning.
+- If the User literally requests `continue nonstop`, then go ahead and **safely continue** working until the acceptance
+  criteria are satisfied, without asking the User again whether you should continue — the answer is always implicitly
+  `continue`.
 
 # Step by Step Reasoning Workflow
 
