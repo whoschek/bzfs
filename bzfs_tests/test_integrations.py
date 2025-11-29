@@ -5573,8 +5573,6 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         LocalTestCase(param=self.param).test_zfs_set_via_set_include()
 
     def test_inject_src_pipe_fail(self) -> None:
-        if platform.platform().startswith("FreeBSD-15"):
-            self.skipTest("tmp disabled")
         self.inject_pipe_error("inject_src_pipe_fail", expected_error=[1, DIE_STATUS])
 
     def test_inject_src_pipe_garble(self) -> None:
