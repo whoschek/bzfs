@@ -127,11 +127,10 @@ def run_with_retries(
                     termination_event.wait(sleep_nanos / 1_000_000_000)  # seconds
                     c_max_sleep_nanos = min(2 * c_max_sleep_nanos, policy.max_sleep_nanos)  # exponential backoff with cap
             if termination_event.is_set() or not will_retry:
-                if policy.retries > 0:
-                    msg = msg[0].lower() + msg[1:]
+                if policy.retries > 0 and not termination_event.is_set():
                     log.warning(
                         "%s",
-                        f"Giving up {msg}because the last [{retry_count}/{policy.retries}] retries across "
+                        f"{msg}exhausted; giving up because the last [{retry_count}/{policy.retries}] retries across "
                         f"[{human_readable_duration(elapsed_nanos)}/{human_readable_duration(policy.max_elapsed_nanos)}] "
                         "failed",
                     )

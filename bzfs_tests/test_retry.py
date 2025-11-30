@@ -152,4 +152,4 @@ class TestRunWithRetries(unittest.TestCase):
 
         mock_log.warning.assert_called_once()
         warning_msg = mock_log.warning.call_args[0][1]
-        self.assertIn("Giving up retrying because", warning_msg)
+        self.assertTrue(warning_msg.startswith("Retrying exhausted; giving up"))
