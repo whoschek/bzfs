@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.15.0] - Not yet released
+## [1.15.0] - December 1, 2025
 
 - [bzfs_jobrunner] Fixed: In some edge cases, subjobs run in parallel when they should run sequentially.
 - [bzfs] [perf] `--cache-snapshots`: Update the cache for the datasets that were actually replicated even if some
@@ -15,6 +15,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Decouple `process_datasets_in_parallel()` parallel task tree scheduler utility from the rest of the program.
 - [bzfs] Also run nightly tests on FreeBSD-15.0.
 - [bzfs] Also run nightly tests on zfs-2.3.5.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.14.0...v1.15.0
 
 ## [1.14.0] - November 7, 2025
 
