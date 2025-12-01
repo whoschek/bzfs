@@ -411,7 +411,7 @@ def _replicate_dataset_fully(
         curr_size: int = _estimate_send_size(job, src, dst_dataset, recv_resume_token, oldest_src_snapshot)
         humansize: str = _format_size(curr_size)
         if recv_resume_token:
-            send_opts: list[str] = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
+            send_opts: list[str] = p.curr_zfs_send_program_opts + send_resume_opts  # e.g. curr + ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
@@ -520,7 +520,7 @@ def _replicate_dataset_incrementally(
         humansize: str = _format_size(total_size) + "/" + _format_size(done_size) + "/" + _format_size(curr_size)
         human_num: str = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
         if recv_resume_token:
-            send_opts: list[str] = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
+            send_opts: list[str] = p.curr_zfs_send_program_opts + send_resume_opts  # e.g. curr + ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [incr_flag, from_snap, to_snap]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
@@ -1052,7 +1052,7 @@ def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_
     zfs_send_program_opts: list[str] = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
     zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
     if recv_resume_token:
-        zfs_send_program_opts = ["-Pnv", "-t", recv_resume_token]
+        zfs_send_program_opts += ["-t", recv_resume_token]
         items = ()
     cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
     try:
