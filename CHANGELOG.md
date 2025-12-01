@@ -2,6 +2,11 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.1] - December 2, 2025
+
+- [bzfs] Include `--zfs-send-program-opts` also when resuming a previously interrupted `zfs receive -s`.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.15.0...v1.15.1
+
 ## [1.15.0] - December 1, 2025
 
 - [bzfs_jobrunner] Fixed: In some edge cases, subjobs run in parallel when they should run sequentially.
