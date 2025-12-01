@@ -417,7 +417,7 @@ class Params(MiniParams):
             exclude_long_opts={"--dryrun"},
             exclude_short_opts="den",
             include_arg_opts={"-X", "--exclude", "--redact"},
-            exclude_arg_opts=frozenset({"-i", "-I"}),
+            exclude_arg_opts=frozenset({"-i", "-I", "-t", "--resume"}),
         )[0]
 
     def _program_name(self, program: str) -> str:
