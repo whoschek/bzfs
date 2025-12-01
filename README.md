@@ -641,7 +641,7 @@ usage: bzfs [-h] [--recursive]
             [--mbuffer-program-opts STRING] [--ps-program {ps,-}]
             [--pv-program {pv,-}] [--pv-program-opts STRING]
             [--shell-program {sh,-}] [--ssh-program {ssh,hpnssh,-}]
-            [--sudo-program {sudo,-}] [--zpool-program {zpool,-}]
+            [--sudo-program {sudo,doas,-}] [--zpool-program {zpool,-}]
             [--log-dir DIR] [--log-file-prefix STRING]
             [--log-file-infix STRING] [--log-file-suffix STRING]
             [--log-subdir {daily,hourly,minutely}]
@@ -2113,7 +2113,7 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--sudo-program"></div>
 
-**--sudo-program** *{sudo,-}*
+**--sudo-program** *{sudo,doas,-}*
 
 *  The name of the 'sudo' executable (optional). Default is 'sudo'. Use '-' to disable the
     use of this program.

@@ -24,7 +24,7 @@ __choices_bzfs() {
     --skip-missing-snapshots) echo continue dataset fail ;;
     --skip-on-error) echo dataset fail tree ;;
     --ssh-program) echo - hpnssh ssh ;;
-    --sudo-program) echo - sudo ;;
+    --sudo-program) echo - doas sudo ;;
     --zfs-recv-o-include-regex) echo [] ;;
     --zfs-recv-o-targets) echo full full+incremental incremental ;;
     --zfs-recv-x-include-regex) echo [] ;;
