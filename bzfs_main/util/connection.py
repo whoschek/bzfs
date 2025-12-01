@@ -31,7 +31,7 @@ from bzfs_main.util.retry import Retry, RetryPolicy, run_with_retries
 
 log = logging.getLogger(__name__)
 remote = create_simple_miniremote(log=log, ssh_user_host="alice@127.0.0.1")
-conn_pool = ConnectionPool(remote, connpool_name="example")
+connection_pool = ConnectionPool(remote, connpool_name="example")
 try:
     job = create_simple_minijob()
     retry_policy = RetryPolicy(
@@ -45,16 +45,16 @@ try:
     )
 
     def run_cmd(retry: Retry) -> str:
-        with conn_pool.connection() as conn:
+        with connection_pool.connection() as conn:
             stdout: str = run_ssh_command(
                 cmd=["echo", "hello"], conn=conn, job=job, check=True, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True
             ).stdout
             return stdout
 
-    stdout = run_with_retries(log=log, policy=retry_policy, fn=run_cmd)
+    stdout = run_with_retries(fn=run_cmd, policy=retry_policy, log=log)
     print(f"stdout: {stdout}")
 finally:
-    conn_pool.shutdown()
+    connection_pool.shutdown()
 """
 
 from __future__ import (
