@@ -796,7 +796,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Eventually create empty destination dataset and ancestors if they do not yet exist and source dataset "
              "has at least one descendant that selects at least one snapshot.\n\n")
     parser.add_argument(
-        "--retries", type=int, min=0, default=2, action=CheckRange, metavar="INT",
+        "--retries", dest="max_retries", type=int, min=0, default=2, action=CheckRange, metavar="INT",
         help="The maximum number of times a retryable replication or deletion step shall be retried if it fails, for "
              "example because of network hiccups (default: %(default)s, min: %(min)s). "
              "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "

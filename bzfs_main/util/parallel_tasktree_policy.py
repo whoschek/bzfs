@@ -46,6 +46,7 @@ from bzfs_main.util.parallel_tasktree import (
 )
 from bzfs_main.util.retry import (
     Retry,
+    RetryOptions,
     RetryPolicy,
     run_with_retries,
 )
@@ -73,6 +74,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error
     retry_policy: RetryPolicy | None = None,
+    retry_options: RetryOptions = RetryOptions(),  # noqa: B008
     dry_run: bool = False,
     is_test_mode: bool = False,
 ) -> bool:  # returns True if any dataset processing failed, False if all succeeded
@@ -104,7 +106,12 @@ def process_datasets_in_parallel_and_fault_tolerant(
         no_skip: bool = False
         try:
             no_skip = run_with_retries(
-                lambda retry: process_dataset(dataset, tid, retry), retry_policy, log, termination_event=termination_event
+                fn=lambda retry: process_dataset(dataset, tid, retry),
+                policy=retry_policy,
+                config=retry_options.config,
+                giveup=retry_options.giveup,
+                after_attempt=retry_options.after_attempt,
+                log=log,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
             exception = e  # may be reraised later

@@ -162,6 +162,8 @@ from bzfs_main.util.parallel_tasktree_policy import (
 from bzfs_main.util.retry import (
     Retry,
     RetryableError,
+    RetryConfig,
+    RetryOptions,
     run_with_retries,
 )
 from bzfs_main.util.utils import (
@@ -254,6 +256,7 @@ class Job(MiniJob):
     def __init__(self, termination_event: threading.Event | None = None) -> None:
         self.params: Params
         self.termination_event: Final[threading.Event] = termination_event or threading.Event()
+        self.retry_options: Final[RetryOptions] = RetryOptions(config=RetryConfig(termination_event=self.termination_event))
         self.subprocesses: Subprocesses = Subprocesses()
         self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
@@ -917,6 +920,7 @@ class Job(MiniJob):
                 task_name="--delete-dst-snapshots",
                 append_exception=self.append_exception,
                 retry_policy=p.retry_policy,
+                retry_options=self.retry_options,
                 dry_run=p.dry_run,
                 is_test_mode=self.is_test_mode,
             )
@@ -1269,6 +1273,7 @@ class Job(MiniJob):
             task_name="Replication",
             append_exception=self.append_exception,
             retry_policy=p.retry_policy,
+            retry_options=self.retry_options,
             dry_run=p.dry_run,
             is_test_mode=self.is_test_mode,
         )
@@ -1673,8 +1678,10 @@ class Job(MiniJob):
         return run_with_retries(
             fn=lambda retry: self.try_ssh_command(*args, **kwargs),
             policy=p.retry_policy,
+            config=self.retry_options.config,
+            giveup=self.retry_options.giveup,
+            after_attempt=self.retry_options.after_attempt,
             log=p.log,
-            termination_event=self.termination_event,
         )
 
     def run_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str:
@@ -1683,8 +1690,10 @@ class Job(MiniJob):
         return run_with_retries(
             fn=lambda retry: self.run_ssh_command(*args, **kwargs),
             policy=p.retry_policy,
+            config=self.retry_options.config,
+            giveup=self.retry_options.giveup,
+            after_attempt=self.retry_options.after_attempt,
             log=p.log,
-            termination_event=self.termination_event,
         )
 
     def maybe_inject_error(self, cmd: list[str], error_trigger: str | None = None) -> None:

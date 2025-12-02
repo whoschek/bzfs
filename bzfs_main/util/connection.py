@@ -35,13 +35,11 @@ connection_pool = ConnectionPool(remote, connpool_name="example")
 try:
     job = create_simple_minijob()
     retry_policy = RetryPolicy(
-        argparse.Namespace(
-            retries=10,
-            retry_min_sleep_secs=0,
-            retry_initial_max_sleep_secs=0.125,
-            retry_max_sleep_secs=30,
-            retry_max_elapsed_secs=300,
-        )
+        max_retries=10,
+        min_sleep_secs=0,
+        initial_max_sleep_secs=0.125,
+        max_sleep_secs=10,
+        max_elapsed_secs=60,
     )
 
     def run_cmd(retry: Retry) -> str:
