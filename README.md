@@ -557,8 +557,8 @@ sudo --non-interactive ls          # verify non-interactive sudo works
 # Choose test scope
 # export bzfs_test_mode=unit       # unit tests only (takes < 5 seconds)
 export bzfs_test_mode=smoke        # small, quick integration test subset (takes < 1 minute)
-# export bzfs_test_mode=functional # most integration tests but only in a single local config (takes ~4 minutes)
-# unset bzfs_test_mode             # all tests (takes ~1 hour)
+# export bzfs_test_mode=functional # most integration tests but only in a single local config (takes ~3 minutes)
+# unset bzfs_test_mode             # all tests (takes ~15 mins)
 
 # Confirm passwordless ssh works on connecting to localhost loopback address
 # You should not get prompted for a password
