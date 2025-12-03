@@ -103,7 +103,9 @@ from bzfs_main.util.utils import (
     human_readable_duration,
     human_readable_float,
     is_descendant,
+    is_included,
     isotime_from_unixtime,
+    list_formatter,
     open_nofollow,
     parse_duration_to_milliseconds,
     percent,
@@ -261,6 +263,20 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(re.error):
             compile_regexes(["fo$o"], re_suffix)
 
+    def test_is_included_with_negated_exclude_regex(self) -> None:
+        """Negated exclude regex excludes non-matching names but not matching ones."""
+        exclude_regexes = compile_regexes(["!foo"])
+        include_regexes = compile_regexes([".*"])
+        self.assertTrue(is_included("foo", include_regexes, exclude_regexes))
+        self.assertFalse(is_included("bar", include_regexes, exclude_regexes))
+
+    def test_is_included_with_negated_include_regex(self) -> None:
+        """Negated include regex includes non-matching names and excludes matching ones."""
+        include_regexes = compile_regexes(["!foo"])
+        exclude_regexes = compile_regexes([])
+        self.assertTrue(is_included("bar", include_regexes, exclude_regexes))
+        self.assertFalse(is_included("foo", include_regexes, exclude_regexes))
+
     def test_parse_duration_to_milliseconds(self) -> None:
         self.assertEqual(5000, parse_duration_to_milliseconds("5 seconds"))
         self.assertEqual(
@@ -277,6 +293,14 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_pretty_print_formatter(self) -> None:
         self.assertIsNotNone(str(pretty_print_formatter(argparse.Namespace(src="src", dst="dst"))))
+
+    def test_list_formatter_lstrip_branch(self) -> None:
+        """list_formatter strips or preserves leading whitespace depending on the lstrip flag."""
+        items = ["  leading", "space"]
+        formatter_no_lstrip = list_formatter(items, separator=" ", lstrip=False)
+        formatter_lstrip = list_formatter(items, separator=" ", lstrip=True)
+        self.assertEqual("  leading space", str(formatter_no_lstrip))
+        self.assertEqual("leading space", str(formatter_lstrip))
 
     def test_xprint(self) -> None:
         log = MagicMock(spec=Logger)
