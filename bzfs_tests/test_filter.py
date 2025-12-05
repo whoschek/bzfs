@@ -62,7 +62,7 @@ from bzfs_main.filter import (
     filter_properties,
     filter_snapshots,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     LOG_DEBUG,
     UNIX_TIME_INFINITY_SECS,
     compile_regexes,
@@ -830,7 +830,7 @@ class TestFilterDatasets(CommonTest):
         p = job.params
         p.include_dataset_regexes = compile_regexes(include or [".*"])
         p.exclude_dataset_regexes = compile_regexes(exclude or [])
-        p.skip_parent = skip_parent
+        p.skip_parent = skip_parent  # type: ignore[misc]  # cannot assign to final attribute
         p.exclude_dataset_property = exclude_property
         remote = MagicMock(spec=Remote, root_dataset="src", location="src")
         return job, remote
@@ -908,10 +908,10 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
     def run_filter(self, mapping: dict[str, str | None], debug: bool = False) -> list[str]:
         job, remote = self.make_job(debug=debug)
 
-        def fake_try(job_: Job, remote_: Remote, level: int, cmd: list[str]) -> str | None:
+        def fake_try_ssh_command(job_: Job, remote_: Remote, loglevel: int, cmd: list[str]) -> str | None:
             return mapping.get(cmd[-1])
 
-        with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try):
+        with patch.object(bzfs.Job, "try_ssh_command", autospec=True, side_effect=fake_try_ssh_command):
             with patch.object(job, "maybe_inject_delete"):
                 with patch("socket.gethostname", return_value="host1"):
                     result = _filter_datasets_by_exclude_property(job, remote, list(mapping.keys()))
@@ -941,10 +941,10 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
         job, remote = self.make_job()
         mapping: dict[str, str | None] = {"a": "false", "a/b": "true", "c": "true"}
 
-        def fake_try(job_: Job, remote_: Remote, level: int, cmd: list[str]) -> str | None:
+        def fake_try_ssh_command(job_: Job, remote_: Remote, loglevel: int, cmd: list[str]) -> str | None:
             return mapping.get(cmd[-1])
 
-        with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try) as mock_try:
+        with patch.object(bzfs.Job, "try_ssh_command", autospec=True, side_effect=fake_try_ssh_command) as mock_try:
             with patch.object(job, "maybe_inject_delete"):
                 with patch("socket.gethostname", return_value="host1"):
                     result = _filter_datasets_by_exclude_property(job, remote, ["a", "a/b", "c"])
@@ -955,10 +955,10 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
         job, remote = self.make_job()
         mapping: dict[str, str | None] = {"a": None, "b": "true"}
 
-        def fake_try(job_: Job, remote_: Remote, level: int, cmd: list[str]) -> str | None:
+        def fake_try_ssh_command(job_: Job, remote_: Remote, loglevel: int, cmd: list[str]) -> str | None:
             return mapping.get(cmd[-1])
 
-        with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try):
+        with patch.object(bzfs.Job, "try_ssh_command", autospec=True, side_effect=fake_try_ssh_command):
             with patch.object(job, "maybe_inject_delete"):
                 with patch("socket.gethostname", return_value="host1"):
                     result = _filter_datasets_by_exclude_property(job, remote, ["a", "b"])
@@ -971,10 +971,10 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
         handler = logging.StreamHandler(stream)
         job.params.log.addHandler(handler)
 
-        def fake_try(job_: Job, remote_: Remote, level: int, cmd: list[str]) -> str | None:
+        def fake_try_ssh_command(job_: Job, remote_: Remote, loglevel: int, cmd: list[str]) -> str | None:
             return mapping.get(cmd[-1])
 
-        with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try):
+        with patch.object(bzfs.Job, "try_ssh_command", autospec=True, side_effect=fake_try_ssh_command):
             with patch.object(job, "maybe_inject_delete"):
                 with patch("socket.gethostname", return_value="host1"):
                     _filter_datasets_by_exclude_property(job, remote, ["a"])

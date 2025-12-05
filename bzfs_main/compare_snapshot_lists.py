@@ -49,14 +49,13 @@ from bzfs_main.filter import (
 from bzfs_main.parallel_batch_cmd import (
     zfs_list_snapshots_in_parallel,
 )
-from bzfs_main.parallel_iterator import (
+from bzfs_main.util.parallel_iterator import (
     run_in_parallel,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
-    Interner,
-    T,
+    HashedInterner,
     human_readable_bytes,
     human_readable_duration,
     isotime_from_unixtime,
@@ -74,7 +73,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 
 
 @dataclass(order=True, frozen=True)
-class ComparableSnapshot:
+class _ComparableSnapshot:
     """Snapshot entry comparable by rel_dataset and GUID for sorting and merging."""
 
     key: tuple[str, str]  # rel_dataset, guid
@@ -90,8 +89,8 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     metadata.
 
     Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and any number of
-    snapshots. Time complexity is O(max(N log N, M log M)) where N is the number of datasets and M is the number of snapshots
-    per dataset. Space complexity is O(max(N, M)). Assumes that both src_datasets and dst_datasets are sorted.
+    snapshots. Time complexity is O((N log N) + (N * M log M)) where N is the number of datasets and M is the number of
+    snapshots per dataset. Space complexity is O(max(N, M)). Assumes that both src_datasets and dst_datasets are sorted.
     """
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
@@ -118,7 +117,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         for lines in zfs_list_snapshots_in_parallel(job, r, cmd, sorted_datasets):
             yield from lines
 
-    def snapshot_iterator(root_dataset: str, sorted_itr: Iterator[str]) -> Iterator[ComparableSnapshot]:
+    def snapshot_iterator(root_dataset: str, sorted_itr: Iterator[str]) -> Iterator[_ComparableSnapshot]:
         """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that any two snapshots
         with the same GUID will lie adjacent to each other during the upcoming phase that merges src snapshots and dst
         snapshots."""
@@ -139,9 +138,9 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
                     continue  # ignore bookmarks whose snapshot still exists. also ignore dupes of bookmarks
                 last_guid = guid
                 key = (rel_dataset, guid)  # ensures src snapshots and dst snapshots with the same GUID will be adjacent
-                yield ComparableSnapshot(key, cols)
+                yield _ComparableSnapshot(key, cols)
 
-    def print_dataset(rel_dataset: str, entries: Iterable[tuple[str, ComparableSnapshot]]) -> None:
+    def print_dataset(rel_dataset: str, entries: Iterable[tuple[str, _ComparableSnapshot]]) -> None:
         entries = sorted(  # fetch all snapshots of current dataset and sort em by creation, createtxg, snapshot_tag
             entries,
             key=lambda entry: (
@@ -250,7 +249,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     dst_snapshot_itr: Iterator = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
     merge_itr = _merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snapshot_itr, dst_snapshot_itr)
 
-    interner: Interner[str] = Interner()  # reduces memory footprint
+    interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint
     rel_datasets: dict[str, set[str]] = defaultdict(set)
     for datasets, remote in (src_datasets, src), (dst_datasets, dst):
         for dataset in datasets:  # rel_dataset=/foo, root_dataset=tank1/src
@@ -302,9 +301,9 @@ def _print_datasets(groups: itertools.groupby, fn: Callable[[str, Iterable], Non
 def _merge_sorted_iterators(
     choices: Sequence[str],  # ["src", "dst", "all"]
     choice: str,  # Example: "src+dst+all"
-    src_itr: Iterator[T],
-    dst_itr: Iterator[T],
-) -> Iterator[tuple[str, T] | tuple[str, T, T]]:
+    src_itr: Iterator[_ComparableSnapshot],
+    dst_itr: Iterator[_ComparableSnapshot],
+) -> Iterator[tuple[str, _ComparableSnapshot] | tuple[str, _ComparableSnapshot, _ComparableSnapshot]]:
     """The typical pipelined merge algorithm of a merge sort, slightly adapted to our specific use case."""
     assert len(choices) == 3
     assert choice

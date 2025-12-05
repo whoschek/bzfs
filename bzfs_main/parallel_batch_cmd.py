@@ -57,17 +57,17 @@ from typing import (
     TypeVar,
 )
 
-from bzfs_main.connection import (
+from bzfs_main.util.connection import (
     SHARED,
     ConnectionPool,
-    try_ssh_command,
+    MiniRemote,
 )
-from bzfs_main.parallel_iterator import (
+from bzfs_main.util.parallel_iterator import (
     batch_cmd_iterator,
     get_max_command_line_bytes,
     parallel_iterator,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     LOG_TRACE,
     drain,
 )
@@ -76,16 +76,13 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import (
         Job,
     )
-    from bzfs_main.configuration import (
-        Remote,
-    )
 
-T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 def run_ssh_cmd_batched(
     job: Job,
-    r: Remote,
+    r: MiniRemote,
     cmd: list[str],
     cmd_args: Iterable[str],
     fn: Callable[[list[str]], Any],
@@ -98,13 +95,13 @@ def run_ssh_cmd_batched(
 
 def itr_ssh_cmd_batched(
     job: Job,
-    r: Remote,
+    r: MiniRemote,
     cmd: list[str],
     cmd_args: Iterable[str],
-    fn: Callable[[list[str]], T],
+    fn: Callable[[list[str]], _T],
     max_batch_items: int = 2**29,
     sep: str = " ",
-) -> Iterator[T]:
+) -> Iterator[_T]:
     """Runs fn(cmd_args) in sequential batches w/ cmd, without creating a cmdline that's too big for the OS to handle."""
     max_bytes: int = _max_batch_bytes(job, r, cmd, sep)
     return batch_cmd_iterator(cmd_args=cmd_args, fn=fn, max_batch_items=max_batch_items, max_batch_bytes=max_bytes, sep=sep)
@@ -112,7 +109,7 @@ def itr_ssh_cmd_batched(
 
 def run_ssh_cmd_parallel(
     job: Job,
-    r: Remote,
+    r: MiniRemote,
     cmd_args_list: Iterable[tuple[list[str], Iterable[str]]],
     fn: Callable[[list[str], list[str]], Any],
     max_batch_items: int = 2**29,
@@ -123,12 +120,12 @@ def run_ssh_cmd_parallel(
 
 def itr_ssh_cmd_parallel(
     job: Job,
-    r: Remote,
+    r: MiniRemote,
     cmd_args_list: Iterable[tuple[list[str], Iterable[str]]],
-    fn: Callable[[list[str], list[str]], T],
+    fn: Callable[[list[str], list[str]], _T],
     max_batch_items: int = 2**29,
     ordered: bool = True,
-) -> Iterator[T]:
+) -> Iterator[_T]:
     """Streams results from multiple parallel (batched) SSH commands.
 
     When ordered=True, preserves the order of the batches as provided by cmd_args_list (i.e. yields results in the same order
@@ -143,37 +140,37 @@ def itr_ssh_cmd_parallel(
         ),
         max_workers=job.max_workers[r.location],
         ordered=ordered,
+        termination_event=job.termination_event,
     )
 
 
 def zfs_list_snapshots_in_parallel(
-    job: Job, r: Remote, cmd: list[str], datasets: list[str], ordered: bool = True
+    job: Job, r: MiniRemote, cmd: list[str], datasets: list[str], ordered: bool = True
 ) -> Iterator[list[str]]:
     """Runs 'zfs list -t snapshot' on multiple datasets at the same time.
 
     Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and any number of
-    snapshots. For local execution (no SSH leg), the minibatch size is divided by a factor of 8 relative to the number of
-    workers to reflect reduced communication latency, which improves throughput.
+    snapshots. Attempts to use at least 4 datasets per remote cmd mini batch to reflect increased communication latency.
     """
     max_workers: int = job.max_workers[r.location]
     max_batch_items: int = min(
         job.max_datasets_per_minibatch_on_list_snaps[r.location],
         max(
-            len(datasets) // (max_workers if r.ssh_user_host else max_workers * 8),
-            max_workers if r.ssh_user_host else 1,
+            len(datasets) // (max_workers * 8),
+            4 if r.ssh_user_host else 1,
         ),
     )
     return itr_ssh_cmd_parallel(
         job,
         r,
         [(cmd, datasets)],
-        fn=lambda cmd, batch: (try_ssh_command(job, r, LOG_TRACE, cmd=cmd + batch) or "").splitlines(),
+        fn=lambda cmd, batch: (job.try_ssh_command_with_retries(r, LOG_TRACE, cmd=cmd + batch) or "").splitlines(),
         max_batch_items=max_batch_items,
         ordered=ordered,
     )
 
 
-def _max_batch_bytes(job: Job, r: Remote, cmd: list[str], sep: str) -> int:
+def _max_batch_bytes(job: Job, r: MiniRemote, cmd: list[str], sep: str) -> int:
     """Avoids creating a cmdline that's too big for the OS to handle.
 
     The calculation subtracts 'header_bytes', which accounts for the full SSH invocation (including control socket/options)

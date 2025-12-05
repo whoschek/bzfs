@@ -24,10 +24,10 @@ from typing import (
     Protocol,
 )
 
-from bzfs_main.utils import (
-    Interner,
+from bzfs_main.util.utils import (
+    HashedInterner,
     SortedInterner,
-    T,
+    TComparable,
 )
 
 
@@ -41,9 +41,9 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class InternerProtocol(Protocol[T]):
-    def interned(self, item: T) -> T: ...
-    def __contains__(self, item: T) -> bool: ...
+class InternerProtocol(Protocol[TComparable]):
+    def interned(self, item: TComparable) -> TComparable: ...
+    def __contains__(self, item: TComparable) -> bool: ...
 
 
 InternerFactory = Callable[[list[str]], InternerProtocol[str]]
@@ -111,5 +111,5 @@ class TestSortedInterner(MyInternerTest):
 
 #############################################################################
 class TestDictInterner(MyInternerTest):
-    INTERNER_FACTORY: ClassVar[InternerFactory] = Interner
+    INTERNER_FACTORY: ClassVar[InternerFactory] = HashedInterner
     duplicate_prefers_first: ClassVar[bool] = False  # dict keeps last dup

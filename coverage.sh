@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# shellcheck disable=SC2154
 
 set -e
 # Use tmpfs (RAM disk) as fast backing storage where available
@@ -21,6 +22,8 @@ if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
   export TMPDIR
   mkdir -p "$TMPDIR"
 fi
+echo "Now using TMPDIR: $TMPDIR"
+echo "Now using bzfs_test_mode: $bzfs_test_mode"
 
 cd "$(dirname "$(realpath "$0")")"
 
@@ -30,6 +33,8 @@ elif [ "$(which coverage 2> /dev/null)" = "" ]; then
   python3 -m pip install --upgrade pip
   python3 -m pip install --upgrade "coverage[toml]>=7.6"
 fi
+PYTHON_LAZY_IMPORTS=all  # PEP 810
+export PYTHON_LAZY_IMPORTS
 
 # see https://coverage.readthedocs.io/
 PYTHONPATH=. python3 -m coverage run -m bzfs_tests.test_all

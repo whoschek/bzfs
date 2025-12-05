@@ -25,19 +25,20 @@ from __future__ import (
 import fcntl
 import glob
 import itertools
-import json
 import logging
 import os
 import platform
 import pwd
 import random
 import re
+import shlex
 import shutil
 import socket
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 import unittest
@@ -64,12 +65,10 @@ from unittest.mock import (
 )
 
 import bzfs_main.replication
-import bzfs_main.utils
 from bzfs_main import (
     argparse_cli,
     bzfs,
     bzfs_jobrunner,
-    utils,
 )
 from bzfs_main.configuration import (
     LogParams,
@@ -87,7 +86,16 @@ from bzfs_main.parallel_batch_cmd import (
 from bzfs_main.replication import (
     INJECT_DST_PIPE_FAIL_KBYTES,
 )
-from bzfs_main.utils import (
+from bzfs_main.snapshot_cache import (
+    MATURITY_TIME_THRESHOLD_SECS,
+)
+from bzfs_main.util import (
+    utils,
+)
+from bzfs_main.util.connection import (
+    dquote,
+)
+from bzfs_main.util.utils import (
     DIE_STATUS,
     ENV_VAR_PREFIX,
     find_match,
@@ -95,6 +103,7 @@ from bzfs_main.utils import (
     getenv_any,
     getenv_bool,
     human_readable_duration,
+    replace_prefix,
     unixtime_fromisoformat,
 )
 from bzfs_tests.abstract_testcase import (
@@ -104,7 +113,7 @@ from bzfs_tests.test_incremental_send_steps import (
     TestIncrementalSendSteps,
 )
 from bzfs_tests.tools import (
-    capture_stderr,
+    gc_disabled,
     stop_on_failure_subtest,
 )
 from bzfs_tests.zfs_util import (
@@ -383,7 +392,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         creation_prefix: str | None = None,
         max_exceptions_to_summarize: int | None = None,
         max_datasets_per_minibatch_on_list_snaps: int | None = None,
-        control_persist_margin_secs: int | None = None,
+        ssh_control_persist_margin_secs: int | None = None,
         isatty: bool | None = None,
         progress_update_intervals: tuple[float, float] | None = None,
         use_select: bool | None = None,
@@ -480,10 +489,10 @@ class IntegrationTestCase(ParametrizedTestCase):
 
         job: bzfs.Job | bzfs_jobrunner.Job
         if use_jobrunner:
-            job = bzfs_jobrunner.Job()
+            job = bzfs_jobrunner.Job(log=None, termination_event=threading.Event())
             job.is_test_mode = True
             if spawn_process_per_job:
-                args += ["--spawn_process_per_job"]
+                args += ["--spawn-process-per-job"]
         else:
             job = bzfs.Job()
             job.is_test_mode = True
@@ -512,17 +521,15 @@ class IntegrationTestCase(ParametrizedTestCase):
             if max_exceptions_to_summarize is not None:
                 job.max_exceptions_to_summarize = max_exceptions_to_summarize
 
-            if control_persist_margin_secs is not None:
-                job.control_persist_margin_secs = control_persist_margin_secs
-
-            if isatty is not None:
-                job.isatty = isatty
-
             if use_select is not None:
                 job.use_select = use_select
 
             if progress_update_intervals is not None:
                 job.progress_update_intervals = progress_update_intervals
+
+        old_ssh_control_persist_margin_secs = os.environ.get(ENV_VAR_PREFIX + "ssh_control_persist_margin_secs")
+        if ssh_control_persist_margin_secs is not None:
+            os.environ[ENV_VAR_PREFIX + "ssh_control_persist_margin_secs"] = str(ssh_control_persist_margin_secs)
 
         old_max_datasets_per_minibatch_on_list_snaps = os.environ.get(
             ENV_VAR_PREFIX + "max_datasets_per_minibatch_on_list_snaps"
@@ -538,6 +545,10 @@ class IntegrationTestCase(ParametrizedTestCase):
             # probably caused by https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=283101
             # via https://github.com/openzfs/zfs/issues/16731#issuecomment-2561987688
             os.environ[ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send"] = "false"
+
+        old_isatty = os.environ.get(ENV_VAR_PREFIX + "isatty")
+        if isatty is not None:
+            os.environ[ENV_VAR_PREFIX + "isatty"] = str(isatty)
 
         returncode = 0
         try:
@@ -586,6 +597,16 @@ class IntegrationTestCase(ParametrizedTestCase):
                 os.environ[ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send"] = (
                     old_dedicated_tcp_connection_per_zfs_send
                 )
+
+            if old_isatty is None:
+                os.environ.pop(ENV_VAR_PREFIX + "isatty", None)
+            else:
+                os.environ[ENV_VAR_PREFIX + "isatty"] = old_isatty
+
+            if old_ssh_control_persist_margin_secs is None:
+                os.environ.pop(ENV_VAR_PREFIX + "ssh_control_persist_margin_secs", None)
+            else:
+                os.environ[ENV_VAR_PREFIX + "ssh_control_persist_margin_secs"] = old_ssh_control_persist_margin_secs
 
         if isinstance(expected_status, list):
             self.assertIn(returncode, expected_status)
@@ -647,6 +668,8 @@ class IntegrationTestCase(ParametrizedTestCase):
             "bzfs:prop5": '/tmp/foo"ba\'r"baz',
             "bzfs:prop6": "/tmp/foo  bar\t\t\nbaz\n\n\n",
             "bzfs:prop7": "/tmp/foo\\bar",
+            "bzfs:prop8": "\\\\server\\share",  # UNC-style path with leading double backslashes
+            "bzfs:prop9": "/tmp/foo\\`bar",  # backslash + backtick sequence exercises dquote edge case
         }
 
     def generate_recv_resume_token(self, from_snapshot: str | None, to_snapshot: str, dst_dataset: str) -> None:
@@ -919,7 +942,7 @@ class TestSSHLatency(IntegrationTestCase):
         )
         p = self.make_params(args=args, log_params=log_params, log=log)
 
-        ssh_opts_list = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no"]
+        ssh_opts_list = list(p.src.ssh_extra_opts) + ["-oStrictHostKeyChecking=no"]
         ssh_opts_list += ["-S", os.path.join(p.src.ssh_exit_on_shutdown_socket_dir, "bzfs_test_ssh_socket")]
         ssh_opts_list += ["-p", cast(str, getenv_any("test_ssh_port", "22"))]
 
@@ -932,14 +955,35 @@ class TestSSHLatency(IntegrationTestCase):
         else:
             ssh_opts_list += src_private_key2
         ssh_opts = " ".join(ssh_opts_list)
+        memory_hog: str = "x" * 1_000
+        # memory_hog: str = "x" * 1_000_000_000
+
+        def run_benchmark(cmd: list[str], check_cmd: list[str]) -> None:
+            _dummy = len(memory_hog)
+            for close_fds in [False, True]:
+                with gc_disabled(run_gc_first=True):
+                    iters = 0
+                    start_time_nanos = time.monotonic_ns()
+                    while time.monotonic_ns() < start_time_nanos + 5 * 1000_000_000:
+                        if check_cmd:
+                            _stdout, stderr = self.run_latency_cmd(check_cmd, close_fds=close_fds)
+                            self.assertIn("Master running", stderr)
+                        _stdout, stderr = self.run_latency_cmd(cmd, close_fds=close_fds)
+                        iters += 1
+                    elapsed = time.monotonic_ns() - start_time_nanos
+                t = human_readable_duration(elapsed / iters)
+                log.info(f"time/iter: {t}, check: {bool(check_cmd)}, close_fds: {close_fds}, cmd: {' '.join(cmd)}")
+
+        echo_cmd = "echo hello"
+        list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
+        for base_cmd in [echo_cmd, list_cmd]:
+            run_benchmark(p.split_args(base_cmd), check_cmd=[])
 
         for mode in range(2):
             with stop_on_failure_subtest(i=mode):
                 control_persist = 2 if mode == 0 else 2  # noqa: RUF034  # seconds
                 master_cmd = p.split_args(f"{ssh_program} {ssh_opts} -M -oControlPersist={control_persist}s 127.0.0.1 exit")
                 check_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O check 127.0.0.1")
-                echo_cmd = "echo hello"
-                list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
                 master_is_running = False
                 try:
                     log.info(f"mode: {mode}")
@@ -963,24 +1007,11 @@ class TestSSHLatency(IntegrationTestCase):
                         self.assertIn("Control socket connect", e.stderr)
                         self.assertIn("No such file or directory", e.stderr)
                         master_is_running = False
-                    elif mode == 1:  # benchmark latency
+                    elif mode >= 1:  # benchmark latency
                         for base_cmd in [echo_cmd, list_cmd]:
-                            cmd = p.split_args(f"{ssh_program} {ssh_opts} 127.0.0.1 {base_cmd}")
                             for check in [False, True]:
-                                # for close_fds in [True]:
-                                for close_fds in [False, True]:
-                                    start_time_nanos = time.time_ns()
-                                    iters = 0
-                                    while time.time_ns() - start_time_nanos < 5 * 1000_000_000:
-                                        iters += 1
-                                        if check:
-                                            stdout, stderr = self.run_latency_cmd(check_cmd, close_fds=close_fds)
-                                            # log.info(f"check result: {(stdout, stderr)}")
-                                            self.assertIn("Master running", stderr)
-                                        result = self.run_latency_cmd(cmd, close_fds=close_fds)
-                                        # log.info(f"cmd result: {result}")
-                                    t = human_readable_duration((time.time_ns() - start_time_nanos) / iters)
-                                    log.info(f"time/iter: {t}, check: {check}, close_fds: {close_fds}, cmd: {' '.join(cmd)}")
+                                cmd = p.split_args(f"{ssh_program} {ssh_opts} 127.0.0.1 {base_cmd}")
+                                run_benchmark(cmd, check_cmd=check_cmd if check else [])
                 except subprocess.CalledProcessError as e:
                     log.error(f"error: {(e.stdout, e.stderr)}")
                     raise
@@ -2252,8 +2283,7 @@ class LocalTestCase(IntegrationTestCase):
             with stop_on_failure_subtest(i=i):
                 src_datasets = zfs_list([src_root_dataset], types=["filesystem", "volume"], max_depth=None)
                 dst_datasets = [
-                    bzfs_main.utils.replace_prefix(src_dataset, src_root_dataset, dst_root_dataset)
-                    for src_dataset in src_datasets
+                    replace_prefix(src_dataset, src_root_dataset, dst_root_dataset) for src_dataset in src_datasets
                 ]
                 opts = [elem for pair in zip(src_datasets, dst_datasets) for elem in pair]
                 self.run_bzfs(*opts, dry_run=(i == 0))
@@ -2581,6 +2611,43 @@ class LocalTestCase(IntegrationTestCase):
         )
         for name, value in props.items():
             self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
+
+    def test_dquote_over_real_ssh_backslash_backtick(self) -> None:
+        """Exercises dquote via the real ssh CLI with a backslash+backtick payload.
+
+        Builds a nested shell command of the form
+
+            sh -c "ssh -F SSH_CONFIG_FILE 127.0.0.1 sh -c \"<script>\""
+
+        where <script> is constructed via dquote(shlex.join([...])) and the final argument contains "/tmp/foo\\`bar".
+        With the correct dquote implementation (which escapes backslashes), the command succeeds and the payload
+        round-trips unchanged.
+        """
+        if shutil.which("ssh") is None:
+            self.skipTest("ssh client not available")
+
+        bad_value = r"/tmp/foo\`bar"
+        prop_arg = f"prop={bad_value}"
+        recv_cmd = [
+            sys.executable,
+            "-c",
+            "import sys; print(sys.argv[-1])",
+            prop_arg,
+        ]
+        recv_cmd_str = shlex.join(recv_cmd)
+
+        # Build the remote script using the same dquote helper used in replication.
+        script = dquote(recv_cmd_str)
+
+        # Use the same SSH config and port as the integration harness so that
+        # authentication works consistently on localhost.
+        cmd: list[str] = [ssh_program, "-F", SSH_CONFIG_FILE]
+        port = getenv_any("test_ssh_port")
+        if port is not None:
+            cmd += ["-p", str(port)]
+        cmd += ["127.0.0.1", "sh", "-c", script]
+        completed = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        self.assertEqual(prop_arg, completed.stdout.rstrip("\n"))
 
     @staticmethod
     def zfs_recv_x_excludes() -> list[str]:
@@ -3554,10 +3621,8 @@ class LocalTestCase(IntegrationTestCase):
         self.setup_basic()
         non_existing_snapshot = snapshots(src_root_dataset)[0] + "$"
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--create-bookmarks=all")
-        with capture_stderr() as buf:
-            with self.assertRaises(subprocess.CalledProcessError):
-                bzfs_main.replication._create_zfs_bookmarks(job, job.params.src, src_root_dataset, [non_existing_snapshot])
-            self.assertTrue(buf.getvalue())
+        with self.assertRaises(subprocess.CalledProcessError):
+            bzfs_main.replication._create_zfs_bookmarks(job, job.params.src, src_root_dataset, [non_existing_snapshot])
 
     def test_create_zfs_bookmarks_existing_bookmark(self) -> None:
         if not are_bookmarks_enabled("src"):
@@ -4817,7 +4882,8 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_syslog(self) -> None:
-        if "Ubuntu" not in platform.version():
+        syslog_path = "/var/log/syslog"
+        if "Ubuntu" not in platform.version() or not os.path.exists(syslog_path) or not os.access(syslog_path, os.R_OK):
             self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
         for i in range(2):
             if i > 0:
@@ -4836,7 +4902,7 @@ class LocalTestCase(IntegrationTestCase):
                     "--log-syslog-prefix=" + syslog_prefix,
                     "--skip-replication",
                 )
-                lines = list(utils.tail("/var/log/syslog", 100, errors="surrogateescape"))
+                lines = list(utils.tail(syslog_path, 100, errors="surrogateescape"))
                 k = -1
                 for kk, line in enumerate(lines):
                     if syslog_prefix in line and "Log file is:" in line:
@@ -4852,172 +4918,6 @@ class LocalTestCase(IntegrationTestCase):
                             found_msg = found_msg or " [D] " in line
                             self.assertNotIn(" [T] ", line)
                 self.assertTrue(found_msg, "No bzfs syslog message was found")
-
-    def test_log_config_file_nonempty(self) -> None:
-        if "Ubuntu" not in platform.version():
-            self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
-        config_str = """
-# This is an example bzfs_log_config.json file that demonstrates how to configure bzfs logging via the standard
-# python logging.config.dictConfig mechanism.
-#
-# For more examples see
-# https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig
-# and for details see https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema
-#
-# Note: Lines starting with a # character are ignored as comments within the JSON.
-# Also, if a line ends with a # character the portion between that # character and the preceding # character on
-# the same line is ignored as a comment.
-#
-# User defined variables and their values can be specified via the --log-config-var=name:value CLI option. These
-# variables can be used in the JSON config via ${name[:default]} references, which are substituted (aka interpolated)
-# as follows:
-# If the variable contains a non-empty CLI value then that value is used. Else if a default value for the
-# variable exists in the JSON file that default value is used. Else the program aborts with an error.
-# Example: In the JSON variable ${syslog_address:/dev/log}, the variable name is "syslog_address"
-# and the default value is "/dev/log". The default value is the portion after the optional : colon within the
-# variable declaration. The default value is used if the CLI user does not specify a non-empty value via
-# --log-config-var, for example via
-# --log-config-var syslog_address:/path/to/socket_file
-#
-# bzfs automatically supplies the following convenience variables:
-# ${bzfs.log_level}, ${bzfs.log_dir}, ${bzfs.log_file}, ${bzfs.sub.logger},
-# ${bzfs.get_default_log_formatter}, ${bzfs.timestamp}.
-# For a complete list see the source code of get_dict_config_logger().
-{
-    "version": 1,
-    "disable_existing_loggers": false,
-    "formatters": {  # formatters specify how to convert a log record to a string message #
-        "bzfs": {
-            # () specifies factory function to call in order to return a formatter.
-            "()": "${bzfs.get_default_log_formatter}"
-        },
-        "bzfs_syslog": {
-            # () specifies factory function to call with the given prefix arg in order to return a formatter.
-            # The prefix identifies bzfs messages within the syslog, as opposed to messages from other sources.
-            "()": "${bzfs.get_default_log_formatter}",
-            "prefix": "bzfs.sub "
-        },
-        "simple": {
-            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        }
-    },
-    "handlers": {  # handlers specify where to write messages to #
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "simple",
-            # "formatter": "bzfs",
-            "stream": "ext://sys.stdout"  # log to stdout #
-        },
-        "file": {
-            "class": "logging.FileHandler",
-            "formatter": "bzfs",
-            "filename": "${bzfs.log_dir}/${log_file_prefix:custom-}${bzfs.log_file}",  # log to this output file #
-            "encoding": "utf-8"
-        },
-        "syslog": {
-            "class": "logging.handlers.SysLogHandler",  # log to local or remote syslog #
-            "level": "${syslog_level:INFO}",  # fall back to INFO level if syslog_level variable is empty #
-            "formatter": "bzfs_syslog",
-            "address": "${syslog_address:/dev/log}",  # log to local syslog socket file #
-            # "address": ["${syslog_host:127.0.0.1}", ${syslog_port:514}],  # log to remote syslog #
-            "socktype": "ext://socket.SOCK_DGRAM"  # Refers to existing UDP python object #
-            # "socktype": "ext://socket.SOCK_STREAM"  # Refers to existing TCP python object #
-        }
-    },
-    "loggers": {  # loggers specify what log records to forward to which handlers #
-        "${bzfs.sub.logger}": {
-            "level": "${log_level:TRACE}",  # do not forward any log record below that level #
-            "handlers": ["console", "file", "syslog"]  # forward records to these handlers, which format and print em #
-            # "handlers": ["file", "syslog"]  # use default console handler instead of a custom handler #
-        }
-    }
-}
-        """
-        for i in range(2):
-            if i > 0:
-                self.tearDownAndSetup()
-            log_file_prefix = "custom-" if i == 0 else ""
-            self.run_bzfs(
-                src_root_dataset,
-                dst_root_dataset,
-                "--log-config-file=" + (config_str if i == 0 else config_str.replace("custom-", "")),
-                "--log-config-var",
-                "syslog_address:/dev/log",
-                "log_file_prefix:" + log_file_prefix,
-                "--skip-replication",
-            )
-        output_dir = os.path.dirname(os.path.abspath(__file__))
-        if os.access(output_dir, os.W_OK):
-            with open(os.path.join(output_dir, "bzfs_log_config.json"), "w", encoding="utf-8") as fd:
-                fd.write(config_str.lstrip())
-
-    def test_log_config_file_empty(self) -> None:
-        if "Ubuntu" not in platform.version():
-            self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
-        config_str = """ "version": 1, "disable_existing_loggers": false, "foo": "${bar:}" """
-        self.run_bzfs(
-            src_root_dataset,
-            dst_root_dataset,
-            "--log-config-file=" + config_str,
-            "--log-config-var",
-            "syslog_address:/dev/log",
-            "bar:white\t\n space",
-            "--skip-replication",
-            "-v",
-            "-v",
-        )
-
-        # test reading from file instead of string
-        tmpfile_fd, tmpfile = tempfile.mkstemp(prefix="test_bzfs_log_config", suffix=".json")
-        os.write(tmpfile_fd, config_str.encode("utf-8"))
-        os.close(tmpfile_fd)
-        try:
-            self.run_bzfs(
-                src_root_dataset,
-                dst_root_dataset,
-                "--log-config-file=+" + tmpfile,
-                "--log-config-var",
-                "syslog_address:/dev/log",
-                "bar:white\t\n space",
-                "--skip-replication",
-            )
-        finally:
-            os.remove(tmpfile)
-
-    def test_log_config_file_error(self) -> None:
-        if "Ubuntu" not in platform.version():
-            self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
-
-        # test that a trailing hash without a preceding hash is not ignored as a comment, and hence leads to a
-        # JSON parser error
-        config_str = """{ "version": 1, "disable_existing_loggers": false }#"""
-        with self.assertRaises(json.decoder.JSONDecodeError):
-            self.run_bzfs(
-                src_root_dataset,
-                dst_root_dataset,
-                "--log-config-file=" + config_str,
-                "--skip-replication",
-            )
-
-        # Missing default value for empty substitution variable
-        config_str = """{ "version": 1, "disable_existing_loggers": false, "foo": "${missing_var}" }"""
-        with self.assertRaises(ValueError):
-            self.run_bzfs(
-                src_root_dataset,
-                dst_root_dataset,
-                "--log-config-file=" + config_str,
-                "--skip-replication",
-            )
-
-        # User defined name:value variable must not be empty
-        config_str = """{ "version": 1, "disable_existing_loggers": false, "foo": "${:}" }"""
-        with self.assertRaises(ValueError):
-            self.run_bzfs(
-                src_root_dataset,
-                dst_root_dataset,
-                "--log-config-file=" + config_str,
-                "--skip-replication",
-            )
 
     def test_main(self) -> None:
         self.setup_basic()
@@ -5041,7 +4941,7 @@ class LocalTestCase(IntegrationTestCase):
         def _run_bzfs(*args: str, **kwargs: Any) -> bzfs.Job:
             return self.run_bzfs(*args, **kwargs, cache_snapshots=True, force_stable_cache_namespace=True)
 
-        delay_secs = 2 * bzfs.MATURITY_TIME_THRESHOLD_SECS
+        delay_secs = 2 * MATURITY_TIME_THRESHOLD_SECS
         create_filesystem(src_root_dataset, "foo1")
         take_snapshot(src_root_dataset + "/foo1", fix("s1"))
 
@@ -5107,7 +5007,7 @@ class LocalTestCase(IntegrationTestCase):
         def _run_bzfs(*args: str, **kwargs: Any) -> bzfs.Job:
             return self.run_bzfs(*args, **kwargs, cache_snapshots=True, force_stable_cache_namespace=True)
 
-        delay_secs = 2 * bzfs.MATURITY_TIME_THRESHOLD_SECS
+        delay_secs = 2 * MATURITY_TIME_THRESHOLD_SECS
         create_filesystem(src_root_dataset, "foo1")
         take_snapshot(src_root_dataset + "/foo1", fix("s1"))
 
@@ -5158,7 +5058,7 @@ class LocalTestCase(IntegrationTestCase):
                 self.tearDownAndSetup()
                 self.assert_snapshots(src_root_dataset, 0)
                 loopback = "127.0.0.2" if platform.system() == "Linux" else "127.0.0.1"
-                delay_secs = bzfs.MATURITY_TIME_THRESHOLD_SECS
+                delay_secs = MATURITY_TIME_THRESHOLD_SECS
                 localhostname = socket.gethostname()
                 src_hosts = [localhostname]  # for local mode (no ssh, no network)
                 dst_hosts_pull = {localhostname: ["", "onsite"]}
@@ -5594,6 +5494,9 @@ class MinimalRemoteTestCase(IntegrationTestCase):
     def test_delete_dst_datasets_recursive_with_dummy_src(self) -> None:
         LocalTestCase(param=self.param).test_delete_dst_datasets_recursive_with_dummy_src()
 
+    def test_zfs_set_via_recv_o(self) -> None:
+        LocalTestCase(param=self.param).test_zfs_set_via_recv_o()
+
     def test_basic_replication_recursive_parallel(self) -> None:
         LocalTestCase(param=self.param).test_basic_replication_recursive_parallel()
 
@@ -5666,9 +5569,6 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
     def test_zfs_set(self) -> None:
         LocalTestCase(param=self.param).test_zfs_set()
 
-    def test_zfs_set_via_recv_o(self) -> None:
-        LocalTestCase(param=self.param).test_zfs_set_via_recv_o()
-
     def test_zfs_set_via_set_include(self) -> None:
         LocalTestCase(param=self.param).test_zfs_set_via_set_include()
 
@@ -5736,7 +5636,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         if self.param and self.param.get("ssh_mode") != "local":
             self.inject_unavailable_program("inject_unavailable_" + ssh_program, expected_error=DIE_STATUS)
             self.tearDownAndSetup()
-            self.inject_unavailable_program("inject_failing_" + ssh_program, expected_error=1)
+            self.inject_unavailable_program("inject_failing_" + ssh_program, expected_error=DIE_STATUS)
 
     def test_inject_unavailable_zfs(self) -> None:
         self.inject_unavailable_program("inject_unavailable_zfs", expected_error=DIE_STATUS)
@@ -5763,7 +5663,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_ssh_master_check_keeps_tcp_connection_alive_with_replication_recursive(self) -> None:
         self.setup_basic()
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", control_persist_margin_secs=2**64)
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", ssh_control_persist_margin_secs=2**64)
         self.assert_snapshots(dst_root_dataset, 3, "s")
         self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
         self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")

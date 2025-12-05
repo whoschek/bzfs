@@ -30,16 +30,12 @@ from bzfs_main.argparse_actions import (
     DeleteDstSnapshotsExceptPlanAction,
     FileOrLiteralAction,
     IncludeSnapshotPlanAction,
-    LogConfigVariablesAction,
     NewSnapshotFilterGroupAction,
     NonEmptyStringAction,
     SafeDirectoryNameAction,
     SafeFileNameAction,
     SSHConfigFileNameAction,
     TimeRangeAndRankRangeAction,
-)
-from bzfs_main.check_range import (
-    CheckRange,
 )
 from bzfs_main.detect import (
     DISABLE_PRG,
@@ -48,16 +44,19 @@ from bzfs_main.detect import (
 from bzfs_main.period_anchors import (
     PeriodAnchors,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.check_range import (
+    CheckRange,
+)
+from bzfs_main.util.utils import (
     ENV_VAR_PREFIX,
     PROG_NAME,
     format_dict,
 )
 
 # constants:
-__version__: Final[str] = "1.14.0.dev0"
+__version__: Final[str] = "1.16.0.dev0"
 PROG_AUTHOR: Final[str] = "Wolfgang Hoschek"
-EXCLUDE_DATASET_REGEXES_DEFAULT: Final[str] = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
+EXCLUDE_DATASET_REGEXES_DEFAULT: Final[str] = r"(?:.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 LOG_DIR_DEFAULT: Final[str] = PROG_NAME + "-logs"
 SKIP_ON_ERROR_DEFAULT: Final[str] = "dataset"
 CMP_CHOICES_ITEMS: Final[tuple[str, str, str]] = ("src", "dst", "all")
@@ -112,12 +111,11 @@ def argument_parser() -> argparse.ArgumentParser:
         allow_abbrev=False,
         formatter_class=argparse.RawTextHelpFormatter,
         description=f"""
-*{PROG_NAME} is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
-source ZFS dataset (ZFS filesystem or ZFS volume) and its descendant datasets to a (local or remote)
-destination ZFS dataset to make the destination dataset a recursively synchronized copy of the source dataset,
-using zfs send/receive/rollback/destroy and ssh tunnel as directed. For example, {PROG_NAME} can be used to
-incrementally replicate all ZFS snapshots since the most recent common snapshot from source to destination,
-in order to help protect against data loss or ransomware.*
+*{PROG_NAME} is a reliable near real-time, parallel replication and backup command-line tool for ZFS. It replicates
+snapshots from many local or remote source ZFS datasets (and their descendants) to local or remote destination
+datasets, using zfs send/receive and ssh, and can operate at sub-second intervals across large fleets of hosts.
+{PROG_NAME} incrementally replicates all ZFS snapshots since the most recent common snapshot, supporting disaster
+recovery and high availability (DR/HA), scale-out deployments, and protection against data loss or ransomware.*
 
 When run for the first time, {PROG_NAME} replicates the dataset and all its snapshots from the source to the
 destination. On subsequent runs, {PROG_NAME} transfers only the data that has changed since the previous run,
@@ -1319,7 +1317,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--ssh-program", default="ssh", choices=["ssh", "hpnssh", DISABLE_PRG],
         help=hlp("ssh") + msg)
     parser.add_argument(
-        "--sudo-program", default="sudo", choices=["sudo", DISABLE_PRG],
+        "--sudo-program", default="sudo", choices=["sudo", "doas", DISABLE_PRG],
         help=hlp("sudo") + msg)
     parser.add_argument(
         "--zpool-program", default="zpool", choices=["zpool", DISABLE_PRG],
@@ -1374,37 +1372,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--log-syslog-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
         default="ERROR",
         help="Only send messages with equal or higher priority than this log level to syslog. Default is '%(default)s'.\n\n")
-    parser.add_argument(
-        "--log-config-file", default=None, action=NonEmptyStringAction, metavar="STRING",
-        help="The contents of a JSON file that defines a custom python logging configuration to be used (optional). "
-             "If the option starts with a `+` prefix then the contents are read from the UTF-8 JSON file given "
-             "after the `+` prefix. Examples: +log_config.json, +/path/to/log_config.json. "
-             "Here is an example config file that demonstrates usage: "
-             "https://github.com/whoschek/bzfs/blob/main/bzfs_tests/log_config.json\n\n"
-             "For more examples see "
-             "https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig "
-             "and for details see "
-             "https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema\n\n"
-             "*Note:* Lines starting with a # character are ignored as comments within the JSON. Also, if a line ends "
-             "with a # character the portion between that # character and the preceding # character on the same line "
-             "is ignored as a comment.\n\n")
-    parser.add_argument(
-        "--log-config-var", action=LogConfigVariablesAction, nargs="+", default=[], metavar="NAME:VALUE",
-        help="User defined variables in the form of zero or more NAME:VALUE pairs (optional). "
-             "These variables can be used within the JSON passed with --log-config-file (see above) via "
-             "`${name[:default]}` references, which are substituted (aka interpolated) as follows:\n\n"
-             "If the variable contains a non-empty CLI value then that value is used. Else if a default value for the "
-             "variable exists in the JSON file that default value is used. Else the program aborts with an error. "
-             "Example: In the JSON variable `${syslog_address:/dev/log}`, the variable name is 'syslog_address' "
-             "and the default value is '/dev/log'. The default value is the portion after the optional : colon "
-             "within the variable declaration. The default value is used if the CLI user does not specify a non-empty "
-             "value via --log-config-var, for example via "
-             "--log-config-var syslog_address:/path/to/socket_file or via "
-             "--log-config-var syslog_address:[host,port].\n\n"
-             f"{PROG_NAME} automatically supplies the following convenience variables: "
-             "`${bzfs.log_level}`, `${bzfs.log_dir}`, `${bzfs.log_file}`, `${bzfs.sub.logger}`, "
-             "`${bzfs.get_default_log_formatter}`, `${bzfs.timestamp}`. "
-             "For a complete list see the source code of get_dict_config_logger().\n\n")
     parser.add_argument(
         "--prometheus-textfile-dir", type=str, default=None, action=SafeDirectoryNameAction, metavar="DIR",
         help="Path to directory where Prometheus metrics will be written in text format for node_exporter textfile "

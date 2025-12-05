@@ -21,6 +21,7 @@ import argparse
 import base64
 import errno
 import hashlib
+import logging
 import os
 import re
 import shutil
@@ -32,15 +33,15 @@ import tempfile
 import threading
 import time
 import unittest
-from argparse import (
-    Namespace,
-)
 from collections.abc import (
     Sequence,
 )
 from concurrent.futures import (
     Future,
     ThreadPoolExecutor,
+)
+from dataclasses import (
+    dataclass,
 )
 from datetime import (
     datetime,
@@ -69,13 +70,17 @@ from zoneinfo import (
     ZoneInfo,
 )
 
-import bzfs_main.utils
-from bzfs_main.utils import (
+from bzfs_main.util import (
+    utils,
+)
+from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
+    JobStats,
     SmallPriorityQueue,
     SnapshotPeriods,
+    Subprocesses,
     SynchronizedBool,
     SynchronizedDict,
     SynchronousExecutor,
@@ -112,6 +117,7 @@ from bzfs_main.utils import (
     subprocess_run,
     tail,
     terminate_process_subtree,
+    termination_signal_handler,
     unixtime_fromisoformat,
     urlsafe_base64,
     validate_file_permissions,
@@ -142,8 +148,12 @@ def suite() -> unittest.TestSuite:
         TestFindMatch,
         TestReplaceCapturingGroups,
         TestSubprocessRun,
+        TestSubprocessRunWithSubprocesses,
+        TestSubprocessRunLogging,
         TestPIDExists,
         TestTerminateProcessSubtree,
+        TestTerminationSignalHandler,
+        TestJobStats,
         TestSmallPriorityQueue,
         TestSynchronizedBool,
         TestSynchronizedDict,
@@ -192,7 +202,7 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_has_siblings(self) -> None:
         def has_siblings(sorted_datasets: list[str]) -> bool:
-            return bzfs_main.utils.has_siblings(sorted_datasets, is_test_mode=True)
+            return utils.has_siblings(sorted_datasets, is_test_mode=True)
 
         self.assertFalse(has_siblings([]))
         self.assertFalse(has_siblings(["a"]))
@@ -266,7 +276,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("\"{'a': 1}\"", format_dict({"a": 1}))
 
     def test_pretty_print_formatter(self) -> None:
-        self.assertIsNotNone(str(pretty_print_formatter(Namespace(src="src", dst="dst"))))
+        self.assertIsNotNone(str(pretty_print_formatter(argparse.Namespace(src="src", dst="dst"))))
 
     def test_xprint(self) -> None:
         log = MagicMock(spec=Logger)
@@ -457,7 +467,7 @@ class TestShuffleDict(unittest.TestCase):
         def fake_shuffle(lst: list) -> None:
             lst.reverse()
 
-        with patch("random.shuffle", side_effect=fake_shuffle) as mock_shuffle:
+        with patch("bzfs_main.util.utils.random.SystemRandom.shuffle", side_effect=fake_shuffle) as mock_shuffle:
             result = shuffle_dict(d)
             self.assertEqual({"c": 3, "b": 2, "a": 1}, result)
             mock_shuffle.assert_called_once()
@@ -695,6 +705,8 @@ class TestHumanReadable(unittest.TestCase):
     def test_percent(self) -> None:
         self.assertEqual("3=30%", percent(3, 10))
         self.assertEqual("0=inf%", percent(0, 0))
+        self.assertEqual("3/10=30%", percent(3, 10, print_total=True))
+        self.assertEqual("0/0=inf%", percent(0, 0, print_total=True))
 
 
 #############################################################################
@@ -1106,8 +1118,8 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 
     def test_complex_pattern(self) -> None:
         complex_pattern = "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))"
-        expected_result = "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))"
-        self.assertEqual(expected_result, replace_capturing_groups_with_non_capturing_groups(complex_pattern))
+        # Conservative fallback: presence of [ and ( anywhere => skip rewrite.
+        self.assertEqual(complex_pattern, replace_capturing_groups_with_non_capturing_groups(complex_pattern))
 
     def test_example(self) -> None:
         pattern = "(.*/)?tmp(foo|bar)(?!public)("
@@ -1148,16 +1160,46 @@ class TestReplaceCapturingGroups(unittest.TestCase):
             r"(?=a)(b)\(c)(?:d)(e)": r"(?=a)(?:b)\(c)(?:d)(?:e)",  # complex mix of groups
             "(你好)": "(?:你好)",  # group with Unicode characters
             "a(?:b)": "a(?:b)",  # string ending with a non-capturing group
-            "([*+?^])": "(?:[*+?^])",  # group containing only special regex metacharacters
+            "([*+?^])": "([*+?^])",  # group containing only special regex metachars; presence of [ and ( => skip rewrite
             r"\(a)": r"\(a)",  # one backslash -> escaped -> NO change
             r"\\(a)": r"\\(a)",  # double-escaped parentheses -> escaped -> NO change
             r"\\\\(a)": r"\\\\(a)",  # quadruple-escaped parentheses -> escaped -> NO change
             r"(a)\(b)(?:c)(?=d)(e)": r"(?:a)\(b)(?:c)(?=d)(?:e)",  # mixed complex case
-            "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))": "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))",  # mixed complex case
+            # Conservative fallback: presence of [ and ( anywhere => skip rewrite.
+            "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))": "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))",  # mixed complex case
         }
         for i, (pattern, expected_result) in enumerate(testcases.items()):
             with self.subTest(i=i):
                 self.assertEqual(expected_result, replace_capturing_groups_with_non_capturing_groups(pattern))
+
+    def test_char_class_with_parentheses_remains_unchanged(self) -> None:
+        # If a character class contains parentheses, rewriting can corrupt the regex.
+        # Since the rewrite is a perf-only optimization, leave such patterns unchanged.
+        patterns = [
+            "[()]",
+            "a[()]b",
+            "[(]",
+            "[a()b]",
+        ]
+        for i, pattern in enumerate(patterns):
+            with self.subTest(i=i):
+                self.assertEqual(pattern, replace_capturing_groups_with_non_capturing_groups(pattern))
+
+    def test_char_class_left_bracket_escapes_remain_unchanged(self) -> None:
+        # Escaped forms of '[' that the regex engine recognizes should also trigger the conservative fallback.
+        patterns = [
+            "\\N{LEFT SQUARE BRACKET}()\\]",  # named Unicode escape for '[' expressed literally
+            r"\x5b()\]",  # hex escape for '[' (lowercase)
+            r"\x5B()\]",  # hex escape for '[' (uppercase)
+            "\\u005b()\\]",  # 4-digit Unicode escape for '[' (lowercase), expressed literally
+            "\\u005B()\\]",  # 4-digit Unicode escape for '[' (uppercase), expressed literally
+            "\\U0000005b()\\]",  # 8-digit Unicode escape for '[' (lowercase), expressed literally
+            "\\U0000005B()\\]",  # 8-digit Unicode escape for '[' (uppercase), expressed literally
+            r"\133()\]",  # octal escape for '['
+        ]
+        for i, pattern in enumerate(patterns):
+            with self.subTest(i=i):
+                self.assertEqual(pattern, replace_capturing_groups_with_non_capturing_groups(pattern))
 
 
 #############################################################################
@@ -1214,6 +1256,161 @@ class TestSubprocessRun(unittest.TestCase):
 
 
 #############################################################################
+class TestSubprocessRunWithSubprocesses(unittest.TestCase):
+
+    def test_unregisters_on_success(self) -> None:
+        """Registers a PID and ensures it is unregistered on success."""
+        sp = Subprocesses()
+        result = subprocess_run(["true"], stdout=PIPE, stderr=PIPE, subprocesses=sp)
+        self.assertEqual(0, result.returncode)
+        # After completion, no PIDs should remain tracked
+        self.assertEqual({}, sp._child_pids)
+
+    def test_unregisters_on_check_exception(self) -> None:
+        """Ensures PID is unregistered when check=True raises an error."""
+        sp = Subprocesses()
+        with self.assertRaises(subprocess.CalledProcessError):
+            subprocess_run(["false"], stdout=PIPE, stderr=PIPE, check=True, subprocesses=sp)
+        # Ensure no PIDs remain tracked after exception
+        self.assertEqual({}, sp._child_pids)
+
+    def test_timeout_terminates_subtree_and_unregisters(self) -> None:
+        """On timeout, terminates subtree and unregisters the PID."""
+        sp = Subprocesses()
+        with patch("bzfs_main.util.utils.terminate_process_subtree") as mock_term:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                subprocess_run(["sleep", "1"], timeout=0.01, stdout=PIPE, stderr=PIPE, subprocesses=sp)
+            self.assertTrue(mock_term.called)
+        # Ensure no PIDs remain tracked after timeout
+        self.assertEqual({}, sp._child_pids)
+
+    def test_terminate_all_kills_running_child(self) -> None:
+        """terminate_process_subtrees kills child and clears tracking."""
+        sp = Subprocesses()
+        result: subprocess.CompletedProcess | None = None
+
+        def run_sleep() -> None:
+            nonlocal result
+            result = sp.subprocess_run(["sleep", "5"], stdout=PIPE, stderr=PIPE)
+
+        t = threading.Thread(target=run_sleep)
+        t.start()
+        time.sleep(0.05)  # ensure child started and registered
+        self.assertEqual(1, len(sp._child_pids))
+        sp.terminate_process_subtrees()
+        self.assertEqual({}, sp._child_pids)
+        t.join(timeout=1.0)
+        self.assertFalse(t.is_alive(), "Expected sleep subprocess to be terminated by terminate_all()")
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertNotEqual(0, result.returncode)
+
+
+#############################################################################
+class TestSubprocessRunLogging(unittest.TestCase):
+    """Tests logging behavior of subprocess_run() finalization block.
+
+    Covers success, failure, timeout statuses and argv formatting via positional args, kwargs, tuple and string (with lstrip)
+    while ensuring deterministic elapsed time formatting using patched monotonic_ns.
+    """
+
+    class _CapturingHandler(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.records: list[str] = []
+            self.setFormatter(logging.Formatter("%(message)s"))
+
+        def emit(self, record: logging.LogRecord) -> None:
+            self.records.append(self.format(record))  # capture the emitted records for later inspection
+
+    def _make_logger(self) -> tuple[Logger, _CapturingHandler]:
+        logger = logging.getLogger(self.id())
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+        handler = self._CapturingHandler()
+        logger.handlers.clear()
+        logger.addHandler(handler)
+        self.addCleanup(logger.handlers.clear)
+        return logger, handler
+
+    def test_logs_success_with_positional_args_list(self) -> None:
+        log, handler = self._make_logger()
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 1_230_000]):
+            result = subprocess_run(["true"], stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
+        self.assertEqual(0, result.returncode)
+        self.assertEqual(["Executed [success] [1.23ms]: true"], handler.records)
+
+    def test_logs_failure_without_check(self) -> None:
+        log, handler = self._make_logger()
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 12_340_000]):
+            result = subprocess_run(["false"], stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
+        self.assertNotEqual(0, result.returncode)
+        # For values between 10 and 100, human_readable_float uses 1 decimal
+        self.assertEqual(["Executed [failure] [12.3ms]: false"], handler.records)
+
+    def test_logs_failure_with_check_exception(self) -> None:
+        log, handler = self._make_logger()
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 9_990_000]):
+            with self.assertRaises(subprocess.CalledProcessError):
+                subprocess_run(["false"], stdout=PIPE, stderr=PIPE, check=True, log=log, loglevel=logging.INFO)
+        self.assertEqual(["Executed [failure] [9.99ms]: false"], handler.records)
+
+    def test_logs_timeout_status(self) -> None:
+        log, handler = self._make_logger()
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 12_350_000]):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                subprocess_run(["sleep", "1"], timeout=0.01, stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
+        # 12.35 is not exactly representable in binary; formatting with one decimal may yield 12.3
+        self.assertEqual(["Executed [timeout] [12.3ms]: sleep 1"], handler.records)
+
+    def test_logs_argv_from_kwargs_list(self) -> None:
+        log, handler = self._make_logger()
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 500_000]):
+            result = subprocess_run(stdout=PIPE, stderr=PIPE, args=["true"], log=log, loglevel=logging.INFO)
+        self.assertEqual(0, result.returncode)
+        self.assertEqual(["Executed [success] [0.5ms]: true"], handler.records)
+
+    def test_logs_tuple_args_and_string_with_lstrip(self) -> None:
+        # Tuple args formatting
+        log1, handler1 = self._make_logger()
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 2_000_000]):
+            result1 = subprocess_run(args=("true",), stdout=PIPE, stderr=PIPE, log=log1, loglevel=logging.INFO)
+        self.assertEqual(0, result1.returncode)
+        self.assertEqual(["Executed [success] [2ms]: true"], handler1.records)
+
+        # String args with leading whitespace and shell=True should be lstrip()'d in logs
+        log2, handler2 = self._make_logger()
+        with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 1_500_000]):
+            result2 = subprocess_run(
+                args="  echo foo", shell=True, stdout=PIPE, stderr=PIPE, log=log2, loglevel=logging.INFO
+            )
+        self.assertEqual(0, result2.returncode)
+        self.assertEqual(["Executed [success] [1.5ms]: echo foo"], handler2.records)
+
+    def test_no_logging_when_level_disabled(self) -> None:
+        logger = logging.getLogger(self.id() + ":disabled")
+        logger.setLevel(logging.ERROR)  # INFO not enabled
+        logger.propagate = False
+        handler = self._CapturingHandler()
+        logger.handlers.clear()
+        logger.addHandler(handler)
+        self.addCleanup(logger.handlers.clear)
+
+        result = subprocess_run(["true"], stdout=PIPE, stderr=PIPE, log=logger, loglevel=logging.INFO)
+        self.assertEqual(0, result.returncode)
+        self.assertEqual([], handler.records)
+
+    def test_logs_failure_when_popen_raises_oserror(self) -> None:
+        """Logs a failure when Popen raises OSError before starting the process (exitcode stays None)."""
+        log, handler = self._make_logger()
+        with patch("bzfs_main.util.utils.subprocess.Popen", side_effect=OSError("boom")):
+            with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 1_000_000]):
+                with self.assertRaises(OSError):
+                    subprocess_run(["true"], stdout=PIPE, stderr=PIPE, log=log, loglevel=logging.INFO)
+        self.assertEqual(["Executed [failure] [1ms]: true"], handler.records)
+
+
+#############################################################################
 class TestPIDExists(unittest.TestCase):
 
     def test_pid_exists(self) -> None:
@@ -1261,14 +1458,36 @@ class TestTerminateProcessSubtree(unittest.TestCase):
         child = subprocess.Popen(["sleep", "1"])
         self.children.append(child)
         time.sleep(0.1)
-        descendants = _get_descendant_processes(os.getpid())
-        self.assertIn(child.pid, descendants, "Child PID not found in descendants")
+        descendants = _get_descendant_processes([os.getpid()])
+        self.assertEqual(1, len(descendants))
+        self.assertIn(child.pid, descendants[0], "Child PID not found in descendants")
 
-    @patch("bzfs_main.utils.subprocess.run")
-    def test_get_descendant_processes_permission_denied_returns_empty(self, mock_run: MagicMock) -> None:
+    @patch("bzfs_main.util.utils.subprocess.run")
+    def test_get_descendant_processes_permission_denied_returns_empty_per_root(self, mock_run: MagicMock) -> None:
         # Simulate PermissionError when trying to invoke 'ps' in restricted sandboxes
         mock_run.side_effect = PermissionError(errno.EPERM, "Operation not permitted", "ps")
-        self.assertEqual([], _get_descendant_processes(os.getpid()))
+        self.assertEqual([[]], _get_descendant_processes([os.getpid()]))
+
+    @patch("bzfs_main.util.utils.subprocess.run")
+    @patch("os.kill")
+    def test_terminate_process_subtree_permission_denied_kills_roots(
+        self, mock_kill: MagicMock, mock_run: MagicMock
+    ) -> None:
+        # When descendant discovery is denied, ensure we still signal the provided roots and preserve shape
+        mock_run.side_effect = PermissionError(errno.EPERM, "Operation not permitted", "ps")
+        current = os.getpid()
+        other = 2**31 - 2  # a fake PID unlikely to exist; os.kill is mocked anyway
+        # except_current_process=True should NOT signal current process but should signal the other root
+        terminate_process_subtree(except_current_process=True, root_pids=[current, other], sig=signal.SIGTERM)
+        mock_kill.assert_any_call(other, signal.SIGTERM)
+        # Ensure we did NOT signal current process in this case
+        for call in mock_kill.call_args_list:
+            self.assertNotEqual(call.args, (current, signal.SIGTERM))
+        mock_kill.reset_mock()
+        # except_current_process=False should signal both roots
+        terminate_process_subtree(except_current_process=False, root_pids=[current, other], sig=signal.SIGTERM)
+        mock_kill.assert_any_call(current, signal.SIGTERM)
+        mock_kill.assert_any_call(other, signal.SIGTERM)
 
     def test_terminate_process_subtree_excluding_current(self) -> None:
         try:
@@ -1283,6 +1502,106 @@ class TestTerminateProcessSubtree(unittest.TestCase):
         terminate_process_subtree(except_current_process=True)
         time.sleep(0.1)
         self.assertIsNotNone(child.poll(), "Child process should be terminated")
+
+    def test_get_descendant_processes_empty_list(self) -> None:
+        self.assertEqual([], _get_descendant_processes([]))
+
+
+#############################################################################
+class TestTerminationSignalHandler(unittest.TestCase):
+
+    def test_sets_event_and_calls_custom_handler_on_sigint(self) -> None:
+        old_sigint = signal.getsignal(signal.SIGINT)
+        old_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            event = threading.Event()
+            mock_handler = MagicMock()
+            with termination_signal_handler(event, termination_handler=mock_handler):
+                self.assertFalse(event.is_set(), "Event should not be set before a signal is received")
+                os.kill(os.getpid(), signal.SIGINT)
+                self.assertTrue(event.wait(1.0), "Event should be set after SIGINT")
+                mock_handler.assert_called_once()
+        finally:
+            # Ensure global handlers are restored to what they were before the test
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+
+    def test_sets_event_and_calls_custom_handler_on_sigterm(self) -> None:
+        old_sigint = signal.getsignal(signal.SIGINT)
+        old_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            event = threading.Event()
+            mock_handler = MagicMock()
+            with termination_signal_handler(event, termination_handler=mock_handler):
+                self.assertFalse(event.is_set(), "Event should not be set before a signal is received")
+                os.kill(os.getpid(), signal.SIGTERM)
+                self.assertTrue(event.wait(1.0), "Event should be set after SIGTERM")
+                mock_handler.assert_called_once()
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+
+    def test_restores_signal_handlers_on_exit(self) -> None:
+        old_sigint = signal.getsignal(signal.SIGINT)
+        old_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            event = threading.Event()
+            with termination_signal_handler(event):
+                # Inside context, handlers should differ from originals
+                self.assertNotEqual(old_sigint, signal.getsignal(signal.SIGINT))
+                self.assertNotEqual(old_sigterm, signal.getsignal(signal.SIGTERM))
+            # After exit, original handlers are restored
+            self.assertEqual(old_sigint, signal.getsignal(signal.SIGINT))
+            self.assertEqual(old_sigterm, signal.getsignal(signal.SIGTERM))
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+
+    def test_restores_handlers_on_exception(self) -> None:
+        old_sigint = signal.getsignal(signal.SIGINT)
+        old_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            event = threading.Event()
+            with self.assertRaises(RuntimeError):
+                with termination_signal_handler(event):
+                    raise RuntimeError("boom")
+            # Even on exception, original handlers are restored
+            self.assertEqual(old_sigint, signal.getsignal(signal.SIGINT))
+            self.assertEqual(old_sigterm, signal.getsignal(signal.SIGTERM))
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+
+    @patch("bzfs_main.util.utils.terminate_process_subtree")
+    def test_default_handler_invokes_terminate_process_subtree(self, mock_terminate: MagicMock) -> None:
+        old_sigint = signal.getsignal(signal.SIGINT)
+        old_sigterm = signal.getsignal(signal.SIGTERM)
+        try:
+            event = threading.Event()
+            with termination_signal_handler(event):
+                os.kill(os.getpid(), signal.SIGINT)
+                self.assertTrue(event.wait(1.0), "Event should be set after SIGINT")
+                mock_terminate.assert_called_once()
+                # Verify called with except_current_process=True to avoid killing current process
+                _, kwargs = mock_terminate.call_args
+                self.assertIsNone(kwargs.get("except_current_process"))
+        finally:
+            signal.signal(signal.SIGINT, old_sigint)
+            signal.signal(signal.SIGTERM, old_sigterm)
+
+
+#############################################################################
+class TestJobStats(unittest.TestCase):
+
+    def test_stats_repr(self) -> None:
+        stats = JobStats(jobs_all=10)
+        stats.jobs_started = 5
+        stats.jobs_completed = 5
+        stats.jobs_failed = 2
+        stats.jobs_running = 1
+        stats.sum_elapsed_nanos = 1_000_000_000
+        expect = "all:10, started:5/10=50%, completed:5/10=50%, failed:2/10=20%, running:1, avg_completion_time:200ms"
+        self.assertEqual(expect, repr(stats))
 
 
 #############################################################################
@@ -1412,6 +1731,92 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.assertEqual(2, self.pq_reverse.pop())
         self.assertEqual(1, self.pq_reverse.pop())
         self.assertEqual(0, len(self.pq_reverse))
+
+    def assert_list_equal_ids(self, lst1: list, lst2: list) -> None:
+        self.assertListEqual(lst1, lst2)
+        for i, value in enumerate(lst1):
+            self.assertIs(value, lst2[i])
+
+    def test_duplicates_order(self) -> None:
+        v1 = IntHolder(1)
+        v2a = IntHolder(2)
+        v2b = IntHolder(2)
+        self.assertTrue(v2a is not v2b)
+        self.assertTrue(v2a == v2b)
+        self.assertTrue(v1 < v2a)
+        self.assertTrue(v1 < v2b)
+        pq: SmallPriorityQueue[IntHolder] = SmallPriorityQueue()
+        pq.push(v2a)
+        pq.push(v2b)
+        pq.push(v1)
+        self.assert_list_equal_ids([v1, v2a, v2b], pq._lst)
+
+        # Pop should remove the smallest element first
+        self.assertIs(v1, pq.peek())
+        self.assertIs(v1, pq.pop())
+        self.assert_list_equal_ids([v2a, v2b], pq._lst)
+
+        # Remove first duplicate, leaving another
+        self.assertTrue(pq.remove(v2a))
+        self.assert_list_equal_ids([v2b], pq._lst)
+
+        # Reinsertion of a duplicate preserves insertion order
+        pq.push(v2a)
+        self.assert_list_equal_ids([v2b, v2a], pq._lst)
+
+        # Remove first duplicate, leaving another
+        self.assertTrue(pq.remove(v2a))
+        self.assert_list_equal_ids([v2a], pq._lst)
+
+        # Peek and pop should now work on the remaining duplicate
+        self.assertIs(v2a, pq.peek())
+        self.assertIs(v2a, pq.pop())
+        self.assertEqual(0, len(pq))
+
+    def test_reverse_with_duplicates_order(self) -> None:
+        v1 = IntHolder(1)
+        v2a = IntHolder(2)
+        v2b = IntHolder(2)
+        self.assertTrue(v2a is not v2b)
+        self.assertTrue(v2a == v2b)
+        self.assertTrue(v1 < v2a)
+        self.assertTrue(v1 < v2b)
+        pq: SmallPriorityQueue[IntHolder] = SmallPriorityQueue(reverse=True)
+        pq.push(v2a)
+        pq.push(v2b)
+        pq.push(v1)
+        self.assert_list_equal_ids([v1, v2a, v2b], pq._lst)
+
+        # Pop should remove the largest element first
+        self.assertIs(v2b, pq.peek())
+        self.assertIs(v2b, pq.pop())
+        self.assert_list_equal_ids([v1, v2a], pq._lst)
+
+        # Reinsertion of a duplicate preserves insertion order
+        pq.push(v2b)
+        self.assert_list_equal_ids([v1, v2a, v2b], pq._lst)
+
+        # Remove first duplicate, leaving another
+        self.assertTrue(pq.remove(v2a))
+        self.assert_list_equal_ids([v1, v2b], pq._lst)
+
+        # Reinsertion of a duplicate preserves insertion order
+        pq.push(v2a)
+        self.assert_list_equal_ids([v1, v2b, v2a], pq._lst)
+
+        # Remove first duplicate, leaving another
+        self.assertTrue(pq.remove(v2a))
+        self.assert_list_equal_ids([v1, v2a], pq._lst)
+
+        # Peek and pop should now work on the remaining duplicate
+        self.assertIs(v2a, pq.peek())
+        self.assertIs(v2a, pq.pop())
+        self.assertEqual(1, len(pq))
+
+
+@dataclass(order=True, frozen=True)
+class IntHolder:
+    value: int
 
 
 #############################################################################

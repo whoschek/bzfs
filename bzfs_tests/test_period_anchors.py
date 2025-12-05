@@ -27,7 +27,6 @@ from zoneinfo import (
     ZoneInfo,
 )
 
-import bzfs_main.period_anchors
 from bzfs_main.period_anchors import (
     PeriodAnchors,
 )
@@ -46,9 +45,7 @@ def round_datetime_up_to_duration_multiple(
     dt: datetime, duration_amount: int, duration_unit: str, anchors: PeriodAnchors | None = None
 ) -> datetime:
     anchors = PeriodAnchors() if anchors is None else anchors
-    return bzfs_main.period_anchors.round_datetime_up_to_duration_multiple(
-        dt, duration_amount, duration_unit, anchors=anchors
-    )
+    return anchors.round_datetime_up_to_duration_multiple(dt, duration_amount, duration_unit)
 
 
 class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
@@ -787,7 +784,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
     # --- Additional Monthly Tests ---
 
     def test_monthly_feb29_anchor_in_leap_year(self) -> None:
-        """Anchoring on Feb 29: in a leap year, day-of-month 29 is used — next boundary is Jan 29 for Jan dt."""
+        """Anchoring on Feb 29: in a leap year, day-of-month 29 is used - next boundary is Jan 29 for Jan dt."""
         anchors = PeriodAnchors(monthly_month=2, monthly_monthday=29, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2024, 1, 15, 10, 0, tzinfo=self.tz)  # leap year
         expected = datetime(2024, 1, 29, 12, 0, 0, tzinfo=self.tz)
@@ -795,7 +792,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected, result)
 
     def test_monthly_feb29_anchor_in_non_leap_year(self) -> None:
-        """Anchoring on Feb 29: in a non-leap year, clamps to 28 — next boundary is Jan 28 for Jan dt."""
+        """Anchoring on Feb 29: in a non-leap year, clamps to 28 - next boundary is Jan 28 for Jan dt."""
         anchors = PeriodAnchors(monthly_month=2, monthly_monthday=29, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 1, 15, 10, 0, tzinfo=self.tz)  # non-leap year
         expected = datetime(2025, 1, 28, 12, 0, 0, tzinfo=self.tz)

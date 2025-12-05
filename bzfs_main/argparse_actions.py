@@ -33,21 +33,18 @@ from typing import (
     Any,
 )
 
-from bzfs_main.check_range import (
-    CheckRange,
-)
 from bzfs_main.filter import (
+    SNAPSHOT_FILTERS_VAR,
     SNAPSHOT_REGEX_FILTER_NAME,
     SNAPSHOT_REGEX_FILTER_NAMES,
     RankRange,
     UnixTimeRange,
 )
-from bzfs_main.loggers import (
-    validate_log_config_variable,
+from bzfs_main.util.check_range import (
+    CheckRange,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     SHELL_CHARS,
-    SNAPSHOT_FILTERS_VAR,
     UNIX_TIME_INFINITY_SECS,
     YEAR_WITH_FOUR_DIGITS_REGEX,
     SnapshotPeriods,
@@ -516,25 +513,6 @@ class TimeRangeAndRankRangeAction(argparse.Action):
                     lo = parse_rank(f"{kind}0")
             rankranges.append((lo[1:], hi[1:]))
         return rankranges
-
-
-#############################################################################
-class LogConfigVariablesAction(argparse.Action):
-    """Collects --log-config-var NAME:VALUE pairs for later substitution."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Validates NAME:VALUE entries and accumulate them."""
-        current_values: list[str] | None = getattr(namespace, self.dest, None)
-        if current_values is None:
-            current_values = []
-        for variable in values:
-            error_msg: str | None = validate_log_config_variable(variable)
-            if error_msg:
-                parser.error(error_msg)
-            current_values.append(variable)
-        setattr(namespace, self.dest, current_values)
 
 
 #############################################################################

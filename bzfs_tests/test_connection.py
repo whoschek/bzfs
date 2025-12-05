@@ -20,9 +20,12 @@ from __future__ import (
 import contextlib
 import itertools
 import logging
+import os
 import platform
 import random
+import shlex
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -47,33 +50,44 @@ from unittest.mock import (
 
 from bzfs_main import (
     bzfs,
-    connection,
 )
 from bzfs_main.configuration import (
     Params,
     Remote,
 )
-from bzfs_main.connection import (
+from bzfs_main.util import (
+    connection,
+)
+from bzfs_main.util.connection import (
     DEDICATED,
     SHARED,
     Connection,
     ConnectionPool,
     ConnectionPools,
+    dquote,
+    squote,
 )
-from bzfs_main.retry import (
+from bzfs_main.util.retry import (
     RetryableError,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     LOG_TRACE,
+    sha256_urlsafe_base64,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
+)
+from bzfs_tests.tools import (
+    suppress_output,
 )
 
 
 #############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
+        TestSimpleMiniRemote,
+        TestSimpleMiniJob,
+        TestQuoting,
         TestConnectionPool,
         TestRunSshCommand,
         TestTrySshCommand,
@@ -94,7 +108,7 @@ TEST_DIR_PREFIX: str = "t_bzfs"
 class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better implementation against this baseline
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int) -> None:
-        super().__init__(remote, max_concurrent_ssh_sessions_per_tcp_connection, SHARED)
+        super().__init__(remote, SHARED, max_concurrent_ssh_sessions_per_tcp_connection)
         self._priority_queue: list[Connection] = []  # type: ignore
 
     def get_connection(self) -> Connection:
@@ -168,10 +182,10 @@ class TestConnectionPool(AbstractTestCase):
         self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: [str(next(counter))]  # type: ignore
 
         with self.assertRaises(AssertionError):
-            ConnectionPool(self.src, 0, SHARED)
+            ConnectionPool(self.src, SHARED, 0)
 
         capacity = 2
-        cpool = ConnectionPool(self.src, capacity, SHARED)
+        cpool = ConnectionPool(self.src, SHARED, capacity)
         dpool = SlowButCorrectConnectionPool(self.src2, capacity)
         self.assert_priority_queue(cpool, 0)
         self.assertIsNotNone(repr(cpool))
@@ -230,17 +244,17 @@ class TestConnectionPool(AbstractTestCase):
                     ssh_socket_dir=ssh_socket_dir,
                 ),
             )
-            cpool = ConnectionPool(remote, 1, SHARED)
+            cpool = ConnectionPool(remote, SHARED, 1)
             try:
                 conn = cpool.get_connection()
                 self.assertIsNotNone(cpool._lease_mgr)
                 self.assertIsNotNone(conn.connection_lease)
             finally:
-                conn.shutdown("test", p)
+                conn.shutdown("test")
 
     def test_multiple_tcp_connections(self) -> None:
         capacity = 2
-        cpool = ConnectionPool(self.remote, capacity, SHARED)
+        cpool = ConnectionPool(self.remote, SHARED, capacity)
 
         conn1 = cpool.get_connection()
         self.assertEqual((capacity - 1) * 1, conn1._free)
@@ -324,7 +338,7 @@ class TestConnectionPool(AbstractTestCase):
         maxsessions = 10
         items = 10
         for j in range(3):
-            cpool = ConnectionPool(self.src, maxsessions, SHARED)
+            cpool = ConnectionPool(self.src, SHARED, maxsessions)
             dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
             rng = random.Random(12345)
             conns = [self.get_connection(cpool, dpool) for _ in range(items)]
@@ -338,7 +352,9 @@ class TestConnectionPool(AbstractTestCase):
         # loglevel = logging.DEBUG
         loglevel = LOG_TRACE
         is_logging = log.isEnabledFor(loglevel)
-        num_steps = 75 if self.is_unit_test or self.is_smoke_test or self.is_functional_test or self.is_adhoc_test else 1000
+        num_steps = (
+            25 if self.is_unit_test else 75 if self.is_smoke_test or self.is_functional_test or self.is_adhoc_test else 1000
+        )
         log.info(f"num_random_steps: {num_steps}")
         start_time_nanos = time.time_ns()
         for maxsessions in range(1, 10 + 1):
@@ -347,9 +363,9 @@ class TestConnectionPool(AbstractTestCase):
                 counter1b = itertools.count()
                 self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: [str(next(counter))]  # type: ignore
                 self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: [str(next(counter))]  # type: ignore
-                cpool = ConnectionPool(self.src, maxsessions, SHARED)
+                cpool = ConnectionPool(self.src, SHARED, maxsessions)
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
-                # dpool = ConnectionPool(self.src2, maxsessions)
+                # dpool = ConnectionPool(self.src2, SHARED, maxsessions)
                 rng = random.Random(12345)
                 conns = []
                 try:
@@ -362,7 +378,8 @@ class TestConnectionPool(AbstractTestCase):
                             log.log(loglevel, f"clen: {len(cpool._priority_queue)}, cpool: {cpool._priority_queue}")
                             log.log(loglevel, f"dlen: {len(dpool._priority_queue)}, dpool: {dpool._priority_queue}")
                         if not conns or rng.randint(0, 1):
-                            log.log(loglevel, "get")
+                            if is_logging:
+                                log.log(loglevel, "get")
                             conns.append(self.get_connection(cpool, dpool))
                         else:
                             # k = rng.randint(0, 2)
@@ -396,22 +413,316 @@ class TestConnectionPool(AbstractTestCase):
 
 
 #############################################################################
+class TestSimpleMiniRemote(AbstractTestCase):
+    """Covers all control-flow branches in SimpleMiniRemote."""
+
+    def setUp(self) -> None:
+        self.log = MagicMock(logging.Logger)
+
+    def test_init_builds_expected_options_defaults(self) -> None:
+        r = connection.create_simple_miniremote(log=self.log, ssh_user_host="")
+        self.assertEqual(
+            ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T", "-c", "^aes256-gcm@openssh.com"],
+            list(r.ssh_extra_opts),
+        )
+        # SimpleMiniRemote always disables immediate master exit on shutdown
+        self.assertFalse(r.ssh_exit_on_shutdown)
+        self.assertEqual("-", r.cache_namespace())  # local mode
+        self.assertEqual([], r.local_ssh_command(socket_file=None))
+
+    def test_init_with_all_extras_and_port(self) -> None:
+        with get_tmpdir() as tmpdir:
+            with tempfile.NamedTemporaryFile(dir=tmpdir, delete=False) as cfg:
+                cfg_path = cfg.name
+            r = connection.create_simple_miniremote(
+                log=self.log,
+                ssh_user_host="user@host",
+                ssh_port=2222,
+                ssh_verbose=True,
+                ssh_config_file=cfg_path,
+                ssh_cipher="aes128-gcm@openssh.com",
+                reuse_ssh_connection=True,
+            )
+            # Verify options order and presence
+            expected_prefix = [
+                "-oBatchMode=yes",
+                "-oServerAliveInterval=0",
+                "-x",
+                "-T",
+                "-v",
+                "-F",
+                cfg_path,
+                "-c",
+                "aes128-gcm@openssh.com",
+                "-p",
+                "2222",
+            ]
+            self.assertEqual(expected_prefix, list(r.ssh_extra_opts))
+            # cache namespace includes user@host, port and cfg hash
+            expected_hash = sha256_urlsafe_base64(os.path.abspath(cfg_path), padding=False)
+            self.assertEqual(f"user@host#2222#{expected_hash}", r.cache_namespace())
+            # local_ssh_command includes -S only when socket provided
+            cmd_no_sock = r.local_ssh_command(socket_file=None)
+            self.assertEqual([r.params.ssh_program] + expected_prefix + ["user@host"], cmd_no_sock)
+            cmd_with_sock = r.local_ssh_command(socket_file="/tmp/sock")
+            self.assertEqual(
+                [r.params.ssh_program] + expected_prefix + ["-S", "/tmp/sock", "user@host"],
+                cmd_with_sock,
+            )
+
+    def test_init_with_custom_extra_opts_is_copied(self) -> None:
+        custom = ["-K"]
+        r = connection.create_simple_miniremote(
+            log=self.log,
+            ssh_user_host="user@h",
+            ssh_extra_opts=custom,
+            ssh_verbose=True,
+            ssh_cipher="^aes256-gcm@openssh.com",
+        )
+        # The instance copies and extends the provided list, leaving the caller's list untouched.
+        self.assertIsNot(custom, r.ssh_extra_opts)
+        self.assertEqual(["-K", "-v", "-c", "^aes256-gcm@openssh.com"], list(r.ssh_extra_opts))
+        self.assertListEqual(["-K"], custom)
+
+    def test_no_cipher_no_config_no_port(self) -> None:
+        r = connection.create_simple_miniremote(
+            log=self.log,
+            ssh_user_host="user@h",
+            ssh_cipher="",  # do not include -c
+            ssh_config_file="",  # do not include -F
+            ssh_port=None,  # do not include -p
+        )
+        opts = r.ssh_extra_opts
+        self.assertNotIn("-c", opts)
+        self.assertNotIn("-F", opts)
+        self.assertNotIn("-p", opts)
+        self.assertEqual("user@h##", r.cache_namespace())
+
+    def test_invalid_parameters_raise_valueerror(self) -> None:
+        # ssh_control_persist_secs must be >= 1
+        with self.assertRaises(ValueError):
+            connection.create_simple_miniremote(log=self.log, ssh_control_persist_secs=0)
+        # location must be 'src' or 'dst'
+        with self.assertRaises(ValueError):
+            connection.create_simple_miniremote(log=self.log, location="invalid")
+
+    def test_invalid_ssh_program_raises_valueerror(self) -> None:
+        with self.assertRaises(ValueError):
+            connection.create_simple_miniremote(log=self.log, ssh_user_host="user@h", ssh_program="")
+
+    def test_none_log_raises_valueerror(self) -> None:
+        with self.assertRaises(ValueError):
+            connection.create_simple_miniremote(log=cast(logging.Logger, None), ssh_user_host="user@h")
+
+    def test_local_ssh_command_branching(self) -> None:
+        r = connection.create_simple_miniremote(log=self.log, ssh_user_host="user@h", reuse_ssh_connection=False)
+        # No -S because reuse is False
+        self.assertEqual([r.params.ssh_program] + list(r.ssh_extra_opts) + ["user@h"], r.local_ssh_command("/tmp/s"))
+
+    def test_factory_method_round_trips_arguments(self) -> None:
+        r = connection.create_simple_miniremote(
+            log=self.log,
+            ssh_user_host="user@host",
+            ssh_port=2222,
+            ssh_verbose=True,
+        )
+        self.assertEqual("user@host", r.ssh_user_host)
+        self.assertEqual(2222, cast(Any, r).ssh_port)
+
+    def test_simple_mini_remote_is_ssh_available_always_true(self) -> None:
+        """Ensure SimpleMiniRemote.is_ssh_available always reports True."""
+        r = connection.create_simple_miniremote(log=self.log, ssh_user_host="user@host")
+        self.assertTrue(r.is_ssh_available())
+
+
+#############################################################################
+class TestSimpleMiniJob(AbstractTestCase):
+    """Smoke tests for SimpleMiniJob wiring to ensure attributes are set correctly."""
+
+    def test_initialization_defaults(self) -> None:
+        j = connection.create_simple_minijob()
+        self.assertIsNone(j.timeout_nanos)
+        self.assertIsNone(j.timeout_duration_nanos)
+        self.assertIsNotNone(j.subprocesses)
+
+    @patch("bzfs_main.util.connection.time.monotonic_ns", return_value=1_000_000_000)
+    def test_timeout_fields_from_duration(self, mock_monotonic: MagicMock) -> None:
+        j = connection.create_simple_minijob(timeout_duration_secs=0.987654321)
+        self.assertEqual(987654321, j.timeout_duration_nanos)
+        self.assertEqual(1_000_000_000 + 987_654_321, j.timeout_nanos)
+        mock_monotonic.assert_called_once_with()
+
+
+#############################################################################
+class TestQuoting(AbstractTestCase):
+    """Covers quoting helpers used across modules."""
+
+    def test_squote_local_no_quote(self) -> None:
+        remote = MagicMock(ssh_user_host="")
+        self.assertEqual("foo bar", squote(remote, "foo bar"))
+
+    def test_squote_remote_quote(self) -> None:
+        remote = MagicMock(ssh_user_host="host")
+        self.assertEqual("'foo bar'", squote(remote, "foo bar"))
+
+    def test_dquote_empty_string(self) -> None:
+        """Empty arguments are quoted without escaping."""
+        self.assertEqual('""', dquote(""))
+
+    def test_dquote_preserves_single_quotes_and_spaces(self) -> None:
+        """Single quotes and spaces remain untouched inside the quotes."""
+        self.assertEqual("\"foo 'bar baz' qux\"", dquote("foo 'bar baz' qux"))
+
+    def test_dquote_multiple_specials(self) -> None:
+        """Every occurrence of special characters is escaped."""
+        cases = [
+            ('""', '"' + '\\"' * 2 + '"'),
+            ("$$$", '"' + "\\$" * 3 + '"'),
+            ("``", '"' + "\\`" * 2 + '"'),
+        ]
+        for arg, expected in cases:
+            with self.subTest(arg=arg):
+                self.assertEqual(expected, dquote(arg))
+
+    def test_dquote_prevents_command_substitution(self) -> None:
+        """Escaping ensures the shell prints literals rather than executing."""
+        for arg in ["$(echo hacked)", "`echo hacked`"]:
+            with self.subTest(arg=arg):
+                self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_roundtrip_empty_string(self) -> None:
+        """Ensures empty arguments survive shell evaluation unchanged."""
+        arg = ""
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_roundtrip_with_spaces(self) -> None:
+        """Verifies that spaces are preserved when passed through a shell."""
+        arg = "foo bar baz"
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_multiple_instances(self) -> None:
+        """All repeated special chars must be escaped and round-trip."""
+        arg = 'aa""bb$$cc``dd'
+        quoted = dquote(arg)
+        self.assertEqual(2, quoted.count('\\"'))
+        self.assertEqual(2, quoted.count("\\$"))
+        self.assertEqual(2, quoted.count("\\`"))
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_preserves_unrelated_chars(self) -> None:
+        """Characters outside the escape set remain intact after quoting."""
+        arg = "path/with 'single' and \\backslash"
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_preserves_dollars_backticks_quotes(self) -> None:
+        samples = [
+            r"a$b",  # $ should not expand
+            r"a`uname`b",  # backticks should not execute
+            r'a"b',  # embedded double quote
+            r"plain",  # trivial
+        ]
+        for s in samples:
+            with self.subTest(s=s):
+                self.assertEqual(s, self._sh_roundtrip(s))
+
+    def test_dquote_handles_spaces_and_newlines(self) -> None:
+        samples = [
+            "a b c",  # spaces must remain a single arg
+            "line1\nline2",  # newline stays literal
+            " tab\tsep ",  # tabs preserved
+        ]
+        for s in samples:
+            with self.subTest(s=s):
+                self.assertEqual(s, self._sh_roundtrip(s))
+
+    def test_dquote_does_not_require_backslash_escaping(self) -> None:
+        samples = [
+            r"a\b",  # normal backslash
+        ]
+        for s in samples:
+            with self.subTest(s=s):
+                self.assertEqual(s, self._sh_roundtrip(s))
+
+    def test_dquote_globally_escapes_specials(self) -> None:
+        s = "pre 'a\"b $USER `uname` \\ tail' post"
+        out = dquote(s)
+        payload = out[1:-1]  # strip outer double quotes
+
+        # Every occurrence of ", $, ` in the payload must be backslash-escaped
+        specials = {'"', "$", "`"}
+        for i, ch in enumerate(payload):
+            with self.subTest(i=i):
+                if ch in specials:
+                    self.assertTrue(i > 0)
+                    self.assertEqual("\\", payload[i - 1], f"unescaped {ch!r} at index {i}")
+
+    @staticmethod
+    def _sh_roundtrip(arg: str) -> str:
+        quoted = dquote(arg)
+        return subprocess.run(["sh", "-c", f"printf %s {quoted}"], stdout=subprocess.PIPE, text=True, check=True).stdout
+
+    @staticmethod
+    def _nested_sh_roundtrip(arg: str) -> str:
+        """Simulates nested 'sh -c' usage for dquote as in replication pipelines.
+
+        Builds a command list with ``arg`` as the final argv element, joins it via ``shlex.join``, wraps it with ``dquote``
+        and executes it through an outer ``sh -c`` that invokes an inner ``sh -c``. Returns the string observed by the inner
+        Python process so tests can assert end-to-end preservation.
+        """
+        recv_cmd: list[str] = [sys.executable, "-c", "import sys; print(sys.argv[-1])", arg]
+        recv_cmd_str: str = shlex.join(recv_cmd)
+        script: str = dquote(recv_cmd_str)
+        stdout: str = subprocess.run(["sh", "-c", f"sh -c {script}"], stdout=subprocess.PIPE, text=True, check=True).stdout
+        return stdout.rstrip("\n")
+
+    def test_dquote_backslash_before_quote(self) -> None:
+        """Backslashes immediately before a quote survive shell evaluation."""
+        arg = r"a\"b"
+        self.assertEqual(arg, self._sh_roundtrip(arg))
+
+    def test_dquote_escapes(self) -> None:
+        self.assertEqual('"a\\"b\\$c\\`d"', dquote('a"b$c`d'))
+
+    def test_dquote_nested_sh_backslash_backtick(self) -> None:
+        """Nested sh -c round-trips values with backslash+backtick."""
+        value = r"/tmp/foo\`bar"
+        prop_arg = f"prop={value}"
+        self.assertEqual(prop_arg, self._nested_sh_roundtrip(prop_arg))
+
+    def test_dquote_preserves_double_backslashes_in_nested_sh(self) -> None:
+        """Ensures nested sh -c round-trips values containing double backslashes."""
+        samples = [
+            r"\\server\share",  # UNC-style path
+            r"\\path\\with\\many",  # multiple segments
+        ]
+        for value in samples:
+            with self.subTest(value=value):
+                prop_arg: str = f"foo={value}"
+                self.assertEqual(prop_arg, self._nested_sh_roundtrip(prop_arg))
+
+
 def make_fake_params() -> Params:
     mock = MagicMock(spec=Params)
     mock.log = logging.getLogger(__name__)
     mock.ssh_program = "ssh"
     mock.connection_pools = {}
-    mock.timeout_nanos = None
     return mock
 
 
 #############################################################################
 class _FakeRemote(SimpleNamespace):
+    ssh_extra_opts: tuple[str, ...]
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        # Provide minimal attributes expected by Connection for lease acquisition.
+        if not hasattr(self, "params"):
+            self.params = make_fake_params()
+        if not hasattr(self, "ssh_extra_opts"):
+            self.ssh_extra_opts = ()
         if not hasattr(self, "ssh_socket_dir"):
             self.ssh_socket_dir = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX)
+        if not hasattr(self, "ssh_control_persist_margin_secs"):
+            self.ssh_control_persist_margin_secs = 2
         if not hasattr(self, "cache_namespace"):
             self.cache_namespace = lambda: "user@host#22#cfg"
         if not hasattr(self, "pool"):
@@ -420,6 +731,9 @@ class _FakeRemote(SimpleNamespace):
     def local_ssh_command(self, socket_path: str | None = None) -> list[str]:
         return ["ssh", self.ssh_user_host or "localhost"]
 
+    def is_ssh_available(self) -> bool:
+        return True
+
 
 #############################################################################
 class TestRunSshCommand(AbstractTestCase):
@@ -427,7 +741,6 @@ class TestRunSshCommand(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
-        self.job.control_persist_margin_secs = 2
         self.job.timeout_nanos = None
         self.remote = cast(
             Remote,
@@ -438,6 +751,7 @@ class TestRunSshCommand(AbstractTestCase):
         self.conn = MagicMock()
         self.conn.ssh_cmd = ["ssh"]
         self.conn.ssh_cmd_quoted = ["ssh"]
+        self.conn.remote = self.remote
         self.conn_pool = MagicMock()
         self.conn_pool.get_connection.return_value = self.conn
         self.conn_pool.return_connection = MagicMock()
@@ -451,57 +765,80 @@ class TestRunSshCommand(AbstractTestCase):
         pool_wrapper = MagicMock(pool=MagicMock(return_value=self.conn_pool))
         self.job.params.connection_pools = {"dst": pool_wrapper}
 
-    @patch("bzfs_main.connection.subprocess_run")
+    def test_empty_cmd_raises_value_error(self) -> None:
+        job = connection.create_simple_minijob()
+        conn = MagicMock()
+        with self.assertRaises(ValueError):
+            connection.run_ssh_command(cmd=[], conn=conn, job=job)
+
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_dry_run_skips_execution(self, mock_run: MagicMock) -> None:
-        result = connection.run_ssh_command(self.job, self.remote, cmd=["ls"], is_dry=True)
+        result = self.job.run_ssh_command(self.remote, cmd=["ls"], is_dry=True)
         self.assertEqual("", result)
         mock_run.assert_not_called()
         self.conn_pool.connection.assert_called_once()
 
-    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
-    @patch("bzfs_main.connection.subprocess_run")
+    @patch("bzfs_main.util.connection.refresh_ssh_connection_if_necessary")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_remote_calls_refresh_and_executes(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "host"
         mock_run.return_value = MagicMock(stdout="out", stderr="err")
-        result = connection.run_ssh_command(self.job, self.remote, cmd=["echo"], print_stdout=True, print_stderr=True)
+        result = self.job.run_ssh_command(self.remote, cmd=["echo"], print_stdout=True, print_stderr=True)
         self.assertEqual("out", result)
-        mock_refresh.assert_called_once_with(self.job, self.remote, self.conn)
+        mock_refresh.assert_called_once_with(self.conn, self.job)
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
-    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @patch("bzfs_main.util.connection.refresh_ssh_connection_if_necessary")
     @patch(
-        "bzfs_main.connection.subprocess_run",
+        "bzfs_main.util.utils.Subprocesses.subprocess_run",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", output="o", stderr="e"),
     )
     def test_calledprocesserror_propagates(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
         with self.assertRaises(subprocess.CalledProcessError):
-            connection.run_ssh_command(self.job, self.remote, cmd=["boom"], print_stdout=True)
+            self.job.run_ssh_command(self.remote, cmd=["boom"], print_stdout=True)
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
-    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    def test_real_ssh_transport_error_raises_retryable_error(self) -> None:
+        """Uses the real ssh CLI to trigger a transport error and exercise RetryableError wrapping."""
+        # Use real Subprocesses.subprocess_run (no patch) and a host name that cannot resolve.
+        self.remote.ssh_user_host = ""
+        self.conn.ssh_cmd = ["ssh", "-T", "-x", "-oBatchMode=yes", "-oConnectTimeout=1"]
+
+        with self.assertRaises(RetryableError) as cm, suppress_output():
+            # Pass an invalid host name as the first argument so ssh treats it as the remote host.
+            self.job.run_ssh_command(self.remote, cmd=["nonexistent.invalid"], print_stdout=False, print_stderr=True)
+
+        self.conn_pool.connection.assert_called_once()
+        self.assertEqual("ssh", cm.exception.display_msg)
+        cause = cm.exception.__cause__
+        self.assertIsNotNone(cause)
+        assert isinstance(cause, subprocess.CalledProcessError)
+        self.assertEqual(255, cause.returncode)
+
+    @patch("bzfs_main.util.connection.refresh_ssh_connection_if_necessary")
     @patch(
-        "bzfs_main.connection.subprocess_run",
+        "bzfs_main.util.utils.Subprocesses.subprocess_run",
         side_effect=subprocess.TimeoutExpired(cmd="cmd", timeout=1),
     )
     def test_timeout_expired_propagates(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
         with self.assertRaises(subprocess.TimeoutExpired):
-            connection.run_ssh_command(self.job, self.remote, cmd=["sleep"], print_stdout=True)
+            self.job.run_ssh_command(self.remote, cmd=["sleep"], print_stdout=True)
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
-    @patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @patch("bzfs_main.util.connection.refresh_ssh_connection_if_necessary")
     @patch(
-        "bzfs_main.connection.subprocess_run",
+        "bzfs_main.util.utils.Subprocesses.subprocess_run",
         side_effect=UnicodeDecodeError("utf-8", b"x", 0, 1, "boom"),
     )
     def test_unicode_error_propagates_without_logging(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
         with self.assertRaises(UnicodeDecodeError):
-            connection.run_ssh_command(self.job, self.remote, cmd=["foo"])
+            self.job.run_ssh_command(self.remote, cmd=["foo"])
         mock_run.assert_called_once()
         self.conn_pool.connection.assert_called_once()
 
@@ -516,45 +853,45 @@ class TestTrySshCommand(AbstractTestCase):
             Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
         )
 
-    @patch("bzfs_main.connection.run_ssh_command", return_value="ok")
-    @patch("bzfs_main.connection.maybe_inject_error")
+    @patch("bzfs_main.bzfs.Job.run_ssh_command", return_value="ok")
+    @patch("bzfs_main.bzfs.Job.maybe_inject_error")
     def test_success(self, mock_inject: MagicMock, mock_run: MagicMock) -> None:
-        result = connection.try_ssh_command(self.job, self.remote, level=0, cmd=["ls"])
+        result = self.job.try_ssh_command(self.remote, loglevel=0, cmd=["ls"])
         self.assertEqual("ok", result)
         mock_inject.assert_called_once()
         mock_run.assert_called_once()
 
     @patch(
-        "bzfs_main.connection.run_ssh_command",
+        "bzfs_main.bzfs.Job.run_ssh_command",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", stderr="zfs: dataset does not exist"),
     )
     def test_dataset_missing_returns_none(self, mock_run: MagicMock) -> None:
-        result = connection.try_ssh_command(self.job, self.remote, level=0, cmd=["zfs"], exists=True)
+        result = self.job.try_ssh_command(self.remote, loglevel=0, cmd=["zfs"], exists=True)
         self.assertIsNone(result)
         mock_run.assert_called_once()
 
     @patch(
-        "bzfs_main.connection.run_ssh_command",
+        "bzfs_main.bzfs.Job.run_ssh_command",
         side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", stderr="boom"),
     )
     def test_other_error_raises_retryable(self, mock_run: MagicMock) -> None:
         with self.assertRaises(RetryableError):
-            connection.try_ssh_command(self.job, self.remote, level=0, cmd=["zfs"], exists=False)
+            self.job.try_ssh_command(self.remote, loglevel=0, cmd=["zfs"], exists=False)
         mock_run.assert_called_once()
 
     @patch(
-        "bzfs_main.connection.run_ssh_command",
+        "bzfs_main.bzfs.Job.run_ssh_command",
         side_effect=UnicodeDecodeError("utf-8", b"x", 0, 1, "boom"),
     )
     def test_unicode_error_wrapped(self, mock_run: MagicMock) -> None:
         with self.assertRaises(RetryableError):
-            connection.try_ssh_command(self.job, self.remote, level=0, cmd=["x"])
+            self.job.try_ssh_command(self.remote, loglevel=0, cmd=["x"])
         mock_run.assert_called_once()
 
-    @patch("bzfs_main.connection.maybe_inject_error", side_effect=RetryableError("Subprocess failed"))
+    @patch("bzfs_main.bzfs.Job.maybe_inject_error", side_effect=RetryableError("Subprocess failed"))
     def test_injected_retryable_error_propagates(self, mock_inject: MagicMock) -> None:
         with self.assertRaises(RetryableError):
-            connection.try_ssh_command(self.job, self.remote, level=0, cmd=["x"])
+            self.job.try_ssh_command(self.remote, loglevel=0, cmd=["x"])
         mock_inject.assert_called_once()
 
 
@@ -563,7 +900,6 @@ class TestRefreshSshConnection(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
-        self.job.control_persist_margin_secs = 1
         self.job.timeout_nanos = None
         self.remote = cast(
             Remote,
@@ -577,42 +913,43 @@ class TestRefreshSshConnection(AbstractTestCase):
                 ssh_extra_opts=[],
             ),
         )
+        self.remote.ssh_control_persist_margin_secs = 1
         self.conn = connection.Connection(self.remote, 1, 0)
         self.conn.last_refresh_time = 0
 
-    @patch("bzfs_main.connection.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_local_mode_returns_immediately(self, mock_run: MagicMock) -> None:
         self.remote.ssh_user_host = ""
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_not_called()
 
-    @patch("bzfs_main.connection.die", side_effect=SystemExit)
+    @patch("bzfs_main.util.connection.die", side_effect=SystemExit)
     def test_ssh_unavailable_dies(self, mock_die: MagicMock) -> None:
-        self.job.params.is_program_available = MagicMock(return_value=False)  # type: ignore[method-assign]
+        self.remote.is_ssh_available = MagicMock(return_value=False)  # type: ignore[method-assign]
         with self.assertRaises(SystemExit):
-            connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+            connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_die.assert_called_once()
 
-    @patch("bzfs_main.connection.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_reuse_disabled_no_action(self, mock_run: MagicMock) -> None:
         self.remote.reuse_ssh_connection = False
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_not_called()
 
-    @patch("bzfs_main.connection.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_connection_alive_fast_path(self, mock_run: MagicMock) -> None:
         self.conn.last_refresh_time = time.monotonic_ns()
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_not_called()
 
-    @patch("bzfs_main.connection.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_master_alive_refreshes_timestamp(self, mock_run: MagicMock) -> None:
         mock_run.return_value = MagicMock(returncode=0)
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_run.assert_called_once()
         self.assertGreater(self.conn.last_refresh_time, 0)
 
-    @patch("bzfs_main.connection.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_master_start_failure_is_retryable(self, mock_run: MagicMock) -> None:
         # First call: '-O check' returns non-zero, indicating master not alive.
         # Second call: starting master with check=True raises CalledProcessError.
@@ -621,18 +958,18 @@ class TestRefreshSshConnection(AbstractTestCase):
             subprocess.CalledProcessError(returncode=1, cmd="ssh", stderr="bad"),
         ]
         with self.assertRaises(RetryableError):
-            connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+            connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
 
-    @patch("bzfs_main.connection.subprocess_run")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_verbose_option_limits_persist_time(self, mock_run: MagicMock) -> None:
-        self.remote.ssh_extra_opts = ["-v"]
+        self.remote.ssh_extra_opts = ("-v",)
         mock_run.side_effect = [MagicMock(returncode=1), MagicMock(returncode=0)]
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         args = mock_run.call_args_list[1][0][0]
         self.assertIn("-oControlPersist=1s", args)
 
-    @patch("bzfs_main.connection_lease.ConnectionLease.set_socket_mtime_to_now")
-    @patch("bzfs_main.connection.subprocess_run")
+    @patch("bzfs_main.util.connection_lease.ConnectionLease.set_socket_mtime_to_now")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_mtime_now_invoked_when_connection_lease_present(self, mock_run: MagicMock, mock_utime: MagicMock) -> None:
         """Ensures set_socket_mtime_to_now() is called when a Connection has a lease (socket path).
 
@@ -654,26 +991,26 @@ class TestRefreshSshConnection(AbstractTestCase):
                     ssh_socket_dir=ssh_socket_dir,
                 ),
             )
-            cpool = ConnectionPool(remote, 1, SHARED)
+            cpool = ConnectionPool(remote, SHARED, 1)
             conn = cpool.get_connection()
             try:
                 conn.last_refresh_time = 0  # avoid fast return
-                connection.refresh_ssh_connection_if_necessary(self.job, remote, conn)
+                connection.refresh_ssh_connection_if_necessary(conn, self.job)
                 self.assertTrue(mock_utime.called)
                 self.assertIsNotNone(conn.connection_lease)
                 mock_utime.assert_called_once()
             finally:
-                conn.shutdown("test", self.job.params)
+                conn.shutdown("test")
 
-    @patch("bzfs_main.connection_lease.ConnectionLease.set_socket_mtime_to_now")
-    @patch("bzfs_main.connection.subprocess_run")
+    @patch("bzfs_main.util.connection_lease.ConnectionLease.set_socket_mtime_to_now")
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_mtime_now_not_invoked_when_no_connection_lease(self, mock_run: MagicMock, mock_utime: MagicMock) -> None:
         """Ensures set_socket_mtime_to_now() is not called when a Connection has no lease (lease is None)."""
         mock_run.return_value = MagicMock(returncode=0)
         self.conn.last_refresh_time = 0  # avoid fast return
         # In setUp, ssh_exit_on_shutdown=True ensures no lease is acquired.
         self.assertIsNone(self.conn.connection_lease)
-        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        connection.refresh_ssh_connection_if_necessary(self.conn, self.job)
         mock_utime.assert_not_called()
 
 
@@ -685,17 +1022,20 @@ class TestTimeout(AbstractTestCase):
         self.job.params = make_fake_params()
 
     def test_no_timeout_returns_none(self) -> None:
+        self.assertIsNone(connection.timeout(self.job))
         self.job.timeout_nanos = None
+        self.job.timeout_duration_nanos = None
         self.assertIsNone(connection.timeout(self.job))
 
     def test_expired_timeout_raises(self) -> None:
-        self.job.params.timeout_nanos = 1
-        self.job.timeout_nanos = time.monotonic_ns() - 1
+        self.job.timeout_duration_nanos = 1
+        self.job.timeout_nanos = time.monotonic_ns() - self.job.timeout_duration_nanos
         with self.assertRaises(subprocess.TimeoutExpired):
             connection.timeout(self.job)
 
     def test_seconds_remaining_returned(self) -> None:
-        self.job.timeout_nanos = time.monotonic_ns() + 1_000_000_000
+        self.job.timeout_duration_nanos = 1_000_000_000
+        self.job.timeout_nanos = time.monotonic_ns() + self.job.timeout_duration_nanos
         result = connection.timeout(self.job)
         self.assertIsNotNone(result)
         self.assertGreaterEqual(cast(float, result), 0.0)
@@ -710,26 +1050,26 @@ class TestMaybeInjectError(AbstractTestCase):
         self.job.error_injection_triggers = {"before": Counter()}
 
     def test_no_trigger_noop(self) -> None:
-        connection.maybe_inject_error(self.job, ["cmd"])
+        self.job.maybe_inject_error(cmd=["cmd"])
 
     def test_missing_counter_noop(self) -> None:
-        connection.maybe_inject_error(self.job, ["cmd"], error_trigger="boom")
+        self.job.maybe_inject_error(cmd=["cmd"], error_trigger="boom")
 
     def test_counter_zero_noop(self) -> None:
         self.job.error_injection_triggers["before"]["boom"] = 0
-        connection.maybe_inject_error(self.job, ["cmd"], error_trigger="boom")
+        self.job.maybe_inject_error(cmd=["cmd"], error_trigger="boom")
         self.assertEqual(0, self.job.error_injection_triggers["before"]["boom"])
 
     def test_nonretryable_error_raised(self) -> None:
         self.job.error_injection_triggers["before"]["boom"] = 1
         with self.assertRaises(subprocess.CalledProcessError):
-            connection.maybe_inject_error(self.job, ["cmd"], error_trigger="boom")
+            self.job.maybe_inject_error(cmd=["cmd"], error_trigger="boom")
         self.assertEqual(0, self.job.error_injection_triggers["before"]["boom"])
 
     def test_retryable_error_raised(self) -> None:
         self.job.error_injection_triggers["before"]["retryable_boom"] = 1
         with self.assertRaises(RetryableError):
-            connection.maybe_inject_error(self.job, ["cmd"], error_trigger="retryable_boom")
+            self.job.maybe_inject_error(cmd=["cmd"], error_trigger="retryable_boom")
 
 
 #############################################################################
@@ -741,18 +1081,18 @@ class TestDecrementInjectionCounter(AbstractTestCase):
 
     def test_zero_counter_returns_false(self) -> None:
         counter: Counter = Counter()
-        self.assertFalse(connection.decrement_injection_counter(self.job, counter, "x"))
+        self.assertFalse(self.job.decrement_injection_counter(counter=counter, trigger="x"))
 
     def test_positive_counter_decrements(self) -> None:
         counter: Counter = Counter({"x": 2})
-        self.assertTrue(connection.decrement_injection_counter(self.job, counter, "x"))
+        self.assertTrue(self.job.decrement_injection_counter(counter=counter, trigger="x"))
         self.assertEqual(1, counter["x"])
 
 
 #############################################################################
 class TestSshExitOnShutdown(AbstractTestCase):
 
-    @patch("bzfs_main.connection.subprocess.run")
+    @patch("bzfs_main.util.connection.subprocess.run")
     def test_ssh_exit_on_shutdown_true_triggers_exit(self, mock_run: MagicMock) -> None:
         """Purpose: Validate that when ``--ssh-exit-on-shutdown`` is enabled, the connection shutdown triggers an SSH
         ControlMaster administrative ``-O exit`` request, asking the master to terminate immediately once idle.
@@ -781,13 +1121,13 @@ class TestSshExitOnShutdown(AbstractTestCase):
             ),
         )
         conn: Connection = Connection(r, 1, 0)
-        conn.shutdown("test", p)
+        conn.shutdown("test")
         self.assertTrue(mock_run.called)
         argv = mock_run.call_args[0][0]
         self.assertIn("-O", argv)
         self.assertIn("exit", argv)
 
-    @patch("bzfs_main.connection.subprocess.run")
+    @patch("bzfs_main.util.connection.subprocess.run")
     def test_ssh_exit_on_shutdown_false_skips_exit(self, mock_run: MagicMock) -> None:
         """Purpose: Ensure that the default behavior, and explicit disabling of immediate exit, avoids sending the
         ``-O exit`` administrative command to an SSH ControlMaster during shutdown. Reusable masters should persist to
@@ -818,9 +1158,9 @@ class TestSshExitOnShutdown(AbstractTestCase):
                     ssh_socket_dir=ssh_socket_dir,
                 ),
             )
-            cpool = ConnectionPool(r, 1, SHARED)
+            cpool = ConnectionPool(r, SHARED, 1)
             conn: Connection = cpool.get_connection()
-            conn.shutdown("test", p)
+            conn.shutdown("test")
             # No call to run expected when immediate exit is false
             self.assertFalse(mock_run.called)
 

@@ -47,16 +47,24 @@ from bzfs_main import (
     bzfs,
     progress_reporter,
 )
+from bzfs_main.configuration import (
+    LogParams,
+)
+from bzfs_main.loggers import (
+    get_logger,
+    reset_logger,
+)
 from bzfs_main.progress_reporter import (
     PV_FILE_THREAD_SEPARATOR,
     ProgressReporter,
     State,
     count_num_bytes_transferred_by_zfs_send,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     tail,
 )
 from bzfs_tests.tools import (
+    capture_stdout,
     stop_on_failure_subtest,
 )
 
@@ -85,7 +93,9 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(round(4.12 * 1024), pv_size_to_bytes("4.12 KiB"))
         self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46,2GiB"))
         self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46.2GiB"))
-        self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46" + progress_reporter.ARABIC_DECIMAL_SEPARATOR + "2GiB"))
+        self.assertEqual(
+            round(46.2 * 1024**3), pv_size_to_bytes("46" + progress_reporter._ARABIC_DECIMAL_SEPARATOR + "2GiB")
+        )
         self.assertEqual(2 * 1024**2, pv_size_to_bytes("2 MiB"))
         self.assertEqual(1000**2, pv_size_to_bytes("1 MB"))
         self.assertEqual(1024**3, pv_size_to_bytes("1 GiB"))
@@ -428,15 +438,16 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual([], fds)
 
     def test_run_internal_reset_triggers_progress_output(self) -> None:
-        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
+        log = MagicMock(spec=Logger)
+        reporter = ProgressReporter(log, [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
         fds: list[IO[Any]] = []
         selector = MagicMock()
         selector.select.return_value = []
-        with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
+        with patch("sys.stdout.write"), patch("sys.stdout.flush"):
             with self.assertRaises(ValueError):
                 reporter._inject_error = True
                 reporter._run_internal(fds, selector)
-            self.assertTrue(write_mock.called)
+            log.log.assert_called()
 
     def test_run_internal_logs_missing_file(self) -> None:
         mock_log = MagicMock(spec=Logger)
@@ -473,7 +484,8 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertEqual(2, upd_mock.call_count)
 
     def test_run_internal_progress_line_includes_latest_eta_line_tail(self) -> None:
-        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
+        log = MagicMock(spec=Logger)
+        reporter = ProgressReporter(log, [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
         fds: list[IO[Any]] = []
         fd1 = io.StringIO("x\n")
         fd2 = io.StringIO("y\n")
@@ -497,11 +509,11 @@ class TestHelperFunctions(unittest.TestCase):
             patch.object(Path, "touch", lambda self, *args, **kwargs: None),
             patch.object(reporter, "_update_transfer_stat", return_value=0),
         ):
-            with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
+            with patch("sys.stdout.write"), patch("sys.stdout.flush"):
                 with self.assertRaises(ValueError):
                     reporter._inject_error = True
-                    reporter._run_internal(fds, cast(selectors.BaseSelector, selector))
-                self.assertTrue(write_mock.called)
+                    reporter._run_internal(fds, selector)
+                log.log.assert_called()
 
     def test_run_internal_calls_sleep_when_no_lines(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(2, 2))
@@ -627,3 +639,43 @@ class TestHelperFunctions(unittest.TestCase):
     def test_format_duration(self) -> None:
         self.assertEqual("0:00:05", ProgressReporter._format_duration(5_000_000_000))
         self.assertEqual("1:01:01", ProgressReporter._format_duration(3_661_000_000_000))
+
+    def test_progress_reporter_emits_carriage_return_to_log_and_stream(self) -> None:
+        """ProgressReporter must end status lines with \r (not \n) for both stream and file handlers."""
+        with capture_stdout() as stream_buf:
+            args = bzfs.argument_parser().parse_args(["src", "dst"])  # minimal valid args
+            log_params = LogParams(args)
+            log = get_logger(log_params, args)
+            try:
+                # Write a few pv-style status updates terminated by "\r" so ProgressReporter has content to parse and emit
+                sample = "125 GiB: 2.71GiB 0:00:08 [98.8MiB/s] [341MiB/s] [>   ]  2% ETA 0:06:03 ETA 17:27:49\r"
+                pv_file = log_params.pv_log_file
+                with open(pv_file, "a", encoding="utf-8") as fd:
+                    fd.write(sample)
+                    fd.write(sample)
+
+                # Create ProgressReporter with fast update intervals; consume the pv log file
+                reporter = ProgressReporter(log, [], use_select=False, progress_update_intervals=(0.05, 0.1))
+                reporter.enqueue_pv_log_file(pv_file)
+                reporter.start()
+                reporter.wait_for_first_status_line()
+                reporter.stop()
+
+                # Assert stream handler captured CR immediately after status msg and not followed by "\n"
+                out: str = stream_buf.getvalue()
+                self.assertTrue(len(out) > 0)
+                self.assertIn("\r", out)
+                self.assertNotIn("\r\n", out, "must not emit CRLF")
+                self.assertTrue(out.endswith("\r"), "stream output must end with CR, no trailing LF")
+                self.assertNotIn("\n", out, "must not emit LF")
+
+                # Assert log file contains CR immediately after status msg and not followed by "\n"
+                with open(log_params.log_file, "rb") as f:
+                    data: str = f.read().decode("utf-8")
+                self.assertTrue(len(data) > 0)
+                self.assertIn("\r", data)
+                self.assertNotIn("\r\n", data, "must not emit CRLF")
+                self.assertTrue(data.endswith("\r"), "file output must end with CR, no trailing LF")
+                self.assertNotIn("\n", data, "must not emit LF")
+            finally:
+                reset_logger(log)

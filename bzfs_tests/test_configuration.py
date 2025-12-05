@@ -43,7 +43,7 @@ from bzfs_main.configuration import (
     Remote,
     SnapshotLabel,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     UNIX_TIME_INFINITY_SECS,
 )
 from bzfs_tests.abstract_testcase import (
@@ -312,6 +312,34 @@ class TestHelperFunctions(AbstractTestCase):
             configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
             self.assertFalse(os.path.exists(regular_file))
 
+    def test_unset_matching_env_vars_include_overrides_exclude(self) -> None:
+        """Include must take precedence over exclude; only excluded-and-not-included vars are unset."""
+        # Arrange a clean, isolated environment snapshot for this test
+        with patch.dict(os.environ, {"FOO_BAR": "x", "KEEP_ME": "y", "PATH": os.environ.get("PATH", "")}, clear=False):
+            # Build args with both include and exclude; include should protect KEEP_ME even if excluded by pattern
+            args = self.argparser_parse_args(
+                [
+                    "src",
+                    "dst",
+                    "--exclude-envvar-regex",
+                    "FOO.*",
+                    "--exclude-envvar-regex",
+                    "KEEP_.*",
+                    "--include-envvar-regex",
+                    "KEEP_.*",
+                ]
+            )
+
+            # Ensure a fresh latch for this test so unsetting runs deterministically
+            configuration._UNSET_ENV_VARS_LATCH.value = True
+            params = self.make_params(args=args)
+            params._unset_matching_env_vars(args)
+
+            # Excluded and not included -> removed
+            self.assertNotIn("FOO_BAR", os.environ)
+            # Included -> retained even though it matches an exclude pattern
+            self.assertIn("KEEP_ME", os.environ)
+
     def test_lock_file_name_secure_directory(self) -> None:
         """Lock file path should live in a private, non-world-writable directory."""
         args = self.argparser_parse_args(args=["src", "dst"])  # ensure a concrete log dir is configured
@@ -555,22 +583,22 @@ class TestHelperFunctions(AbstractTestCase):
         configuration.CreateSrcSnapshotConfig(good_args, params)
 
         args = bzfs.argument_parser().parse_args(["src", "dst"])
-        params.daemon_frequency = "2secondly"
+        params.daemon_frequency = "2secondly"  # type: ignore[misc]  # cannot assign to final attribute
         config = configuration.CreateSrcSnapshotConfig(args, params)
         self.assertDictEqual({"_2secondly": (2, "secondly")}, config.suffix_durations)
 
         args = bzfs.argument_parser().parse_args(["src", "dst"])
-        params.daemon_frequency = "2seconds"
+        params.daemon_frequency = "2seconds"  # type: ignore[misc]  # cannot assign to final attribute
         with self.assertRaises(SystemExit):
             configuration.CreateSrcSnapshotConfig(args, params)
 
         args = bzfs.argument_parser().parse_args(["src", "dst"])
-        params.daemon_frequency = "-2secondly"
+        params.daemon_frequency = "-2secondly"  # type: ignore[misc]  # cannot assign to final attribute
         with self.assertRaises(SystemExit):
             configuration.CreateSrcSnapshotConfig(args, params)
 
         args = bzfs.argument_parser().parse_args(["src", "dst"])
-        params.daemon_frequency = "2adhoc"
+        params.daemon_frequency = "2adhoc"  # type: ignore[misc]  # cannot assign to final attribute
         with self.assertRaises(SystemExit):
             configuration.CreateSrcSnapshotConfig(args, params)
 
@@ -715,6 +743,8 @@ class TestAdditionalHelpers(AbstractTestCase):
     def test_unset_matching_env_vars(self) -> None:
         with patch.dict(os.environ, {"FOO_BAR": "x"}):
             args = self.argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
+            # Reset latch to force a fresh pass over os.environ for this test
+            configuration._UNSET_ENV_VARS_LATCH.value = True
             params = self.make_params(args=args)
             params._unset_matching_env_vars(args)
             self.assertNotIn("FOO_BAR", os.environ)

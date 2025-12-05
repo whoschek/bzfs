@@ -64,7 +64,7 @@ Design Rationale
   path-unfriendly characters. This reduces collision probability and helps with human diagnostics.
 - Security is prioritized: the root, sockets, and lease directories are created with explicit permissions, and symlinks are
   rejected to avoid redirection attacks. Open flags include ``O_NOFOLLOW`` and ``O_CLOEXEC`` to remove common foot-guns.
-  Foreign file ownership and overly permissive file permissions are rejected to avoid sockets being used by third parties.
+  Foreign file ownership and overly permissive file permissions are rejected to prevent sockets being used by third parties.
 - The public API is intentionally tiny and ergonomic. ``ConnectionLeaseManager.acquire()`` never blocks: it either returns
   a lease for an existing name or a new name, ensuring predictable low latency under contention. The ``ConnectionLease``
   is immutable and simple to reason about, with an explicit ``release()`` to return capacity to the pool.
@@ -87,7 +87,7 @@ from typing import (
     NamedTuple,
 )
 
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     LOG_TRACE,
@@ -268,8 +268,10 @@ class ConnectionLeaseManager:
         try:
             fd = os.open(src_path, flags=open_flags, mode=FILE_PERMISSIONS)
 
-            # Acquire an exclusive lock; will raise a BlockingIOError if lock is already held by another process.
-            # The (advisory) lock is auto-released when the process terminates or the fd is closed.
+            # Acquire an exclusive lock; will raise a BlockingIOError if lock is already held by this process or another
+            # process. The (advisory) lock is auto-released when the process terminates or the fd is closed.
+            # Note: All supported operating systems also reject any attempt to acquire an exclusive flock that is already
+            # held within the same process under an fd obtained from a separate os.open() call, by raising a BlockingIOError.
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
 
             socket_name: str = os.path.basename(src_path)
@@ -286,7 +288,7 @@ class ConnectionLeaseManager:
         except OSError as e:
             close_quietly(fd)  # release lock
             if isinstance(e, BlockingIOError):
-                return None  # lock is already held by another process
+                return None  # lock is already held by this process or another process
             elif isinstance(e, FileNotFoundError):
                 self._validate_dirs()
                 return None

@@ -48,16 +48,6 @@ from typing import (
 from bzfs_main.argparse_actions import (
     has_timerange_filter,
 )
-from bzfs_main.connection import (
-    DEDICATED,
-    SHARED,
-    ConnectionPool,
-    maybe_inject_error,
-    refresh_ssh_connection_if_necessary,
-    run_ssh_command,
-    timeout,
-    try_ssh_command,
-)
 from bzfs_main.detect import (
     ZFS_VERSION_IS_AT_LEAST_2_1_0,
     ZFS_VERSION_IS_AT_LEAST_2_2_0,
@@ -75,22 +65,32 @@ from bzfs_main.parallel_batch_cmd import (
     run_ssh_cmd_batched,
     run_ssh_cmd_parallel,
 )
-from bzfs_main.parallel_iterator import (
-    parallel_iterator,
-    run_in_parallel,
-)
 from bzfs_main.progress_reporter import (
     PV_FILE_THREAD_SEPARATOR,
 )
-from bzfs_main.retry import (
+from bzfs_main.util.connection import (
+    DEDICATED,
+    SHARED,
+    ConnectionPool,
+    dquote,
+    refresh_ssh_connection_if_necessary,
+    squote,
+    timeout,
+)
+from bzfs_main.util.parallel_iterator import (
+    parallel_iterator,
+    run_in_parallel,
+)
+from bzfs_main.util.retry import (
     Retry,
     RetryableError,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DONT_SKIP_DATASET,
     FILE_PERMISSIONS,
     LOG_DEBUG,
     LOG_TRACE,
+    Subprocesses,
     append_if_absent,
     cut,
     die,
@@ -101,7 +101,6 @@ from bzfs_main.utils import (
     open_nofollow,
     replace_prefix,
     stderr_to_str,
-    subprocess_run,
     xprint,
 )
 
@@ -117,7 +116,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 
 # constants:
 INJECT_DST_PIPE_FAIL_KBYTES: Final[int] = 400  # for testing only
-RIGHT_JUST: Final[int] = 7
+_RIGHT_JUST: Final[int] = 7
 
 
 def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
@@ -227,8 +226,8 @@ def _list_and_filter_src_and_dst_snapshots(
     src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
     job.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
     src_snapshots_and_bookmarks, dst_snapshots_with_guids_str = run_in_parallel(  # list src+dst snapshots in parallel
-        lambda: try_ssh_command(job, src, LOG_TRACE, cmd=src_cmd),
-        lambda: try_ssh_command(job, dst, LOG_TRACE, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
+        lambda: job.try_ssh_command(src, LOG_TRACE, cmd=src_cmd),
+        lambda: job.try_ssh_command(dst, LOG_TRACE, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
     )
     job.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids_str is not None
     dst_snapshots_with_guids: list[str] = (dst_snapshots_with_guids_str or "").splitlines()
@@ -301,7 +300,7 @@ def _rollback_dst_dataset_if_necessary(
             # rollback just in case the dst dataset was modified since its most recent snapshot
             done_checking = done_checking or _check_zfs_dataset_busy(job, dst, dst_dataset)
             cmd: list[str] = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
-            try_ssh_command(job, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
+            job.try_ssh_command(dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
     elif latest_src_snapshot == "":
         log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
         return True
@@ -343,12 +342,12 @@ def _rollback_dst_dataset_if_necessary(
             f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}", latest_common_dst_snapshot
         )
         try:
-            run_ssh_command(job, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+            job.run_ssh_command(dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
         except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
             stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
             no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-            raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
+            raise RetryableError("Subprocess failed", display_msg="zfs rollback", no_sleep=no_sleep) from e
 
     if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
         log.info(f"{tid} Already up-to-date: %s", dst_dataset)
@@ -412,7 +411,7 @@ def _replicate_dataset_fully(
         curr_size: int = _estimate_send_size(job, src, dst_dataset, recv_resume_token, oldest_src_snapshot)
         humansize: str = _format_size(curr_size)
         if recv_resume_token:
-            send_opts: list[str] = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
+            send_opts: list[str] = p.curr_zfs_send_program_opts + send_resume_opts  # e.g. curr + ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
@@ -425,7 +424,7 @@ def _replicate_dataset_fully(
         done_checking = done_checking or _check_zfs_dataset_busy(job, dst, dst_dataset)
         dry_run_no_send = dry_run_no_send or p.dry_run_no_send
         job.maybe_inject_params(error_trigger="full_zfs_send_params")
-        humansize = humansize.rjust(RIGHT_JUST * 3 + 2)
+        humansize = humansize.rjust(_RIGHT_JUST * 3 + 2)
         _run_zfs_send_receive(
             job, src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "full_zfs_send"
         )
@@ -521,7 +520,7 @@ def _replicate_dataset_incrementally(
         humansize: str = _format_size(total_size) + "/" + _format_size(done_size) + "/" + _format_size(curr_size)
         human_num: str = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
         if recv_resume_token:
-            send_opts: list[str] = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
+            send_opts: list[str] = p.curr_zfs_send_program_opts + send_resume_opts  # e.g. curr + ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [incr_flag, from_snap, to_snap]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
@@ -560,7 +559,7 @@ def _replicate_dataset_incrementally(
 
 def _format_size(num_bytes: int) -> str:
     """Formats a byte count for human-readable logs."""
-    return human_readable_bytes(num_bytes, separator="").rjust(RIGHT_JUST)
+    return human_readable_bytes(num_bytes, separator="").rjust(_RIGHT_JUST)
 
 
 def _prepare_zfs_send_receive(
@@ -621,7 +620,7 @@ def _prepare_zfs_send_receive(
     if src_pipe:
         src_pipe = f"{send_cmd_str} | {src_pipe}"
         if p.src.ssh_user_host:
-            src_pipe = p.shell_program + " -c " + _dquote(src_pipe)
+            src_pipe = p.shell_program + " -c " + dquote(src_pipe)
     else:
         src_pipe = send_cmd_str
 
@@ -658,7 +657,7 @@ def _prepare_zfs_send_receive(
     if dst_pipe:
         dst_pipe = f"{dst_pipe} | {recv_cmd_str}"
         if p.dst.ssh_user_host:
-            dst_pipe = p.shell_program + " -c " + _dquote(dst_pipe)
+            dst_pipe = p.shell_program + " -c " + dquote(dst_pipe)
     else:
         dst_pipe = recv_cmd_str
 
@@ -669,8 +668,8 @@ def _prepare_zfs_send_receive(
     if not p.is_program_available("sh", "dst"):
         dst_pipe = recv_cmd_str
 
-    src_pipe = _squote(p.src, src_pipe)
-    dst_pipe = _squote(p.dst, dst_pipe)
+    src_pipe = squote(p.src, src_pipe)
+    dst_pipe = squote(p.dst, dst_pipe)
     return src_pipe, local_pipe, dst_pipe
 
 
@@ -692,11 +691,11 @@ def _run_zfs_send_receive(
     )
     src_pipe, local_pipe, dst_pipe = pipes
     conn_pool_name: str = DEDICATED if p.dedicated_tcp_connection_per_zfs_send else SHARED
-    src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(conn_pool_name)
-    dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
+    src_conn_pool: ConnectionPool = p.connection_pools[p.src.location].pool(conn_pool_name)
+    dst_conn_pool: ConnectionPool = p.connection_pools[p.dst.location].pool(conn_pool_name)
     with src_conn_pool.connection() as src_conn, dst_conn_pool.connection() as dst_conn:
-        refresh_ssh_connection_if_necessary(job, p.src, src_conn)
-        refresh_ssh_connection_if_necessary(job, p.dst, dst_conn)
+        refresh_ssh_connection_if_necessary(src_conn, job)
+        refresh_ssh_connection_if_necessary(dst_conn, job)
         src_ssh_cmd: str = " ".join(src_conn.ssh_cmd_quoted)
         dst_ssh_cmd: str = " ".join(dst_conn.ssh_cmd_quoted)
         cmd: list[str] = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
@@ -704,9 +703,10 @@ def _run_zfs_send_receive(
         log.debug(msg, cmd[2].lstrip())
         if not dry_run_no_send:
             try:
-                maybe_inject_error(job, cmd=cmd, error_trigger=error_trigger)
-                process = subprocess_run(
-                    cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=True
+                job.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
+                sp: Subprocesses = job.subprocesses
+                process = sp.subprocess_run(
+                    cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=True, log=log
                 )
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
                 no_sleep: bool = False
@@ -714,21 +714,32 @@ def _run_zfs_send_receive(
                     xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
                     log.warning("%s", stderr_to_str(e.stderr).rstrip())
                 if isinstance(e, subprocess.CalledProcessError):
-                    no_sleep = _clear_resumable_recv_state_if_necessary(job, dst_dataset, e.stderr)
+                    no_sleep = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr_to_str(e.stderr))
                 # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-                raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
+                raise RetryableError("Subprocess failed", display_msg="zfs send/receive", no_sleep=no_sleep) from e
             else:
                 xprint(log, process.stdout, file=sys.stdout)
                 xprint(log, process.stderr, file=sys.stderr)
 
 
 def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr: str) -> bool:
-    """Deletes leftover state when resume tokens fail to apply."""
+    """Deletes leftover ZFS resume token state on the receiving dataset if necessary to continue operations.
+
+    To make resumable ZFS receive a reliable feature, we cope with the following ZFS facts:
+    - A failed `zfs receive -s` prohibits the following subsequent operations, until the situation is explicitly resolved
+      via a successful subsequent `zfs receive`, or cleared via `zfs receive -A`:
+        - `zfs receive` without the resumable receive token (`zfs send -t <token>` is now required)
+        - `zfs destroy <snapshot>`
+        - `zfs rollback`
+    - `zfs send -t` does not support sending more than a single snapshot; e.g. https://github.com/openzfs/zfs/issues/16764
+    - A stale receive token prohibits subsequent `zfs send -t` if not handled (meanwhile, state changed on src or dst).
+    - `zfs receive -A` fails if the receiving dataset has no ZFS resume token (anymore).
+    """
 
     def clear_resumable_recv_state() -> bool:
         log.warning(p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset)
         cmd: list[str] = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
-        try_ssh_command(job, p.dst, LOG_TRACE, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+        job.try_ssh_command(p.dst, LOG_TRACE, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
         log.log(LOG_TRACE, p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
         return True
 
@@ -806,7 +817,7 @@ def _recv_resume_token(job: Job, dst_dataset: str, retry_count: int) -> tuple[st
     send_resume_opts: list[str] = []
     if job.dst_dataset_exists[dst_dataset]:
         cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset)
-        recv_resume_token = run_ssh_command(job, p.dst, LOG_TRACE, cmd=cmd).rstrip()
+        recv_resume_token = job.run_ssh_command(p.dst, LOG_TRACE, cmd=cmd).rstrip()
         if recv_resume_token == "-" or not recv_resume_token:  # noqa: S105
             recv_resume_token = None
         else:
@@ -860,14 +871,14 @@ def _decompress_cmd(p: Params, loc: str, size_estimate_bytes: int) -> str:
         return "cat"
 
 
-WORKER_THREAD_NUMBER_REGEX: Final[re.Pattern[str]] = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
+_WORKER_THREAD_NUMBER_REGEX: Final[re.Pattern[str]] = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
 
 
 def _pv_cmd(
     job: Job, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar: bool = False
 ) -> str:
     """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'; Progress can be
-    viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
+    viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current/current.pv or similar."""
     p = job.params
     if p.is_program_available("pv", loc):
         size: str = f"--size={size_estimate_bytes}"
@@ -875,15 +886,15 @@ def _pv_cmd(
             size = ""
         pv_log_file: str = p.log_params.pv_log_file
         thread_name: str = threading.current_thread().name
-        if match := WORKER_THREAD_NUMBER_REGEX.fullmatch(thread_name):
+        if match := _WORKER_THREAD_NUMBER_REGEX.fullmatch(thread_name):
             worker = int(match.group(1))
             if worker > 0:
                 pv_log_file += PV_FILE_THREAD_SEPARATOR + f"{worker:04}"
         if job.is_first_replication_task.get_and_set(False):
-            if job.isatty and not p.quiet:
+            if not p.log_params.quiet:
                 job.progress_reporter.start()
             job.replication_start_time_nanos = time.monotonic_ns()
-        if job.isatty and not p.quiet:
+        if not p.log_params.quiet:
             with open_nofollow(pv_log_file, mode="a", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
                 fd.write("\n")  # mark start of new stream so ProgressReporter can reliably reset bytes_in_flight
             job.progress_reporter.enqueue_pv_log_file(pv_log_file)
@@ -895,17 +906,6 @@ def _pv_cmd(
         return f"LC_ALL=C {shlex.join(pv_program_opts)} 2>> {shlex.quote(pv_log_file)}"
     else:
         return "cat"
-
-
-def _squote(remote: Remote, arg: str) -> str:
-    """Quotes an argument only when running remotely over ssh."""
-    assert arg is not None
-    return shlex.quote(arg) if remote.ssh_user_host else arg
-
-
-def _dquote(arg: str) -> str:
-    """Shell-escapes double quotes and dollar and backticks, then surrounds with double quotes."""
-    return '"' + arg.replace('"', '\\"').replace("$", "\\$").replace("`", "\\`") + '"'
 
 
 def delete_snapshots(job: Job, remote: Remote, dataset: str, snapshot_tags: list[str]) -> None:
@@ -932,13 +932,13 @@ def _delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str
     cmd: list[str] = _delete_snapshot_cmd(p, r, snapshots_to_delete)
     is_dry: bool = False  # False is safe because we're using the 'zfs destroy -n' flag
     try:
-        maybe_inject_error(job, cmd=cmd, error_trigger="zfs_delete_snapshot")
-        run_ssh_command(job, r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
+        job.maybe_inject_error(cmd=cmd, error_trigger="zfs_delete_snapshot")
+        job.run_ssh_command(r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
         stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
         no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
         # op isn't idempotent so retries regather current state from the start
-        raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
+        raise RetryableError("Subprocess failed", display_msg="zfs destroy snapshot", no_sleep=no_sleep) from e
 
 
 def _delete_snapshot_cmd(p: Params, r: Remote, snapshots_to_delete: str) -> list[str]:
@@ -962,8 +962,8 @@ def delete_bookmarks(job: Job, remote: Remote, dataset: str, snapshot_tags: list
         job,
         remote,
         [(cmd, (f"{dataset}#{snapshot_tag}" for snapshot_tag in snapshot_tags))],
-        lambda _cmd, batch: try_ssh_command(
-            job, remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch, exists=False
+        lambda _cmd, batch: job.try_ssh_command(
+            remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch, exists=False
         ),
         max_batch_items=1,
     )
@@ -985,7 +985,7 @@ def delete_datasets(job: Job, remote: Remote, datasets: Iterable[str]) -> None:
             dataset,
         )
         is_dry: bool = False  # False is safe because we're using the 'zfs destroy -n' flag
-        run_ssh_command(job, remote, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
+        job.run_ssh_command(remote, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
         last_deleted_dataset = dataset
 
 
@@ -1003,14 +1003,15 @@ def _create_zfs_filesystem(job: Job, filesystem: str) -> None:
         if not job.dst_dataset_exists[parent]:
             cmd: list[str] = p.split_args(f"{p.dst.sudo} {p.zfs_program} create -p", no_mount, parent)
             try:
-                run_ssh_command(job, p.dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+                job.run_ssh_command(p.dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             except subprocess.CalledProcessError as e:
                 # ignore harmless error caused by 'zfs create' without the -u flag, or by dataset already existing
+                stderr: str = stderr_to_str(e.stderr)
                 if not (
-                    "filesystem successfully created, but it may only be mounted by root" in e.stderr
-                    or "filesystem successfully created, but not mounted" in e.stderr  # SolarisZFS
-                    or "dataset already exists" in e.stderr
-                    or "filesystem already exists" in e.stderr  # SolarisZFS?
+                    "filesystem successfully created, but it may only be mounted by root" in stderr
+                    or "filesystem successfully created, but not mounted" in stderr  # SolarisZFS
+                    or "dataset already exists" in stderr
+                    or "filesystem already exists" in stderr  # SolarisZFS?
                 ):
                     raise
             if not p.dry_run:
@@ -1028,11 +1029,12 @@ def _create_zfs_bookmarks(job: Job, remote: Remote, dataset: str, snapshots: lis
         assert "@" in snapshot
         bookmark_cmd: list[str] = cmd + [replace_prefix(snapshot, old_prefix=f"{dataset}@", new_prefix=f"{dataset}#")]
         try:
-            run_ssh_command(job, remote, LOG_DEBUG, is_dry=p.dry_run, print_stderr=False, cmd=bookmark_cmd)
+            job.run_ssh_command(remote, LOG_DEBUG, is_dry=p.dry_run, print_stderr=False, cmd=bookmark_cmd)
         except subprocess.CalledProcessError as e:
             # ignore harmless zfs error caused by bookmark with the same name already existing
-            if ": bookmark exists" not in e.stderr:
-                print(e.stderr, file=sys.stderr, end="")
+            stderr: str = stderr_to_str(e.stderr)
+            if ": bookmark exists" not in stderr:
+                xprint(p.log, stderr, file=sys.stderr, end="")
                 raise
 
     if p.create_bookmarks != "none" and are_bookmarks_enabled(p, remote):
@@ -1050,11 +1052,11 @@ def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_
     zfs_send_program_opts: list[str] = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
     zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
     if recv_resume_token:
-        zfs_send_program_opts = ["-Pnv", "-t", recv_resume_token]
+        zfs_send_program_opts += ["-t", recv_resume_token]
         items = ()
     cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
     try:
-        lines: str | None = try_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
+        lines: str | None = job.try_ssh_command(remote, LOG_TRACE, cmd=cmd)
     except RetryableError as retryable_error:
         assert retryable_error.__cause__ is not None
         if recv_resume_token:
@@ -1094,7 +1096,9 @@ def _estimate_send_sizes_in_parallel(
         ]
 
     max_workers: int = min(len(steps_todo), job.max_workers[r.location])
-    return list(parallel_iterator(iterator_builder, max_workers=max_workers, ordered=True))
+    return list(
+        parallel_iterator(iterator_builder, max_workers=max_workers, ordered=True, termination_event=job.termination_event)
+    )
 
 
 def _zfs_set(job: Job, properties: list[str], remote: Remote, dataset: str) -> None:
@@ -1109,8 +1113,8 @@ def _zfs_set(job: Job, properties: list[str], remote: Remote, dataset: str) -> N
         remote,
         cmd,
         properties,
-        lambda batch: run_ssh_command(
-            job, remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch + [dataset]
+        lambda batch: job.run_ssh_command(
+            remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch + [dataset]
         ),
         max_batch_items=2**29,
     )
@@ -1133,14 +1137,15 @@ def _zfs_get(
     if not propnames:
         return {}
     p = job.params
-    cache_key = (sources, output_columns, propnames)
+    cache_key: tuple[str, str, str] = (sources, output_columns, propnames)
     props: dict[str, str | None] | None = props_cache.get(cache_key)
     if props is None:
         cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
-        lines: str = run_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
+        lines: str = job.run_ssh_command(remote, LOG_TRACE, cmd=cmd)
         is_name_value_pair: bool = "," in output_columns
         props = {}
         # if not splitlines: omit single trailing newline that was appended by 'zfs get' CLI
+        assert splitlines or len(lines) == 0 or lines[-1] == "\n"
         for line in lines.splitlines() if splitlines else [lines[0:-1]]:
             if is_name_value_pair:
                 propname, propvalue = line.split("\t", 1)
@@ -1197,7 +1202,7 @@ def _add_recv_property_options(
                 for propnames in user_propnames:
                     props.update(_zfs_get(job, p.src, dataset, config.sources, "property,value", propnames, False, cache))
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-                raise RetryableError("Subprocess failed") from e
+                raise RetryableError("Subprocess failed", display_msg="zfs get") from e
             for propname in sorted(props.keys()):
                 if config is p.zfs_recv_o_config:
                     if not (propname in ox_names or propname in x_names_set):
@@ -1223,10 +1228,10 @@ def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send
     parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use cases where A replicates to B,
     and B replicates to C.
 
-    check_zfs_dataset_busy() offers no guarantees, it merely proactively avoids likely collisions. In other words, even if
+    _check_zfs_dataset_busy() offers no guarantees, it merely proactively avoids likely collisions. In other words, even if
     the process check below passes there is no guarantee that the destination dataset won't be busy by the time we actually
     execute the 'zfs send' operation. In such an event ZFS will reject the operation, we'll detect that, and we'll simply
-    retry, after some delay. check_zfs_dataset_busy() can be disabled via --ps-program=-.
+    retry, after some delay. _check_zfs_dataset_busy() can be disabled via --ps-program=-.
 
     TLDR: As is common for long-running operations in distributed systems, we use coordination-free optimistic concurrency
     control where the parties simply retry on collision detection (rather than coordinate concurrency via a remote lock
@@ -1236,7 +1241,7 @@ def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send
     if not p.is_program_available("ps", remote.location):
         return True
     cmd: list[str] = p.split_args(f"{p.ps_program} -Ao args")
-    procs: list[str] = (try_ssh_command(job, remote, LOG_TRACE, cmd=cmd) or "").splitlines()
+    procs: list[str] = (job.try_ssh_command(remote, LOG_TRACE, cmd=cmd) or "").splitlines()
     if job.inject_params.get("is_zfs_dataset_busy", False):
         procs += ["sudo -n zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
     if not _is_zfs_dataset_busy(procs, dataset, busy_if_send=busy_if_send):
@@ -1246,17 +1251,17 @@ def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send
         die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
     except SystemExit as e:
         log.warning("%s", e)
-        raise RetryableError("dst currently busy with zfs mutation op") from e
+        raise RetryableError("dst currently busy with zfs mutation op", display_msg="replication") from e
 
 
-ZFS_DATASET_BUSY_PREFIX: Final[str] = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
-ZFS_DATASET_BUSY_IF_MODS: Final[re.Pattern[str]] = re.compile((ZFS_DATASET_BUSY_PREFIX + ") .*").replace("(", "(?:"))
-ZFS_DATASET_BUSY_IF_SEND: Final[re.Pattern[str]] = re.compile((ZFS_DATASET_BUSY_PREFIX + "|send) .*").replace("(", "(?:"))
+_ZFS_DATASET_BUSY_PREFIX: Final[str] = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
+_ZFS_DATASET_BUSY_IF_MODS: Final[re.Pattern[str]] = re.compile((_ZFS_DATASET_BUSY_PREFIX + ") .*").replace("(", "(?:"))
+_ZFS_DATASET_BUSY_IF_SEND: Final[re.Pattern[str]] = re.compile((_ZFS_DATASET_BUSY_PREFIX + "|send) .*").replace("(", "(?:"))
 
 
 def _is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> bool:
     """Checks if any process list entry indicates ZFS activity on dataset."""
-    regex: re.Pattern[str] = ZFS_DATASET_BUSY_IF_SEND if busy_if_send else ZFS_DATASET_BUSY_IF_MODS
+    regex: re.Pattern[str] = _ZFS_DATASET_BUSY_IF_SEND if busy_if_send else _ZFS_DATASET_BUSY_IF_MODS
     suffix: str = " " + dataset
     infix: str = " " + dataset + "@"
     return any((proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc) for proc in procs)

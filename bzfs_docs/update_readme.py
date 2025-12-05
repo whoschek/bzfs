@@ -39,7 +39,7 @@ from bzfs_main import (
     bzfs,
     bzfs_jobrunner,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     find_match,
 )
 

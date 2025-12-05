@@ -27,6 +27,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import (
     Iterable,
@@ -42,18 +43,15 @@ from logging import (
     Logger,
 )
 from typing import (
-    TYPE_CHECKING,
     Final,
     Literal,
     NamedTuple,
     cast,
 )
 
-import bzfs_main.utils
 from bzfs_main.argparse_actions import (
     SnapshotFilter,
     optimize_snapshot_filters,
-    validate_no_argument_file,
 )
 from bzfs_main.argparse_cli import (
     LOG_DIR_DEFAULT,
@@ -65,18 +63,28 @@ from bzfs_main.argparse_cli import (
 from bzfs_main.detect import (
     DISABLE_PRG,
 )
+from bzfs_main.filter import (
+    SNAPSHOT_FILTERS_VAR,
+)
 from bzfs_main.period_anchors import (
     PeriodAnchors,
 )
-from bzfs_main.retry import (
+from bzfs_main.util import (
+    utils,
+)
+from bzfs_main.util.connection import (
+    ConnectionPools,
+    MiniParams,
+    MiniRemote,
+)
+from bzfs_main.util.retry import (
     RetryPolicy,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     PROG_NAME,
     SHELL_CHARS,
-    SNAPSHOT_FILTERS_VAR,
     UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH,
     UNIX_TIME_INFINITY_SECS,
     RegexList,
@@ -106,10 +114,10 @@ from bzfs_main.utils import (
     xappend,
 )
 
-if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.connection import (
-        ConnectionPools,
-    )
+# constants:
+HOME_DIRECTORY: Final[str] = get_home_directory()
+_UNSET_ENV_VARS_LOCK: Final[threading.Lock] = threading.Lock()
+_UNSET_ENV_VARS_LATCH: Final[SynchronizedBool] = SynchronizedBool(True)
 
 
 #############################################################################
@@ -128,12 +136,15 @@ class LogParams:
         else:
             log_level = "INFO"
         self.log_level: Final[str] = log_level
-        self.log_config_file: Final[str] = args.log_config_file
-        if self.log_config_file and self.log_config_file.startswith("+"):
-            validate_no_argument_file(self.log_config_file, args, err_prefix="--log-config-file: ")
-        self.log_config_vars: Final[dict[str, str]] = dict(var.split(":", 1) for var in args.log_config_var)
         self.timestamp: Final[str] = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
-        self.home_dir: Final[str] = get_home_directory()
+        self.isatty: Final[bool] = getenv_bool("isatty", True)
+        self.quiet: Final[bool] = args.quiet
+        self.terminal_columns: Final[int] = (
+            getenv_int("terminal_columns", shutil.get_terminal_size(fallback=(120, 24)).columns)
+            if self.isatty and args.pv_program != DISABLE_PRG and not self.quiet
+            else 0
+        )
+        self.home_dir: Final[str] = HOME_DIRECTORY
         log_parent_dir: Final[str] = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)
         if LOG_DIR_DEFAULT not in os.path.basename(log_parent_dir):
             die(f"Basename of --log-dir must contain the substring '{LOG_DIR_DEFAULT}', but got: {log_parent_dir}")
@@ -158,7 +169,11 @@ class LogParams:
         )
         os.fchmod(fd, FILE_PERMISSIONS)
         os.close(fd)
-        self.pv_log_file: str = self.log_file[0 : -len(".log")] + ".pv"
+        self.pv_log_file: Final[str] = self.log_file[0 : -len(".log")] + ".pv"
+        log_file_stem: str = os.path.basename(self.log_file)[0 : -len(".log")]
+        # Python's standard logger naming API interprets chars such as '.', '-', ':', spaces, etc in special ways, e.g.
+        # logging.getLogger("foo.bar") vs logging.getLogger("foo-bar"). Thus, we sanitize the Python logger name via a regex:
+        self.logger_name_suffix: Final[str] = re.sub(r"[^A-Za-z0-9_]", repl="_", string=log_file_stem)
         cache_root_dir: str = os.path.join(log_parent_dir, ".cache")
         os.makedirs(cache_root_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_file_permissions(cache_root_dir, DIR_PERMISSIONS)
@@ -168,7 +183,7 @@ class LogParams:
         # For parallel usage, ensures there is no time window when the symlinks are inconsistent or do not exist.
         current: str = "current"
         dot_current_dir: str = os.path.join(log_parent_dir, f".{current}")
-        current_dir: str = os.path.join(dot_current_dir, os.path.basename(self.log_file)[0 : -len(".log")])
+        current_dir: str = os.path.join(dot_current_dir, log_file_stem)
         os.makedirs(dot_current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--log-dir: .current ", dot_current_dir)
         try:
@@ -182,14 +197,13 @@ class LogParams:
             _delete_stale_files(dot_current_dir, prefix="", millis=5000, dirs=True, exclude=os.path.basename(current_dir))
         except FileNotFoundError:
             pass  # harmless concurrent cleanup
-        self.params: Params | None = None
 
     def __repr__(self) -> str:
         return str(self.__dict__)
 
 
 #############################################################################
-class Params:
+class Params(MiniParams):
     """All parsed CLI options combined into a single bundle; simplifies passing around numerous settings and defaults."""
 
     def __init__(
@@ -209,7 +223,7 @@ class Params:
         self.args: Final[argparse.Namespace] = args
         self.sys_argv: Final[list[str]] = sys_argv
         self.log_params: Final[LogParams] = log_params
-        self.log: Final[Logger] = log
+        self.log: Logger = log
         self.inject_params: Final[dict[str, bool]] = inject_params if inject_params is not None else {}  # for testing only
         self.one_or_more_whitespace_regex: Final[re.Pattern[str]] = re.compile(r"\s+")
         self.two_or_more_spaces_regex: Final[re.Pattern[str]] = re.compile(r"  +")
@@ -227,16 +241,15 @@ class Params:
         self.dry_run_no_send: Final[bool] = args.dryrun == "send"
         self.verbose_zfs: Final[bool] = args.verbose >= 2
         self.verbose_destroy: Final[str] = "" if args.quiet else "-v"
-        self.quiet: Final[bool] = args.quiet
 
-        self.zfs_send_program_opts: list[str] = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
+        self.zfs_send_program_opts: Final[list[str]] = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
         zfs_recv_program_opts: list[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             zfs_recv_program_opts.append(self.validate_arg_str(extra_opt, allow_all=True))
         preserve_properties = [validate_property_name(name, "--preserve-properties") for name in args.preserve_properties]
         zfs_recv_program_opts, zfs_recv_x_names = self._fix_recv_opts(zfs_recv_program_opts, frozenset(preserve_properties))
         self.zfs_recv_program_opts: Final[list[str]] = zfs_recv_program_opts
-        self.zfs_recv_x_names: list[str] = zfs_recv_x_names
+        self.zfs_recv_x_names: Final[list[str]] = zfs_recv_x_names
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
@@ -247,31 +260,33 @@ class Params:
         self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
 
         self.force_rollback_to_latest_snapshot: Final[bool] = args.force_rollback_to_latest_snapshot
-        self.force_rollback_to_latest_common_snapshot = SynchronizedBool(args.force_rollback_to_latest_common_snapshot)
+        self.force_rollback_to_latest_common_snapshot: Final[SynchronizedBool] = SynchronizedBool(
+            args.force_rollback_to_latest_common_snapshot
+        )
         self.force: Final[SynchronizedBool] = SynchronizedBool(args.force)
         self.force_once: Final[bool] = args.force_once
         self.force_unmount: Final[str] = "-f" if args.force_unmount else ""
         force_hard: str = "-R" if args.force_destroy_dependents else ""
         self.force_hard: Final[str] = "-R" if args.force_hard else force_hard  # --force-hard is deprecated
 
-        self.skip_parent: bool = args.skip_parent
+        self.skip_parent: Final[bool] = args.skip_parent
         self.skip_missing_snapshots: Final[str] = args.skip_missing_snapshots
         self.skip_on_error: Final[str] = args.skip_on_error
         self.retry_policy: Final[RetryPolicy] = RetryPolicy(args)
         self.skip_replication: Final[bool] = args.skip_replication
         self.delete_dst_snapshots: Final[bool] = args.delete_dst_snapshots is not None
         self.delete_dst_bookmarks: Final[bool] = args.delete_dst_snapshots == "bookmarks"
-        self.delete_dst_snapshots_no_crosscheck: bool = args.delete_dst_snapshots_no_crosscheck
+        self.delete_dst_snapshots_no_crosscheck: Final[bool] = args.delete_dst_snapshots_no_crosscheck
         self.delete_dst_snapshots_except: Final[bool] = args.delete_dst_snapshots_except
         self.delete_dst_datasets: Final[bool] = args.delete_dst_datasets
         self.delete_empty_dst_datasets: Final[bool] = args.delete_empty_dst_datasets is not None
-        self.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: bool = (
+        self.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: Final[bool] = (
             args.delete_empty_dst_datasets == "snapshots+bookmarks"
         )
-        self.compare_snapshot_lists: str = args.compare_snapshot_lists
+        self.compare_snapshot_lists: Final[str] = args.compare_snapshot_lists
         self.daemon_lifetime_nanos: Final[int] = 1_000_000 * parse_duration_to_milliseconds(args.daemon_lifetime)
-        self.daemon_frequency: str = args.daemon_frequency
-        self.enable_privilege_elevation: bool = not args.no_privilege_elevation
+        self.daemon_frequency: Final[str] = args.daemon_frequency
+        self.enable_privilege_elevation: Final[bool] = not args.no_privilege_elevation
         self.no_stream: Final[bool] = args.no_stream
         self.resume_recv: Final[bool] = not args.no_resume_recv
         self.create_bookmarks: Final[str] = (
@@ -279,8 +294,8 @@ class Params:
         )  # no_create_bookmark depr
         self.use_bookmark: Final[bool] = not args.no_use_bookmark
 
-        self.src: Remote = Remote("src", args, self)  # src dataset, host and ssh options
-        self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
+        self.src: Final[Remote] = Remote("src", args, self)  # src dataset, host and ssh options
+        self.dst: Final[Remote] = Remote("dst", args, self)  # dst dataset, host and ssh options
         self.create_src_snapshots_config: Final[CreateSrcSnapshotConfig] = CreateSrcSnapshotConfig(args, self)
         self.monitor_snapshots_config: Final[MonitorSnapshotsConfig] = MonitorSnapshotsConfig(args, self)
         self.is_caching_snapshots: Final[bool] = args.cache_snapshots == "true"
@@ -302,13 +317,12 @@ class Params:
                        "-U", "--store-and-forward", "-d", "--watchfd", "-R", "--remote", "-P", "--pidfile"}  # fmt: skip
         for opt in bad_pv_opts.intersection(self.pv_program_opts):
             die(f"--pv-program-opts: {opt} is disallowed for security reasons.")
-        self.isatty: Final[bool] = getenv_bool("isatty", True)
         if args.bwlimit:
             self.pv_program_opts.extend([f"--rate-limit={self.validate_arg_str(args.bwlimit)}"])
         self.shell_program_local: Final[str] = "sh"
-        self.shell_program: str = self._program_name(args.shell_program)
-        self.ssh_program: Final[str] = self._program_name(args.ssh_program)
-        self.sudo_program: str = self._program_name(args.sudo_program)
+        self.shell_program: Final[str] = self._program_name(args.shell_program)
+        self.ssh_program: str = self._program_name(args.ssh_program)
+        self.sudo_program: Final[str] = self._program_name(args.sudo_program)
         self.uname_program: Final[str] = self._program_name("uname")
         self.zfs_program: Final[str] = self._program_name("zfs")
         self.zpool_program: Final[str] = self._program_name(args.zpool_program)
@@ -321,14 +335,11 @@ class Params:
         self.dedicated_tcp_connection_per_zfs_send: Final[bool] = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
         # threads: with --force-once we intentionally coerce to a single-threaded run to ensure deterministic serial behavior
         self.threads: Final[tuple[int, bool]] = (1, False) if self.force_once else args.threads
-        timeout_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
-        self.timeout_nanos: int | None = timeout_nanos
+        timeout_duration_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
+        self.timeout_duration_nanos: int | None = timeout_duration_nanos  # duration (not a timestamp); for logging only
         self.no_estimate_send_size: Final[bool] = args.no_estimate_send_size
-        self.remote_conf_cache_ttl_nanos: int = 1_000_000 * parse_duration_to_milliseconds(args.daemon_remote_conf_cache_ttl)
-        self.terminal_columns: Final[int] = (
-            getenv_int("terminal_columns", shutil.get_terminal_size(fallback=(120, 24)).columns)
-            if self.isatty and self.pv_program != DISABLE_PRG and not self.quiet
-            else 0
+        self.remote_conf_cache_ttl_nanos: Final[int] = 1_000_000 * parse_duration_to_milliseconds(
+            args.daemon_remote_conf_cache_ttl
         )
 
         self.os_cpu_count: Final[int | None] = os.cpu_count()
@@ -426,12 +437,21 @@ class Params:
 
     def _unset_matching_env_vars(self, args: argparse.Namespace) -> None:
         """Unset environment variables matching regex filters."""
+        if len(args.exclude_envvar_regex) == 0 and len(args.include_envvar_regex) == 0:
+            return  # fast path
         exclude_envvar_regexes: RegexList = compile_regexes(args.exclude_envvar_regex)
         include_envvar_regexes: RegexList = compile_regexes(args.include_envvar_regex)
-        for envvar_name in list(os.environ.keys()):
-            if is_included(envvar_name, exclude_envvar_regexes, include_envvar_regexes):
-                os.environ.pop(envvar_name, None)
-                self.log.debug("Unsetting b/c envvar regex: %s", envvar_name)
+        # Mutate global state at most once, atomically. First thread wins. The latch isn't strictly necessary for
+        # correctness as all concurrent bzfs.Job instances in bzfs_jobrunner have identical include/exclude_envvar_regex
+        # anyway. It's just for reduced latency.
+        with _UNSET_ENV_VARS_LOCK:
+            if _UNSET_ENV_VARS_LATCH.get_and_set(False):
+                for envvar_name in list(os.environ):
+                    # order of include vs exclude is intentionally reversed to correctly implement semantics:
+                    # "unset env var iff excluded and not included (include takes precedence)."
+                    if is_included(envvar_name, exclude_envvar_regexes, include_envvar_regexes):
+                        os.environ.pop(envvar_name, None)
+                        self.log.debug("Unsetting b/c envvar regex: %s", envvar_name)
 
     def lock_file_name(self) -> str:
         """Returns unique path used to detect concurrently running jobs.
@@ -449,7 +469,6 @@ class Params:
                self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_dst_snapshots_except,
                self.args.delete_empty_dst_datasets,
                self.args.compare_snapshot_lists, self.args.monitor_snapshots,
-               self.args.log_file_infix,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
         # fmt: on
@@ -463,7 +482,7 @@ class Params:
 
     def dry(self, msg: str) -> str:
         """Prefix ``msg`` with 'Dry' when running in dry-run mode."""
-        return bzfs_main.utils.dry(msg, self.dry_run)
+        return utils.dry(msg, self.dry_run)
 
     def is_program_available(self, program: str, location: str) -> bool:
         """Return True if ``program`` was detected on ``location`` host."""
@@ -471,39 +490,42 @@ class Params:
 
 
 #############################################################################
-class Remote:
+class Remote(MiniRemote):
     """Connection settings for either source or destination host."""
 
     def __init__(self, loc: str, args: argparse.Namespace, p: Params) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
         assert loc == "src" or loc == "dst"
-        self.location: Final[str] = loc
-        self.params: Final[Params] = p
-        self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
-        self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
-        self.ssh_port: int | None = getattr(args, f"ssh_{loc}_port")
+        self.location: str = loc
+        self.params: Params = p
+        self.basis_ssh_user: Final[str] = getattr(args, f"ssh_{loc}_user")
+        self.basis_ssh_host: Final[str] = getattr(args, f"ssh_{loc}_host")
+        self.ssh_port: Final[int | None] = getattr(args, f"ssh_{loc}_port")
         self.ssh_config_file: Final[str | None] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
         if self.ssh_config_file:
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
-        self.ssh_config_file_hash: str = (
+        self.ssh_config_file_hash: Final[str] = (
             sha256_urlsafe_base64(os.path.abspath(self.ssh_config_file), padding=False) if self.ssh_config_file else ""
         )
         self.ssh_cipher: Final[str] = p.validate_arg_str(args.ssh_cipher)
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
-        self.ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
+        ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
             ["-v"] if args.verbose >= 3 else []
         )
+        self.ssh_extra_opts: tuple[str, ...] = tuple(ssh_extra_opts)
         self.max_concurrent_ssh_sessions_per_tcp_connection: Final[int] = args.max_concurrent_ssh_sessions_per_tcp_connection
-        self.ssh_exit_on_shutdown: Final[bool] = args.ssh_exit_on_shutdown
-        self.ssh_control_persist_secs: Final[int] = args.ssh_control_persist_secs
+        self.ssh_exit_on_shutdown: bool = args.ssh_exit_on_shutdown
+        self.ssh_control_persist_secs: int = args.ssh_control_persist_secs
+        self.ssh_control_persist_margin_secs: int = getenv_int("ssh_control_persist_margin_secs", 2)
         self.socket_prefix: Final[str] = "s"
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
+        self.ssh_socket_dir: str = ""
         if self.reuse_ssh_connection:
-            ssh_home_dir: str = os.path.join(get_home_directory(), ".ssh")
+            ssh_home_dir: str = os.path.join(HOME_DIRECTORY, ".ssh")
             os.makedirs(ssh_home_dir, mode=DIR_PERMISSIONS, exist_ok=True)
-            self.ssh_socket_dir: Final[str] = os.path.join(ssh_home_dir, "bzfs")
+            self.ssh_socket_dir = os.path.join(ssh_home_dir, "bzfs")
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             validate_file_permissions(self.ssh_socket_dir, mode=DIR_PERMISSIONS)
             self.ssh_exit_on_shutdown_socket_dir: Final[str] = os.path.join(self.ssh_socket_dir, "x")
@@ -534,7 +556,7 @@ class Remote:
         p: Params = self.params
         if p.ssh_program == DISABLE_PRG:
             die("Cannot talk to remote host because ssh CLI is disabled.")
-        ssh_cmd: list[str] = [p.ssh_program] + self.ssh_extra_opts
+        ssh_cmd: list[str] = [p.ssh_program] + list(self.ssh_extra_opts)
         if self.ssh_config_file:
             ssh_cmd += ["-F", self.ssh_config_file]
         if self.ssh_cipher:
@@ -570,12 +592,16 @@ class Remote:
         return self.location, self.ssh_user_host, self.ssh_port, self.ssh_config_file
 
     def cache_namespace(self) -> str:
-        """Returns cache namespace string which is a stable, unique directory component for snapshot caches that
-        distinguishes endpoints by username+host+port+ssh_config_file where applicable, and uses '-' when no user/host is
-        present (local mode)."""
+        """Returns cache namespace string which is a stable, unique directory component for caches that distinguishes
+        endpoints by username+host+port+ssh_config_file where applicable, and uses '-' when no user/host is present (local
+        mode)."""
         if not self.ssh_user_host:
             return "-"  # local mode
         return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"
+
+    def is_ssh_available(self) -> bool:
+        """Return True if the ssh client program required for this remote is available on the local host."""
+        return self.params.is_program_available("ssh", "local")
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -657,7 +683,7 @@ class CreateSrcSnapshotConfig:
         self.skip_create_src_snapshots: Final[bool] = not args.create_src_snapshots
         self.create_src_snapshots_even_if_not_due: Final[bool] = args.create_src_snapshots_even_if_not_due
         tz_spec: str | None = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
-        self.tz: tzinfo | None = get_timezone(tz_spec)
+        self.tz: Final[tzinfo | None] = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: Final[str] = args.create_src_snapshots_timeformat
         self.anchors: Final[PeriodAnchors] = PeriodAnchors.parse(args)
@@ -855,7 +881,7 @@ def _fix_send_recv_opts(
     return results, sorted(x_names)
 
 
-SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: Final[re.Pattern[str]] = re.compile(r"^[0-9]+")  # see local_ssh_command()
+_SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: Final[re.Pattern[str]] = re.compile(r"^[0-9]+")  # see local_ssh_command()
 
 
 def _delete_stale_files(
@@ -882,7 +908,7 @@ def _delete_stale_files(
                         shutil.rmtree(entry.path, ignore_errors=True)
                     elif not (ssh and stat.S_ISSOCK(stats.st_mode)):
                         os.remove(entry.path)
-                    elif match := SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
+                    elif match := _SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
                         pid: int = int(match.group(0))
                         if pid_exists(pid) is False or now - stats.st_mtime >= 31 * 24 * 60 * 60:
                             os.remove(entry.path)  # bzfs process is no longer alive; its ssh master process isn't either

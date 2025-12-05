@@ -2,9 +2,37 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.14.0] - TBD
+## [1.16.0] - Not yet released
 
+- [bzfs] Include `--zfs-send-program-opts` also when resuming a previously interrupted `zfs receive -s`.
+
+## [1.15.0] - December 1, 2025
+
+- [bzfs_jobrunner] Fixed: In some edge cases, subjobs run in parallel when they should run sequentially.
+- [bzfs] [perf] `--cache-snapshots`: Update the cache for the datasets that were actually replicated even if some
+  datasets were skipped.
+- [bzfs] More reliable retries when connecting to remote server.
+- [bzfs] `--cache-snapshots`: Ensure equal snapshots_changed still allows updating cached creation time.
+- [bzfs] [security] Properly round-trip backslash characters in ZFS property values.
+- [bzfs] [security] Enable use of `doas` as a replacement for `sudo`, via `--sudo-program=doas`
+- [bzfs] Decouple `run_ssh_command()` SSH client utility from the rest of the program.
+- [bzfs] Decouple `process_datasets_in_parallel()` parallel task tree scheduler utility from the rest of the program.
+- [bzfs] Also run nightly tests on FreeBSD-15.0.
+- [bzfs] Also run nightly tests on zfs-2.3.5.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.14.0...v1.15.0
+
+## [1.14.0] - November 7, 2025
+
+- [bzfs_jobrunner] [perf] Improve latency by enabling bzfs_jobrunner to safely execute multiple bzfs jobs in parallel
+  within the same Python process (not just in parallel across multiple Python subprocesses).
+- [bzfs] [perf] Use better heuristic to choose num-datasets-per-thread when listing snapshots.
 - [bzfs] Change default of `--create-bookmarks` from `hourly` to `all` to improve safety.
+- [bzfs] [security] Set the umask so intermediate directories created by `os.makedirs()` have stricter permissions.
+- [bzfs] [security] Remove the `--log-config-file` and `--log-config-var` CLI options.
+- [bzfs] Don't optimize regex if it might contain a pathological character class that contains parenthesis.
+- [bzfs] Also run nightly tests on zfs-2.4.0-rcX.
+- [bzfs] Also run nightly tests on python-3.15-dev.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.13.0...v1.14.0
 
 ## [1.13.0] - October 11, 2025
 

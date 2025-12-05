@@ -27,7 +27,6 @@ import glob
 import os
 import re
 import selectors
-import sys
 import threading
 import time
 from collections import (
@@ -57,8 +56,9 @@ from typing import (
     NamedTuple,
 )
 
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     FILE_PERMISSIONS,
+    LOG_STDOUT,
     InterruptibleSleep,
     human_readable_bytes,
     open_nofollow,
@@ -66,9 +66,9 @@ from bzfs_main.utils import (
 
 # constants
 PV_FILE_THREAD_SEPARATOR: Final[str] = "_"
-ARABIC_DECIMAL_SEPARATOR: Final[str] = "\u066b"  # "٫"  # noqa: RUF003
-PV_SIZE_TO_BYTES_REGEX: Final[re.Pattern[str]] = re.compile(
-    rf"(\d+[.,{ARABIC_DECIMAL_SEPARATOR}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)"
+_ARABIC_DECIMAL_SEPARATOR: Final[str] = "\u066b"  # "٫"  # noqa: RUF003
+_PV_SIZE_TO_BYTES_REGEX: Final[re.Pattern[str]] = re.compile(
+    rf"(\d+[.,{_ARABIC_DECIMAL_SEPARATOR}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)"
 )
 
 
@@ -87,9 +87,8 @@ class ProgressReporter:
 
     Tails the 'pv' output log files that are being written to by (parallel) replication,
     and extracts aggregate progress and throughput metrics from them, such as MB, MB/s, ETA, etc. Periodically prints these
-    metrics to the console status line (but not to the log file), and in doing so "visually overwrites" the previous status
-    line, via appending a \r carriage return control char rather than a \n newline char. Does not print a status line if the
-    Unix environment var 'bzfs_isatty' is set to 'false', in order not to confuse programs that scrape redirected stdout.
+    metrics to the console status line, and in doing so "visually overwrites" the previous status line, via appending a \r
+    carriage return control char rather than a \n newline char.
     Example console status line:
     2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] [==========>  ] 80% ETA 0:00:04 ETA 01:23:08
     """
@@ -117,8 +116,9 @@ class ProgressReporter:
         self._sleeper: Final[InterruptibleSleep] = InterruptibleSleep(self._lock)  # sleeper shares lock with reporter
         self._file_name_queue: set[str] = set()
         self._file_name_set: Final[set[str]] = set()
-        self._is_stopping = False
+        self._is_stopping: bool = False
         self._states: list[State] = [State.IS_RESETTING]
+        self._first_status_line_emitted: Final[threading.Event] = threading.Event()  # for testing only
 
     def start(self) -> None:
         """Starts the monitoring thread and begins asynchronous parsing of ``pv`` log files."""
@@ -157,6 +157,11 @@ class ProgressReporter:
             if len(states) >= 3:
                 del states[0]  # cap time and memory consumption by removing redundant state transitions
         self._sleeper.interrupt()
+
+    def wait_for_first_status_line(self) -> None:
+        """Blocks until at least the first status line has been emitted; for testing only."""
+        if not self._first_status_line_emitted.is_set():
+            self._first_status_line_emitted.wait()
 
     def enqueue_pv_log_file(self, pv_log_file: str) -> None:
         """Tells progress reporter thread to also monitor and tail the given pv log file."""
@@ -273,12 +278,11 @@ class ProgressReporter:
                 _, msg2 = self._format_sent_bytes(sent_bytes - oldest.sent_bytes, curr_time_nanos - oldest.timestamp_nanos)
                 msg4: str = max(etas).line_tail if len(etas) > 0 else ""  # progress bar, ETAs
                 timestamp: str = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
-                status_line: str = f"{timestamp} [I] zfs sent {msg0} {msg1} {msg2} {msg3} {msg4}"
+                status_line: str = f"{timestamp} [I] zfs sent {msg0} {msg1} {msg2} {msg3} {msg4}".rstrip()
                 status_line = status_line.ljust(last_status_len)  # "overwrite" trailing chars of previous status with spaces
 
                 # The Unix console skips back to the beginning of the console line when it sees this \r control char:
-                sys.stdout.write(f"{status_line}\r")
-                sys.stdout.flush()
+                log.log(LOG_STDOUT, "%s", status_line, extra={"terminator": "\r"})
 
                 # log.log(log_trace, "\nnum_lines: %s, num_readables: %s", num_lines, num_readables)
                 last_status_len = len(status_line.rstrip())
@@ -286,6 +290,8 @@ class ProgressReporter:
                 latest_samples.append(Sample(sent_bytes, curr_time_nanos))
                 if elapsed_nanos >= sliding_window_nanos:
                     latest_samples.popleft()  # slide the sliding window containing recent measurements
+                if not self._first_status_line_emitted.is_set():
+                    self._first_status_line_emitted.set()
             elif not has_line:
                 # Avoid burning CPU busily spinning on I/O readiness as fds are almost always ready for non-blocking read
                 # even if no new pv log line has been written. Yet retain ability to wake up immediately on reporter.stop().
@@ -348,8 +354,8 @@ def _pv_size_to_bytes(
     size: str,
 ) -> tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
     """Converts pv size string to bytes and returns remaining text."""
-    if match := PV_SIZE_TO_BYTES_REGEX.fullmatch(size):
-        number: float = float(match.group(1).replace(",", ".").replace(ARABIC_DECIMAL_SEPARATOR, "."))
+    if match := _PV_SIZE_TO_BYTES_REGEX.fullmatch(size):
+        number: float = float(match.group(1).replace(",", ".").replace(_ARABIC_DECIMAL_SEPARATOR, "."))
         i: int = "KMGTPEZYRQ".index(match.group(2)) if match.group(2) else -1
         m: int = 1024 if match.group(3) == "i" else 1000
         b: int = 1 if match.group(4) == "B" else 8

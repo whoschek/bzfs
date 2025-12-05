@@ -47,9 +47,9 @@ import contextlib
 import fcntl
 import heapq
 import itertools
+import logging
 import os
 import re
-import signal
 import subprocess
 import sys
 import threading
@@ -72,10 +72,11 @@ from pathlib import (
     Path,
 )
 from subprocess import (
+    DEVNULL,
+    PIPE,
     CalledProcessError,
 )
 from typing import (
-    IO,
     Any,
     Callable,
     Final,
@@ -101,13 +102,6 @@ from bzfs_main.configuration import (
     Remote,
     SnapshotLabel,
 )
-from bzfs_main.connection import (
-    decrement_injection_counter,
-    maybe_inject_error,
-    run_ssh_command,
-    timeout,
-    try_ssh_command,
-)
 from bzfs_main.detect import (
     DISABLE_PRG,
     RemoteConfCacheItem,
@@ -126,22 +120,13 @@ from bzfs_main.filter import (
     filter_snapshots,
 )
 from bzfs_main.loggers import (
-    Tee,
     get_simple_logger,
     reset_logger,
+    set_logging_runtime_defaults,
 )
 from bzfs_main.parallel_batch_cmd import (
     run_ssh_cmd_parallel,
     zfs_list_snapshots_in_parallel,
-)
-from bzfs_main.parallel_iterator import (
-    run_in_parallel,
-)
-from bzfs_main.parallel_tasktree_policy import (
-    process_datasets_in_parallel_and_fault_tolerant,
-)
-from bzfs_main.period_anchors import (
-    round_datetime_up_to_duration_multiple,
 )
 from bzfs_main.progress_reporter import (
     ProgressReporter,
@@ -153,11 +138,8 @@ from bzfs_main.replication import (
     delete_snapshots,
     replicate_dataset,
 )
-from bzfs_main.retry import (
-    Retry,
-    RetryableError,
-)
 from bzfs_main.snapshot_cache import (
+    MATURITY_TIME_THRESHOLD_SECS,
     MONITOR_CACHE_FILE_PREFIX,
     REPLICATION_CACHE_FILE_PREFIX,
     SnapshotCache,
@@ -166,7 +148,26 @@ from bzfs_main.snapshot_cache import (
 from bzfs_main.prometheus_exporter import (
     write_prometheus_metrics,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.connection import (
+    SHARED,
+    ConnectionPool,
+    MiniJob,
+    MiniRemote,
+    run_ssh_command,
+    timeout,
+)
+from bzfs_main.util.parallel_iterator import (
+    run_in_parallel,
+)
+from bzfs_main.util.parallel_tasktree_policy import (
+    process_datasets_in_parallel_and_fault_tolerant,
+)
+from bzfs_main.util.retry import (
+    Retry,
+    RetryableError,
+    run_with_retries,
+)
+from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
     DIE_STATUS,
     DONT_SKIP_DATASET,
@@ -175,9 +176,11 @@ from bzfs_main.utils import (
     LOG_TRACE,
     PROG_NAME,
     SHELL_CHARS,
+    UMASK,
     YEAR_WITH_FOUR_DIGITS_REGEX,
-    Interner,
+    HashedInterner,
     SortedInterner,
+    Subprocesses,
     SynchronizedBool,
     SynchronizedDict,
     append_if_absent,
@@ -188,18 +191,19 @@ from bzfs_main.utils import (
     human_readable_bytes,
     human_readable_duration,
     is_descendant,
-    open_nofollow,
     percent,
     pretty_print_formatter,
     replace_in_lines,
     replace_prefix,
     sha256_85_urlsafe_base64,
     sha256_128_urlsafe_base64,
-    terminate_process_subtree,
+    stderr_to_str,
+    termination_signal_handler,
     validate_dataset_name,
     validate_property_name,
     xappend,
     xfinally,
+    xprint,
 )
 
 # constants:
@@ -211,9 +215,6 @@ MIN_PYTHON_VERSION: Final[tuple[int, int]] = (3, 9)
 if sys.version_info < MIN_PYTHON_VERSION:
     print(f"ERROR: {PROG_NAME} requires Python version >= {'.'.join(map(str, MIN_PYTHON_VERSION))}!")
     sys.exit(DIE_STATUS)
-CREATE_SRC_SNAPSHOTS_PREFIX_DFLT: Final[str] = PROG_NAME + "_"
-CREATE_SRC_SNAPSHOTS_SUFFIX_DFLT: Final[str] = "_adhoc"
-MATURITY_TIME_THRESHOLD_SECS: Final[float] = 1.1  # 1 sec ZFS creation time resolution + NTP clock skew is typically < 10ms
 
 
 #############################################################################
@@ -224,25 +225,39 @@ def argument_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     """API for command line clients."""
+    prev_umask: int = os.umask(UMASK)
     try:
-        run_main(argument_parser().parse_args(), sys.argv)
+        set_logging_runtime_defaults()
+        # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
+        termination_event: threading.Event = threading.Event()
+        with termination_signal_handler(termination_event=termination_event):
+            run_main(argument_parser().parse_args(), sys.argv, termination_event=termination_event)
     except subprocess.CalledProcessError as e:
         ret: int = e.returncode
         ret = DIE_STATUS if isinstance(ret, int) and 1 <= ret <= STILL_RUNNING_STATUS else ret
         sys.exit(ret)
+    finally:
+        os.umask(prev_umask)  # restore prior global state
 
 
-def run_main(args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
+def run_main(
+    args: argparse.Namespace,
+    sys_argv: list[str] | None = None,
+    log: Logger | None = None,
+    termination_event: threading.Event | None = None,
+) -> None:
     """API for Python clients; visible for testing; may become a public API eventually."""
-    Job().run_main(args, sys_argv, log)
+    Job(termination_event=termination_event).run_main(args, sys_argv, log)
 
 
 #############################################################################
-class Job:
+class Job(MiniJob):
     """Executes one bzfs run, coordinating snapshot replication tasks."""
 
-    def __init__(self) -> None:
+    def __init__(self, termination_event: threading.Event | None = None) -> None:
         self.params: Params
+        self.termination_event: Final[threading.Event] = termination_event or threading.Event()
+        self.subprocesses: Subprocesses = Subprocesses()
         self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: dict[str, DatasetProperties] = {}
@@ -254,11 +269,11 @@ class Job:
         self.remote_conf_cache: dict[tuple, RemoteConfCacheItem] = {}
         self.max_datasets_per_minibatch_on_list_snaps: dict[str, int] = {}
         self.max_workers: dict[str, int] = {}
-        self.control_persist_margin_secs: int = 2
         self.progress_reporter: ProgressReporter = cast(ProgressReporter, None)
         self.is_first_replication_task: Final[SynchronizedBool] = SynchronizedBool(True)
         self.replication_start_time_nanos: int = time.monotonic_ns()
-        self.timeout_nanos: int | None = None
+        self.timeout_nanos: int | None = None  # timestamp aka instant in time
+        self.timeout_duration_nanos: int | None = None  # duration (not a timestamp); for logging only
         self.cache: SnapshotCache = SnapshotCache(self)
         self.stats_lock: Final[threading.Lock] = threading.Lock()
         self.num_cache_hits: int = 0
@@ -268,7 +283,6 @@ class Job:
 
         self.is_test_mode: bool = False  # for testing only
         self.creation_prefix: str = ""  # for testing only
-        self.isatty: bool | None = None  # for testing only
         self.use_select: bool = False  # for testing only
         self.progress_update_intervals: tuple[float, float] | None = None  # for testing only
         self.error_injection_triggers: dict[str, Counter[str]] = {}  # for testing only
@@ -284,14 +298,9 @@ class Job:
         for i, cache_item in enumerate(cache_items):
             cache_item.connection_pools.shutdown(f"{i + 1}/{len(cache_items)}")
 
-    def terminate(self, old_term_handler: Any, except_current_process: bool = False) -> None:
-        """Shuts down gracefully on SIGTERM, optionally killing descendants."""
-
-        def post_shutdown() -> None:
-            signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
-            terminate_process_subtree(except_current_process=except_current_process)
-
-        with xfinally(post_shutdown):
+    def terminate(self) -> None:
+        """Shuts down gracefully; also terminates descendant processes, if any."""
+        with xfinally(self.subprocesses.terminate_process_subtrees):
             self.shutdown()
 
     def _write_prometheus_metrics_on_error(self, exit_code: int) -> None:
@@ -313,13 +322,26 @@ class Job:
         assert isinstance(self.error_injection_triggers, dict)
         assert isinstance(self.delete_injection_triggers, dict)
         assert isinstance(self.inject_params, dict)
-        with xfinally(reset_logger):  # runs reset_logger() on exit, without masking exception raised in body of `with` block
+        logger_name_suffix: str = ""
+
+        def _reset_logger() -> None:
+            if logger_name_suffix and log is not None:  # reset Logger unless it's a Logger outside of our control
+                reset_logger(log)
+
+        with xfinally(_reset_logger):  # runs _reset_logger() on exit, without masking error raised in body of `with` block
             try:
                 log_params: LogParams = LogParams(args)
-                log = bzfs_main.loggers.get_logger(log_params=log_params, args=args, log=log)
+                logger_name_suffix = "" if log is not None else log_params.logger_name_suffix
+                log = bzfs_main.loggers.get_logger(
+                    log_params=log_params, args=args, log=log, logger_name_suffix=logger_name_suffix
+                )
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
-                get_simple_logger(PROG_NAME).error("Log init: %s", e, exc_info=not isinstance(e, SystemExit))
+                simple_log: Logger = get_simple_logger(PROG_NAME, logger_name_suffix=logger_name_suffix)
+                try:
+                    simple_log.error("Log init: %s", e, exc_info=not isinstance(e, SystemExit))
+                finally:
+                    reset_logger(simple_log)
                 raise
 
             aux_args: list[str] = []
@@ -339,46 +361,38 @@ class Job:
                 if self.is_test_mode:
                     log.log(LOG_TRACE, "Parsed CLI arguments: %s", args)
                 self.params = p = Params(args, sys_argv or [], log_params, log, self.inject_params)
-                log_params.params = p
-                with open_nofollow(log_params.log_file, "a", encoding="utf-8", perm=FILE_PERMISSIONS) as log_file_fd:
-                    with contextlib.redirect_stderr(cast(IO[Any], Tee(log_file_fd, sys.stderr))):  # stderr to logfile+stderr
-                        lock_file: str = p.lock_file_name()
-                        lock_fd = os.open(
-                            lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, FILE_PERMISSIONS
-                        )
-                        with xfinally(lambda: os.close(lock_fd)):
-                            try:
-                                # Acquire an exclusive lock; will raise an error if lock is already held by another process.
-                                # The (advisory) lock is auto-released when the process terminates or the fd is closed.
-                                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
-                            except BlockingIOError:
-                                msg = "Exiting as same previous periodic job is still running without completion yet per "
-                                die(msg + lock_file, STILL_RUNNING_STATUS)
+                self.timeout_duration_nanos = p.timeout_duration_nanos
+                lock_file: str = p.lock_file_name()
+                lock_fd = os.open(
+                    lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, FILE_PERMISSIONS
+                )
+                with xfinally(lambda: os.close(lock_fd)):
+                    try:
+                        # Acquire an exclusive lock; will raise a BlockingIOError if lock is already held by this process or
+                        # another process. The (advisory) lock is auto-released when the process terminates or the fd is
+                        # closed.
+                        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
+                    except BlockingIOError:
+                        msg = "Exiting as same previous periodic job is still running without completion yet per "
+                        die(msg + lock_file, STILL_RUNNING_STATUS)
 
-                            # xfinally: unlink the lock_file while still holding the flock on its fd — it's correct and safe:
-                            # - Performing unlink() before close() avoids a race where a subsequent bzfs process could
-                            #   recreate and lock a fresh inode for the same path between our close() and a later unlink().
-                            #   In that case, a late unlink would delete the newer process's lock_file path.
-                            # - At this point, critical work is complete; the remaining steps are shutdown mechanics,
-                            #   so continuing to hold the flock until close() is correct, safe, and simple.
-                            with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # don't accumulate stale files
-
-                                # On CTRL-C and SIGTERM, send signal to descendant processes to also terminate descendants
-                                old_term_handler = signal.getsignal(signal.SIGTERM)
-                                signal.signal(signal.SIGTERM, lambda sig, f: self.terminate(old_term_handler))
-                                old_int_handler = signal.signal(signal.SIGINT, lambda s, f: self.terminate(old_term_handler))
-
-                                try:
-                                    self.run_tasks()  # do the real work
-                                except BaseException:
-                                    self.terminate(old_term_handler, except_current_process=True)
-                                    raise
-                                finally:
-                                    signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
-                                    signal.signal(signal.SIGINT, old_int_handler)  # restore original signal handler
-                                self.shutdown()
-                                with contextlib.suppress(BrokenPipeError):
-                                    sys.stderr.flush()
+                    # xfinally: unlink the lock_file while still holding the flock on its fd - it's a correct and safe
+                    # standard POSIX pattern:
+                    # - Performing unlink() before close(fd) avoids a race where a subsequent bzfs process could recreate and
+                    #   lock a fresh inode for the same path between our close() and a later unlink(). In that case, a late
+                    #   unlink would delete the newer process's lock_file path.
+                    # - At this point, critical work is complete; the remaining steps are shutdown mechanics that have no
+                    #   side effect, so this pattern is correct, safe, and simple.
+                    with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # don't accumulate stale files
+                        try:
+                            self.run_tasks()  # do the real work
+                        except BaseException:
+                            self.terminate()
+                            raise
+                        self.shutdown()
+                        with contextlib.suppress(BrokenPipeError):
+                            sys.stderr.flush()
+                            sys.stdout.flush()
             except subprocess.CalledProcessError as e:
                 log_error_on_exit(e, e.returncode)
                 self._write_prometheus_metrics_on_error(e.returncode)
@@ -415,6 +429,7 @@ class Job:
             log.info("Success. Goodbye!")
             with contextlib.suppress(BrokenPipeError):
                 sys.stderr.flush()
+                sys.stdout.flush()
 
     def run_tasks(self) -> None:
         """Executes replication cycles, repeating until daemon lifetime expires."""
@@ -423,38 +438,44 @@ class Job:
         self.all_exceptions_count = 0
         self.first_exception = None
         self.remote_conf_cache = {}
-        self.isatty = self.isatty if self.isatty is not None else p.isatty
         self.validate_once()
         self.replication_start_time_nanos = time.monotonic_ns()
         self.progress_reporter = ProgressReporter(log, p.pv_program_opts, self.use_select, self.progress_update_intervals)
         with xfinally(lambda: self.progress_reporter.stop()):
             daemon_stoptime_nanos: int = time.monotonic_ns() + p.daemon_lifetime_nanos
             while True:  # loop for daemon mode
-                self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
+                self.timeout_nanos = (
+                    None if p.timeout_duration_nanos is None else time.monotonic_ns() + p.timeout_duration_nanos
+                )
                 self.all_dst_dataset_exists.clear()
                 self.progress_reporter.reset()
                 src, dst = p.src, p.dst
                 for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
+                    if self.termination_event.is_set():
+                        self.terminate()
+                        break
                     src.root_dataset = src.basis_root_dataset = src_root_dataset
                     dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
                     p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
                     if p.daemon_lifetime_nanos > 0:
-                        self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
+                        self.timeout_nanos = (
+                            None if p.timeout_duration_nanos is None else time.monotonic_ns() + p.timeout_duration_nanos
+                        )
                     recurs_sep = " " if p.recursive_flag else ""
                     task_description = f"{src.basis_root_dataset} {p.recursive_flag}{recurs_sep}--> {dst.basis_root_dataset}"
                     if len(p.root_dataset_pairs) > 1:
                         log.info("Starting task: %s", task_description + " ...")
                     try:
                         try:
-                            maybe_inject_error(self, cmd=[], error_trigger="retryable_run_tasks")
+                            self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
                             timeout(self)
                             self.validate_task()
-                            self.run_task()
+                            self.run_task()  # do the real work
                         except RetryableError as retryable_error:
                             cause: BaseException | None = retryable_error.__cause__
                             assert cause is not None
                             raise cause.with_traceback(cause.__traceback__)  # noqa: B904 re-raise of cause without chaining
-                    except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                         if p.skip_on_error == "fail" or (
                             isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0
                         ):
@@ -467,7 +488,7 @@ class Job:
             self.print_replication_stats(self.replication_start_time_nanos)
         error_count = self.all_exceptions_count
         if error_count > 0 and p.daemon_lifetime_nanos == 0:
-            msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
+            msgs = "\n".join(f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions))
             log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
             assert self.first_exception is not None
             raise self.first_exception
@@ -481,7 +502,7 @@ class Job:
         self.params.log.error(f"#{self.all_exceptions_count}: Done with %s: %s", task_name, task_description)
 
     def sleep_until_next_daemon_iteration(self, daemon_stoptime_nanos: int) -> bool:
-        """Pauses until the next scheduled snapshot time or daemon stop."""
+        """Pauses until next scheduled snapshot time or daemon stop; Returns True to continue daemon loop; False to stop."""
         sleep_nanos: int = daemon_stoptime_nanos - time.monotonic_ns()
         if sleep_nanos <= 0:
             return False
@@ -491,7 +512,7 @@ class Job:
         curr_datetime: datetime = config.current_datetime + timedelta(microseconds=1)
         next_snapshotting_event_dt: datetime = min(
             (
-                round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit, config.anchors)
+                config.anchors.round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit)
                 for duration_amount, duration_unit in config.suffix_durations.values()
             ),
             default=curr_datetime + timedelta(days=10 * 365),  # infinity
@@ -500,9 +521,9 @@ class Job:
         offset_nanos: int = (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000
         sleep_nanos = min(sleep_nanos, max(0, offset_nanos))
         log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), f" ... [Log {p.log_params.log_file}]")
-        time.sleep(sleep_nanos / 1_000_000_000)
+        self.termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
         config.current_datetime = datetime.now(config.tz)
-        return daemon_stoptime_nanos - time.monotonic_ns() > 0
+        return time.monotonic_ns() < daemon_stoptime_nanos and not self.termination_event.is_set()
 
     def print_replication_stats(self, start_time_nanos: int) -> None:
         """Logs overall replication statistics after a job cycle completes."""
@@ -513,7 +534,7 @@ class Job:
             sent_bytes: int = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
             sent_bytes_per_sec: int = round(1_000_000_000 * sent_bytes / (elapsed_nanos or 1))
             msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s]."
-        log.info("%s", msg.ljust(p.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
+        log.info("%s", msg.ljust(p.log_params.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
 
     def validate_once(self) -> None:
         """Validates CLI parameters and compiles regex lists one time only, which will later be reused many times."""
@@ -551,7 +572,7 @@ class Job:
             pv_program_opts_set = set(p.pv_program_opts)
             if pv_program_opts_set.isdisjoint({"--bytes", "-b", "--bits", "-8"}):
                 die("--pv-program-opts must contain one of --bytes or --bits for progress metrics to function.")
-            if self.isatty and not p.quiet:
+            if not p.log_params.quiet:
                 for opts in [["--eta", "-e"], ["--fineta", "-I"], ["--average-rate", "-a"]]:
                     if pv_program_opts_set.isdisjoint(opts):
                         die(f"--pv-program-opts must contain one of {', '.join(opts)} for progress report line to function.")
@@ -597,10 +618,8 @@ class Job:
 
         detect_available_programs(self)
 
-        zfs_send_program_opts: list[str] = p.curr_zfs_send_program_opts
         if is_zpool_feature_enabled_or_active(p, dst, "feature@large_blocks"):
-            append_if_absent(zfs_send_program_opts, "--large-block")
-        p.curr_zfs_send_program_opts = zfs_send_program_opts
+            append_if_absent(p.curr_zfs_send_program_opts, "--large-block")
 
         self.max_workers = {}
         self.max_datasets_per_minibatch_on_list_snaps = {}
@@ -741,7 +760,7 @@ class Job:
         cmd: list[str] = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
         )
-        for line in (try_ssh_command(self, src, LOG_DEBUG, cmd=cmd) or "").splitlines():
+        for line in (self.try_ssh_command_with_retries(src, LOG_DEBUG, cmd=cmd) or "").splitlines():
             cols: list[str] = line.split("\t")
             snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
             self.src_properties[src_dataset] = DatasetProperties(
@@ -763,7 +782,7 @@ class Job:
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", dst.root_dataset
         )
         basis_dst_datasets: list[str] = []
-        basis_dst_datasets_str: str | None = try_ssh_command(self, dst, LOG_TRACE, cmd=cmd)
+        basis_dst_datasets_str: str | None = self.try_ssh_command_with_retries(dst, LOG_TRACE, cmd=cmd)
         if basis_dst_datasets_str is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
         else:
@@ -791,8 +810,8 @@ class Job:
         command line invocations, respecting the limits that the operating system places on the maximum length of a single
         command line, per `getconf ARG_MAX`.
 
-        Time complexity is O(max(N log N, M log M)) where N is the number of datasets and M is the number of snapshots per
-        dataset. Space complexity is O(max(N, M)).
+        Time complexity is O((N log N) + (N * M log M)) where N is the number of datasets and M is the number of snapshots
+        per dataset. Space complexity is O(max(N, M)).
         """
         p, log = self.params, self.params.log
         src = p.src
@@ -818,7 +837,9 @@ class Job:
             self,
             src,
             ((commands[lbl], (f"{ds}@{lbl}" for ds in datasets)) for lbl, datasets in datasets_to_snapshot.items()),
-            fn=lambda cmd, batch: run_ssh_command(self, src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
+            fn=lambda cmd, batch: self.run_ssh_command_with_retries(
+                src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch, retry_on_generic_ssh_error=False
+            ),  # retry_on_generic_ssh_error=False means only retry on SSH connect errors b/c `zfs snapshot` isn't idempotent
             max_batch_items=2**29,
         )
         if is_caching_snapshots(p, src):
@@ -851,8 +872,8 @@ class Job:
             dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
             self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
             src_snaps_with_guids, dst_snaps_with_guids_str = run_in_parallel(  # list src+dst snapshots in parallel
-                lambda: set(run_ssh_command(self, src, LOG_TRACE, cmd=src_cmd).splitlines() if src_cmd else []),
-                lambda: try_ssh_command(self, dst, LOG_TRACE, cmd=dst_cmd),
+                lambda: set(self.run_ssh_command(src, LOG_TRACE, cmd=src_cmd).splitlines() if src_cmd else []),
+                lambda: self.try_ssh_command(dst, LOG_TRACE, cmd=dst_cmd),
             )
             if dst_snaps_with_guids_str is None:
                 log.warning("Third party deleted destination: %s", dst_dataset)
@@ -923,6 +944,8 @@ class Job:
                 skip_tree_on_error=lambda dataset: False,
                 skip_on_error=p.skip_on_error,
                 max_workers=max_workers,
+                termination_event=self.termination_event,
+                termination_handler=self.terminate,
                 enable_barriers=False,
                 task_name="--delete-dst-snapshots",
                 append_exception=self.append_exception,
@@ -1050,8 +1073,8 @@ class Job:
         are successfully taken on schedule, successfully replicated on schedule, and successfully pruned on schedule. Process
         exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
 
-        Time complexity is O(max(N log N, M log M)) where N is the number of datasets and M is the number of snapshots per
-        dataset. Space complexity is O(max(N, M)).
+        Time complexity is O((N log N) + (N * M log M)) where N is the number of datasets and M is the number of snapshots
+        per dataset. Space complexity is O(max(N, M)).
         """
         p, log = self.params, self.params.log
         alerts: list[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
@@ -1256,14 +1279,25 @@ class Job:
             cache_files = {}
             cmsg = ""
 
+        done_src_datasets: list[str] = []
+        done_src_datasets_lock: threading.Lock = threading.Lock()
+
+        def _process_dataset_fn(src_dataset: str, tid: str, retry: Retry) -> bool:
+            result: bool = replicate_dataset(job=self, src_dataset=src_dataset, tid=tid, retry=retry)
+            with done_src_datasets_lock:
+                done_src_datasets.append(src_dataset)  # record datasets that were actually replicated (not skipped)
+            return result
+
         # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
         failed: bool = process_datasets_in_parallel_and_fault_tolerant(
             log=log,
             datasets=stale_src_datasets,
-            process_dataset=lambda src_dataset, tid, retry: replicate_dataset(self, src_dataset, tid, retry),
+            process_dataset=_process_dataset_fn,
             skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[src2dst(dataset)],
             skip_on_error=p.skip_on_error,
             max_workers=max_workers,
+            termination_event=self.termination_event,
+            termination_handler=self.terminate,
             enable_barriers=False,
             task_name="Replication",
             append_exception=self.append_exception,
@@ -1272,9 +1306,9 @@ class Job:
             is_test_mode=self.is_test_mode,
         )
 
-        if is_caching_snapshots(p, src) and not failed:
+        if is_caching_snapshots(p, src) and len(done_src_datasets) > 0:
             # refresh "snapshots_changed" ZFS dataset property from dst
-            stale_dst_datasets: list[str] = [src2dst(src_dataset) for src_dataset in stale_src_datasets]
+            stale_dst_datasets: list[str] = [src2dst(src_dataset) for src_dataset in sorted(done_src_datasets)]
             dst_snapshots_changed_dict: dict[str, int] = self.cache.zfs_get_snapshots_changed(dst, stale_dst_datasets)
             for dst_dataset in stale_dst_datasets:  # update local cache
                 dst_snapshots_changed: int = dst_snapshots_changed_dict.get(dst_dataset, 0)
@@ -1301,16 +1335,16 @@ class Job:
         """For testing only; for unit tests to delete datasets during replication and test correct handling of that."""
         assert delete_trigger
         counter = self.delete_injection_triggers.get("before")
-        if counter and decrement_injection_counter(self, counter, delete_trigger):
+        if counter and self.decrement_injection_counter(counter, delete_trigger):
             p = self.params
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset or "")
-            run_ssh_command(self, remote, LOG_DEBUG, print_stdout=True, cmd=cmd)
+            self.run_ssh_command(remote, LOG_DEBUG, print_stdout=True, cmd=cmd)
 
     def maybe_inject_params(self, error_trigger: str) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
         assert error_trigger
         counter = self.error_injection_triggers.get("before")
-        if counter and decrement_injection_counter(self, counter, error_trigger):
+        if counter and self.decrement_injection_counter(counter, error_trigger):
             self.inject_params = self.param_injection_triggers[error_trigger]
         elif error_trigger in self.param_injection_triggers:
             self.inject_params = {}
@@ -1319,7 +1353,7 @@ class Job:
     def recv_option_property_names(recv_opts: list[str]) -> set[str]:
         """Extracts -o and -x property names that are already specified on the command line; This can be used to check for
         dupes because 'zfs receive' does not accept multiple -o or -x options with the same property name."""
-        propnames = set()
+        propnames: set[str] = set()
         i = 0
         n = len(recv_opts)
         while i < n:
@@ -1407,7 +1441,7 @@ class Job:
         config: CreateSrcSnapshotConfig = p.create_src_snapshots_config
         datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         is_caching: bool = False
-        interner: Interner[datetime] = Interner()  # reduces memory footprint
+        interner: HashedInterner[datetime] = HashedInterner()  # reduces memory footprint
         msgs: list[tuple[datetime, str, SnapshotLabel, str]] = []
 
         def create_snapshot_if_latest_is_too_old(
@@ -1417,8 +1451,8 @@ class Job:
             creation_dt: datetime = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
             log.log(LOG_TRACE, "Latest snapshot creation: %s for %s", creation_dt, label)
             duration_amount, duration_unit = config.suffix_durations[label.suffix]
-            next_event_dt: datetime = round_datetime_up_to_duration_multiple(
-                creation_dt + timedelta(microseconds=1), duration_amount, duration_unit, config.anchors
+            next_event_dt: datetime = config.anchors.round_datetime_up_to_duration_multiple(
+                creation_dt + timedelta(microseconds=1), duration_amount, duration_unit
             )
             msg: str = ""
             if config.current_datetime >= next_event_dt:
@@ -1490,7 +1524,7 @@ class Job:
             create_snapshot_if_latest_is_too_old(datasets_to_snapshot, dataset, labels[i], creation_unixtime_secs)
 
         def on_finish_dataset(dataset: str) -> None:
-            if is_caching and not p.dry_run:
+            if is_caching_snapshots(p, src) and not p.dry_run:
                 set_last_modification_time_safe(
                     self.cache.last_modified_cache_file(src, dataset),
                     unixtime_in_secs=self.src_properties[dataset].snapshots_changed,
@@ -1592,6 +1626,121 @@ class Job:
         total = hits + misses
         return f", cache hits: {percent(hits, total, print_total=True)}, misses: {percent(misses, total, print_total=True)}"
 
+    def run_ssh_command(
+        self,
+        remote: MiniRemote,
+        loglevel: int = logging.INFO,
+        is_dry: bool = False,
+        check: bool = True,
+        print_stdout: bool = False,
+        print_stderr: bool = True,
+        cmd: list[str] | None = None,
+        retry_on_generic_ssh_error: bool = True,
+    ) -> str:
+        """Runs the given CLI cmd via ssh on the given remote, and returns stdout."""
+        assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
+        conn_pool: ConnectionPool = self.params.connection_pools[remote.location].pool(SHARED)
+        with conn_pool.connection() as conn:
+            log: logging.Logger = conn.remote.params.log
+            try:
+                process: subprocess.CompletedProcess[str] = run_ssh_command(
+                    cmd=cmd,
+                    conn=conn,
+                    job=self,
+                    loglevel=loglevel,
+                    is_dry=is_dry,
+                    check=check,
+                    stdin=DEVNULL,
+                    stdout=PIPE,
+                    stderr=PIPE,
+                    text=True,
+                )
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                xprint(log, stderr_to_str(e.stdout) if print_stdout else e.stdout, run=print_stdout, file=sys.stdout, end="")
+                xprint(log, stderr_to_str(e.stderr) if print_stderr else e.stderr, run=print_stderr, file=sys.stderr, end="")
+                if retry_on_generic_ssh_error and isinstance(e, subprocess.CalledProcessError):
+                    stderr: str = stderr_to_str(e.stderr)
+                    if stderr.startswith("ssh: "):
+                        assert e.returncode == 255, e.returncode  # error within SSH itself (not during the remote command)
+                        raise RetryableError("Subprocess failed", display_msg="ssh") from e
+                raise
+            else:
+                if is_dry:
+                    return ""
+                xprint(log, process.stdout, run=print_stdout, file=sys.stdout, end="")
+                xprint(log, process.stderr, run=print_stderr, file=sys.stderr, end="")
+                return process.stdout
+
+    def try_ssh_command(
+        self,
+        remote: MiniRemote,
+        loglevel: int,
+        is_dry: bool = False,
+        print_stdout: bool = False,
+        cmd: list[str] | None = None,
+        exists: bool = True,
+        error_trigger: str | None = None,
+    ) -> str | None:
+        """Convenience method that helps retry/react to a dataset or pool that potentially doesn't exist anymore."""
+        assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
+        log = self.params.log
+        try:
+            self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
+            return self.run_ssh_command(remote=remote, loglevel=loglevel, is_dry=is_dry, print_stdout=print_stdout, cmd=cmd)
+        except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
+            if not isinstance(e, UnicodeDecodeError):
+                stderr: str = stderr_to_str(e.stderr)
+                if exists and (
+                    ": dataset does not exist" in stderr
+                    or ": filesystem does not exist" in stderr  # solaris 11.4.0
+                    or ": no such pool" in stderr
+                    or "does not have any resumable receive state to abort" in stderr  # harmless `zfs receive -A` race
+                ):
+                    return None
+                log.warning("%s", stderr.rstrip())
+            raise RetryableError("Subprocess failed") from e
+
+    def try_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str | None:
+        """Convenience method that auto-retries try_ssh_command() on failure."""
+        p = self.params
+        return run_with_retries(
+            fn=lambda retry: self.try_ssh_command(*args, **kwargs),
+            policy=p.retry_policy,
+            log=p.log,
+            termination_event=self.termination_event,
+        )
+
+    def run_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str:
+        """Convenience method that auto-retries run_ssh_command() on transport failure (not on remote command failure)."""
+        p = self.params
+        return run_with_retries(
+            fn=lambda retry: self.run_ssh_command(*args, **kwargs),
+            policy=p.retry_policy,
+            log=p.log,
+            termination_event=self.termination_event,
+        )
+
+    def maybe_inject_error(self, cmd: list[str], error_trigger: str | None = None) -> None:
+        """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
+        if error_trigger:
+            counter = self.error_injection_triggers.get("before")
+            if counter and self.decrement_injection_counter(counter, error_trigger):
+                try:
+                    raise CalledProcessError(returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ":dataset is busy")
+                except subprocess.CalledProcessError as e:
+                    if error_trigger.startswith("retryable_"):
+                        raise RetryableError("Subprocess failed") from e
+                    else:
+                        raise
+
+    def decrement_injection_counter(self, counter: Counter[str], trigger: str) -> bool:
+        """For testing only."""
+        with self.injection_lock:
+            if counter[trigger] <= 0:
+                return False
+            counter[trigger] -= 1
+            return True
+
 
 #############################################################################
 class DatasetProperties:
@@ -1607,9 +1756,10 @@ class DatasetProperties:
         self.snapshots_changed: int = snapshots_changed
 
 
+#############################################################################
 # Input format is [[user@]host:]dataset
-#                                                            1234         5          6
-DATASET_LOCATOR_REGEX: Final[re.Pattern[str]] = re.compile(r"(((([^@]*)@)?([^:]+)):)?(.*)", flags=re.DOTALL)
+#                                                             1234         5          6
+_DATASET_LOCATOR_REGEX: Final[re.Pattern[str]] = re.compile(r"(((([^@]*)@)?([^:]+)):)?(.*)", flags=re.DOTALL)
 
 
 def parse_dataset_locator(
@@ -1629,7 +1779,7 @@ def parse_dataset_locator(
     host = convert_ipv6(host)
     user_host, dataset, pool = "", "", ""
 
-    if match := DATASET_LOCATOR_REGEX.fullmatch(input_text):
+    if match := _DATASET_LOCATOR_REGEX.fullmatch(input_text):
         if user_undefined:
             user = match.group(4) or ""
         if host_undefined:

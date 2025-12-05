@@ -32,7 +32,7 @@ from unittest.mock import (
     patch,
 )
 
-from bzfs_main.connection_lease import (
+from bzfs_main.util.connection_lease import (
     FREE_DIR,
     NAMESPACE_DIR_LENGTH,
     SOCKETS_DIR,
@@ -40,7 +40,7 @@ from bzfs_main.connection_lease import (
     ConnectionLease,
     ConnectionLeaseManager,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH,
@@ -576,8 +576,8 @@ class TestConnectionLease(AbstractTestCase):
 
         Rationale: This test proves that the collision check prevents replacing an existing ``used/<name>`` (avoiding
         double-ownership hazards), that salvage from ``used/`` remains functional, and that release resolves any
-        temporary duplication without leaks. It focuses on externally observable invariants—paths, existence, and final
-        directory contents—rather than internal implementation details, ensuring robust behavior under rare edge
+        temporary duplication without leaks. It focuses on externally observable invariants - paths, existence, and final
+        directory contents - rather than internal implementation details, ensuring robust behavior under rare edge
         conditions without introducing latency or complexity in the common path.
         """
         with get_tmpdir() as root_dir:
@@ -674,7 +674,7 @@ class TestConnectionLease(AbstractTestCase):
                     raise result
 
             mgr._validate_dirs()  # avoid any unrelated flock calls before the patch is active
-            with patch("bzfs_main.connection_lease.fcntl.flock", side_effect=fake_flock):
+            with patch("bzfs_main.util.connection_lease.fcntl.flock", side_effect=fake_flock):
                 lease = mgr._create_and_acquire()
                 try:
                     self.assertTrue(os.path.exists(lease.used_path))
@@ -719,7 +719,7 @@ class TestConnectionLease(AbstractTestCase):
         """
         with get_tmpdir() as root_dir:
             mgr = ConnectionLeaseManager(root_dir=root_dir, namespace="ns", log=MagicMock(logging.Logger))
-            with patch("bzfs_main.connection_lease.os.open", side_effect=PermissionError("denied")):
+            with patch("bzfs_main.util.connection_lease.os.open", side_effect=PermissionError("denied")):
                 with self.assertRaises(PermissionError):
                     _ = mgr._try_lock(os.path.join(mgr._free_dir, "sabc"), open_flags=os.O_WRONLY)
 
@@ -913,8 +913,11 @@ class TestConnectionLease(AbstractTestCase):
         if self.is_unit_test or self.is_smoke_test:
             self.skipTest("Ignore test_xbenchmark_find_and_acquire_used_when_all_locked() if is unit test or smoke test")
 
-        all_num_locks = [20, 200]
-        all_num_locks += [1000] if platform.system() != "Darwin" else []  # OSX defaults to max 256 open FDs per process
+        all_num_locks = [10]
+        if not self.is_unit_test:
+            all_num_locks.append(100)
+            if not self.is_smoke_test:
+                all_num_locks += [1000] if platform.system() != "Darwin" else []  # OSX default max 256 open FDs per process
         measure_seconds = 0.5
 
         for num_locks in all_num_locks:

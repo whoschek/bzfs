@@ -19,9 +19,9 @@ from __future__ import (
 )
 import os
 import sys
+import types
 import unittest
 
-import bzfs_main.utils
 import bzfs_tests.test_argparse_actions
 import bzfs_tests.test_bzfs
 import bzfs_tests.test_compare_snapshot_lists
@@ -35,6 +35,7 @@ import bzfs_tests.test_interner
 import bzfs_tests.test_jobrunner
 import bzfs_tests.test_loggers
 import bzfs_tests.test_parallel_batch_cmd
+import bzfs_tests.test_parallel_iterator
 import bzfs_tests.test_parallel_tasktree
 import bzfs_tests.test_parallel_tasktree_policy
 import bzfs_tests.test_period_anchors
@@ -43,42 +44,71 @@ import bzfs_tests.test_replication
 import bzfs_tests.test_retry
 import bzfs_tests.test_snapshot_cache
 import bzfs_tests.test_utils
+from bzfs_main.util.utils import (
+    getenv_any,
+)
+from bzfs_tests.tools import (
+    TestSuiteCompleteness,
+)
 
 
 def main() -> None:
-    suite = unittest.TestSuite()
-    suites = [
-        bzfs_tests.test_utils.suite(),
-        bzfs_tests.test_interner.suite(),
-        bzfs_tests.test_loggers.suite(),
-        bzfs_tests.test_retry.suite(),
-        bzfs_tests.test_period_anchors.suite(),
-        bzfs_tests.test_progress_reporter.suite(),
-        bzfs_tests.test_parallel_batch_cmd.suite(),
-        bzfs_tests.test_parallel_tasktree.suite(),
-        bzfs_tests.test_parallel_tasktree_policy.suite(),
-        bzfs_tests.test_filter.suite(),
-        bzfs_tests.test_connection.suite(),
-        bzfs_tests.test_connection_lease.suite(),
-        bzfs_tests.test_detect.suite(),
-        bzfs_tests.test_incremental_send_steps.suite(),
-        bzfs_tests.test_argparse_actions.suite(),
-        bzfs_tests.test_configuration.suite(),
-        bzfs_tests.test_bzfs.suite(),
-        bzfs_tests.test_replication.suite(),
-        bzfs_tests.test_compare_snapshot_lists.suite(),
-        bzfs_tests.test_snapshot_cache.suite(),
-        bzfs_tests.test_jobrunner.suite(),
+    modules: list[types.ModuleType] = [
+        bzfs_tests.test_utils,
+        bzfs_tests.test_interner,
+        bzfs_tests.test_loggers,
+        bzfs_tests.test_retry,
+        bzfs_tests.test_period_anchors,
+        bzfs_tests.test_progress_reporter,
+        bzfs_tests.test_parallel_iterator,
+        bzfs_tests.test_parallel_batch_cmd,
+        bzfs_tests.test_parallel_tasktree,
+        bzfs_tests.test_parallel_tasktree_policy,
+        bzfs_tests.test_filter,
+        bzfs_tests.test_connection,
+        bzfs_tests.test_connection_lease,
+        bzfs_tests.test_detect,
+        bzfs_tests.test_incremental_send_steps,
+        bzfs_tests.test_argparse_actions,
+        bzfs_tests.test_configuration,
+        bzfs_tests.test_bzfs,
+        bzfs_tests.test_replication,
+        bzfs_tests.test_compare_snapshot_lists,
+        bzfs_tests.test_snapshot_cache,
+        bzfs_tests.test_jobrunner,
     ]
-    suite.addTests(suites)
-    test_mode = bzfs_main.utils.getenv_any("test_mode", "")  # Consider toggling this when testing
+    incomplete_modules: list[types.ModuleType] = []
+
+    test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing
     is_unit_test = test_mode == "unit"  # run only unit tests (skip integration tests)
     if not is_unit_test:
         from bzfs_tests import (
             test_integrations,
         )
 
-        suite.addTest(test_integrations.suite())
+        modules.append(test_integrations)
+        incomplete_modules.append(test_integrations)
+
+    suite = unittest.TestSuite()
+    suite.addTests(module.suite() for module in modules)
+
+    # Verify each test module's suite() includes all locally defined test classes to avoid accidentally orphaned tests
+    def class_predicate(cls: type[unittest.TestCase]) -> bool:
+        """Returns True if the given test must be included in the suite()."""
+        excluded_classes: frozenset[type[unittest.TestCase]] = frozenset(
+            [
+                # bzfs_tests.test_bzfs.TestPerformance,
+            ]
+        )
+        if cls in excluded_classes:
+            return False
+        if cls.__name__.startswith("Test"):
+            return True
+        return False
+
+    complete_modules: list[types.ModuleType] = [module for module in modules if module not in incomplete_modules]
+    for name in unittest.TestLoader().getTestCaseNames(TestSuiteCompleteness):
+        suite.addTest(TestSuiteCompleteness(name, modules=complete_modules, class_predicate=class_predicate))
 
     failfast = False if os.getenv("CI") else True  # no need to fail fast when running within GitHub Action
     print(f"Running in failfast mode: {failfast} ...")

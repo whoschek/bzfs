@@ -25,7 +25,7 @@ default_install_hook_types:
   - commit-msg
 repos:
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.28.0
+    rev: v8.30.0
     hooks:                              # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
       - id: gitleaks                    # defaults to: gitleaks git --pre-commit --redact --staged --verbose
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -37,9 +37,7 @@ repos:
       - id: check-yaml                  # Attempt to load all YAML files to verify syntax
       - id: check-xml                   # Attempt to load all XML files to verify syntax via xmllint
       - id: check-json                  # Attempt to load all JSON files to verify syntax
-        exclude: '.*/.*bzfs_log_config.*\.json$'
       - id: pretty-format-json          # Auto-format JSON files
-        exclude: '.*/.*bzfs_log_config.*\.json$'
         args: [
           --autofix,
           --indent=4,
@@ -59,14 +57,14 @@ repos:
       - id: shellcheck                  # Validate syntax of shell scripts
         exclude: '^\.github-workflow-scripts'
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.34.1
+    rev: 0.35.0
     hooks:
       - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
       #- id: check-compose-spec         # Validate syntax of Docker Compose files
       - id: check-dependabot            # Validate syntax of Dependabot config files
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.8
+    rev: v1.7.9
     hooks:
       - id: actionlint                  # Validate semantics (and some syntax) of GitHub Workflow YAML files
         args: [--shellcheck=venv/bin/shellcheck]
@@ -82,7 +80,7 @@ repos:
         additional_dependencies: [tomli]
         # config options like `wrap-summaries` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.1
+    rev: v0.14.7
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
@@ -91,7 +89,7 @@ repos:
   #   hooks:
   #     - id: isort                     # Reformat imports more precisely
   - repo: https://github.com/pycqa/pylint
-    rev: v4.0.1
+    rev: v4.0.4
     hooks:
       - id: pylint                      # Run `pylint` linter to check if there are problems in the Python source code
         name: pylint (cyclic imports, etc)
@@ -105,10 +103,10 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.37.0']
+        additional_dependencies: ['pyrefly==0.43.0']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
+    rev: v1.19.0
     hooks:
       - id: mypy                             # Run `mypy` Python type checker
         exclude: '^\.git.*$'
@@ -149,21 +147,20 @@ repos:
       - id: forbid-ambiguous-characters
         name: "forbid ambiguous characters"
         language: pygrep
-        entry: '…|–|“|”|‘|’|→'               # replace ambiguous with unambiguous characters (en dash, curly quotes, etc)
+        entry: '…|—|–|“|”|‘|’|→'             # replace ambiguous with unambiguous characters (em dash, curly quotes, etc)
         types: [python]
   - repo: https://github.com/hukkin/mdformat
-    rev: 0.7.22
+    rev: 1.0.0
     hooks:
-      - id: mdformat              # Auto-format Markdown files - see https://github.com/hukkin/mdformat
+      - id: mdformat                       # Auto-format Markdown files - see https://github.com/hukkin/mdformat
         args: [--wrap=120, --number, --compact-tables]
-        exclude: '^(README.*|prd)\.md$'
-        additional_dependencies:  # see https://mdformat.readthedocs.io/en/stable/users/plugins.html
-          - mdformat-gfm          # GitHub-Flavored Markdown support - see https://github.github.com/gfm
-          - mdformat-frontmatter  # YAML frontmatter support
-          - mdformat-toc          # auto-generate Table-of-Contents via this directive: <!-- mdformat-toc start -->
-          - mdformat-shfmt        # format embedded bash, sh
-          - mdformat-black        # format embedded python
-          - mdformat-config       # format embedded json, toml, yaml
+        exclude: '^(README.*|prd|.*/bug_report|.*/feature_request)\.md$'
+        additional_dependencies:           # see https://mdformat.readthedocs.io/en/stable/users/plugins.html
+          - mdformat-gfm                   # GitHub-Flavored Markdown support - see https://github.github.com/gfm
+          - mdformat-toc                   # auto-generate Table-of-Contents via this directive: <!-- mdformat-toc start -->
+          - mdformat-shfmt                 # format embedded bash, sh
+          - mdformat-black                 # format embedded python
+          - mdformat-config                # format embedded json, toml, yaml
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
     hooks:
@@ -171,12 +168,12 @@ repos:
         additional_dependencies: [tomli]
         # config options like `ignore-words-list` live in pyproject.toml
   - repo: https://github.com/psf/black
-    rev: 25.9.0
+    rev: 25.11.0
     hooks:
       - id: black                  # Run `black` Python code formatter
       # style options like `line_length` live in pyproject.toml
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.9.1
+    rev: v4.10.0
     hooks:
       - id: commitizen  # Check commit msg has the form `type(scope): description` per https://www.conventionalcommits.org
         stages: [commit-msg]

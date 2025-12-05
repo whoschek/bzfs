@@ -24,11 +24,13 @@ from unittest.mock import (
     patch,
 )
 
-import bzfs_main.utils
 from bzfs_main import (
     argparse_actions,
 )
-from bzfs_main.check_range import (
+from bzfs_main.filter import (
+    SNAPSHOT_FILTERS_VAR,
+)
+from bzfs_main.util.check_range import (
     CheckRange,
 )
 from bzfs_tests.abstract_testcase import (
@@ -46,7 +48,6 @@ def suite() -> unittest.TestSuite:
         TestFileOrLiteralAction,
         TestNewSnapshotFilterGroupAction,
         TestNonEmptyStringAction,
-        TestLogConfigVariablesAction,
         SSHConfigFileNameAction,
         TestSafeFileNameAction,
         TestSafeDirectoryNameAction,
@@ -177,11 +178,11 @@ class TestNewSnapshotFilterGroupAction(AbstractTestCase):
 
     def test_basic0(self) -> None:
         args = self.parser.parse_args(["--new-snapshot-filter-group"])
-        self.assertListEqual([[]], getattr(args, bzfs_main.utils.SNAPSHOT_FILTERS_VAR))
+        self.assertListEqual([[]], getattr(args, SNAPSHOT_FILTERS_VAR))
 
     def test_basic1(self) -> None:
         args = self.parser.parse_args(["--new-snapshot-filter-group", "--new-snapshot-filter-group"])
-        self.assertListEqual([[]], getattr(args, bzfs_main.utils.SNAPSHOT_FILTERS_VAR))
+        self.assertListEqual([[]], getattr(args, SNAPSHOT_FILTERS_VAR))
 
 
 ###############################################################################
@@ -194,22 +195,6 @@ class TestNonEmptyStringAction(AbstractTestCase):
     def test_non_empty_string_action_empty(self) -> None:
         with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["--name", " "])
-
-
-###############################################################################
-class TestLogConfigVariablesAction(AbstractTestCase):
-
-    def setUp(self) -> None:
-        self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--log-config-var", nargs="+", action=argparse_actions.LogConfigVariablesAction)
-
-    def test_basic(self) -> None:
-        args = self.parser.parse_args(["--log-config-var", "name1:val1", "name2:val2"])
-        self.assertEqual(["name1:val1", "name2:val2"], args.log_config_var)
-
-        for var in ["", "  ", "varWithoutColon", ":valueWithoutName", " nameWithWhitespace:value"]:
-            with self.assertRaises(SystemExit), suppress_output():
-                self.parser.parse_args(["--log-config-var", var])
 
 
 ###############################################################################

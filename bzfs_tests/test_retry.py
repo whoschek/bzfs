@@ -18,6 +18,7 @@ from __future__ import (
     annotations,
 )
 import argparse
+import threading
 import unittest
 from logging import (
     Logger,
@@ -27,7 +28,7 @@ from unittest.mock import (
     patch,
 )
 
-from bzfs_main.retry import (
+from bzfs_main.util.retry import (
     Retry,
     RetryableError,
     RetryPolicy,
@@ -69,13 +70,13 @@ class TestRunWithRetries(unittest.TestCase):
         )
         retry_policy = RetryPolicy(args)
 
-        def fn(*, retry: Retry) -> str:
+        def fn(retry: Retry) -> str:
             calls.append(retry.count)
             if retry.count < 2:
-                raise RetryableError("fail", no_sleep=(retry.count == 0)) from ValueError("boom")
+                raise RetryableError("fail", display_msg="connect", no_sleep=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", run_with_retries(MagicMock(spec=Logger), retry_policy, fn))
+        self.assertEqual("ok", run_with_retries(fn, retry_policy, MagicMock(spec=Logger), display_msg="foo"))
         self.assertEqual([0, 1, 2], calls)
 
     @patch("time.sleep")
@@ -89,22 +90,22 @@ class TestRunWithRetries(unittest.TestCase):
         )
         retry_policy = RetryPolicy(args)
 
-        def fn(*, retry: Retry) -> None:
+        def fn(retry: Retry) -> None:
             raise RetryableError("fail", no_sleep=True) from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            run_with_retries(MagicMock(spec=Logger), retry_policy, fn)
+            run_with_retries(fn, retry_policy, MagicMock(spec=Logger))
 
     @patch("time.sleep")
     def test_run_with_retries_no_retries(self, mock_sleep: MagicMock) -> None:
         retry_policy = RetryPolicy.no_retries()
         mock_log = MagicMock(spec=Logger)
 
-        def fn(*, retry: Retry) -> None:
+        def fn(retry: Retry) -> None:
             raise RetryableError("fail") from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            run_with_retries(mock_log, retry_policy, fn)
+            run_with_retries(fn, retry_policy, mock_log)
         mock_log.warning.assert_not_called()
         mock_sleep.assert_not_called()
 
@@ -123,9 +124,32 @@ class TestRunWithRetries(unittest.TestCase):
 
         with patch("time.monotonic_ns", side_effect=[0, max_elapsed + 1]):
 
-            def fn(*, retry: Retry) -> None:
+            def fn(retry: Retry) -> None:
                 raise RetryableError("fail", no_sleep=True) from ValueError("boom")
 
             with self.assertRaises(ValueError):
-                run_with_retries(mock_log, retry_policy, fn)
+                run_with_retries(fn, retry_policy, mock_log, termination_event=threading.Event())
         mock_log.warning.assert_called_once()
+
+    @patch("time.sleep")
+    def test_run_with_retries_empty_display_msg_uses_default(self, mock_sleep: MagicMock) -> None:
+        """Ensures default 'Retrying ' message is used when display_msg is empty."""
+        args = argparse.Namespace(
+            retries=1,
+            retry_min_sleep_secs=0,
+            retry_initial_max_sleep_secs=0,
+            retry_max_sleep_secs=0,
+            retry_max_elapsed_secs=1,
+        )
+        retry_policy = RetryPolicy(args)
+        mock_log = MagicMock(spec=Logger)
+
+        def fn(retry: Retry) -> None:
+            raise RetryableError("fail", no_sleep=True) from ValueError("boom")
+
+        with self.assertRaises(ValueError):
+            run_with_retries(fn, retry_policy, mock_log, display_msg="")
+
+        mock_log.warning.assert_called_once()
+        warning_msg = mock_log.warning.call_args[0][1]
+        self.assertTrue(warning_msg.startswith("Retrying exhausted; giving up"))

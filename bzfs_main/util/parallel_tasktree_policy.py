@@ -30,35 +30,33 @@ from __future__ import (
 import logging
 import os
 import subprocess
+import threading
 import time
 from concurrent.futures import (
     Future,
-)
-from logging import (
-    Logger,
 )
 from typing import (
     Callable,
 )
 
-from bzfs_main.parallel_tasktree import (
+from bzfs_main.util.parallel_tasktree import (
     CompletionCallback,
-    process_datasets_in_parallel,
+    CompletionCallbackResult,
+    ParallelTaskTree,
 )
-from bzfs_main.retry import (
+from bzfs_main.util.retry import (
     Retry,
     RetryPolicy,
     run_with_retries,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     dry,
     human_readable_duration,
-    terminate_process_subtree,
 )
 
 
 def process_datasets_in_parallel_and_fault_tolerant(
-    log: Logger,
+    log: logging.Logger,
     datasets: list[str],  # (sorted) list of datasets to process
     process_dataset: Callable[
         [str, str, Retry], bool  # lambda: dataset, tid, Retry; return False to skip subtree; must be thread-safe
@@ -68,7 +66,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
     max_workers: int = os.cpu_count() or 1,
     interval_nanos: Callable[
         [int, str, int], int
-    ] = lambda last_update_nanos, dataset, submitted_count: 0,  # optionally spread tasks out over time; e.g. for jitter
+    ] = lambda last_update_nanos, dataset, submit_count: 0,  # optionally spread tasks out over time; e.g. for jitter
+    termination_event: threading.Event | None = None,  # optional event to request early async termination
+    termination_handler: Callable[[], None] = lambda: None,
     task_name: str = "Task",
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error
@@ -89,20 +89,23 @@ def process_datasets_in_parallel_and_fault_tolerant(
     """
     assert callable(process_dataset)
     assert callable(skip_tree_on_error)
+    termination_event = threading.Event() if termination_event is None else termination_event
     assert "%" not in task_name
     assert callable(append_exception)
     retry_policy = RetryPolicy.no_retries() if retry_policy is None else retry_policy
     len_datasets: int = len(datasets)
     is_debug: bool = log.isEnabledFor(logging.DEBUG)
 
-    def _process_dataset(dataset: str, submitted_count: int) -> CompletionCallback:
-        """Wrapper function around process_dataset(); adds a callback determining if to fail or skip subtree on error."""
-        tid: str = f"{submitted_count}/{len_datasets}"
+    def _process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+        """Wrapper around process_dataset(); adds retries plus a callback determining if to fail or skip subtree on error."""
+        tid: str = f"{submit_count}/{len_datasets}"
         start_time_nanos: int = time.monotonic_ns()
         exception = None
         no_skip: bool = False
         try:
-            no_skip = run_with_retries(log, retry_policy, process_dataset, dataset, tid)
+            no_skip = run_with_retries(
+                lambda retry: process_dataset(dataset, tid, retry), retry_policy, log, termination_event=termination_event
+            )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
             exception = e  # may be reraised later
         finally:
@@ -110,32 +113,33 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 elapsed_duration: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
                 log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, elapsed_duration)
 
-        def _completion_callback(
-            todo_futures: set[Future[CompletionCallback]],
-        ) -> tuple[bool, bool]:
+        def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
             """CompletionCallback determining if to fail or skip subtree on error; Runs in the (single) main thread as part
             of the coordination loop."""
             nonlocal no_skip
             fail: bool = False
             if exception is not None:
                 fail = True
-                if skip_on_error == "fail":
-                    [todo_future.cancel() for todo_future in todo_futures]
-                    terminate_process_subtree(except_current_process=True)
+                if skip_on_error == "fail" or termination_event.is_set():
+                    for todo_future in todo_futures:
+                        todo_future.cancel()
+                    termination_handler()
                     raise exception
                 no_skip = not (skip_on_error == "tree" or skip_tree_on_error(dataset))
                 log.error("%s", exception)
                 append_exception(exception, task_name, dataset)
-            return no_skip, fail
+            return CompletionCallbackResult(no_skip=no_skip, fail=fail)
 
         return _completion_callback
 
-    return process_datasets_in_parallel(
+    tasktree: ParallelTaskTree = ParallelTaskTree(
         log=log,
         datasets=datasets,
         process_dataset=_process_dataset,
         max_workers=max_workers,
         interval_nanos=interval_nanos,
+        termination_event=termination_event,
         enable_barriers=enable_barriers,
         is_test_mode=is_test_mode,
     )
+    return tasktree.process_datasets_in_parallel()

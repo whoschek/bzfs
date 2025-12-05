@@ -22,6 +22,34 @@ metadata in fast local inodes (no external DB, no daemon). Instead of repeatedly
 per-dataset files whose inode atime/mtime atomically encode what we need to know. This reduces latency, load on ZFS, and
 network chatter, while remaining dependency free and robust under crashes or concurrent runs.
 
+Correctness scope and analysis guidance
+=======================================
+The cache files described here are an internal implementation detail of the ``--cache-snapshots`` feature. The supported
+contract is that only ``bzfs`` itself creates and updates these files via its documented CLI flows; third-party tools or
+manual edits under ``.cache/mods`` are outside the design and correctness model.
+
+From a correctness perspective, the *current* design is deliberately fail-safe under *benign* external modifications:
+
+- Deleting any subset of cache files or directories (including wiping the entire ``.cache`` tree) is safe. ``bzfs`` will
+  simply fall back to live ``zfs list -t snapshot`` and repopulate caches conservatively.
+- Touching existing cache files so their timestamps move away from the true ZFS properties (for example via ``touch`` or
+  copying cache files without preserving timestamps) cannot cause incorrect behavior. Such changes only make cache
+  entries look stale; all ``bzfs`` consumers re-validate cached timestamps against live ZFS properties plus maturity
+  checks and treat any mismatch as a cache miss, at the cost of extra ZFS I/O and latency but never weakening safety.
+
+The cache directories themselves are created with strict Unix permissions: ``--log-dir`` and its subdirectories (including
+``.cache``) use ``DIR_PERMISSIONS`` (``rwx------``), and cache files are written with ``FILE_PERMISSIONS`` (``rw-------``),
+with the process-wide ``UMASK`` set accordingly. As a result, only the same Unix user account (and root) can read or
+modify the cache tree; other users and groups have no access by default. Analyses shall therefore not assume arbitrary
+hostile writes coming from other unprivileged users on the same system.
+
+When reasoning about correctness, or when searching for bugs, analyses shall be restricted to states that can be reached
+via real use of the public CLIs plus standard ZFS operations. Fabricated scenarios that assume arbitrary or adversarial
+rewrites of cache files (for example, scripts that deliberately write hand-crafted timestamps into ``.cache/mods`` or
+invoke internal helpers directly) are explicitly out of scope and shall not be treated as bugs in ``--cache-snapshots``.
+Under the stated assumptions and invariants below, the fast paths never weaken the safety guarantees of snapshot
+creation, replication, or monitoring; at worst they cause extra ``zfs list -t snapshot`` calls.
+
 Assumptions
 ===========
 - OpenZFS >= 2.2 provides two key UTC times with integer-second resolution: ``snapshots_changed`` (dataset level)
@@ -129,7 +157,6 @@ from __future__ import (
 import errno
 import fcntl
 import os
-import stat
 from subprocess import (
     CalledProcessError,
 )
@@ -138,14 +165,12 @@ from typing import (
     Final,
 )
 
-from bzfs_main.connection import (
-    run_ssh_command,
-)
 from bzfs_main.parallel_batch_cmd import (
     itr_ssh_cmd_parallel,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
+    FILE_PERMISSIONS,
     LOG_TRACE,
     SortedInterner,
     sha256_urlsafe_base64,
@@ -165,6 +190,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 DATASET_CACHE_FILE_PREFIX: Final[str] = "="
 REPLICATION_CACHE_FILE_PREFIX: Final[str] = "=="
 MONITOR_CACHE_FILE_PREFIX: Final[str] = "==="
+MATURITY_TIME_THRESHOLD_SECS: Final[float] = 1.1  # 1 sec ZFS creation time resolution + NTP clock skew is typically < 10ms
 
 
 #############################################################################
@@ -242,13 +268,13 @@ class SnapshotCache:
                         dataset_cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True
                     )
 
-    def zfs_get_snapshots_changed(self, remote: Remote, sorted_datasets: list[str]) -> dict[str, int]:
+    def zfs_get_snapshots_changed(self, r: Remote, sorted_datasets: list[str]) -> dict[str, int]:
         """For each given dataset, returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer
         seconds; See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
 
-        def try_zfs_list_command(_cmd: list[str], batch: list[str]) -> list[str]:
+        def _run_zfs_list_command(_cmd: list[str], batch: list[str]) -> list[str]:
             try:
-                return run_ssh_command(self.job, remote, LOG_TRACE, print_stderr=False, cmd=_cmd + batch).splitlines()
+                return self.job.run_ssh_command_with_retries(r, LOG_TRACE, print_stderr=False, cmd=_cmd + batch).splitlines()
             except CalledProcessError as e:
                 return stderr_to_str(e.stdout).splitlines()
             except UnicodeDecodeError:
@@ -260,7 +286,7 @@ class SnapshotCache:
         results: dict[str, int] = {}
         interner: SortedInterner[str] = SortedInterner(sorted_datasets)  # reduces memory footprint
         for lines in itr_ssh_cmd_parallel(
-            self.job, remote, [(cmd, sorted_datasets)], lambda _cmd, batch: try_zfs_list_command(_cmd, batch), ordered=False
+            self.job, r, [(cmd, sorted_datasets)], lambda _cmd, batch: _run_zfs_list_command(_cmd, batch), ordered=False
         ):
             for line in lines:
                 if "\t" not in line:
@@ -296,8 +322,8 @@ def set_last_modification_time(
     """Atomically sets the atime/mtime of the file with the given ``path``, with a monotonic guard.
 
     if_more_recent=True is a concurrency control mechanism that prevents us from overwriting a newer (monotonically
-    increasing) snapshots_changed value (which is a UTC Unix time in integer seconds) that might have been written to the
-    cache file by a different, more up-to-date bzfs process.
+    increasing) mtime=snapshots_changed value (which is a UTC Unix time in integer seconds) that might have been written to
+    the cache file by a different, more up-to-date bzfs process.
 
     For a brand-new file created by this call, we always update the file's timestamp to avoid retaining the file's implicit
     creation time ("now") instead of the intended timestamp.
@@ -307,7 +333,6 @@ def set_last_modification_time(
     timestamp write unconditionally. This preserves concurrency safety and prevents silent skips on first write.
     """
     unixtimes = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
-    perm: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
     flags_base: int = os.O_WRONLY | os.O_NOFOLLOW | os.O_CLOEXEC
     preexisted: bool = True
 
@@ -315,13 +340,13 @@ def set_last_modification_time(
         fd = os.open(path, flags_base)
     except FileNotFoundError:
         try:
-            fd = os.open(path, flags_base | os.O_CREAT | os.O_EXCL, mode=perm)
+            fd = os.open(path, flags_base | os.O_CREAT | os.O_EXCL, mode=FILE_PERMISSIONS)
             preexisted = False
         except FileExistsError:
             fd = os.open(path, flags_base)  # we lost the race, open existing file
 
     try:
-        # Acquire an exclusive lock; will block if lock is already held by another process.
+        # Acquire an exclusive lock; will block if lock is already held by this process or another process.
         # The (advisory) lock is auto-released when the process terminates or the fd is closed.
         fcntl.flock(fd, fcntl.LOCK_EX)
 
@@ -331,8 +356,12 @@ def set_last_modification_time(
             raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
 
         # Monotonic guard: only skip when the file pre-existed, to not skip the very first write.
-        if preexisted and if_more_recent and unixtimes[1] <= round(stats.st_mtime):
-            return
+        if preexisted and if_more_recent:
+            st_mtime: int = round(stats.st_mtime)
+            if unixtimes[1] < st_mtime:
+                return
+            if unixtimes[1] == st_mtime and unixtimes[0] == round(stats.st_atime):
+                return
         os.utime(fd, times=unixtimes)  # write timestamps
     finally:
         os.close(fd)

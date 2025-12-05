@@ -28,20 +28,19 @@
 - [Quickstart](#Quickstart)
 - [Installation](#Installation)
 - [Design Aspects](#Design-Aspects)
-- [Continuous Testing](#Continuous-Testing)
-- [Unit Testing on GitHub](#Unit-Testing-on-GitHub)
-- [Unit Testing Locally](#Unit-Testing-Locally)
+- [Continuous Integration Testing](#Continuous-Integration-Testing)
+- [Testing on GitHub Runners](#Testing-on-GitHub-Runners)
+- [Testing Locally](#Testing-Locally)
 - [Man Page](#Man-Page)
 # Introduction
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN DESCRIPTION SECTION -->
-*bzfs is a backup command line tool that reliably replicates ZFS snapshots from a (local or
-remote) source ZFS dataset (ZFS filesystem or ZFS volume) and its descendant datasets to a (local
-or remote) destination ZFS dataset to make the destination dataset a recursively synchronized copy
-of the source dataset, using zfs send/receive/rollback/destroy and ssh tunnel as directed. For
-example, bzfs can be used to incrementally replicate all ZFS snapshots since the most recent
-common snapshot from source to destination, in order to help protect against data loss or
-ransomware.*
+*bzfs is a reliable near real-time, parallel replication and backup command-line tool for ZFS. It
+replicates snapshots from many local or remote source ZFS datasets (and their descendants) to
+local or remote destination datasets, using zfs send/receive and ssh, and can operate at
+sub-second intervals across large fleets of hosts. bzfs incrementally replicates all ZFS snapshots
+since the most recent common snapshot, supporting disaster recovery and high availability (DR/HA),
+scale-out deployments, and protection against data loss or ransomware.*
 
 When run for the first time, bzfs replicates the dataset and all its snapshots from the source to
 the destination. On subsequent runs, bzfs transfers only the data that has changed since the
@@ -431,9 +430,9 @@ bzfs_jobrunner --help
 git clone https://github.com/whoschek/bzfs.git
 cd bzfs
 python3 -m venv venv                      # Create a Python virtual environment
-source venv/bin/activate                  # Activate it
+source venv/bin/activate                  # Activate the venv
 pip install -e '.[dev]'                   # Install all development dependencies
-pre-commit install --install-hooks        # Ensure Linters and Formatters run on every commit
+pre-commit install --install-hooks        # Set up linters/formatters to run on every commit
 ```
 
 
@@ -501,16 +500,15 @@ intermittent failures, via efficient 'zfs receive -s' and 'zfs send -t'.
 simultaneously this is detected and the operation can be auto-retried safely.
 * A job that runs periodically declines to start if the same previous periodic job is still running without
 completion yet.
-* Can log to local and remote destinations out of the box. Logging mechanism is customizable and pluggable for smooth
-integration.
+* Can log to local and remote destinations out of the box.
 * Codebase is easy to change and maintain. No hidden magic. Python is very readable to contemporary engineers.
 Chances are that CI tests will catch changes that have unintended side effects.
 * It's fast!
 
 
-# Continuous Testing
+# Continuous Integration Testing
 
-Results of continuous test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD are
+Results of continuous integration test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD are
 [here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
 by [this script](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml).
 The script also demonstrates functioning installation steps on Ubuntu and FreeBSD, etc.
@@ -521,7 +519,7 @@ The gist is that it should work on any platform, with python (3.9 or higher, no 
 only needed on the initiator host.
 
 
-# Unit Testing on GitHub
+# Testing on GitHub Runners
 
 * First, on the GitHub page of this repo, click on "Fork/Create a new fork".
 * Click the 'Actions' menu on your repo, and then enable GitHub Actions on your fork.
@@ -546,7 +544,7 @@ Click on any run and browse to the bottom of the resulting run page to find the 
 coverage report that merges all jobs of the run.
 
 
-# Unit Testing Locally
+# Testing Locally
 ```bash
 # Check prerequisites
 zfs --version                      # verify ZFS is installed
@@ -643,7 +641,7 @@ usage: bzfs [-h] [--recursive]
             [--mbuffer-program-opts STRING] [--ps-program {ps,-}]
             [--pv-program {pv,-}] [--pv-program-opts STRING]
             [--shell-program {sh,-}] [--ssh-program {ssh,hpnssh,-}]
-            [--sudo-program {sudo,-}] [--zpool-program {zpool,-}]
+            [--sudo-program {sudo,doas,-}] [--zpool-program {zpool,-}]
             [--log-dir DIR] [--log-file-prefix STRING]
             [--log-file-infix STRING] [--log-file-suffix STRING]
             [--log-subdir {daily,hourly,minutely}]
@@ -651,8 +649,6 @@ usage: bzfs [-h] [--recursive]
             [--log-syslog-socktype {UDP,TCP}]
             [--log-syslog-facility INT] [--log-syslog-prefix STRING]
             [--log-syslog-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
-            [--log-config-file STRING]
-            [--log-config-var NAME:VALUE [NAME:VALUE ...]]
             [--include-envvar-regex REGEX [REGEX ...]]
             [--exclude-envvar-regex REGEX [REGEX ...]]
             [--yearly_year INT] [--yearly_month INT]
@@ -796,7 +792,7 @@ usage: bzfs [-h] [--recursive]
 **--exclude-dataset-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-dataset-regex (see above) except that the default is
-    `(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*` (exclude tmp datasets). Example:
+    `(?:.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*` (exclude tmp datasets). Example:
     `!.*` (exclude no dataset)
 
 <!-- -->
@@ -2117,7 +2113,7 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--sudo-program"></div>
 
-**--sudo-program** *{sudo,-}*
+**--sudo-program** *{sudo,doas,-}*
 
 *  The name of the 'sudo' executable (optional). Default is 'sudo'. Use '-' to disable the
     use of this program.
@@ -2237,51 +2233,6 @@ usage: bzfs [-h] [--recursive]
 
 *  Only send messages with equal or higher priority than this log level to syslog. Default is
     'ERROR'.
-
-<!-- -->
-
-<div id="--log-config-file"></div>
-
-**--log-config-file** *STRING*
-
-*  The contents of a JSON file that defines a custom python logging configuration to be used
-    (optional). If the option starts with a `+` prefix then the contents are read from the UTF-8
-    JSON file given after the `+` prefix. Examples: +log_config.json, +/path/to/log_config.json.
-    Here is an example config file that demonstrates usage:
-    https://github.com/whoschek/bzfs/blob/main/bzfs_tests/log_config.json
-
-    For more examples see
-    https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig
-    and for details see
-    https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema
-
-    *Note:* Lines starting with a # character are ignored as comments within the JSON. Also, if
-    a line ends with a # character the portion between that # character and the preceding #
-    character on the same line is ignored as a comment.
-
-<!-- -->
-
-<div id="--log-config-var"></div>
-
-**--log-config-var** *NAME:VALUE [NAME:VALUE ...]*
-
-*  User defined variables in the form of zero or more NAME:VALUE pairs (optional). These
-    variables can be used within the JSON passed with --log-config-file (see above) via
-    `${name[:default]}` references, which are substituted (aka interpolated) as follows:
-
-    If the variable contains a non-empty CLI value then that value is used. Else if a default
-    value for the variable exists in the JSON file that default value is used. Else the program
-    aborts with an error. Example: In the JSON variable `${syslog_address:/dev/log}`, the
-    variable name is 'syslog_address' and the default value is '/dev/log'. The default value
-    is the portion after the optional : colon within the variable declaration. The default value
-    is used if the CLI user does not specify a non-empty value via --log-config-var, for example
-    via --log-config-var syslog_address:/path/to/socket_file or via --log-config-var
-    syslog_address:[host,port].
-
-    bzfs automatically supplies the following convenience variables: `${bzfs.log_level}`,
-    `${bzfs.log_dir}`, `${bzfs.log_file}`, `${bzfs.sub.logger}`,
-    `${bzfs.get_default_log_formatter}`, `${bzfs.timestamp}`. For a complete list see the
-    source code of get_dict_config_logger().
 
 <!-- -->
 

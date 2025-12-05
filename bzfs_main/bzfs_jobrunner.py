@@ -38,6 +38,7 @@ from __future__ import (
 import argparse
 import contextlib
 import os
+import platform
 import pwd
 import random
 import socket
@@ -68,45 +69,55 @@ from typing import (
 )
 
 import bzfs_main.argparse_actions
-import bzfs_main.check_range
-import bzfs_main.utils
 from bzfs_main import (
     bzfs,
 )
 from bzfs_main.argparse_cli import (
     PROG_AUTHOR,
-    SKIP_ON_ERROR_DEFAULT,
 )
 from bzfs_main.detect import (
     DUMMY_DATASET,
 )
 from bzfs_main.loggers import (
     get_simple_logger,
+    reset_logger,
+    set_logging_runtime_defaults,
 )
-from bzfs_main.parallel_tasktree import (
+from bzfs_main.util import (
+    check_range,
+    utils,
+)
+from bzfs_main.util.parallel_tasktree import (
     BARRIER_CHAR,
 )
-from bzfs_main.parallel_tasktree_policy import (
+from bzfs_main.util.parallel_tasktree_policy import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIE_STATUS,
     LOG_TRACE,
+    UMASK,
+    JobStats,
+    Subprocesses,
+    dry,
     format_dict,
     format_obj,
-    has_siblings,
+    getenv_bool,
     human_readable_duration,
     percent,
     shuffle_dict,
     terminate_process_subtree,
+    termination_signal_handler,
+    validate_dataset_name,
 )
-from bzfs_main.utils import PROG_NAME as BZFS_PROG_NAME
+from bzfs_main.util.utils import PROG_NAME as BZFS_PROG_NAME
 
 # constants:
 PROG_NAME: Final[str] = "bzfs_jobrunner"
 SRC_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^SRC_HOST"  # noqa: S105
 DST_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^DST_HOST"  # noqa: S105
 SEP: Final[str] = ","
+POSIX_END_OF_OPTIONS_MARKER: Final[str] = "--"  # args following -- are treated as operands, even if they begin with a hyphen
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -363,7 +374,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             help=f"Remote SSH username on {loc} hosts to connect to (optional). Examples: 'root', 'alice'.\n\n")
     for loc in locations:
         parser.add_argument(
-            f"--ssh-{loc}-port", type=int, min=1, max=65535, action=bzfs_main.check_range.CheckRange, metavar="INT",
+            f"--ssh-{loc}-port", type=int, min=1, max=65535, action=check_range.CheckRange, metavar="INT",
             help=f"Remote SSH port on {loc} host to connect to (optional).\n\n")
     for loc in locations:
         parser.add_argument(
@@ -396,7 +407,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many parallel jobs as "
              "there are cores on the machine; 75%% uses num_procs = num_cores * 0.75. Examples: 1, 4, 75%%, 150%%\n\n")
     parser.add_argument(
-        "--work-period-seconds", type=float, min=0, default=0, action=bzfs_main.check_range.CheckRange, metavar="FLOAT",
+        "--work-period-seconds", type=float, min=0, default=0, action=check_range.CheckRange, metavar="FLOAT",
         help="Reduces bandwidth spikes by spreading out the start of worker jobs over this much time; "
              "0 disables this feature (default: %(default)s). Examples: 0, 60, 86400\n\n")
     parser.add_argument(
@@ -404,13 +415,15 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Randomize job start time and host order to avoid potential thundering herd problems in large distributed "
              "systems (optional). Randomizing job start time is only relevant if --work-period-seconds > 0.\n\n")
     parser.add_argument(
-        "--worker-timeout-seconds", type=float, min=0.001, default=None, action=bzfs_main.check_range.CheckRange,
-        metavar="FLOAT",
+        "--worker-timeout-seconds", type=float, min=0.001, default=None, action=check_range.CheckRange, metavar="FLOAT",
         help="If this much time has passed after a worker process has started executing, kill the straggling worker "
              "(optional). Other workers remain unaffected. Examples: 60, 3600\n\n")
     parser.add_argument(
-        "--spawn_process_per_job", action="store_true",
-        help=argparse.SUPPRESS)
+        "--spawn-process-per-job", action="store_true",
+        help="Spawn a Python process per subjob instead of a Python thread per subjob (optional). The former is only "
+             "recommended for a job operating in parallel on a large number of hosts as it helps avoid exceeding "
+             "per-process limits such as the default max number of open file descriptors, at the expense of increased "
+             "startup latency.\n\n")
     parser.add_argument(
         "--jobrunner-dryrun", action="store_true",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
@@ -432,7 +445,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--daemon-monitor-snapshots-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.\n\n")
     bad_opts = ["--daemon-frequency", "--include-snapshot-plan", "--create-src-snapshots-plan", "--skip-replication",
-                "--log-file-prefix", "--log-file-infix", "--log-file-suffix", "--log-config-file", "--log-config-var",
+                "--log-file-prefix", "--log-file-infix", "--log-file-suffix",
                 "--delete-dst-datasets", "--delete-dst-snapshots", "--delete-dst-snapshots-except",
                 "--delete-dst-snapshots-except-plan", "--delete-empty-dst-datasets",
                 "--monitor-snapshots", "--timeout"]
@@ -458,24 +471,34 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 #############################################################################
 def main() -> None:
     """API for command line clients."""
-    Job().run_main(sys.argv)
+    prev_umask: int = os.umask(UMASK)
+    try:
+        set_logging_runtime_defaults()
+        # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
+        termination_event: threading.Event = threading.Event()
+        with termination_signal_handler(termination_event=termination_event):
+            Job(log=None, termination_event=termination_event).run_main(sys_argv=sys.argv)
+    finally:
+        os.umask(prev_umask)  # restore prior global state
 
 
 #############################################################################
 class Job:
     """Coordinates subjobs per the CLI flags; Each subjob handles one host pair and may run in its own process or thread."""
 
-    def __init__(self, log: Logger | None = None) -> None:
-        """Initialize caches and logger shared across subjobs."""
+    def __init__(self, log: Logger | None, termination_event: threading.Event) -> None:
         # immutable variables:
+        self.log_was_None: Final[bool] = log is None
+        self.log: Final[Logger] = get_simple_logger(PROG_NAME) if log is None else log
+        self.termination_event: Final[threading.Event] = termination_event
+        self.subprocesses: Final[Subprocesses] = Subprocesses()
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
-        self.log: Logger = log if log is not None else get_simple_logger(PROG_NAME)
-        self.loopback_address: str = _detect_loopback_address()
+        self.loopback_address: Final[str] = _detect_loopback_address()
 
         # mutable variables:
         self.first_exception: int | None = None
-        self.stats: Stats = Stats()
+        self.stats: JobStats = JobStats(jobs_all=0)
         self.cache_existing_dst_pools: set[str] = set()
         self.cache_known_dst_pools: set[str] = set()
 
@@ -483,6 +506,13 @@ class Job:
 
     def run_main(self, sys_argv: list[str]) -> None:
         """API for Python clients; visible for testing; may become a public API eventually."""
+        try:
+            self._run_main(sys_argv)
+        finally:
+            if self.log_was_None:  # reset Logger unless it's a Logger outside of our control
+                reset_logger(self.log)
+
+    def _run_main(self, sys_argv: list[str]) -> None:
         self.first_exception = None
         log: Logger = self.log
         log.info("CLI arguments: %s", " ".join(sys_argv))
@@ -545,7 +575,7 @@ class Job:
                 f"Problematic subset of --dst-root-datasets: {bad_root_datasets} for src_hosts: {sorted(basis_src_hosts)}"
             )
         if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
-            random.shuffle(src_hosts)
+            random.SystemRandom().shuffle(src_hosts)
             dst_hosts = shuffle_dict(dst_hosts)
         ssh_src_user: str = args.ssh_src_user or args.src_user  # --src-user is deprecated
         ssh_dst_user: str = args.ssh_dst_user or args.dst_user  # --dst-user is deprecated
@@ -562,10 +592,11 @@ class Job:
         self.spawn_process_per_job = args.spawn_process_per_job
         username: str = pwd.getpwuid(os.getuid()).pw_name
         assert username
-        localhost_ids: set[str] = {"localhost", "127.0.0.1", "::1", socket.gethostname()}  # ::1 is IPv6 loopback address
-        localhost_ids.update(self.get_localhost_ips())  # union
-        localhost_ids.add(localhostname)
-        log.log(LOG_TRACE, "localhost_ids: %s", sorted(localhost_ids))
+        loopback_ids: set[str] = {"localhost", "127.0.0.1", "::1", socket.gethostname()}  # ::1 is IPv6 loopback address
+        loopback_ids.update(self.get_localhost_ips())  # union
+        loopback_ids.add(localhostname)
+        loopback_ids = set() if getenv_bool("disable_loopback", False) else loopback_ids
+        log.log(LOG_TRACE, "loopback_ids: %s", sorted(loopback_ids))
 
         def zero_pad(number: int, width: int = 6) -> str:
             """Pads number with leading '0' chars to the given width."""
@@ -575,9 +606,9 @@ class Job:
             """Returns ``tag`` prefixed with slash and zero padded index."""
             return "/" + zero_pad(jj) + tag
 
-        def npad() -> str:
+        def runpad() -> str:
             """Returns standardized subjob count suffix."""
-            return SEP + zero_pad(len(subjobs))
+            return job_run + SEP + zero_pad(len(subjobs))
 
         def update_subjob_name(tag: str) -> str:
             """Derives next subjob name based on ``tag`` and index ``j``."""
@@ -595,8 +626,8 @@ class Job:
             ssh_user = ssh_src_user if is_src else ssh_dst_user
             ssh_user = ssh_user if ssh_user else username
             lb: str = self.loopback_address
-            local_ids: set[str] = localhost_ids
-            hostname = hostname if hostname not in local_ids else (lb if lb else hostname) if username != ssh_user else "-"
+            loopbck_ids: set[str] = loopback_ids
+            hostname = hostname if hostname not in loopbck_ids else (lb if lb else hostname) if username != ssh_user else "-"
             hostname = convert_ipv6(hostname)
             return f"{hostname}:{dataset}"
 
@@ -609,31 +640,30 @@ class Job:
             root_dataset = root_dataset.replace(SRC_MAGIC_SUBSTITUTION_TOKEN, src_host)
             root_dataset = root_dataset.replace(DST_MAGIC_SUBSTITUTION_TOKEN, dst_hostname)
             resolved_dst_dataset: str = f"{root_dataset}/{dst_dataset}" if root_dataset else dst_dataset
-            bzfs_main.utils.validate_dataset_name(resolved_dst_dataset, dst_dataset)
+            validate_dataset_name(resolved_dst_dataset, dst_dataset)
             return resolve_dataset(dst_hostname, resolved_dst_dataset, is_src=False)
 
         for src_host in src_hosts:
             assert src_host
         for dst_hostname in dst_hosts:
             assert dst_hostname
-        dummy: str = DUMMY_DATASET
-        lhn: str = localhostname
-        bzfs_prog_header: list[str] = [BZFS_PROG_NAME, "--no-argument-file"] + unknown_args
+        dummy: Final[str] = DUMMY_DATASET
+        lhn: Final[str] = localhostname
+        bzfs_prog_header: Final[list[str]] = [BZFS_PROG_NAME, "--no-argument-file"] + unknown_args
         subjobs: dict[str, list[str]] = {}
         for i, src_host in enumerate(src_hosts):
             subjob_name: str = zero_pad(i) + "src-host"
+            src_log_suffix: str = _log_suffix(localhostname, src_host, "")
             j: int = 0
             opts: list[str]
 
             if args.create_src_snapshots:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
-                opts += [f"--log-file-prefix={PROG_NAME}{SEP}create-src-snapshots{SEP}"]
-                opts += [f"--log-file-infix={SEP}{job_id}"]
-                opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{_log_suffix(lhn, src_host, '')}{SEP}"]
+                self.add_log_file_opts(opts, "create-src-snapshots", job_id, runpad(), src_log_suffix)
                 self.add_ssh_opts(
                     opts, ssh_src_user=ssh_src_user, ssh_src_port=ssh_src_port, ssh_src_config_file=ssh_src_config_file
                 )
-                opts += ["--"]
+                opts += [POSIX_END_OF_OPTIONS_MARKER]
                 opts += _flatten(_dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/create-src-snapshots"
                 subjobs[subjob_name] = bzfs_prog_header + opts
@@ -643,7 +673,7 @@ class Job:
                 marker: str = "replicate"
                 for dst_hostname, targets in dst_hosts.items():
                     opts = self.replication_opts(
-                        dst_snapshot_plan, set(targets), lhn, src_host, dst_hostname, marker, job_id, job_run + npad()
+                        dst_snapshot_plan, set(targets), lhn, src_host, dst_hostname, marker, job_id, runpad()
                     )
                     if len(opts) > 0:
                         opts += [f"--daemon-frequency={args.daemon_replication_frequency}"]
@@ -656,7 +686,7 @@ class Job:
                             ssh_src_config_file=ssh_src_config_file,
                             ssh_dst_config_file=ssh_dst_config_file,
                         )
-                        opts += ["--"]
+                        opts += [POSIX_END_OF_OPTIONS_MARKER]
                         dataset_pairs: list[tuple[str, str]] = [
                             (resolve_dataset(src_host, src), resolve_dst_dataset(dst_hostname, dst))
                             for src, dst in args.root_dataset_pairs
@@ -667,20 +697,17 @@ class Job:
                             j += 1
                 subjob_name = update_subjob_name(marker)
 
-            def prune_src(opts: list[str], retention_plan: dict, tag: str, src_host: str = src_host) -> None:
+            def prune_src(
+                opts: list[str], retention_plan: dict, tag: str, src_host: str = src_host, logsuffix: str = src_log_suffix
+            ) -> None:
                 """Creates prune subjob options for ``tag`` using ``retention_plan``."""
-                opts += [
-                    "--skip-replication",
-                    f"--delete-dst-snapshots-except-plan={retention_plan}",
-                    f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}",
-                    f"--log-file-infix={SEP}{job_id}",
-                    f"--log-file-suffix={SEP}{job_run}{npad()}{_log_suffix(lhn, src_host, '')}{SEP}",
-                    f"--daemon-frequency={args.daemon_prune_src_frequency}",
-                ]
+                opts += ["--skip-replication", f"--delete-dst-snapshots-except-plan={retention_plan}"]
+                opts += [f"--daemon-frequency={args.daemon_prune_src_frequency}"]
+                self.add_log_file_opts(opts, tag, job_id, runpad(), logsuffix)
                 self.add_ssh_opts(  # i.e. dst=src, src=dummy
                     opts, ssh_dst_user=ssh_src_user, ssh_dst_port=ssh_src_port, ssh_dst_config_file=ssh_src_config_file
                 )
-                opts += ["--"]
+                opts += [POSIX_END_OF_OPTIONS_MARKER]
                 opts += _flatten(_dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 nonlocal subjob_name
                 subjob_name += f"/{tag}"
@@ -706,15 +733,14 @@ class Job:
                     }
                     opts = ["--delete-dst-snapshots", "--skip-replication"]
                     opts += [f"--delete-dst-snapshots-except-plan={curr_dst_snapshot_plan}"]
-                    opts += [f"--log-file-prefix={PROG_NAME}{SEP}{marker}{SEP}"]
-                    opts += [f"--log-file-infix={SEP}{job_id}"]
-                    opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{_log_suffix(lhn, src_host, dst_hostname)}{SEP}"]
                     opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
+                    self.add_log_file_opts(opts, marker, job_id, runpad(), _log_suffix(lhn, src_host, dst_hostname))
                     self.add_ssh_opts(
                         opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
                     )
-                    opts += ["--"]
+                    opts += [POSIX_END_OF_OPTIONS_MARKER]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
+                    dataset_pairs = _dedupe(dataset_pairs)
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs, worker_timeout_seconds)
                     if len(dataset_pairs) > 0:
                         subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + _flatten(dataset_pairs)
@@ -724,10 +750,8 @@ class Job:
             def monitor_snapshots_opts(tag: str, monitor_plan: dict, logsuffix: str) -> list[str]:
                 """Returns monitor subjob options for ``tag`` and ``monitor_plan``."""
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
-                opts += [f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}"]
-                opts += [f"--log-file-infix={SEP}{job_id}"]
-                opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{logsuffix}{SEP}"]
                 opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
+                self.add_log_file_opts(opts, tag, job_id, runpad(), logsuffix)
                 return opts
 
             def build_monitor_plan(monitor_plan: dict, snapshot_plan: dict, cycles_prefix: str) -> dict:
@@ -756,11 +780,11 @@ class Job:
             if args.monitor_src_snapshots:
                 marker = "monitor-src-snapshots"
                 monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan, "src_snapshot_")
-                opts = monitor_snapshots_opts(marker, monitor_plan, _log_suffix(lhn, src_host, ""))
+                opts = monitor_snapshots_opts(marker, monitor_plan, src_log_suffix)
                 self.add_ssh_opts(  # i.e. dst=src, src=dummy
                     opts, ssh_dst_user=ssh_src_user, ssh_dst_port=ssh_src_port, ssh_dst_config_file=ssh_src_config_file
                 )
-                opts += ["--"]
+                opts += [POSIX_END_OF_OPTIONS_MARKER]
                 opts += _flatten(_dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/" + marker
                 subjobs[subjob_name] = bzfs_prog_header + opts
@@ -779,15 +803,16 @@ class Job:
                     self.add_ssh_opts(
                         opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
                     )
-                    opts += ["--"]
+                    opts += [POSIX_END_OF_OPTIONS_MARKER]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
+                    dataset_pairs = _dedupe(dataset_pairs)
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs, worker_timeout_seconds)
                     if len(dataset_pairs) > 0:
                         subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + _flatten(dataset_pairs)
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
-        msg = "Ready to run %s subjobs using %s/%s src hosts: %s, %s/%s dst hosts: %s"
+        msg = dry("Ready to run %s subjobs using %s/%s src hosts: %s, %s/%s dst hosts: %s", is_dry_run=self.jobrunner_dryrun)
         log.info(
             msg, len(subjobs), len(src_hosts), nb_src_hosts, src_hosts, len(dst_hosts), nb_dst_hosts, list(dst_hosts.keys())
         )
@@ -834,9 +859,7 @@ class Job:
         opts: list[str] = []
         if len(include_snapshot_plan) > 0:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
-            opts += [f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}"]
-            opts += [f"--log-file-infix={SEP}{job_id}"]
-            opts += [f"--log-file-suffix={SEP}{job_run}{_log_suffix(localhostname, src_hostname, dst_hostname)}{SEP}"]
+            self.add_log_file_opts(opts, tag, job_id, job_run, _log_suffix(localhostname, src_hostname, dst_hostname))
         return opts
 
     def skip_nonexisting_local_dst_pools(
@@ -893,6 +916,13 @@ class Job:
         opts += [f"--ssh-src-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
         opts += [f"--ssh-dst-config-file={ssh_dst_config_file}"] if ssh_dst_config_file else []
 
+    @staticmethod
+    def add_log_file_opts(opts: list[str], tag: str, job_id: str, job_run: str, logsuffix: str) -> None:
+        """Appends standard log-file CLI options to ``opts``."""
+        opts += [f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}"]
+        opts += [f"--log-file-infix={SEP}{job_id}"]
+        opts += [f"--log-file-suffix={SEP}{job_run}{logsuffix}{SEP}"]
+
     def run_subjobs(
         self,
         subjobs: dict[str, list[str]],
@@ -901,19 +931,25 @@ class Job:
         work_period_seconds: float,
         jitter: bool,
     ) -> None:
-        """Executes subjobs sequentially or in parallel, respecting barriers."""
-        self.stats = Stats()
-        self.stats.jobs_all = len(subjobs)
+        """Executes subjobs sequentially or in parallel, respecting '~' barriers.
+
+        Design note on subjob failure, isolation and termination:
+        - On subjob failure the subjob's subtree is skipped.
+        - Subjob failures are converted to return codes (not exceptions) so the policy does not invoke a termination handler
+          on such failures and sibling subjobs continue unaffected. This preserves per-subjob isolation, both within a single
+          process (thread-per-subjob mode; default) as well as in process-per-subjob mode (``--spawn-process-per-job``).
+        """
+        self.stats = JobStats(len(subjobs))
         log = self.log
         num_intervals = 1 + len(subjobs) if jitter else len(subjobs)
         interval_nanos = 0 if len(subjobs) == 0 else round(1_000_000_000 * max(0.0, work_period_seconds) / num_intervals)
         assert interval_nanos >= 0
         if jitter:  # randomize job start time to avoid potential thundering herd problems in large distributed systems
-            sleep_nanos = random.randint(0, interval_nanos)  # noqa: S311
+            sleep_nanos = random.SystemRandom().randint(0, interval_nanos)
             log.info("Jitter: Delaying job start time by sleeping for %s ...", human_readable_duration(sleep_nanos))
-            time.sleep(sleep_nanos / 1_000_000_000)  # seconds
+            self.termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
         sorted_subjobs: list[str] = sorted(subjobs.keys())
-        spawn_process_per_job: bool = self.spawn_process_per_job or has_siblings(sorted_subjobs, self.is_test_mode)
+        spawn_process_per_job: bool = self.spawn_process_per_job
         log.log(LOG_TRACE, "%s: %s", "spawn_process_per_job", spawn_process_per_job)
         if process_datasets_in_parallel_and_fault_tolerant(
             log=log,
@@ -923,9 +959,11 @@ class Job:
             )
             == 0,
             skip_tree_on_error=lambda subjob: True,
-            skip_on_error=SKIP_ON_ERROR_DEFAULT,
-            max_workers=max_workers if spawn_process_per_job else 1,
-            interval_nanos=lambda last_update_nanos, dataset, submitted_count: interval_nanos,
+            skip_on_error="dataset",
+            max_workers=max_workers,
+            interval_nanos=lambda last_update_nanos, dataset, submit_count: interval_nanos,
+            termination_event=self.termination_event,
+            termination_handler=self.subprocesses.terminate_process_subtrees,
             task_name="Subjob",
             retry_policy=None,  # no retries
             dry_run=False,
@@ -934,7 +972,7 @@ class Job:
             self.first_exception = DIE_STATUS if self.first_exception is None else self.first_exception
         stats = self.stats
         jobs_skipped = stats.jobs_all - stats.jobs_started
-        msg = f"{stats}, skipped:" + percent(jobs_skipped, total=stats.jobs_all)
+        msg = f"{stats}, skipped:" + percent(jobs_skipped, total=stats.jobs_all, print_total=True)
         log.info("Final Progress: %s", msg)
         assert stats.jobs_running == 0, msg
         assert stats.jobs_completed == stats.jobs_started, msg
@@ -953,11 +991,7 @@ class Job:
         cmd_str = " ".join(cmd)
         stats = self.stats
         try:
-            with stats.lock:
-                stats.jobs_started += 1
-                stats.jobs_running += 1
-                stats.started_job_names.add(name)
-                msg = str(stats)
+            msg: str = stats.submit_job(name)
             log.log(LOG_TRACE, "Starting worker job: %s", cmd_str)
             log.info("Progress: %s", msg)
             start_time_nanos = time.monotonic_ns()
@@ -969,8 +1003,7 @@ class Job:
             log.error("Worker job failed with unexpected exception: %s for command: %s", e, cmd_str)
             raise
         else:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            elapsed_human = human_readable_duration(elapsed_nanos)
+            elapsed_human: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
             if returncode != 0:
                 with stats.lock:
                     if self.first_exception is None:
@@ -980,22 +1013,7 @@ class Job:
                 log.debug("Worker job succeeded in %s: %s", elapsed_human, cmd_str)
             return returncode
         finally:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            with stats.lock:
-                stats.jobs_running -= 1
-                stats.jobs_completed += 1
-                stats.sum_elapsed_nanos += elapsed_nanos
-                stats.jobs_failed += 1 if returncode != 0 else 0
-                msg = str(stats)
-                assert stats.jobs_all >= 0, msg
-                assert stats.jobs_started >= 0, msg
-                assert stats.jobs_completed >= 0, msg
-                assert stats.jobs_failed >= 0, msg
-                assert stats.jobs_running >= 0, msg
-                assert stats.sum_elapsed_nanos >= 0, msg
-                assert stats.jobs_failed <= stats.jobs_completed, msg
-                assert stats.jobs_completed <= stats.jobs_started, msg
-                assert stats.jobs_started <= stats.jobs_all, msg
+            msg = stats.complete_job(failed=returncode != 0, elapsed_nanos=time.monotonic_ns() - start_time_nanos)
             log.info("Progress: %s", msg)
 
     def run_worker_job_in_current_thread(self, cmd: list[str], timeout_secs: float | None) -> int | None:
@@ -1018,7 +1036,7 @@ class Job:
 
     def _bzfs_run_main(self, cmd: list[str]) -> None:
         """Delegates execution to :mod:`bzfs` using parsed arguments."""
-        bzfs_job = bzfs.Job()
+        bzfs_job = bzfs.Job(termination_event=self.termination_event)
         bzfs_job.is_test_mode = self.is_test_mode
         bzfs_job.run_main(bzfs.argument_parser().parse_args(cmd[1:]), cmd)
 
@@ -1030,23 +1048,33 @@ class Job:
         if self.jobrunner_dryrun:
             return 0
         proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, text=True)  # run job in a separate subprocess
+        pid: int = proc.pid
+        self.subprocesses.register_child_pid(pid)
         try:
-            proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
+            if self.termination_event.is_set():
+                timeout_secs = 1.0 if timeout_secs is None else timeout_secs
+                raise subprocess.TimeoutExpired(cmd, timeout_secs)  # do not wait for normal completion
+            proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to complete and exit normally
         except subprocess.TimeoutExpired:
             cmd_str = " ".join(cmd)
-            log.error("%s", f"Terminating worker job as it failed to complete within {timeout_secs}s: {cmd_str}")
+            if self.termination_event.is_set():
+                log.error("%s", f"Terminating worker job due to async termination request: {cmd_str}")
+            else:
+                log.error("%s", f"Terminating worker job as it failed to complete within {timeout_secs}s: {cmd_str}")
             proc.terminate()  # Sends SIGTERM signal to job subprocess
-            assert isinstance(timeout_secs, float)
+            assert timeout_secs is not None
             timeout_secs = min(1.0, timeout_secs)
             try:
                 proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
             except subprocess.TimeoutExpired:
                 log.error("%s", f"Killing worker job as it failed to terminate within {timeout_secs}s: {cmd_str}")
-                terminate_process_subtree(except_current_process=True, root_pid=proc.pid)  # Send SIGTERM to process subtree
+                terminate_process_subtree(root_pids=[proc.pid])  # Send SIGTERM to process subtree
                 proc.kill()  # Sends SIGKILL signal to job subprocess because SIGTERM wasn't enough
                 timeout_secs = min(0.025, timeout_secs)
                 with contextlib.suppress(subprocess.TimeoutExpired):
                     proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
+        finally:
+            self.subprocesses.unregister_child_pid(pid)
         return proc.returncode
 
     def validate_src_hosts(self, src_hosts: list[str]) -> list[str]:
@@ -1162,7 +1190,7 @@ class Job:
         if raw_src_hosts is None:
             # If stdin is an interactive TTY, don't block waiting for input; fail clearly instead
             try:
-                is_tty: bool = bool(getattr(sys.stdin, "isatty", lambda: False)())
+                is_tty: bool = getattr(sys.stdin, "isatty", lambda: False)()
             except Exception:
                 is_tty = False
             if is_tty:
@@ -1183,13 +1211,13 @@ class Job:
     def die(self, msg: str) -> NoReturn:
         """Log ``msg`` and exit the program."""
         self.log.error("%s", msg)
-        bzfs_main.utils.die(msg)
+        utils.die(msg)
 
     def get_localhost_ips(self) -> set[str]:
         """Returns all network addresses of the local host, i.e. all configured addresses on all network interfaces, without
         depending on name resolution."""
         ips: set[str] = set()
-        if sys.platform == "linux":
+        if platform.system() == "Linux":
             try:
                 proc = subprocess.run(["hostname", "-I"], stdin=DEVNULL, stdout=PIPE, text=True, check=True)  # noqa: S607
             except Exception as e:
@@ -1198,32 +1226,6 @@ class Job:
                 ips = {ip for ip in proc.stdout.strip().split() if ip}
         self.log.log(LOG_TRACE, "localhost_ips: %s", sorted(ips))
         return ips
-
-
-#############################################################################
-class Stats:
-    """Thread-safe counters summarizing subjob progress."""
-
-    def __init__(self) -> None:
-        self.lock: Final[threading.Lock] = threading.Lock()
-        self.jobs_all: int = 0
-        self.jobs_started: int = 0
-        self.jobs_completed: int = 0
-        self.jobs_failed: int = 0
-        self.jobs_running: int = 0
-        self.sum_elapsed_nanos: int = 0
-        self.started_job_names: Final[set[str]] = set()
-
-    def __repr__(self) -> str:
-
-        def pct(number: int) -> str:
-            """Returns percentage string relative to total jobs."""
-            return percent(number, total=self.jobs_all)
-
-        al, started, completed, failed = self.jobs_all, self.jobs_started, self.jobs_completed, self.jobs_failed
-        running = self.jobs_running
-        t = "avg_completion_time:" + human_readable_duration(self.sum_elapsed_nanos / max(1, completed))
-        return f"all:{al}, started:{pct(started)}, completed:{pct(completed)}, failed:{pct(failed)}, running:{running}, {t}"
 
 
 #############################################################################
@@ -1240,13 +1242,13 @@ class RejectArgumentAction(argparse.Action):
 #############################################################################
 def _dedupe(root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """Returns a list with duplicate dataset pairs removed while preserving order."""
-    return list(dict.fromkeys(root_dataset_pairs).keys())
+    return list(dict.fromkeys(root_dataset_pairs))
 
 
-T = TypeVar("T")
+_T = TypeVar("_T")
 
 
-def _flatten(root_dataset_pairs: Iterable[Iterable[T]]) -> list[T]:
+def _flatten(root_dataset_pairs: Iterable[Iterable[_T]]) -> list[_T]:
     """Flattens an iterable of pairs into a single list."""
     return [item for pair in root_dataset_pairs for item in pair]
 
@@ -1260,8 +1262,7 @@ def _sanitize(filename: str) -> str:
 
 def _log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
     """Returns a log file suffix in a format that contains the given hostnames."""
-    sanitized_dst_hostname = _sanitize(dst_hostname) if dst_hostname else ""
-    return f"{SEP}{_sanitize(localhostname)}{SEP}{_sanitize(src_hostname)}{SEP}{sanitized_dst_hostname}"
+    return f"{SEP}{_sanitize(localhostname)}{SEP}{_sanitize(src_hostname)}{SEP}{_sanitize(dst_hostname)}"
 
 
 def _pretty_print_formatter(dictionary: dict[str, Any]) -> Any:

@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bzfs"
-version = "1.14.0.dev0"
+version = "1.16.0.dev0"
 
 description = """
-bzfs is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote) source ZFS dataset \
-(ZFS filesystem or ZFS volume) and its descendant datasets to a (local or remote) destination ZFS dataset to make the \
-destination dataset a recursively synchronized copy of the source dataset, using zfs send/receive/rollback/destroy and \
-ssh tunnel as directed. bzfs can be used to incrementally replicate all ZFS snapshots since the most recent common \
-snapshot from source to destination."""
+bzfs is a reliable near real-time, parallel replication and backup command-line tool for ZFS. It replicates snapshots \
+from many local or remote source ZFS datasets (and their descendants) to local or remote destination datasets, using \
+zfs send/receive and ssh, and can operate at sub-second intervals across large fleets of hosts.
+bzfs incrementally replicates all ZFS snapshots since the most recent common snapshot, supporting disaster recovery \
+and high availability (DR/HA), scale-out deployments, and protection against data loss or ransomware."""
 
 authors = [
   {name = "Wolfgang Hoschek", email = "wolfgang.hoschek@mac.com"},
@@ -58,23 +58,23 @@ Distribution = "https://pypi.org/project/bzfs"
 dev = [  # for development only
   "argparse-manpage==4.7",          # see https://github.com/praiskup/argparse-manpage
   # "pandoc", # instead use this for pandoc >= 3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
-  "genbadge[coverage]==1.1.2",      # see https://smarie.github.io/python-genbadge/
-  "commitizen==4.9.1",              # see https://github.com/commitizen-tools/commitizen
-  "pre-commit==4.3.0",              # see https://github.com/pre-commit/pre-commit
-  "black==25.9.0",                  # see https://github.com/psf/black
-  "ruff==0.14.1",                   # see https://github.com/astral-sh/ruff
+  "genbadge[coverage]==1.1.3",      # see https://smarie.github.io/python-genbadge/
+  "commitizen==4.10.0",             # see https://github.com/commitizen-tools/commitizen
+  "pre-commit==4.5.0",              # see https://github.com/pre-commit/pre-commit
+  "black==25.11.0",                 # see https://github.com/psf/black
+  "ruff==0.14.7",                   # see https://github.com/astral-sh/ruff
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
-  "mypy==1.18.2",                   # see https://github.com/python/mypy
+  "mypy==1.19.0",                   # see https://github.com/python/mypy
   "shellcheck-py==0.11.0.1",        # see https://github.com/shellcheck-py/shellcheck-py
-  "ast-grep-cli==0.39.6",           # see https://github.com/ast-grep/ast-grep
+  # "ast-grep-cli==0.39.9",         # see https://github.com/ast-grep/ast-grep
 ]
 # Example that installs the optional python development dependencies (see above) into a venv:
 # cd ~/devel/bzfs
 # rm -rf venv
 # python3 -m venv venv                      # Create a Python virtual environment
-# source venv/bin/activate                  # Activate it
+# source venv/bin/activate                  # Activate the venv
 # pip install -e '.[dev]'                   # Install all development dependencies
-# pre-commit install --install-hooks        # Ensure Linters and Formatters run on every commit
+# pre-commit install --install-hooks        # Set up linters/formatters to run on every commit
 # pip list --not-required
 
 [project.scripts]
@@ -99,8 +99,8 @@ update_changelog_on_bump = false
 
 [tool.coverage.run]  # see https://coverage.readthedocs.io/
 branch = true
-include = ["bzfs_main/*.py"]
-omit = ["bzfs_tests/*.py", "*/__init__.py"]
+include = ["bzfs_main/**/*.py"]
+omit = ["bzfs_tests/**/*.py", "**/__init__.py"]
 
 [tool.docformatter]         # auto-format Python docstrings to follow PEP 257 and wrap them to a specific line length
 wrap-summaries = 125        # summary / one-liner length; see https://docformatter.readthedocs.io/en/latest/usage.html
@@ -229,7 +229,9 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
 
 [tool.ruff.lint.flake8-copyright]
 notice-rgx = """Copyright (\\(c\\) )?\\d{4}([-,]\\d{4})* Wolfgang Hoschek AT mac DOT com\
-\\s+#\\s+# Licensed under the Apache License, Version 2\\.0"""
+(\\s#.*){0,2}\\s\
+#\\s\
+# Licensed under the Apache License, Version 2\\.0"""
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"

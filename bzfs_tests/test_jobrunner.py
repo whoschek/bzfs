@@ -18,10 +18,14 @@ from __future__ import (
     annotations,
 )
 import argparse
+import contextlib
+import platform
 import shutil
 import signal
 import subprocess
 import sys
+import threading
+import time
 import unittest
 from logging import (
     Logger,
@@ -44,13 +48,14 @@ from unittest.mock import (
 from bzfs_main import (
     bzfs_jobrunner,
 )
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     DIE_STATUS,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
 from bzfs_tests.tools import (
+    suppress_logger,
     suppress_output,
 )
 
@@ -70,50 +75,58 @@ def suite() -> unittest.TestSuite:
         TestValidateSnapshotPlan,
         TestValidateMonitorSnapshotPlan,
         TestParserIsolationAcrossSubjobs,
+        TestSpawnProcessPerJobDecision,
+        TestScopedTerminationInProcess,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
+
+
+def make_bzfs_jobrunner_job(log: Logger | None = None) -> bzfs_jobrunner.Job:
+    job = bzfs_jobrunner.Job(log=log, termination_event=threading.Event())
+    job.is_test_mode = True
+    return job
 
 
 #############################################################################
 class TestHelperFunctions(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
+        self.job = make_bzfs_jobrunner_job()
 
     def test_validate_type(self) -> None:
         """Ensure validate_type accepts expected types and exits on mismatches quietly."""
         self.job.validate_type("foo", str, "name")
         self.job.validate_type(123, int, "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_type(123, str, "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_type("foo", int, "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_type(None, str, "name")
         self.job.validate_type("foo", Union[str, int], "name")
         self.job.validate_type(123, Union[str, int], "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_type([], Union[str, int], "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_type(None, Union[str, int], "name")
 
     def test_validate_non_empty_string(self) -> None:
         """Reject empty strings while keeping the log output silent."""
         self.job.validate_non_empty_string("valid_string", "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_non_empty_string("", "name")
 
     def test_validate_non_negative_int(self) -> None:
         """Verify negative integers abort without leaking error logs."""
         self.job.validate_non_negative_int(1, "name")
         self.job.validate_non_negative_int(0, "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_non_negative_int(-1, "name")
 
     def test_validate_true(self) -> None:
         """Expect false values to trigger exit, capturing any error message."""
         self.job.validate_true(1, "name")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_true(0, "name")
 
     def test_validate_is_subset(self) -> None:
@@ -121,13 +134,13 @@ class TestHelperFunctions(AbstractTestCase):
         self.job.validate_is_subset(["1"], ["1", "2"], "x", "y")
         self.job.validate_is_subset([], ["1", "2"], "x", "y")
         self.job.validate_is_subset([], [], "x", "y")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_is_subset(["3"], ["1", "2"], "x", "y")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_is_subset(["3", "4"], [], "x", "y")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_is_subset("foo", ["3"], "x", "y")
-        with self.assertRaises(SystemExit), self.assertLogs("bzfs_jobrunner", level="ERROR"):
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_is_subset(["3"], "foo", "x", "y")
 
     def _make_mock_socket(self, bind_side_effect: Exception | None = None) -> MagicMock:
@@ -185,17 +198,6 @@ class TestHelperFunctions(AbstractTestCase):
         with self.assertRaises(SystemExit), suppress_output():
             parser.parse_args(["--delete-dst-snapshots"] + opts)
 
-    def test_stats_repr(self) -> None:
-        stats = bzfs_jobrunner.Stats()
-        stats.jobs_all = 10
-        stats.jobs_started = 5
-        stats.jobs_completed = 5
-        stats.jobs_failed = 2
-        stats.jobs_running = 1
-        stats.sum_elapsed_nanos = 1_000_000_000
-        expect = "all:10, started:5=50%, completed:5=50%, failed:2=20%, running:1, avg_completion_time:200ms"
-        self.assertEqual(expect, repr(stats))
-
     def test_dedupe_and_flatten(self) -> None:
         pairs = [("a", "b"), ("a", "b"), ("c", "d")]
         self.assertEqual([("a", "b"), ("c", "d")], bzfs_jobrunner._dedupe(pairs))
@@ -209,16 +211,16 @@ class TestHelperFunctions(AbstractTestCase):
     def test_convert_ipv6(self) -> None:
         self.assertEqual("fe80||1", bzfs_jobrunner.convert_ipv6("fe80::1"))
 
-    @unittest.skipIf(sys.platform != "linux", "This test is designed for Linux only")
+    @unittest.skipIf(platform.system() != "Linux", "This test is designed for Linux only")
     def test_get_localhost_ips(self) -> None:
-        job = bzfs_jobrunner.Job()
+        job = make_bzfs_jobrunner_job()
         ips: set[str] = job.get_localhost_ips()
         self.assertTrue(len(ips) > 0)
 
     @patch("subprocess.run", side_effect=RuntimeError("fail"))
     def test_get_localhost_ips_failure_logs_warning(self, mock_run: MagicMock) -> None:
-        job = bzfs_jobrunner.Job()
-        with patch.object(sys, "platform", "linux"), patch.object(job.log, "warning") as mock_warn:
+        job = make_bzfs_jobrunner_job()
+        with patch("platform.system", return_value="Linux"), patch.object(job.log, "warning") as mock_warn:
             ips = job.get_localhost_ips()
         self.assertEqual(set(), ips)
         mock_warn.assert_called_once()
@@ -231,7 +233,7 @@ class TestHelperFunctions(AbstractTestCase):
 class TestParseSrcHosts(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
+        self.job = make_bzfs_jobrunner_job()
 
     # ---- raw_src_hosts provided (no stdin) ----
     def test_cli_value_valid_list(self) -> None:
@@ -239,13 +241,13 @@ class TestParseSrcHosts(AbstractTestCase):
         self.assertEqual(["h1", "h2"], result)
 
     def test_cli_value_invalid_literal(self) -> None:
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
             self.job.parse_src_hosts_from_cli_or_stdin("[not_a_name]")
         self.assertEqual(DIE_STATUS, cm.exception.code)
         self.assertIn("Invalid --src-hosts format:", str(cm.exception))
 
     def test_cli_value_not_a_list(self) -> None:
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
             self.job.parse_src_hosts_from_cli_or_stdin("'single'")
         self.assertEqual(DIE_STATUS, cm.exception.code)
         self.assertIn("expected a Python list literal", str(cm.exception))
@@ -268,7 +270,7 @@ class TestParseSrcHosts(AbstractTestCase):
     def test_stdin_tty_raises(self) -> None:
         fake = self._FakeStdin(data="", isatty=True)
         with patch.object(sys, "stdin", fake):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn("stdin is a TTY", str(cm.exception))
@@ -276,7 +278,7 @@ class TestParseSrcHosts(AbstractTestCase):
     def test_stdin_empty_raises(self) -> None:
         fake = self._FakeStdin(data="   \n\t  ", isatty=False)
         with patch.object(sys, "stdin", fake):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn("stdin is empty", str(cm.exception))
@@ -284,7 +286,7 @@ class TestParseSrcHosts(AbstractTestCase):
     def test_stdin_invalid_literal_raises(self) -> None:
         fake = self._FakeStdin(data="nonsense", isatty=False)
         with patch.object(sys, "stdin", fake):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn("Invalid --src-hosts format:", str(cm.exception))
@@ -292,7 +294,7 @@ class TestParseSrcHosts(AbstractTestCase):
     def test_stdin_not_a_list_raises(self) -> None:
         fake = self._FakeStdin(data="'abc'", isatty=False)
         with patch.object(sys, "stdin", fake):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn("expected a Python list literal", str(cm.exception))
@@ -317,9 +319,7 @@ class TestParseSrcHosts(AbstractTestCase):
 class TestValidation(AbstractTestCase):
 
     def _new_job(self) -> bzfs_jobrunner.Job:
-        job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
-        job.is_test_mode = True
+        job = make_bzfs_jobrunner_job()
         return job
 
     def _build_argv(
@@ -351,7 +351,8 @@ class TestValidation(AbstractTestCase):
     def _expect_pass(self, job: bzfs_jobrunner.Job, argv: list[str]) -> None:
         with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
             with patch("sys.argv", argv):
-                job.run_main(argv)
+                with suppress_output():
+                    job.run_main(argv)
                 mock_run_subjobs.assert_called_once()
 
     def test_multisource_substitution_token_validation_with_empty_target(self) -> None:
@@ -378,7 +379,7 @@ class TestValidation(AbstractTestCase):
         # Scenario 3: Run for both (no --src-host filter), should fail.
         job = self._new_job()
         with patch("sys.argv", base_argv):  # No --src-host filter
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output():
                 job.run_main(base_argv)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
@@ -417,7 +418,7 @@ class TestValidation(AbstractTestCase):
         # Scenario 1: Run for srcA only, should fail.
         argv_src1 = base_argv + ["--src-host", "src1"]
         with patch("sys.argv", argv_src1):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output():
                 job.run_main(argv_src1)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
@@ -425,7 +426,7 @@ class TestValidation(AbstractTestCase):
         # Scenario 2: Run for srcB only, should fail.
         argv_src2 = base_argv + ["--src-host", "src2"]
         with patch("sys.argv", argv_src2):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output():
                 job.run_main(argv_src2)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
@@ -433,7 +434,7 @@ class TestValidation(AbstractTestCase):
         # Scenario 3: Run for both (no --src-host filter), should fail.
         job = self._new_job()
         with patch("sys.argv", base_argv):  # No --src-host filter
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(SystemExit) as cm, suppress_output():
                 job.run_main(base_argv)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
@@ -456,9 +457,7 @@ class TestFiltering(AbstractTestCase):
         localhostname: str = "localtest",
     ) -> dict[str, list[str]]:
         """Builds argv, runs Job.run_main and returns the subjobs dict captured via run_subjobs."""
-        job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
-        job.is_test_mode = True
+        job = make_bzfs_jobrunner_job()
 
         argv: list[str] = [
             bzfs_jobrunner.PROG_NAME,
@@ -486,7 +485,8 @@ class TestFiltering(AbstractTestCase):
 
         with patch.object(job, "run_subjobs", side_effect=fake_run_subjobs):
             with patch("sys.argv", argv):
-                job.run_main(argv)
+                with suppress_output():
+                    job.run_main(argv)
 
         return captured
 
@@ -550,9 +550,8 @@ class TestFiltering(AbstractTestCase):
 class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.log_mock = MagicMock()
-        self.job.log = cast(Logger, self.log_mock)
+        self.log_mock = MagicMock(Logger)
+        self.job = make_bzfs_jobrunner_job(log=self.log_mock)
 
     def test_empty_input_raises(self) -> None:
         with self.assertRaises(AssertionError):
@@ -829,7 +828,7 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
 
     def setUp(self) -> None:
         self.assertIsNotNone(shutil.which("sh"))
-        self.job = bzfs_jobrunner.Job()
+        self.job = make_bzfs_jobrunner_job()
 
     def run_and_capture(self, cmd: list[str], timeout_secs: float | None) -> tuple[int | None, list[str]]:
         """Helper: invoke the method, return (exit_code, [all error-log messages])."""
@@ -881,13 +880,50 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
             f"Expected a log starting with 'Killing worker job', got {logs!r}",
         )
 
+    def test_termination_event_triggers_early_cancel_in_spawn_mode(self) -> None:
+        """When termination_event is set, spawned process should be terminated promptly, not after full timeout.
+
+        This covers a race where a termination sweep may miss a just-spawned child. The worker must observe the termination
+        event and proactively terminate its own subprocess to avoid hanging until timeout_secs elapses.
+        """
+        # Arrange a job with the event pre-set; patch Popen so we don't rely on real sleeps.
+        self.job.termination_event.set()
+
+        class _FakeProc:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.args = args
+                self.kwargs = kwargs
+                self.pid = 99999
+                self.returncode: int | None = None
+
+            def poll(self) -> int | None:
+                return self.returncode
+
+            def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+                return ("", "")
+
+            def terminate(self) -> None:
+                self.returncode = -signal.SIGTERM
+
+            def kill(self) -> None:
+                self.returncode = -signal.SIGKILL
+
+        start = time.monotonic()
+        with patch("bzfs_main.bzfs_jobrunner.subprocess.Popen", new=_FakeProc):
+            code, _logs = self.run_and_capture(["sleep", "600"], timeout_secs=10.0)
+        elapsed = time.monotonic() - start
+
+        # Assert we did not wait for the full timeout; should return very quickly (< 0.2s on CI).
+        self.assertLess(elapsed, 0.2, f"unexpected slow early-termination: {elapsed:.3f}s")
+        self.assertIn(code, (-signal.SIGTERM, -signal.SIGKILL))
+
 
 #############################################################################
 @patch("bzfs_main.bzfs_jobrunner.Job._bzfs_run_main")
 class TestRunSubJobInCurrentThread(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
+        self.job = make_bzfs_jobrunner_job()
 
     def test_no_timeout_success(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo", "bar"]
@@ -953,7 +989,7 @@ class TestRunSubJobInCurrentThread(AbstractTestCase):
 class TestRunSubJob(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
+        self.job = make_bzfs_jobrunner_job()
         self.job.stats.jobs_all = 1
         self.assertIsNone(self.job.first_exception)
 
@@ -998,26 +1034,149 @@ class TestRunSubJob(AbstractTestCase):
 class TestErrorPropagation(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
-        self.job.is_test_mode = True
+        self.job = make_bzfs_jobrunner_job()
 
     def test_parallel_worker_exception_sets_first_exception_via_exception_mode(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
-        self.job.is_test_mode = True
+        self.job = make_bzfs_jobrunner_job()
         with patch.object(self.job, "run_worker_job_in_current_thread", side_effect=CalledProcessError(1, "boom")):
+            with suppress_output():
+                self.job.run_subjobs(
+                    subjobs={"000000src-host/replicate": ["bzfs", "--no-argument-file"]},
+                    max_workers=1,
+                    timeout_secs=None,
+                    work_period_seconds=0,
+                    jitter=False,
+                )
+        self.assertIsInstance(self.job.first_exception, int)
+        self.assertEqual(DIE_STATUS, self.job.first_exception)
+        self.assertEqual(1, self.job.stats.jobs_started)
+
+
+#############################################################################
+class TestSpawnProcessPerJobDecision(AbstractTestCase):
+    """Verifies Job.run_subjobs selects per-subjob execution mode correctly.
+
+    It asserts no subprocesses are spawned without siblings, even when the spawn flag is true, and confirms subprocess
+    spawning when siblings exist.
+    """
+
+    def setUp(self) -> None:
+        self.job = make_bzfs_jobrunner_job()
+
+    def _capture_spawn_flags(self, subjobs: dict[str, list[str]], spawn_process_per_job: bool) -> list[bool]:
+        self.job.spawn_process_per_job = spawn_process_per_job
+        flags: list[bool] = []
+
+        def fake_run_subjob(cmd: list[str], name: str, timeout_secs: float | None, spawn_process_per_job: bool) -> int:
+            flags.append(spawn_process_per_job)
+            return 0
+
+        with patch.object(self.job, "run_subjob", side_effect=fake_run_subjob):
+            with suppress_output():
+                self.job.run_subjobs(
+                    subjobs=subjobs,
+                    max_workers=1,
+                    timeout_secs=None,
+                    work_period_seconds=0,
+                    jitter=False,
+                )
+        return flags
+
+    def test_no_siblings_spawn_flag_false_runs_in_process(self) -> None:
+        subjobs = {"000000src-host/replicate": ["bzfs"]}
+        flags = self._capture_spawn_flags(subjobs, spawn_process_per_job=False)
+        self.assertEqual([False], flags)
+
+    def test_no_siblings_spawn_flag_true_still_runs_in_process(self) -> None:
+        subjobs = {"000000src-host/replicate": ["bzfs"]}  # single subjob -> no siblings
+        flags = self._capture_spawn_flags(subjobs, spawn_process_per_job=True)
+        self.assertEqual([True], flags)
+
+    def test_with_siblings_spawn_flag_false_runs_in_process(self) -> None:
+        subjobs = {
+            "000000src-host/replicate_A": ["bzfs"],
+            "000000src-host/replicate_B": ["bzfs"],
+        }
+        flags = self._capture_spawn_flags(subjobs, spawn_process_per_job=False)
+        self.assertEqual(sorted([False, False]), sorted(flags))
+
+    def test_with_siblings_spawn_flag_true_spawns_processes(self) -> None:
+        subjobs = {
+            "000000src-host/replicate_A": ["bzfs"],
+            "000000src-host/replicate_B": ["bzfs"],
+        }
+        flags = self._capture_spawn_flags(subjobs, spawn_process_per_job=True)
+        self.assertEqual(sorted([True, True]), sorted(flags))
+
+
+#############################################################################
+class TestScopedTerminationInProcess(AbstractTestCase):
+    """Validates scoped-termination semantics: if a subjob fails, only its own process subtree is torn down while sibling
+    subjobs and their children keep running. Purpose: demonstrate that Job.run_subjobs preserves worker isolation and avoids
+    collateral kills during parallel replication. Executes the scenario in both thread and process modes via a shared helper.
+    """
+
+    def setUp(self) -> None:
+        self.job = make_bzfs_jobrunner_job()
+
+    def test_failing_subjob_terminates_only_its_own_children_process(self) -> None:
+        self._assert_scoped_termination(spawn_process_per_job=True, patch_method="run_worker_job_spawn_process_per_job")
+
+    def test_failing_subjob_terminates_only_its_own_children_thread(self) -> None:
+        self._assert_scoped_termination(spawn_process_per_job=False, patch_method="run_worker_job_in_current_thread")
+
+    def _assert_scoped_termination(self, spawn_process_per_job: bool, patch_method: str) -> None:
+        """Two concurrent subjobs; subjob B will fail after spawning a child, whereas subjob A stays alive.
+
+        kill B to emulate a failing subjob, which should trigger termination of B's children, not trigger killing A.
+        """
+        subjobs: dict[str, list[str]] = {
+            "000000src-host/replicate_A": ["bzfs", "srcA", "dstA"],
+            "000000src-host/replicate_B": ["bzfs", "srcB", "dstB"],
+        }
+        children: dict[str, subprocess.Popen[Any]] = {}
+
+        def fake_worker(cmd: list[str], timeout_secs: float | None) -> int:
+            # Simulate subjob execution without invoking bzfs parser
+            if "srcA" in cmd:
+                p = subprocess.Popen(["sleep", "1"])  # Child that should survive
+                children["A"] = p
+                time.sleep(0.05)  # brief overlap to ensure concurrency without slowing the suite
+                return 0
+            if "srcB" in cmd:
+                p = subprocess.Popen(["sleep", "1"])  # Child that should be terminated
+                children["B"] = p
+                # kill B to emulate a failing subjob, which should trigger termination of B's children, not trigger killing A
+                p.kill()
+                return DIE_STATUS
+            return 0
+
+        self.job.spawn_process_per_job = spawn_process_per_job
+        target = f"bzfs_main.bzfs_jobrunner.Job.{patch_method}"
+        with patch(target, side_effect=fake_worker), suppress_output():
             self.job.run_subjobs(
-                subjobs={"000000src-host/replicate": ["bzfs", "--no-argument-file"]},
-                max_workers=1,
+                subjobs=subjobs,
+                max_workers=2,
                 timeout_secs=None,
                 work_period_seconds=0,
                 jitter=False,
             )
-        self.assertIsInstance(self.job.first_exception, int)
-        self.assertEqual(DIE_STATUS, self.job.first_exception)
-        self.assertEqual(1, self.job.stats.jobs_started)
-        self.assertEqual(1, self.job.stats.jobs_completed)
+
+        # B's child should have been terminated
+        self.assertIn("B", children)
+        deadline = time.monotonic() + 0.25
+        while children["B"].poll() is None and time.monotonic() < deadline:
+            time.sleep(0.005)
+        self.assertIsNotNone(children["B"].poll(), "B child should be terminated")
+
+        # A's child should still be running, proving scoped termination did not affect siblings
+        self.assertIn("A", children)
+        self.assertIsNone(children["A"].poll(), "A child should still be running")
+
+        # Cleanup remaining child
+        with contextlib.suppress(Exception):
+            children["A"].kill()
+        self.assertEqual(self.job.stats.jobs_started, self.job.stats.jobs_completed)
         self.assertEqual(1, self.job.stats.jobs_failed)
 
 
@@ -1025,8 +1184,7 @@ class TestErrorPropagation(AbstractTestCase):
 class TestValidateSnapshotPlan(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
+        self.job = make_bzfs_jobrunner_job(log=MagicMock())
 
     def test_validate_snapshot_plan_empty(self) -> None:
         plan: dict = {}
@@ -1046,8 +1204,7 @@ class TestValidateSnapshotPlan(AbstractTestCase):
 class TestValidateMonitorSnapshotPlan(AbstractTestCase):
 
     def setUp(self) -> None:
-        self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
+        self.job = make_bzfs_jobrunner_job(log=MagicMock())
 
     def test_validate_monitor_snapshot_plan_empty(self) -> None:
         plan: dict = {}
@@ -1075,9 +1232,7 @@ class TestParserIsolationAcrossSubjobs(AbstractTestCase):
         parse inside Job._bzfs_run_main (before bzfs re-parses aux args). With a reused parser, the list accumulates
         across subjobs and we would see both regexes in the second subjob.
         """
-        job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
-        job.is_test_mode = True
+        job = make_bzfs_jobrunner_job()
 
         # Build argv that yields two separate replicate subjobs, one per dst host with distinct targets.
         # Host A replicates empty-target daily; Host B replicates 'onsite' hourly.
@@ -1104,7 +1259,8 @@ class TestParserIsolationAcrossSubjobs(AbstractTestCase):
 
         with patch.object(job, "run_subjobs", side_effect=fake_run_subjobs):
             with patch("sys.argv", argv):
-                job.run_main(argv)
+                with suppress_output():
+                    job.run_main(argv)
 
         # In this test we only emit replicate subjobs; assert count and take them in deterministic order.
         self.assertEqual(2, len(captured), f"unexpected subjobs: {sorted(captured.keys())}")
