@@ -380,7 +380,7 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
         return 0
 
     total_bytes: int = 0
-    files: list[str] = [basis_pv_log_file] + glob.glob(basis_pv_log_file + PV_FILE_THREAD_SEPARATOR + "[0-9]*")
+    files: list[str] = [basis_pv_log_file] + glob.glob(glob.escape(basis_pv_log_file + PV_FILE_THREAD_SEPARATOR) + "[0-9]*")
     for file in files:
         if os.path.isfile(file):
             try:
