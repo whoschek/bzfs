@@ -299,6 +299,7 @@ class Params(MiniParams):
         self.create_src_snapshots_config: Final[CreateSrcSnapshotConfig] = CreateSrcSnapshotConfig(args, self)
         self.monitor_snapshots_config: Final[MonitorSnapshotsConfig] = MonitorSnapshotsConfig(args, self)
         self.is_caching_snapshots: Final[bool] = args.cache_snapshots == "true"
+        self.prometheus_textfile_dir: Final[str | None] = args.prometheus_textfile_dir
 
         self.compression_program: Final[str] = self._program_name(args.compression_program)
         self.compression_program_opts: Final[list[str]] = self.split_args(args.compression_program_opts)
