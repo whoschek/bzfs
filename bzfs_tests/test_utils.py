@@ -1402,14 +1402,14 @@ class TestSubprocessRunLogging(unittest.TestCase):
         self.assertEqual(0, result1.returncode)
         self.assertEqual(["Executed [success] [2ms]: true"], handler1.records)
 
-        # String args with leading whitespace and shell=True should be lstrip()'d in logs
+        # String args with leading whitespace should not be lstrip()'d in logs
         log2, handler2 = self._make_logger()
         with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 1_500_000]):
             result2 = subprocess_run(
                 args="  echo foo", shell=True, stdout=PIPE, stderr=PIPE, log=log2, loglevel=logging.INFO
             )
         self.assertEqual(0, result2.returncode)
-        self.assertEqual(["Executed [success] [1.5ms]: echo foo"], handler2.records)
+        self.assertEqual(["Executed [success] [1.5ms]:   echo foo"], handler2.records)
 
     def test_no_logging_when_level_disabled(self) -> None:
         logger = logging.getLogger(self.id() + ":disabled")

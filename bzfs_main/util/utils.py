@@ -623,7 +623,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
                 status: str = "timeout" if is_timeout else "success" if exitcode == 0 else "failure"
                 cmd = kwargs["args"] if "args" in kwargs else (args[0] if args else None)
                 cmd_str: str = " ".join(str(arg) for arg in iter(cmd)) if isinstance(cmd, (list, tuple)) else str(cmd)
-                log.log(_loglevel, f"Executed [{status}] [{elapsed_time}]: %s", cmd_str.lstrip())
+                log.log(_loglevel, f"Executed [{status}] [{elapsed_time}]: %s", cmd_str)
 
     with xfinally(log_status):
         pid: int | None = None
