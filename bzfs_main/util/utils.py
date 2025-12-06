@@ -626,31 +626,28 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
                 log.log(_loglevel, f"Executed [{status}] [{elapsed_time}]: %s", cmd_str)
 
     with xfinally(log_status):
-        pid: int | None = None
-        try:
-            with subprocess.Popen(*args, **kwargs) as proc:
-                pid = proc.pid
-                if subprocesses is not None:
-                    subprocesses.register_child_pid(pid)
+        ctx: contextlib.AbstractContextManager[subprocess.Popen]
+        if subprocesses is None:
+            ctx = subprocess.Popen(*args, **kwargs)
+        else:
+            ctx = subprocesses.popen_and_track(*args, **kwargs)
+        with ctx as proc:
+            try:
+                stdout, stderr = proc.communicate(input_value, timeout=timeout)
+            except BaseException as e:
                 try:
-                    stdout, stderr = proc.communicate(input_value, timeout=timeout)
-                except BaseException as e:
-                    try:
-                        if isinstance(e, subprocess.TimeoutExpired):
-                            is_timeout = True
-                            terminate_process_subtree(root_pids=[proc.pid])  # send SIGTERM to child proc and its descendants
-                    finally:
-                        proc.kill()
-                        raise
-                else:
-                    exitcode = proc.poll()
-                    assert exitcode is not None
-                    if check and exitcode:
-                        raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
-            return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
-        finally:
-            if subprocesses is not None and isinstance(pid, int):
-                subprocesses.unregister_child_pid(pid)
+                    if isinstance(e, subprocess.TimeoutExpired):
+                        is_timeout = True
+                        terminate_process_subtree(root_pids=[proc.pid])  # send SIGTERM to child proc and descendants
+                finally:
+                    proc.kill()
+                    raise
+            else:
+                exitcode = proc.poll()
+                assert exitcode is not None
+                if check and exitcode:
+                    raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
+        return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
 
 
 def terminate_process_subtree(
@@ -730,25 +727,40 @@ def termination_signal_handler(
 #############################################################################
 class Subprocesses:
     """Provides per-job tracking of child PIDs so a job can safely terminate only the subprocesses it spawned itself; used
-    when multiple jobs run concurrently within the same Python process."""
+    when multiple jobs run concurrently within the same Python process.
 
-    def __init__(self) -> None:
+    Optionally binds to a termination_event to enforce asynchronous cancellation by forcing immediate timeouts for newly
+    spawned subprocesses once cancellation is requested.
+    """
+
+    def __init__(self, termination_event: threading.Event | None = None) -> None:
+        self._termination_event: Final[threading.Event | None] = termination_event
         self._lock: Final[threading.Lock] = threading.Lock()
         self._child_pids: Final[dict[int, None]] = {}  # a set that preserves insertion order
 
+    @contextlib.contextmanager
+    def popen_and_track(self, *popen_args: Any, **popen_kwargs: Any) -> Iterator[subprocess.Popen]:
+        """Context manager that calls subprocess.Popen() and tracks the child PID for per-job termination.
+
+        Holds a lock across Popen+PID registration to prevent a race when terminate_process_subtrees() is invoked (e.g. from
+        SIGINT/SIGTERM handlers), ensuring newly spawned child processes cannot escape termination. The child PID is
+        unregistered on context exit.
+        """
+        with self._lock:
+            proc: subprocess.Popen = subprocess.Popen(*popen_args, **popen_kwargs)
+            self._child_pids[proc.pid] = None
+        try:
+            yield proc
+        finally:
+            with self._lock:
+                self._child_pids.pop(proc.pid, None)
+
     def subprocess_run(self, *args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
         """Wrapper around utils.subprocess_run() that auto-registers/unregisters child PIDs for per-job termination."""
+        if self._termination_event is not None and self._termination_event.is_set():
+            kwargs = dict(kwargs)
+            kwargs["timeout"] = 0
         return subprocess_run(*args, **kwargs, subprocesses=self)
-
-    def register_child_pid(self, pid: int) -> None:
-        """Registers a child PID as managed by this instance."""
-        with self._lock:
-            self._child_pids[pid] = None
-
-    def unregister_child_pid(self, pid: int) -> None:
-        """Unregisters a child PID that has exited or is no longer tracked."""
-        with self._lock:
-            self._child_pids.pop(pid, None)
 
     def terminate_process_subtrees(self, sig: signal.Signals = signal.SIGTERM) -> None:
         """Sends the given signal to all tracked child PIDs and their descendants, ignoring errors for dead PIDs."""

@@ -909,13 +909,28 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
                 self.returncode = -signal.SIGKILL
 
         start = time.monotonic()
-        with patch("bzfs_main.bzfs_jobrunner.subprocess.Popen", new=_FakeProc):
+        with patch("bzfs_main.util.utils.subprocess.Popen", new=_FakeProc):
             code, _logs = self.run_and_capture(["sleep", "600"], timeout_secs=10.0)
         elapsed = time.monotonic() - start
 
         # Assert we did not wait for the full timeout; should return very quickly (< 0.2s on CI).
         self.assertLess(elapsed, 0.2, f"unexpected slow early-termination: {elapsed:.3f}s")
         self.assertIn(code, (-signal.SIGTERM, -signal.SIGKILL))
+
+    def test_termination_event_real_sleep_exits_quickly(self) -> None:
+        """Integration-style check: pre-set termination_event causes real spawned process to exit promptly."""
+        self.job.termination_event.set()
+        start = time.monotonic()
+        code, logs = self.run_and_capture(["sleep", "1"], timeout_secs=2.0)
+        elapsed = time.monotonic() - start
+
+        # We should not wait anywhere near the full timeout; allow generous slack for slow CI.
+        self.assertLess(elapsed, 0.75, f"unexpected slow early-termination with real sleep: {elapsed:.3f}s")
+        self.assertIn(code, (-signal.SIGTERM, -signal.SIGKILL))
+        self.assertTrue(
+            logs and logs[0].startswith("Terminating worker job due to async termination request"),
+            f"Expected first log starting with async termination request, got {logs!r}",
+        )
 
 
 #############################################################################

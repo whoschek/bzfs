@@ -1329,6 +1329,56 @@ class TestSubprocessRunWithSubprocesses(unittest.TestCase):
         assert result is not None
         self.assertNotEqual(0, result.returncode)
 
+    def test_termination_event_forces_timeout_and_cleanup(self) -> None:
+        """When termination_event is set, subprocess_run enforces timeout=0 and cleans up tracking on TimeoutExpired."""
+        termination_event = threading.Event()
+        sp = Subprocesses(termination_event=termination_event)
+        termination_event.set()
+        created_procs: list[Any] = []
+
+        class _FakeProc:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.args = args
+                self.kwargs = kwargs
+                self.pid = 12345
+                self.killed: bool = False
+                self.seen_timeout: float | None = None
+                created_procs.append(self)
+
+            def communicate(self, _input: Any | None = None, timeout: float | None = None) -> tuple[bytes, bytes]:
+                self.seen_timeout = timeout
+                t: float = 0.0 if timeout is None else float(timeout)
+                raise subprocess.TimeoutExpired(cmd=self.args, timeout=t)
+
+            def kill(self) -> None:
+                self.killed = True
+
+        with (
+            patch("bzfs_main.util.utils.terminate_process_subtree") as mock_term,
+            patch("bzfs_main.util.utils.subprocess.Popen", new=_FakeProc),
+        ):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                sp.subprocess_run(["sleep", "1"], stdout=PIPE, stderr=PIPE)
+
+        self.assertEqual(1, len(created_procs))
+        proc = cast(_FakeProc, created_procs[0])
+        self.assertEqual(0, proc.seen_timeout)
+        self.assertTrue(proc.killed)
+        self.assertEqual({}, sp._child_pids)
+        mock_term.assert_called_once()
+
+    def test_termination_event_real_sleep_exits_quickly(self) -> None:
+        """Integration-style check: pre-set termination_event causes real subprocess_run to timeout promptly."""
+        termination_event = threading.Event()
+        sp = Subprocesses(termination_event=termination_event)
+        termination_event.set()
+        start = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            sp.subprocess_run(["sleep", "1"], stdout=PIPE, stderr=PIPE, timeout=2.0)
+        elapsed = time.monotonic() - start
+        self.assertLess(elapsed, 0.75, f"unexpected slow termination_event handling: {elapsed:.3f}s")
+        self.assertEqual({}, sp._child_pids)
+
 
 #############################################################################
 class TestSubprocessRunLogging(unittest.TestCase):

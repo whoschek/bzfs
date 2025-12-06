@@ -491,7 +491,7 @@ class Job:
         self.log_was_None: Final[bool] = log is None
         self.log: Final[Logger] = get_simple_logger(PROG_NAME) if log is None else log
         self.termination_event: Final[threading.Event] = termination_event
-        self.subprocesses: Final[Subprocesses] = Subprocesses()
+        self.subprocesses: Final[Subprocesses] = Subprocesses(termination_event=self.termination_event)
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
         self.loopback_address: Final[str] = _detect_loopback_address()
@@ -1047,34 +1047,31 @@ class Job:
             cmd = [sys.executable, "-m", "bzfs_main." + cmd[0]] + cmd[1:]
         if self.jobrunner_dryrun:
             return 0
-        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, text=True)  # run job in a separate subprocess
-        pid: int = proc.pid
-        self.subprocesses.register_child_pid(pid)
-        try:
-            if self.termination_event.is_set():
-                timeout_secs = 1.0 if timeout_secs is None else timeout_secs
-                raise subprocess.TimeoutExpired(cmd, timeout_secs)  # do not wait for normal completion
-            proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to complete and exit normally
-        except subprocess.TimeoutExpired:
-            cmd_str = " ".join(cmd)
-            if self.termination_event.is_set():
-                log.error("%s", f"Terminating worker job due to async termination request: {cmd_str}")
-            else:
-                log.error("%s", f"Terminating worker job as it failed to complete within {timeout_secs}s: {cmd_str}")
-            proc.terminate()  # Sends SIGTERM signal to job subprocess
-            assert timeout_secs is not None
-            timeout_secs = min(1.0, timeout_secs)
+
+        with self.subprocesses.popen_and_track(cmd, stdin=subprocess.DEVNULL, text=True) as proc:
             try:
-                proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
+                if self.termination_event.is_set():
+                    timeout_secs = 1.0 if timeout_secs is None else timeout_secs
+                    raise subprocess.TimeoutExpired(cmd, timeout_secs)  # do not wait for normal completion
+                proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to complete and exit normally
             except subprocess.TimeoutExpired:
-                log.error("%s", f"Killing worker job as it failed to terminate within {timeout_secs}s: {cmd_str}")
-                terminate_process_subtree(root_pids=[proc.pid])  # Send SIGTERM to process subtree
-                proc.kill()  # Sends SIGKILL signal to job subprocess because SIGTERM wasn't enough
-                timeout_secs = min(0.025, timeout_secs)
-                with contextlib.suppress(subprocess.TimeoutExpired):
+                cmd_str = " ".join(cmd)
+                if self.termination_event.is_set():
+                    log.error("%s", f"Terminating worker job due to async termination request: {cmd_str}")
+                else:
+                    log.error("%s", f"Terminating worker job as it failed to complete within {timeout_secs}s: {cmd_str}")
+                proc.terminate()  # Sends SIGTERM signal to job subprocess
+                assert timeout_secs is not None
+                timeout_secs = min(1.0, timeout_secs)
+                try:
                     proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
-        finally:
-            self.subprocesses.unregister_child_pid(pid)
+                except subprocess.TimeoutExpired:
+                    log.error("%s", f"Killing worker job as it failed to terminate within {timeout_secs}s: {cmd_str}")
+                    terminate_process_subtree(root_pids=[proc.pid])  # Send SIGTERM to process subtree
+                    proc.kill()  # Sends SIGKILL signal to job subprocess because SIGTERM wasn't enough
+                    timeout_secs = min(0.025, timeout_secs)
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
         return proc.returncode
 
     def validate_src_hosts(self, src_hosts: list[str]) -> list[str]:

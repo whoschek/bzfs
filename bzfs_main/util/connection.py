@@ -243,7 +243,9 @@ def create_simple_miniremote(
     )
 
 
-def create_simple_minijob(timeout_duration_secs: float | None = None) -> MiniJob:
+def create_simple_minijob(
+    timeout_duration_secs: float | None = None, termination_event: threading.Event | None = None
+) -> MiniJob:
     """Factory that returns a simple implementation of the MiniJob interface."""
 
     @dataclass(frozen=True)  # aka immutable
@@ -254,7 +256,8 @@ def create_simple_minijob(timeout_duration_secs: float | None = None) -> MiniJob
 
     t_duration_nanos: int | None = None if timeout_duration_secs is None else int(timeout_duration_secs * 1_000_000_000)
     timeout_nanos: int | None = None if t_duration_nanos is None else time.monotonic_ns() + t_duration_nanos
-    return SimpleMiniJob(timeout_nanos=timeout_nanos, timeout_duration_nanos=t_duration_nanos, subprocesses=Subprocesses())
+    subprocesses: Subprocesses = Subprocesses(termination_event=termination_event)
+    return SimpleMiniJob(timeout_nanos=timeout_nanos, timeout_duration_nanos=t_duration_nanos, subprocesses=subprocesses)
 
 
 #############################################################################

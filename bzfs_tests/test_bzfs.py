@@ -1951,6 +1951,21 @@ class TestTerminationEventBehavior(AbstractTestCase):
         self.assertLess(time.monotonic_ns(), stoptime_nanos - 0.2 * 1_000_000_000)
         self.assertFalse(result, "Expected False when termination_event is set during daemon sleep")
 
+    def test_subprocess_run_respects_termination_event(self) -> None:
+        """Integration-style check: Job.subprocesses.subprocess_run reacts promptly to a pre-set termination_event."""
+        job = self.make_job(["src", "dst"])
+        sp = job.subprocesses
+        job.termination_event.set()
+
+        start = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            sp.subprocess_run(["sleep", "1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=2.0)
+        elapsed = time.monotonic() - start
+
+        # We should not wait anywhere near the full timeout; allow generous slack for slow environments.
+        self.assertLess(elapsed, 0.75, f"unexpected slow termination_event handling in bzfs.Job: {elapsed:.3f}s")
+        self.assertEqual({}, sp._child_pids)
+
 
 #############################################################################
 class TestPerJobTermination(AbstractTestCase):
@@ -1958,26 +1973,25 @@ class TestPerJobTermination(AbstractTestCase):
 
     def test_scoped_termination_kills_only_registered_children(self) -> None:
         job = bzfs.Job()
-        # Start two child processes; register only one with the job
-        p1 = subprocess.Popen(["sleep", "1"])
-        p2 = subprocess.Popen(["sleep", "1"])
-        try:
-            job.subprocesses.register_child_pid(p1.pid)
-            self.assertIsNone(p1.poll())
-            self.assertIsNone(p2.poll())
+        # Start two child processes; track only one with the job
+        with job.subprocesses.popen_and_track(["sleep", "1"]) as p1:
+            p2 = subprocess.Popen(["sleep", "1"])
+            try:
+                self.assertIsNone(p1.poll())
+                self.assertIsNone(p2.poll())
 
-            # Enable job-scoped termination and invoke terminate()
-            job.terminate()
-            time.sleep(0.05)
+                # Enable job-scoped termination and invoke terminate()
+                job.terminate()
+                time.sleep(0.05)
 
-            # Registered child should be terminated; unregistered should still be running
-            self.assertIsNotNone(p1.poll(), "Registered child should be terminated")
-            self.assertIsNone(p2.poll(), "Unregistered child should remain running")
-        finally:
-            with contextlib.suppress(Exception):
-                p1.kill()
-            with contextlib.suppress(Exception):
-                p2.kill()
+                # Tracked child should be terminated; untracked should still be running
+                self.assertIsNotNone(p1.poll(), "Tracked child should be terminated")
+                self.assertIsNone(p2.poll(), "Untracked child should remain running")
+            finally:
+                with contextlib.suppress(Exception):
+                    p1.kill()
+                with contextlib.suppress(Exception):
+                    p2.kill()
 
 
 #############################################################################

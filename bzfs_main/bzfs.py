@@ -256,8 +256,8 @@ class Job(MiniJob):
     def __init__(self, termination_event: threading.Event | None = None) -> None:
         self.params: Params
         self.termination_event: Final[threading.Event] = termination_event or threading.Event()
+        self.subprocesses: Subprocesses = Subprocesses(termination_event=self.termination_event)
         self.retry_options: Final[RetryOptions] = RetryOptions(config=RetryConfig(termination_event=self.termination_event))
-        self.subprocesses: Subprocesses = Subprocesses()
         self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: dict[str, DatasetProperties] = {}
