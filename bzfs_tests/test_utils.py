@@ -1538,12 +1538,15 @@ class TestTerminationSignalHandler(unittest.TestCase):
         old_sigint = signal.getsignal(signal.SIGINT)
         old_sigterm = signal.getsignal(signal.SIGTERM)
         try:
-            event = threading.Event()
+            event1 = threading.Event()
+            event2 = threading.Event()
+            events = [event1, event2]
             mock_handler = MagicMock()
-            with termination_signal_handler(event, termination_handler=mock_handler):
-                self.assertFalse(event.is_set(), "Event should not be set before a signal is received")
+            with termination_signal_handler(events, termination_handler=mock_handler):
+                self.assertFalse(any(event.is_set() for event in events), "Event must not be set before signal is received")
                 os.kill(os.getpid(), signal.SIGINT)
-                self.assertTrue(event.wait(1.0), "Event should be set after SIGINT")
+                for event in events:
+                    self.assertTrue(event.wait(1.0), "Event should be set after SIGINT")
                 mock_handler.assert_called_once()
         finally:
             # Ensure global handlers are restored to what they were before the test
@@ -1554,12 +1557,15 @@ class TestTerminationSignalHandler(unittest.TestCase):
         old_sigint = signal.getsignal(signal.SIGINT)
         old_sigterm = signal.getsignal(signal.SIGTERM)
         try:
-            event = threading.Event()
+            event1 = threading.Event()
+            event2 = threading.Event()
+            events = [event1, event2]
             mock_handler = MagicMock()
-            with termination_signal_handler(event, termination_handler=mock_handler):
-                self.assertFalse(event.is_set(), "Event should not be set before a signal is received")
+            with termination_signal_handler(events, termination_handler=mock_handler):
+                self.assertFalse(any(event.is_set() for event in events), "Event must not be set before signal is received")
                 os.kill(os.getpid(), signal.SIGTERM)
-                self.assertTrue(event.wait(1.0), "Event should be set after SIGTERM")
+                for event in events:
+                    self.assertTrue(event.wait(1.0), "Event should be set after SIGTERM")
                 mock_handler.assert_called_once()
         finally:
             signal.signal(signal.SIGINT, old_sigint)
@@ -1570,7 +1576,8 @@ class TestTerminationSignalHandler(unittest.TestCase):
         old_sigterm = signal.getsignal(signal.SIGTERM)
         try:
             event = threading.Event()
-            with termination_signal_handler(event):
+            events = [event]
+            with termination_signal_handler(events):
                 # Inside context, handlers should differ from originals
                 self.assertNotEqual(old_sigint, signal.getsignal(signal.SIGINT))
                 self.assertNotEqual(old_sigterm, signal.getsignal(signal.SIGTERM))
@@ -1587,7 +1594,8 @@ class TestTerminationSignalHandler(unittest.TestCase):
         try:
             event = threading.Event()
             with self.assertRaises(RuntimeError):
-                with termination_signal_handler(event):
+                events = [event]
+                with termination_signal_handler(events):
                     raise RuntimeError("boom")
             # Even on exception, original handlers are restored
             self.assertEqual(old_sigint, signal.getsignal(signal.SIGINT))
@@ -1602,7 +1610,8 @@ class TestTerminationSignalHandler(unittest.TestCase):
         old_sigterm = signal.getsignal(signal.SIGTERM)
         try:
             event = threading.Event()
-            with termination_signal_handler(event):
+            events = [event]
+            with termination_signal_handler(events):
                 os.kill(os.getpid(), signal.SIGINT)
                 self.assertTrue(event.wait(1.0), "Event should be set after SIGINT")
                 mock_terminate.assert_called_once()

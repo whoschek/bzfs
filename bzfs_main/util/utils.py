@@ -706,15 +706,16 @@ def _get_descendant_processes(root_pids: list[int]) -> list[list[int]]:
 
 @contextlib.contextmanager
 def termination_signal_handler(
-    termination_event: threading.Event,
+    termination_events: list[threading.Event],
     termination_handler: Callable[[], None] = lambda: terminate_process_subtree(),
 ) -> Iterator[None]:
-    """Context manager that installs SIGINT/SIGTERM handlers that set ``termination_event`` and, by default, terminate all
-    descendant processes."""
-    assert termination_event is not None
+    """Context manager that installs SIGINT/SIGTERM handlers that set all ``termination_events`` and, by default, terminate
+    all descendant processes."""
+    termination_events = list(termination_events)  # shallow copy
 
     def _handler(_sig: int, _frame: object) -> None:
-        termination_event.set()
+        for event in termination_events:
+            event.set()
         termination_handler()
 
     previous_int_handler = signal.signal(signal.SIGINT, _handler)  # install new signal handler

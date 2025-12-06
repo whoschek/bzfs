@@ -476,7 +476,7 @@ def main() -> None:
         set_logging_runtime_defaults()
         # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
         termination_event: threading.Event = threading.Event()
-        with termination_signal_handler(termination_event=termination_event):
+        with termination_signal_handler(termination_events=[termination_event]):
             Job(log=None, termination_event=termination_event).run_main(sys_argv=sys.argv)
     finally:
         os.umask(prev_umask)  # restore prior global state

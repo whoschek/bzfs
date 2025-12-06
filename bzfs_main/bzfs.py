@@ -229,7 +229,7 @@ def main() -> None:
         set_logging_runtime_defaults()
         # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
         termination_event: threading.Event = threading.Event()
-        with termination_signal_handler(termination_event=termination_event):
+        with termination_signal_handler(termination_events=[termination_event]):
             run_main(argument_parser().parse_args(), sys.argv, termination_event=termination_event)
     except subprocess.CalledProcessError as e:
         ret: int = e.returncode
