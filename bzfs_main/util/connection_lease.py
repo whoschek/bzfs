@@ -37,13 +37,15 @@ local user) plus a hashed subdirectory derived from the remote endpoint identity
 A bzfs process acquires an exclusive advisory file lock via flock(2) on a named empty lock file in the namespace directory
 tree, then atomically moves it between free/ and used/ subdirectories to speed up later searches for available names in each
 category of that namespace. The held lease exposes the open file descriptor (which maintains the lock) and the computed
-ControlPath so callers can safely establish, reuse and maintain exclusive access to SSH master connections without races or
-leaks.
+ControlPath so callers can safely establish, reuse and maintain exclusive access to OpenSSH master connections without races
+or leaks.
 
 Holding a lease's lock for the duration of a `bzfs` process guarantees exclusive ownership of that SSH master while allowing
 the underlying TCP connection to persist beyond bzfs process exit via OpenSSH ControlPersist. No other `bzfs` process can use
-the TCP connection while the lease's lock is held, which ensures the connection cannot be degraded/overwhelmed with an
-unbounded number of concurrent SSH channels (aka too many concurrent requests per connection, via multiple processes).
+the TCP connection while the lease's lock is held, which ensures the connection cannot be degraded/overloaded with an
+unbounded number of concurrent SSH sessions (aka too many concurrent requests per connection, via multiple processes). See
+the server-side sshd_config(5) MaxSessions parameter (which defaults to 10, see
+https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html).
 
 Also see https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
 and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master

@@ -23,7 +23,6 @@ window sizes for best throughput over high speed long distance networks, aka pat
 
 Example usage:
 
-import argparse
 import logging
 from subprocess import DEVNULL, PIPE
 from bzfs_main.util.connection import ConnectionPool, create_simple_minijob, create_simple_miniremote, run_ssh_command
