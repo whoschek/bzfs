@@ -18,7 +18,9 @@ Purpose
 This module safely reduces SSH startup latency on bzfs process startup. Using this, a fresh bzfs CLI process can attach
 immediately to an existing OpenSSH ControlMaster connection, and in doing so skip TCP handshake, SSH handshake, key exchange,
 authentication, and other delays from multiple network round-trips. This way, the very first remote ZFS command starts
-hundreds of milliseconds earlier as compared to when creating an SSH connection from scratch.
+hundreds of milliseconds earlier as compared to when creating an SSH connection from scratch. Crucially, this module
+guarantees that a bzfs process can (as long as it is alive) maintain exclusive access to the OpenSSH connections it has
+obtained.
 
 The higher-level goal is predictable performance, shorter critical paths, and less noisy-neighbor impact across frequent
 periodic replication jobs at fleet scale, including at high concurrency. To achieve this, OpenSSH masters remain alive after
@@ -35,9 +37,13 @@ local user) plus a hashed subdirectory derived from the remote endpoint identity
 A bzfs process acquires an exclusive advisory file lock via flock(2) on a named empty lock file in the namespace directory
 tree, then atomically moves it between free/ and used/ subdirectories to speed up later searches for available names in each
 category of that namespace. The held lease exposes the open file descriptor (which maintains the lock) and the computed
-ControlPath so callers can safely establish or reuse SSH master connections without races or leaks. Holding a lease's lock
-for the duration of a `bzfs` process guarantees exclusive ownership of that SSH master while allowing the underlying TCP
-connection to persist beyond bzfs process exit via OpenSSH ControlPersist.
+ControlPath so callers can safely establish, reuse and maintain exclusive access to SSH master connections without races or
+leaks.
+
+Holding a lease's lock for the duration of a `bzfs` process guarantees exclusive ownership of that SSH master while allowing
+the underlying TCP connection to persist beyond bzfs process exit via OpenSSH ControlPersist. No other `bzfs` process can use
+the TCP connection while the lease's lock is held, which ensures the connection cannot be degraded/overwhelmed with an
+unbounded number of concurrent SSH channels (aka too many concurrent requests per connection, via multiple processes).
 
 Also see https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
 and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
