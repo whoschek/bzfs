@@ -80,6 +80,7 @@ from bzfs_main.util.connection import (
 )
 from bzfs_main.util.retry import (
     Retry,
+    RetryPolicy,
 )
 from bzfs_main.util.utils import (
     DIE_STATUS,
@@ -1301,7 +1302,7 @@ class TestJobMethods(AbstractTestCase):
             mock_run.return_value = None
 
             # Act: Should complete without conflict and run a single incremental send based on h1->d2.
-            replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0))
+            replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0, policy=RetryPolicy()))
             # Assert: incremental planning was invoked (found common base -> incremental)
             mock_steps.assert_called_once()
             # And exactly one zfs send/receive pipeline executed

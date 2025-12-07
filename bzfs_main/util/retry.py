@@ -128,7 +128,7 @@ def run_with_retries(
     rand: random.Random | None = None
     start_time_nanos: int = time.monotonic_ns()
     while True:
-        retry: Retry = Retry(retry_count)
+        retry: Retry = Retry(retry_count, policy)
         try:
             result: _T = fn(retry)  # Call the target function and supply retry attempt number
             after_attempt(retry, True, False, False, time.monotonic_ns() - start_time_nanos, result)
@@ -208,6 +208,7 @@ class Retry:
     """The current retry attempt number provided to callback functions; immutable."""
 
     count: int
+    policy: RetryPolicy
 
 
 #############################################################################

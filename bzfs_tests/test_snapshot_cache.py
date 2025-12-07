@@ -71,7 +71,6 @@ from datetime import (
     timezone,
 )
 from typing import (
-    TYPE_CHECKING,
     Callable,
 )
 from unittest.mock import (
@@ -102,6 +101,7 @@ from bzfs_main.snapshot_cache import (
 )
 from bzfs_main.util.retry import (
     Retry,
+    RetryPolicy,
 )
 from bzfs_main.util.utils import (
     sha256_85_urlsafe_base64,
@@ -110,11 +110,6 @@ from bzfs_main.util.utils import (
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
-
-if TYPE_CHECKING:  # type-only imports for annotations
-    from bzfs_main.util.retry import (
-        RetryPolicy,
-    )
 
 
 #############################################################################
@@ -2270,7 +2265,7 @@ class TestSnapshotCache(AbstractTestCase):
                 any_failed = False
                 for idx, dataset in enumerate(datasets):
                     try:
-                        process_dataset(dataset, "tid", Retry(idx))
+                        process_dataset(dataset, "tid", Retry(idx, policy=RetryPolicy()))
                     except Exception:
                         any_failed = True
                 return any_failed
