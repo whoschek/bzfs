@@ -103,7 +103,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.43.0']
+        additional_dependencies: ['pyrefly==0.45.0']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.0
