@@ -115,7 +115,6 @@ from bzfs_main.util.utils import (
 )
 
 # constants:
-HOME_DIRECTORY: Final[str] = get_home_directory()
 _UNSET_ENV_VARS_LOCK: Final[threading.Lock] = threading.Lock()
 _UNSET_ENV_VARS_LATCH: Final[SynchronizedBool] = SynchronizedBool(True)
 
@@ -144,7 +143,7 @@ class LogParams:
             if self.isatty and args.pv_program != DISABLE_PRG and not self.quiet
             else 0
         )
-        self.home_dir: Final[str] = HOME_DIRECTORY
+        self.home_dir: Final[str] = get_home_directory()
         log_parent_dir: Final[str] = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)
         if LOG_DIR_DEFAULT not in os.path.basename(log_parent_dir):
             die(f"Basename of --log-dir must contain the substring '{LOG_DIR_DEFAULT}', but got: {log_parent_dir}")
@@ -522,7 +521,7 @@ class Remote(MiniRemote):
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         self.ssh_socket_dir: str = ""
         if self.reuse_ssh_connection:
-            ssh_home_dir: str = os.path.join(HOME_DIRECTORY, ".ssh")
+            ssh_home_dir: str = os.path.join(get_home_directory(), ".ssh")
             os.makedirs(ssh_home_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             self.ssh_socket_dir = os.path.join(ssh_home_dir, "bzfs")
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)

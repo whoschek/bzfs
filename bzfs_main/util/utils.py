@@ -357,7 +357,7 @@ def find_match(
         lst = ["a", "b", "-c", "d"]
         i = find_match(lst, lambda arg: arg.startswith("-"), start=1, end=3, reverse=True)
         if i >= 0:
-            ...
+            print(lst[i])
         i = find_match(lst, lambda arg: arg.startswith("-"), raises=f"Tag {tag} not found in {file}")
         i = find_match(lst, lambda arg: arg.startswith("-"), raises=lambda: f"Tag {tag} not found in {file}")
     """
