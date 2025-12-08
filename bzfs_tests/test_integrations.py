@@ -93,6 +93,10 @@ from bzfs_main.util import (
     utils,
 )
 from bzfs_main.util.connection import (
+    SHARED,
+    ConnectionPool,
+    create_simple_minijob,
+    create_simple_miniremote,
     dquote,
 )
 from bzfs_main.util.utils import (
@@ -178,6 +182,7 @@ def suite() -> unittest.TestSuite:
     if not (ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
+        suite.addTest(ParametrizedTestCase.parametrize(TestSSHMasterIntermittentFailure))
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
@@ -1020,6 +1025,95 @@ class TestSSHLatency(IntegrationTestCase):
                         master_exit_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O exit 127.0.0.1")
                         result = self.run_latency_cmd(master_exit_cmd)
                         log.info(f"exit result: {result}")
+
+
+#############################################################################
+class TestSSHMasterIntermittentFailure(IntegrationTestCase):
+    """Documents and verifies SSH master behavior under intermittent failure.
+
+    This test exists to answer a subtle but important question for operators: what happens when ``bzfs`` is configured to
+    reuse an SSH ControlMaster (``reuse_ssh_connection=True`` with ``ControlPersist``), that master dies unexpectedly, and
+    replication continues to run every few seconds? In particular: do SSH commands fail for the remainder of the persistence
+    window, or do they keep working, and when is a new master created?
+
+    The expected behavior is:
+    * While the master is alive, ``Connection.run_ssh_command`` calls ``refresh_ssh_connection_if_necessary()``, which
+      periodically extends the master lifetime by running ``ssh -O check`` and, if needed, starting a new master via
+      ``ssh -M -oControlPersist=... exit``. The timestamp ``_last_refresh_time`` records successful refreshes.
+    * If the master dies shortly after a refresh, subsequent ``run_ssh_command`` calls initially take the fast path:
+      they skip the ``-O check`` and directly invoke ``ssh -S <socket> ...``.  OpenSSH then automatically falls back to
+      a fresh direct TCP connection when the control socket is missing, so commands continue to succeed, albeit with
+      higher latency per call.
+    * Once the refresh window has elapsed (ssh_control_persist_secs=90 secs by default), the next
+      ``refresh_ssh_connection_if_necessary()`` invocation leaves the fast path, detects that ``-O check`` fails, and
+      recreates a new ControlMaster.  From that point on, commands are again multiplexed over a hot TCP connection with
+      low startup latency.
+    This test method verifies that the actual behavior is as described above.
+    """
+
+    def test_master_dies_then_recovers_via_refresh(self) -> None:
+        self.setup_basic()
+        username = pwd.getpwuid(os.getuid()).pw_name
+        ssh_port = int(cast(str, getenv_any("test_ssh_port", "22")))
+        args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+        log_params = LogParams(args)
+        log = bzfs_main.loggers.get_logger(
+            log_params=log_params, args=args, log=get_simple_logger("test_ssh_master_intermittent_failure")
+        )
+        remote = create_simple_miniremote(
+            log=log,
+            ssh_user_host=f"{username}@127.0.0.1",
+            ssh_port=ssh_port,
+            ssh_config_file=SSH_CONFIG_FILE,
+            ssh_program=ssh_program,
+            reuse_ssh_connection=True,
+            ssh_control_persist_secs=4,  # to speed up the test, reduce 90 sec refresh window down to a few secs
+            ssh_control_persist_margin_secs=1,
+        )
+        pool = ConnectionPool(remote, SHARED, max_concurrent_ssh_sessions_per_tcp_connection=1)
+        try:
+            job = create_simple_minijob(timeout_duration_secs=10.0)
+            conn = pool.get_connection()
+            # Initial command: should create a master and succeed.
+            proc1 = conn.run_ssh_command(["echo", "one"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
+            self.assertEqual("one\n", proc1.stdout)
+
+            ssh_cmd = conn.ssh_cmd
+            ssh_sock_cmd = ssh_cmd[0:-1]
+            ssh_user_host = remote.ssh_user_host
+            check_cmd = ssh_sock_cmd + ["-O", "check", ssh_user_host]
+            exit_cmd = ssh_sock_cmd + ["-O", "exit", ssh_user_host]
+
+            # Confirm master is running.
+            check_proc1 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            self.assertEqual(0, check_proc1.returncode, check_proc1.stderr)
+            self.assertIn("Master running", check_proc1.stderr)
+
+            # Kill the master to simulate an intermittent failure.
+            subprocess.run(exit_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            check_proc2 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            self.assertNotEqual(0, check_proc2.returncode)
+            self.assertIn("Control socket connect", check_proc2.stderr)
+
+            last_refresh_before = conn._last_refresh_time
+
+            # Immediately run a command: refresh takes the fast path, ssh falls back to a direct connection and succeeds
+            proc2 = conn.run_ssh_command(["echo", "two"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
+            self.assertEqual("two\n", proc2.stdout)
+            check_proc3 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            self.assertNotEqual(0, check_proc3.returncode)  # assert master is not running
+
+            # Wait long enough so that a subsequent refresh will perform -O check and recreate the master.
+            time.sleep(remote.ssh_control_persist_secs - remote.ssh_control_persist_margin_secs + 1)
+
+            proc3 = conn.run_ssh_command(["echo", "three"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
+            self.assertEqual("three\n", proc3.stdout)
+            check_proc4 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            self.assertEqual(0, check_proc4.returncode, check_proc4.stderr)
+            self.assertIn("Master running", check_proc4.stderr)
+            self.assertGreater(conn._last_refresh_time, last_refresh_before)
+        finally:
+            pool.shutdown("itest")
 
 
 #############################################################################
