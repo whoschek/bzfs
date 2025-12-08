@@ -73,7 +73,6 @@ from bzfs_main.util.connection import (
     SHARED,
     ConnectionPool,
     dquote,
-    refresh_ssh_connection_if_necessary,
     squote,
     timeout,
 )
@@ -694,8 +693,8 @@ def _run_zfs_send_receive(
     src_conn_pool: ConnectionPool = p.connection_pools[p.src.location].pool(conn_pool_name)
     dst_conn_pool: ConnectionPool = p.connection_pools[p.dst.location].pool(conn_pool_name)
     with src_conn_pool.connection() as src_conn, dst_conn_pool.connection() as dst_conn:
-        refresh_ssh_connection_if_necessary(src_conn, job)
-        refresh_ssh_connection_if_necessary(dst_conn, job)
+        src_conn.refresh_ssh_connection_if_necessary(job)
+        dst_conn.refresh_ssh_connection_if_necessary(job)
         src_ssh_cmd: str = " ".join(src_conn.ssh_cmd_quoted)
         dst_ssh_cmd: str = " ".join(dst_conn.ssh_cmd_quoted)
         cmd: list[str] = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]

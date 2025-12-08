@@ -150,7 +150,6 @@ from bzfs_main.util.connection import (
     ConnectionPool,
     MiniJob,
     MiniRemote,
-    run_ssh_command,
     timeout,
 )
 from bzfs_main.util.parallel_iterator import (
@@ -1613,11 +1612,10 @@ class Job(MiniJob):
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         conn_pool: ConnectionPool = self.params.connection_pools[remote.location].pool(SHARED)
         with conn_pool.connection() as conn:
-            log: logging.Logger = conn.remote.params.log
+            log: logging.Logger = self.params.log
             try:
-                process: subprocess.CompletedProcess[str] = run_ssh_command(
+                process: subprocess.CompletedProcess[str] = conn.run_ssh_command(
                     cmd=cmd,
-                    conn=conn,
                     job=self,
                     loglevel=loglevel,
                     is_dry=is_dry,
