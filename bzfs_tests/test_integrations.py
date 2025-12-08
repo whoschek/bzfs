@@ -1052,7 +1052,6 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
     """
 
     def test_master_dies_then_recovers_via_refresh(self) -> None:
-        self.setup_basic()
         username = pwd.getpwuid(os.getuid()).pw_name
         ssh_port = int(cast(str, getenv_any("test_ssh_port", "22")))
         args = bzfs.argument_parser().parse_args(args=["src", "dst"])
@@ -1070,10 +1069,10 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
             ssh_control_persist_secs=4,  # to speed up the test, reduce 90 sec refresh window down to a few secs
             ssh_control_persist_margin_secs=1,
         )
-        pool = ConnectionPool(remote, SHARED, max_concurrent_ssh_sessions_per_tcp_connection=1)
+        pool = ConnectionPool(remote, SHARED)
         try:
-            job = create_simple_minijob(timeout_duration_secs=10.0)
             conn = pool.get_connection()
+            job = create_simple_minijob(timeout_duration_secs=10.0)
             # Initial command: should create a master and succeed.
             proc1 = conn.run_ssh_command(["echo", "one"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
             self.assertEqual("one\n", proc1.stdout)
@@ -1113,7 +1112,7 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
             self.assertIn("Master running", check_proc4.stderr)
             self.assertGreater(conn._last_refresh_time, last_refresh_before)
         finally:
-            pool.shutdown("itest")
+            pool.shutdown()
 
 
 #############################################################################

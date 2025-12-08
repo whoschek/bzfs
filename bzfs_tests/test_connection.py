@@ -116,10 +116,9 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
             self._priority_queue.sort()
             conn = self._priority_queue[-1] if self._priority_queue else None
             if conn is None or conn._is_full():
-                conn = Connection(self._remote, self._capacity, self._cid)
+                conn = Connection(self._remote, self._capacity)
                 self._last_modified += 1
                 conn._update_last_modified(self._last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
-                self._cid += 1
                 self._priority_queue.append(conn)
             conn._increment_free(-1)
             return conn
@@ -153,7 +152,7 @@ class TestConnectionPool(AbstractTestCase):
         self.assertEqual(queuelen, len(cpool._priority_queue))
 
     def assert_equal_connections(self, conn: Connection, donn: Connection) -> None:
-        self.assertTupleEqual((donn._cid, donn._ssh_cmd), (conn._cid, conn._ssh_cmd))
+        self.assertEqual(donn._ssh_cmd, conn._ssh_cmd)
         self.assertEqual(donn._free, conn._free)
         self.assertEqual(donn._last_modified, conn._last_modified)
 
@@ -170,7 +169,7 @@ class TestConnectionPool(AbstractTestCase):
         dpool: SlowButCorrectConnectionPool,
         donn: Connection,
     ) -> None:
-        self.assertTupleEqual((donn._cid, donn._ssh_cmd), (conn._cid, conn._ssh_cmd))
+        self.assertEqual(donn._ssh_cmd, conn._ssh_cmd)
         cpool.return_connection(conn)
         dpool.return_connection(donn)
 
@@ -767,7 +766,7 @@ class TestRunSshCommand(AbstractTestCase):
 
     def test_empty_cmd_raises_value_error(self) -> None:
         job = connection.create_simple_minijob()
-        conn = Connection(self.remote, 1, 0)
+        conn = Connection(self.remote, 1)
         with self.assertRaises(ValueError):
             conn.run_ssh_command(cmd=[], job=job)
 
@@ -922,7 +921,7 @@ class TestRefreshSshConnection(AbstractTestCase):
             ),
         )
         self.remote.ssh_control_persist_margin_secs = 1
-        self.conn = connection.Connection(self.remote, 1, 0)
+        self.conn = connection.Connection(self.remote, 1)
         self.conn._last_refresh_time = 0
 
     @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
@@ -1128,7 +1127,7 @@ class TestSshExitOnShutdown(AbstractTestCase):
                 ssh_extra_opts=[],
             ),
         )
-        conn: Connection = Connection(r, 1, 0)
+        conn: Connection = Connection(r, 1)
         conn.shutdown("test")
         self.assertTrue(mock_run.called)
         argv = mock_run.call_args[0][0]

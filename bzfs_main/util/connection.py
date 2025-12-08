@@ -219,19 +219,19 @@ def create_simple_miniremote(
         raise ValueError("ssh_control_persist_secs must be >= 1")
     params: MiniParams = SimpleMiniParams(log=log, ssh_program=ssh_program)
 
-    _ssh_extra_opts: list[str] = (  # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation
+    ssh_extra_opts = (  # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation
         ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] if ssh_extra_opts is None else list(ssh_extra_opts)
     )
-    _ssh_extra_opts += ["-v"] if ssh_verbose else []
-    _ssh_extra_opts += ["-F", ssh_config_file] if ssh_config_file else []
-    _ssh_extra_opts += ["-c", ssh_cipher] if ssh_cipher else []
-    _ssh_extra_opts += ["-p", str(ssh_port)] if ssh_port is not None else []
+    ssh_extra_opts += ["-v"] if ssh_verbose else []
+    ssh_extra_opts += ["-F", ssh_config_file] if ssh_config_file else []
+    ssh_extra_opts += ["-c", ssh_cipher] if ssh_cipher else []
+    ssh_extra_opts += ["-p", str(ssh_port)] if ssh_port is not None else []
     ssh_config_file_hash = sha256_urlsafe_base64(os.path.abspath(ssh_config_file), padding=False) if ssh_config_file else ""
     return SimpleMiniRemote(
         params=params,
         location=location,
         ssh_user_host=ssh_user_host,
-        ssh_extra_opts=tuple(_ssh_extra_opts),
+        ssh_extra_opts=tuple(ssh_extra_opts),
         reuse_ssh_connection=reuse_ssh_connection,
         ssh_control_persist_secs=ssh_control_persist_secs,
         ssh_control_persist_margin_secs=ssh_control_persist_margin_secs,
@@ -243,9 +243,7 @@ def create_simple_miniremote(
     )
 
 
-def create_simple_minijob(
-    timeout_duration_secs: float | None = None, termination_event: threading.Event | None = None
-) -> MiniJob:
+def create_simple_minijob(timeout_duration_secs: float | None = None, subprocesses: Subprocesses | None = None) -> MiniJob:
     """Factory that returns a simple implementation of the MiniJob interface."""
 
     @dataclass(frozen=True)  # aka immutable
@@ -256,7 +254,7 @@ def create_simple_minijob(
 
     t_duration_nanos: int | None = None if timeout_duration_secs is None else int(timeout_duration_secs * 1_000_000_000)
     timeout_nanos: int | None = None if t_duration_nanos is None else time.monotonic_ns() + t_duration_nanos
-    subprocesses: Subprocesses = Subprocesses(termination_event=termination_event)
+    subprocesses = Subprocesses() if subprocesses is None else subprocesses
     return SimpleMiniJob(timeout_nanos=timeout_nanos, timeout_duration_nanos=t_duration_nanos, subprocesses=subprocesses)
 
 
@@ -299,7 +297,6 @@ class Connection:
         self,
         remote: MiniRemote,
         max_concurrent_ssh_sessions_per_tcp_connection: int,
-        cid: int,
         lease: ConnectionLease | None = None,
     ) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
@@ -307,7 +304,6 @@ class Connection:
         self._capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
         self._free: int = max_concurrent_ssh_sessions_per_tcp_connection
         self._last_modified: int = 0  # monotonically increasing
-        self._cid: Final[int] = cid
         self._last_refresh_time: int = 0
         self._lock: Final[threading.Lock] = threading.Lock()
         self._reuse_ssh_connection: Final[bool] = remote.reuse_ssh_connection
@@ -326,7 +322,7 @@ class Connection:
         return self._ssh_cmd_quoted.copy()
 
     def __repr__(self) -> str:
-        return str({"free": self._free, "cid": self._cid})
+        return str({"free": self._free})
 
     def run_ssh_command(
         self,
@@ -450,7 +446,9 @@ class Connection:
 
 #############################################################################
 class ConnectionPool:
-    """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse."""
+    """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse;
+    Note that max_concurrent_ssh_sessions_per_tcp_connection must not be larger than the server-side sshd_config(5)
+    MaxSessions parameter (which defaults to 10, see https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html)."""
 
     def __init__(
         self, remote: MiniRemote, connpool_name: str, max_concurrent_ssh_sessions_per_tcp_connection: int = 8
@@ -463,7 +461,6 @@ class ConnectionPool:
             reverse=True  # sorted by #free slots and last_modified
         )
         self._last_modified: int = 0  # monotonically increasing sequence number
-        self._cid: int = 0  # monotonically increasing connection number
         self._lock: Final[threading.Lock] = threading.Lock()
         lease_mgr: ConnectionLeaseManager | None = None
         if self._remote.ssh_user_host and self._remote.reuse_ssh_connection and not self._remote.ssh_exit_on_shutdown:
@@ -499,10 +496,9 @@ class ConnectionPool:
                 if conn is not None:
                     self._priority_queue.push(conn)
                 lease: ConnectionLease | None = None if self._lease_mgr is None else self._lease_mgr.acquire()
-                conn = Connection(self._remote, self._capacity, self._cid, lease=lease)  # add a new connection
+                conn = Connection(self._remote, self._capacity, lease=lease)  # add a new connection
                 self._last_modified += 1
                 conn._update_last_modified(self._last_modified)  # noqa: SLF001  # pylint: disable=protected-access
-                self._cid += 1
             conn._increment_free(-1)  # noqa: SLF001  # pylint: disable=protected-access
             self._priority_queue.push(conn)
             return conn
@@ -532,7 +528,7 @@ class ConnectionPool:
     def __repr__(self) -> str:
         with self._lock:
             queue = self._priority_queue
-            return str({"capacity": self._capacity, "queue_len": len(queue), "cid": self._cid, "queue": queue})
+            return str({"capacity": self._capacity, "queue_len": len(queue), "queue": queue})
 
 
 #############################################################################
