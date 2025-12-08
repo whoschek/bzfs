@@ -381,38 +381,31 @@ class Connection:
             if time.monotonic_ns() < self._last_refresh_time + control_limit_nanos:
                 return  # ssh master is alive, reuse its TCP connection (this is the common case and the ultra-fast path)
             ssh_cmd: list[str] = self._ssh_cmd
-            ssh_socket_cmd: list[str] = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-            ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
+            ssh_sock_cmd: list[str] = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+            ssh_sock_cmd += ["-O", "check", remote.ssh_user_host]
             # extend lifetime of ssh master by $ssh_control_persist_secs via `ssh -O check` if master is still running.
             # `ssh -S /path/to/socket -O check` doesn't talk over the network, hence is still a low latency fast path.
             sp: Subprocesses = job.subprocesses
             t: float | None = timeout(job)
-            if (
-                sp.subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, timeout=t, log=log).returncode
-                == 0
-            ):
-                log.log(LOG_TRACE, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
+            if sp.subprocess_run(ssh_sock_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, timeout=t, log=log).returncode == 0:
+                log.log(LOG_TRACE, "ssh connection is alive: %s", list_formatter(ssh_sock_cmd))
             else:  # ssh master is not alive; start a new master:
-                log.log(LOG_TRACE, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
+                log.log(LOG_TRACE, "ssh connection is not yet alive: %s", list_formatter(ssh_sock_cmd))
                 ssh_control_persist_secs: int = max(1, remote.ssh_control_persist_secs)
                 if "-v" in remote.ssh_extra_opts:
                     # Unfortunately, with `ssh -v` (debug mode), the ssh master won't background; instead it stays in the
                     # foreground and blocks until the ControlPersist timer expires (90 secs). To make progress earlier we ...
-                    ssh_control_persist_secs = min(
-                        1, ssh_control_persist_secs
-                    )  # tell ssh to block as briefly as possible (1s)
-                ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                ssh_socket_cmd += ["-M", f"-oControlPersist={ssh_control_persist_secs}s", remote.ssh_user_host, "exit"]
-                log.log(LOG_TRACE, "Executing: %s", list_formatter(ssh_socket_cmd))
+                    ssh_control_persist_secs = min(1, ssh_control_persist_secs)  # tell ssh block as briefly as possible (1s)
+                ssh_sock_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                ssh_sock_cmd += ["-M", f"-oControlPersist={ssh_control_persist_secs}s", remote.ssh_user_host, "exit"]
+                log.log(LOG_TRACE, "Executing: %s", list_formatter(ssh_sock_cmd))
                 t = timeout(job)
                 try:
-                    sp.subprocess_run(
-                        ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, check=True, timeout=t, log=log
-                    )
+                    sp.subprocess_run(ssh_sock_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, check=True, timeout=t, log=log)
                 except subprocess.CalledProcessError as e:
                     log.error("%s", stderr_to_str(e.stderr).rstrip())
                     raise RetryableError(
-                        f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration first, "
+                        f"Cannot ssh into remote host via '{' '.join(ssh_sock_cmd)}'. Fix ssh configuration first, "
                         "considering diagnostic log file output from running with -v -v -v.",
                         display_msg="ssh connect",
                     ) from e
