@@ -30,8 +30,7 @@ from typing import (
     Final,
 )
 
-from bzfs_main.configuration import LogParams
-from bzfs_main.utils import (
+from bzfs_main.util.utils import (
     FILE_PERMISSIONS,
     sha256_hex,
 )
