@@ -5,6 +5,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [1.16.0] - Not yet released
 
 - [bzfs] Include `--zfs-send-program-opts` also when resuming a previously interrupted `zfs receive -s`.
+- [bzfs] Fix potential delay of process exit when receiving SIGINT/SIGTERM while spawning a subprocess.
+- [bzfs] Make `run_with_retries()` more widely applicable.
+
+## [1.15.1] - December 1, 2025
+
+- [bzfs] Include `--zfs-send-program-opts` also when resuming a previously interrupted `zfs receive -s`.
 
 ## [1.15.0] - December 1, 2025
 
