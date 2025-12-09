@@ -147,6 +147,7 @@ from bzfs_main.snapshot_cache import (
 )
 from bzfs_main.prometheus_exporter import (
     write_prometheus_metrics,
+    write_prometheus_metrics_on_error,
 )
 from bzfs_main.util.connection import (
     SHARED,
@@ -303,20 +304,6 @@ class Job(MiniJob):
         with xfinally(self.subprocesses.terminate_process_subtrees):
             self.shutdown()
 
-    def _write_prometheus_metrics_on_error(self, exit_code: int) -> None:
-        """Helper to write Prometheus metrics when an error occurs."""
-        try:
-            if hasattr(self, "params") and hasattr(self, "replication_start_time_nanos"):
-                p = self.params
-                elapsed_nanos = time.monotonic_ns() - self.replication_start_time_nanos
-                sent_bytes = 0
-                if p.is_program_available("pv", "local"):
-                    sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
-                write_prometheus_metrics(self, exit_code=exit_code, elapsed_nanos=elapsed_nanos, sent_bytes=sent_bytes)
-        except Exception:
-            pass  # Silently ignore errors during error handling
-            # TODO: WOLFGANG: How do I call log here ?
-
     def run_main(self, args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
         """Parses CLI arguments, sets up logging, and executes main job loop."""
         assert isinstance(self.error_injection_triggers, dict)
@@ -395,23 +382,23 @@ class Job(MiniJob):
                             sys.stdout.flush()
             except subprocess.CalledProcessError as e:
                 log_error_on_exit(e, e.returncode)
-                self._write_prometheus_metrics_on_error(e.returncode)
+                write_prometheus_metrics_on_error(self, e.returncode)
                 raise
             except SystemExit as e:
                 log_error_on_exit(e, e.code)
-                self._write_prometheus_metrics_on_error(e.code if isinstance(e.code, int) else DIE_STATUS)
+                write_prometheus_metrics_on_error(self, e.code if isinstance(e.code, int) else DIE_STATUS)
                 raise
             except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 log_error_on_exit(e, DIE_STATUS)
-                self._write_prometheus_metrics_on_error(DIE_STATUS)
+                write_prometheus_metrics_on_error(self, DIE_STATUS)
                 raise SystemExit(DIE_STATUS) from e
             except re.error as e:
                 log_error_on_exit(f"{e} within regex {e.pattern!r}", DIE_STATUS)
-                self._write_prometheus_metrics_on_error(DIE_STATUS)
+                write_prometheus_metrics_on_error(self, DIE_STATUS)
                 raise SystemExit(DIE_STATUS) from e
             except BaseException as e:
                 log_error_on_exit(e, DIE_STATUS, exc_info=True)
-                self._write_prometheus_metrics_on_error(DIE_STATUS)
+                write_prometheus_metrics_on_error(self, DIE_STATUS)
                 raise SystemExit(DIE_STATUS) from e
             else:
                 # Write Prometheus metrics on successful completion only

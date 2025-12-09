@@ -34,6 +34,10 @@ from bzfs_main.utils import (
     sha256_hex,
 )
 
+from bzfs_main.progress_reporter import (
+    count_num_bytes_transferred_by_zfs_send,
+)
+
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import (
         Job,
@@ -166,6 +170,21 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
             raise
     except Exception as e:
         p.log.warning("Failed to write Prometheus metrics: %s", e)
+
+
+def write_prometheus_metrics_on_error(job: Job, exit_code: int) -> None:
+    """Helper to write Prometheus metrics when an error occurs."""
+    try:
+        if hasattr(job, "params") and hasattr(job, "replication_start_time_nanos"):
+            p = job.params
+            elapsed_nanos = time.monotonic_ns() - job.replication_start_time_nanos
+            sent_bytes = 0
+            if p.is_program_available("pv", "local"):
+                sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
+            write_prometheus_metrics(job, exit_code=exit_code, elapsed_nanos=elapsed_nanos, sent_bytes=sent_bytes)
+    except Exception:
+        pass  # Silently ignore errors during error handling
+        # TODO: WOLFGANG: How do I call log here ?
 
 
 def _generate_job_id(job: Job) -> str:
