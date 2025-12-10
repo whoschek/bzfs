@@ -18,9 +18,9 @@
 set -e
 # Use tmpfs (RAM disk) as fast backing storage where available
 if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
-  TMPDIR="/run/user/$(id -u)/bzfs" # for Github Action on Linux, etc
-  export TMPDIR
-  mkdir -p "$TMPDIR"
+    TMPDIR="/run/user/$(id -u)/bzfs" # for Github Action on Linux, etc
+    export TMPDIR
+    mkdir -p "$TMPDIR"
 fi
 echo "Now using TMPDIR: $TMPDIR"
 echo "Now using bzfs_test_mode: $bzfs_test_mode"
@@ -28,10 +28,10 @@ echo "Now using bzfs_test_mode: $bzfs_test_mode"
 cd "$(dirname "$(realpath "$0")")"
 
 if [ "$(uname -s)" = "FreeBSD" ]; then
-  echo "Running on FreeBSD"
+    echo "Running on FreeBSD"
 elif [ "$(which coverage 2> /dev/null)" = "" ]; then
-  python3 -m pip install --upgrade pip
-  python3 -m pip install --upgrade "coverage[toml]>=7.6"
+    python3 -m pip install --upgrade pip
+    python3 -m pip install --upgrade "coverage[toml]>=7.6"
 fi
 PYTHON_LAZY_IMPORTS=all  # PEP 810
 export PYTHON_LAZY_IMPORTS
@@ -43,5 +43,5 @@ python3 -m coverage html
 python3 -m coverage xml
 
 if [ "$(which zfs 2> /dev/null)" != "" ]; then
-  PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate
+    PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate
 fi

@@ -22,20 +22,21 @@ cd "$(dirname "$(realpath "$0")")"
 echo "Running tests on $bzfs_test_remote_userhost:$bzfs_test_remote_path ..."
 
 if [ "$bzfs_test_ssh_port" = "" ]; then
-  bzfs_test_ssh_port="22"
+    bzfs_test_ssh_port="22"
 fi
 case "$bzfs_test_remote_userhost" in ""|-*|*[![:alnum:]_.@-]* ) \
-  echo "error: invalid bzfs_test_remote_userhost: $bzfs_test_remote_userhost" >&2; exit 1;; esac
+    echo "error: invalid bzfs_test_remote_userhost: $bzfs_test_remote_userhost" >&2; exit 1;; esac
 case "$bzfs_test_remote_path" in ""|-*|*[![:alnum:]/_.-]* ) \
-  echo "error: invalid bzfs_test_remote_path: $bzfs_test_remote_path" >&2; exit 1;; esac
+    echo "error: invalid bzfs_test_remote_path: $bzfs_test_remote_path" >&2; exit 1;; esac
 case "$bzfs_test_ssh_port" in ""|*[![:digit:]]* ) \
-  echo "error: invalid bzfs_test_ssh_port: $bzfs_test_ssh_port" >&2; exit 1;; esac
+    echo "error: invalid bzfs_test_ssh_port: $bzfs_test_ssh_port" >&2; exit 1;; esac
 case "$bzfs_test_remote_private_key" in ""|-*|*[![:alnum:]/_.-]* ) \
-  echo "error: invalid bzfs_test_remote_private_key: $bzfs_test_remote_private_key" >&2; exit 1;; esac
+    echo "error: invalid bzfs_test_remote_private_key: $bzfs_test_remote_private_key" >&2; exit 1;; esac
 
 flags="-oServerAliveInterval=0 -x -T"
 rsync -a --delete --exclude=venv --compress-choice=zstd --compress-level=1 -e \
-  "ssh -i $bzfs_test_remote_private_key -p $bzfs_test_ssh_port $flags" ./ "$bzfs_test_remote_userhost:$bzfs_test_remote_path"
+    "ssh -i $bzfs_test_remote_private_key -p $bzfs_test_ssh_port $flags" ./ \
+    "$bzfs_test_remote_userhost:$bzfs_test_remote_path"
 # shellcheck disable=SC2086
 ssh -i "$bzfs_test_remote_private_key" -p "$bzfs_test_ssh_port" $flags "$bzfs_test_remote_userhost" \
-  "bzfs_test_mode=$bzfs_test_mode" "bzfs_test_ssh_port=$bzfs_test_ssh_port" "$bzfs_test_remote_path/test.sh"
+    "bzfs_test_mode=$bzfs_test_mode" "bzfs_test_ssh_port=$bzfs_test_ssh_port" "$bzfs_test_remote_path/test.sh"

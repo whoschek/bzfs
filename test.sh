@@ -18,17 +18,17 @@
 set -e
 cd "$(dirname "$(realpath "$0")")"
 if [ "$bzfs_test_remote_userhost" = "" ]; then
-  # Use tmpfs (RAM disk) as fast backing storage where available
-  if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
-    TMPDIR="/run/user/$(id -u)/bzfs" # for Github Action on Linux, etc
-    export TMPDIR
-    mkdir -p "$TMPDIR"
-  fi
-  echo "Now using TMPDIR: $TMPDIR"
-  echo "Now using bzfs_test_mode: $bzfs_test_mode"
-  PYTHON_LAZY_IMPORTS=all  # PEP 810
-  export PYTHON_LAZY_IMPORTS
-  ./run_quietly.sh "$(basename "$0")" python3 -m bzfs_tests.test_all
+    # Use tmpfs (RAM disk) as fast backing storage where available
+    if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
+        TMPDIR="/run/user/$(id -u)/bzfs" # for Github Action on Linux, etc
+        export TMPDIR
+        mkdir -p "$TMPDIR"
+    fi
+    echo "Now using TMPDIR: $TMPDIR"
+    echo "Now using bzfs_test_mode: $bzfs_test_mode"
+    PYTHON_LAZY_IMPORTS=all  # PEP 810
+    export PYTHON_LAZY_IMPORTS
+      ./run_quietly.sh "$(basename "$0")" python3 -m bzfs_tests.test_all
 else
-  ./test_host.sh  # rsync's the local repo to remote host and runs tests there
+    ./test_host.sh  # rsync's the local repo to remote host and runs tests there
 fi
