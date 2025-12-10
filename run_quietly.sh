@@ -35,11 +35,9 @@ exitcode=${PIPESTATUS[0]}
 echo
 if [ "$exitcode" = "0" ]; then
     echo "✓ $subject"  # PASSED
-    rm -f "$tmpfile"
-    exit 0
 else
     echo "✗ $subject"  # FAILED
     cat "$tmpfile"
-    rm -f "$tmpfile"
-    exit "$exitcode"
 fi
+rm -f "$tmpfile"
+exit "$exitcode"
