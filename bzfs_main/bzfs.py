@@ -382,23 +382,23 @@ class Job(MiniJob):
                             sys.stdout.flush()
             except subprocess.CalledProcessError as e:
                 log_error_on_exit(e, e.returncode)
-                write_prometheus_metrics_on_error(self, e.returncode)
+                write_prometheus_metrics_on_error(self, e.returncode, log)
                 raise
             except SystemExit as e:
                 log_error_on_exit(e, e.code)
-                write_prometheus_metrics_on_error(self, e.code if isinstance(e.code, int) else DIE_STATUS)
+                write_prometheus_metrics_on_error(self, e.code if isinstance(e.code, int) else DIE_STATUS, log)
                 raise
             except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 log_error_on_exit(e, DIE_STATUS)
-                write_prometheus_metrics_on_error(self, DIE_STATUS)
+                write_prometheus_metrics_on_error(self, DIE_STATUS, log)
                 raise SystemExit(DIE_STATUS) from e
             except re.error as e:
                 log_error_on_exit(f"{e} within regex {e.pattern!r}", DIE_STATUS)
-                write_prometheus_metrics_on_error(self, DIE_STATUS)
+                write_prometheus_metrics_on_error(self, DIE_STATUS, log)
                 raise SystemExit(DIE_STATUS) from e
             except BaseException as e:
                 log_error_on_exit(e, DIE_STATUS, exc_info=True)
-                write_prometheus_metrics_on_error(self, DIE_STATUS)
+                write_prometheus_metrics_on_error(self, DIE_STATUS, log)
                 raise SystemExit(DIE_STATUS) from e
             else:
                 # Write Prometheus metrics on successful completion only
