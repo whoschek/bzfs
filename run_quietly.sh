@@ -25,7 +25,7 @@ shift
 tmpfile=$(mktemp -t bzfs_test_run_quietly."$(date '+%Y-%m-%d_%H-%M-%S')".XXXXXX)
 ${1+"$@"} 2>&1 | tee "$tmpfile" | while IFS= read -r currline; do
     if [ "$bzfs_test_no_run_quietly" != "" ]; then
-        echo "$currline"
+        printf '%s\n' "$currline"
     else
         printf '.'  # print progress bar
     fi
@@ -38,7 +38,7 @@ if [ "$exitcode" = "0" ]; then
 else
     echo "✗ $subject"  # FAILED
     if [ "$bzfs_test_no_run_quietly" = "" ]; then
-        cat "$tmpfile" | grep -v "... ok$"
+        cat "$tmpfile" | grep -v ') ... ok$'
     fi
 fi
 rm -f "$tmpfile"
