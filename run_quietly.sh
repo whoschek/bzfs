@@ -37,7 +37,9 @@ if [ "$exitcode" = "0" ]; then
     echo "✓ $subject"  # PASSED
 else
     echo "✗ $subject"  # FAILED
-    cat "$tmpfile"
+    if [ "$bzfs_test_no_run_quietly" = "" ]; then
+        cat "$tmpfile" | grep -v "... ok$"
+    fi
 fi
 rm -f "$tmpfile"
 exit "$exitcode"
