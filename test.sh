@@ -28,7 +28,7 @@ if [ "$bzfs_test_remote_userhost" = "" ]; then
   echo "Now using bzfs_test_mode: $bzfs_test_mode"
   PYTHON_LAZY_IMPORTS=all  # PEP 810
   export PYTHON_LAZY_IMPORTS
-  python3 -m bzfs_tests.test_all
+  ./run_quietly.sh "$(basename "$0")" python3 -m bzfs_tests.test_all
 else
   ./test_host.sh  # rsync's the local repo to remote host and runs tests there
 fi

@@ -84,6 +84,7 @@ permissions:
 
 env:  # it's sufficient to run smoke tests when dependabot is detected
   bzfs_test_mode: ${{ (github.actor == 'dependabot[bot]' && 'smoke') || (github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string) || (github.event.inputs.bzfs_test_mode != 'all' && github.event.inputs.bzfs_test_mode) || '' }}
+  bzfs_test_no_run_quietly: "true"
   NUM_RUNS: ${{ github.event.inputs.num_runs != '' && github.event.inputs.num_runs || '1' }}
 
 jobs:
@@ -506,7 +507,7 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "15.0"
-        envs: "bzfs_test_mode"
+        envs: "bzfs_test_mode bzfs_test_no_run_quietly"
         run: |
           ./.github-workflow-scripts/test_freebsd_14_1.sh
     - name: Upload code coverage report to workflow run page
@@ -532,7 +533,7 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "14.3"
-        envs: "bzfs_test_mode"
+        envs: "bzfs_test_mode bzfs_test_no_run_quietly"
         run: |
           ./.github-workflow-scripts/test_freebsd_14_1.sh
     - name: Upload code coverage report to workflow run page
@@ -558,7 +559,7 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "13.4"
-        envs: "bzfs_test_mode"
+        envs: "bzfs_test_mode bzfs_test_no_run_quietly"
         run: |
          touch coverage_report.txt; exit 0  # ./.github-workflow-scripts/test_freebsd_13_3.sh
     - name: Upload code coverage report to workflow run page

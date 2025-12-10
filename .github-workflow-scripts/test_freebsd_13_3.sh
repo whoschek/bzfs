@@ -15,7 +15,7 @@
 # limitations under the License.
 
 set -e # Exit immediately if a cmd returns a non-zero status
-pkg install -y python3 sudo zstd pv mbuffer netcat devel/py-coverage
+pkg install -y python3 sudo zstd pv mbuffer bash netcat devel/py-coverage
 id -u -n
 uname -a
 zfs --version || true
@@ -71,5 +71,5 @@ chsh -s /bin/sh $my_user
 echo "Default shell of $my_user after change:"
 getent passwd $my_user | cut -d: -f7
 
-sudo -u $tuser sh -c "cd $thome/bzfs; bzfs_test_mode=$bzfs_test_mode ./test.sh"
+sudo -u $tuser sh -c "cd $thome/bzfs; bzfs_test_mode=$bzfs_test_mode bzfs_test_no_run_quietly=$bzfs_test_no_run_quietly ./test.sh"
 echo "bzfs-testrun-success"
