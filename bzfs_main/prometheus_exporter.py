@@ -77,8 +77,9 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
     # Extract source and destination info
     src_root: str = p.src.basis_root_dataset
     dst_root: str = p.dst.basis_root_dataset
-    src_host: str = p.src.ssh_host or "localhost"
-    dst_host: str = p.dst.ssh_host or "localhost"
+    # Prefer using basis_ssh_host (the given by cli args) in order to preserve proper metric labels instead of resvoled hostnames
+    src_host: str = p.src.basis_ssh_host or p.src.ssh_host or "localhost"
+    dst_host: str = p.dst.basis_ssh_host or p.src.ssh_host or "localhost"
 
     # Determine the primary action(s) being performed
     action: str = _determine_action(p)
