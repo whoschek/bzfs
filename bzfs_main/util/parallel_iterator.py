@@ -58,7 +58,8 @@ def parallel_iterator(
     avoids pre-submitting the entire workload.
 
     This function provides high-performance parallel execution of iterator-based tasks using a shared thread pool, with
-    precise control over result delivery ordering and concurrency management through a sliding window buffer approach.
+    precise control over result delivery ordering and concurrency management through a bounded buffer (a sliding window of
+    at most ``max_workers`` in-flight futures).
 
     Purpose:
     --------
@@ -80,9 +81,9 @@ def parallel_iterator(
     where I/O or ZFS overhead dominates and parallel execution provides substantial performance improvements over
     sequential processing. The implementation addresses several key design challenges:
 
-    - Sliding Window Buffer: Maintains at most ``max_workers`` futures in flight, preventing resource exhaustion and
-      bounding memory consumption while maximizing thread utilization. New tasks are submitted as completed ones are
-      consumed. This is crucial when processing large numbers of datasets typical in ZFS operation.
+    - Bounded Buffer: Maintains at most ``max_workers`` futures in flight, preventing resource exhaustion and bounding memory
+      consumption while maximizing thread utilization. New tasks are submitted as completed ones are consumed. This is
+      crucial when processing large numbers of datasets typical in ZFS operation.
 
     - Ordered vs Unordered Execution:
 
@@ -102,7 +103,7 @@ def parallel_iterator(
         with the managed thread pool.
 
     max_workers : int, default=os.cpu_count() or 1
-        Maximum number of worker threads in the thread pool. Also determines the buffer size for the sliding window
+        Maximum number of worker threads in the thread pool. Also determines the buffer size for the bounded-concurrency
         execution model. Often higher than the number of available CPU cores for I/O-bound tasks.
 
     ordered : bool, default=True
@@ -146,7 +147,7 @@ def parallel_iterator_results(
     ordered: bool,
     termination_event: threading.Event | None = None,  # optional event to request early async termination
 ) -> Iterator[_T]:
-    """Yield results from an iterator of Future[T] using sliding-window parallelism with optional ordered delivery."""
+    """Yield results from an iterator of Future[T] using bounded concurrency with optional ordered delivery."""
     assert max_workers >= 0
     max_workers = max(1, max_workers)
     termination_event = threading.Event() if termination_event is None else termination_event
