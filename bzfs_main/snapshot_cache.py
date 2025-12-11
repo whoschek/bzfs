@@ -163,6 +163,7 @@ from subprocess import (
 from typing import (
     TYPE_CHECKING,
     Final,
+    final,
 )
 
 from bzfs_main.parallel_batch_cmd import (
@@ -194,6 +195,7 @@ MATURITY_TIME_THRESHOLD_SECS: Final[float] = 1.1  # 1 sec ZFS creation time reso
 
 
 #############################################################################
+@final
 class SnapshotCache:
     """Handles last-modified cache operations for snapshot management."""
 

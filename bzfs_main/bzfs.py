@@ -81,6 +81,7 @@ from typing import (
     Callable,
     Final,
     cast,
+    final,
 )
 
 import bzfs_main.loggers
@@ -249,6 +250,7 @@ def run_main(
 
 
 #############################################################################
+@final
 class Job(MiniJob):
     """Executes one bzfs run, coordinating snapshot replication tasks."""
 
@@ -1717,6 +1719,7 @@ class Job(MiniJob):
 
 
 #############################################################################
+@final
 class DatasetProperties:
     """Properties of a ZFS dataset."""
 

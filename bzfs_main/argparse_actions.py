@@ -31,6 +31,7 @@ from datetime import (
 )
 from typing import (
     Any,
+    final,
 )
 
 from bzfs_main.filter import (
@@ -60,6 +61,7 @@ from bzfs_main.util.utils import (
 
 #############################################################################
 @dataclass(order=True)
+@final
 class SnapshotFilter:
     """Represents a snapshot filter with matching options and time range."""
 
@@ -190,6 +192,7 @@ def validate_no_argument_file(
 
 
 #############################################################################
+@final
 class NonEmptyStringAction(argparse.Action):
     """Argparse action rejecting empty string values."""
 
@@ -204,6 +207,7 @@ class NonEmptyStringAction(argparse.Action):
 
 
 #############################################################################
+@final
 class DatasetPairsAction(argparse.Action):
     """Parses alternating source/destination dataset arguments."""
 
@@ -247,6 +251,7 @@ class DatasetPairsAction(argparse.Action):
 
 
 #############################################################################
+@final
 class SSHConfigFileNameAction(argparse.Action):
     """Validates SSH config file argument contains no whitespace or shell chars."""
 
@@ -264,6 +269,7 @@ class SSHConfigFileNameAction(argparse.Action):
 
 
 #############################################################################
+@final
 class SafeFileNameAction(argparse.Action):
     """Ensures filenames lack path separators and weird whitespace."""
 
@@ -279,6 +285,7 @@ class SafeFileNameAction(argparse.Action):
 
 
 #############################################################################
+@final
 class SafeDirectoryNameAction(argparse.Action):
     """Validates directory name argument, allowing only simple spaces."""
 
@@ -295,6 +302,7 @@ class SafeDirectoryNameAction(argparse.Action):
 
 
 #############################################################################
+@final
 class NewSnapshotFilterGroupAction(argparse.Action):
     """Starts a new filter group when seen in command line arguments."""
 
@@ -309,6 +317,7 @@ class NewSnapshotFilterGroupAction(argparse.Action):
 
 
 #############################################################################
+@final
 class FileOrLiteralAction(argparse.Action):
     """Allows '@file' style argument expansion with '+' prefix."""
 
@@ -393,6 +402,7 @@ class IncludeSnapshotPlanAction(argparse.Action):
 
 
 #############################################################################
+@final
 class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
     """Specialized include plan used to decide which dst snapshots to keep."""
 
@@ -415,6 +425,7 @@ class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
 
 
 #############################################################################
+@final
 class TimeRangeAndRankRangeAction(argparse.Action):
     """Parses --include-snapshot-times-and-ranks option values."""
 
@@ -516,6 +527,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
 
 
 #############################################################################
+@final
 class CheckPercentRange(CheckRange):
     """Argparse action verifying percentages fall within 0-100."""
 

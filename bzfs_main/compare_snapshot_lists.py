@@ -35,6 +35,7 @@ from dataclasses import (
 from typing import (
     TYPE_CHECKING,
     Callable,
+    final,
 )
 
 from bzfs_main.argparse_cli import (
@@ -73,6 +74,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 
 
 @dataclass(order=True, frozen=True)
+@final
 class _ComparableSnapshot:
     """Snapshot entry comparable by rel_dataset and GUID for sorting and merging."""
 
@@ -151,6 +153,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         )
 
         @dataclass
+        @final
         class SnapshotStats:
             snapshot_count: int = field(default=0)
             sum_written: int = field(default=0)

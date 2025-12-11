@@ -35,6 +35,7 @@ from datetime import (
 )
 from typing import (
     Final,
+    final,
 )
 
 # constants:
@@ -49,6 +50,7 @@ METADATA_MICROSECOND: Final = {"min": 0, "max": 999, "help": "The microsecond wi
 
 
 @dataclass(frozen=True)
+@final
 class PeriodAnchors:
     """Anchor offsets used to round datetimes up to periodic boundaries; Immutable."""
 

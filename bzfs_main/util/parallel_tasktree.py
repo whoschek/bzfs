@@ -41,6 +41,7 @@ from typing import (
     Callable,
     Final,
     NamedTuple,
+    final,
 )
 
 from bzfs_main.util.utils import (
@@ -57,6 +58,7 @@ BARRIER_CHAR: Final[str] = "~"
 
 
 #############################################################################
+@final
 class CompletionCallbackResult(NamedTuple):
     """Result of a CompletionCallback invocation."""
 
@@ -85,6 +87,7 @@ until they exit or time out.
 
 
 #############################################################################
+@final
 class ParallelTaskTree:
     """Main class for dependency-aware scheduling of dataset jobs with optional barriers and priority ordering."""
 
@@ -385,6 +388,7 @@ class ParallelTaskTree:
 
 
 #############################################################################
+@final
 class _TreeNodeMutableAttributes:
     """Container for mutable attributes, stored space efficiently."""
 
@@ -397,6 +401,7 @@ class _TreeNodeMutableAttributes:
 
 
 #############################################################################
+@final
 class _TreeNode(NamedTuple):
     """Node in dataset dependency tree used by the scheduler; _TreeNodes are ordered by priority and dataset name within a
     priority queue, via __lt__ comparisons."""

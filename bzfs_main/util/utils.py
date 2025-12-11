@@ -79,6 +79,7 @@ from typing import (
     TextIO,
     TypeVar,
     cast,
+    final,
 )
 
 # constants:
@@ -515,6 +516,7 @@ def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
 def list_formatter(iterable: Iterable[Any], separator: str = " ", lstrip: bool = False) -> Any:
     """Lazy formatter joining items with ``separator`` used to avoid overhead in disabled log levels."""
 
+    @final
     class CustomListFormatter:
         """Formatter object that joins items when converted to ``str``."""
 
@@ -528,6 +530,7 @@ def list_formatter(iterable: Iterable[Any], separator: str = " ", lstrip: bool =
 def pretty_print_formatter(obj_to_format: Any) -> Any:
     """Lazy pprint formatter used to avoid overhead in disabled log levels."""
 
+    @final
     class PrettyPrintFormatter:
         """Formatter that pretty-prints the object on conversion to ``str``."""
 
@@ -725,6 +728,7 @@ def termination_signal_handler(
 
 
 #############################################################################
+@final
 class Subprocesses:
     """Provides per-job tracking of child PIDs so a job can safely terminate only the subprocesses it spawned itself; used
     when multiple jobs run concurrently within the same Python process.
@@ -931,6 +935,7 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
 
 
 ###############################################################################
+@final
 class SnapshotPeriods:  # thread-safe
     """Parses snapshot suffix strings and converts between durations."""
 
@@ -987,6 +992,7 @@ class SnapshotPeriods:  # thread-safe
 
 
 #############################################################################
+@final
 class JobStats:
     """Simple thread-safe counters summarizing job progress."""
 
@@ -1047,6 +1053,7 @@ class Comparable(Protocol):
 TComparable = TypeVar("TComparable", bound=Comparable)  # Generic type variable for elements stored in a SmallPriorityQueue
 
 
+@final
 class SmallPriorityQueue(Generic[TComparable]):
     """A priority queue that can handle updates to the priority of any element that is already contained in the queue, and
     does so very efficiently if there are a small number of elements in the queue (no more than thousands), as is the case
@@ -1111,6 +1118,7 @@ class SmallPriorityQueue(Generic[TComparable]):
 
 
 ###############################################################################
+@final
 class SortedInterner(Generic[TComparable]):
     """Same as sys.intern() except that it isn't global and that it assumes the input list is sorted (for binary search)."""
 
@@ -1139,6 +1147,7 @@ def binary_search(sorted_list: list[TComparable], item: TComparable) -> int:
 _S = TypeVar("_S")
 
 
+@final
 class HashedInterner(Generic[_S]):
     """Same as sys.intern() except that it isn't global and can also be used for types other than str."""
 
@@ -1158,6 +1167,7 @@ class HashedInterner(Generic[_S]):
 
 
 #############################################################################
+@final
 class SynchronizedBool:
     """Thread-safe wrapper around a regular bool."""
 
@@ -1208,6 +1218,7 @@ _K = TypeVar("_K")
 _V = TypeVar("_V")
 
 
+@final
 class SynchronizedDict(Generic[_K, _V]):
     """Thread-safe wrapper around a regular dict."""
 
@@ -1266,6 +1277,7 @@ class SynchronizedDict(Generic[_K, _V]):
 
 
 #############################################################################
+@final
 class InterruptibleSleep:
     """Provides a sleep(timeout) function that can be interrupted by another thread; The underlying lock is configurable."""
 
@@ -1300,6 +1312,7 @@ class InterruptibleSleep:
 
 
 #############################################################################
+@final
 class SynchronousExecutor(Executor):
     """Executor that runs tasks inline in the calling thread, sequentially."""
 
@@ -1330,6 +1343,7 @@ class SynchronousExecutor(Executor):
 
 
 #############################################################################
+@final
 class _XFinally(contextlib.AbstractContextManager):
     """Context manager ensuring cleanup code executes after ``with`` blocks."""
 

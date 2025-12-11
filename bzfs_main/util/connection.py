@@ -79,6 +79,7 @@ from typing import (
     Any,
     Final,
     Protocol,
+    final,
     runtime_checkable,
 )
 
@@ -171,11 +172,13 @@ def create_simple_miniremote(
     """Factory that returns a simple implementation of the MiniRemote interface."""
 
     @dataclass(frozen=True)  # aka immutable
+    @final
     class SimpleMiniParams(MiniParams):
         log: logging.Logger
         ssh_program: str
 
     @dataclass(frozen=True)  # aka immutable
+    @final
     class SimpleMiniRemote(MiniRemote):
         params: MiniParams
         location: str  # "src" or "dst"
@@ -247,6 +250,7 @@ def create_simple_minijob(timeout_duration_secs: float | None = None, subprocess
     """Factory that returns a simple implementation of the MiniJob interface."""
 
     @dataclass(frozen=True)  # aka immutable
+    @final
     class SimpleMiniJob(MiniJob):
         timeout_nanos: int | None  # timestamp aka instant in time
         timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
@@ -287,6 +291,7 @@ def dquote(arg: str) -> str:
 
 #############################################################################
 @dataclass(order=True, repr=False)
+@final
 class Connection:
     """Represents the ability to multiplex N=capacity concurrent SSH sessions over the same TCP connection."""
 
@@ -495,13 +500,16 @@ class ConnectionPool:
             if conn is None or conn._is_full():  # noqa: SLF001  # pylint: disable=protected-access
                 if conn is not None:
                     self._priority_queue.push(conn)
-                lease: ConnectionLease | None = None if self._lease_mgr is None else self._lease_mgr.acquire()
-                conn = Connection(self._remote, self._capacity, lease=lease)  # add a new connection
+                conn = self._new_connection()  # add a new connection
                 self._last_modified += 1
                 conn._update_last_modified(self._last_modified)  # noqa: SLF001  # pylint: disable=protected-access
             conn._increment_free(-1)  # noqa: SLF001  # pylint: disable=protected-access
             self._priority_queue.push(conn)
             return conn
+
+    def _new_connection(self) -> Connection:
+        lease: ConnectionLease | None = None if self._lease_mgr is None else self._lease_mgr.acquire()
+        return Connection(self._remote, self._capacity, lease=lease)
 
     def return_connection(self, conn: Connection) -> None:
         """Returns the given connection to the pool and updates its priority."""
@@ -532,6 +540,7 @@ class ConnectionPool:
 
 
 #############################################################################
+@final
 class ConnectionPools:
     """A bunch of named connection pools with various multiplexing capacities."""
 

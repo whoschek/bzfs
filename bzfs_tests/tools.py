@@ -31,6 +31,7 @@ from collections.abc import (
 from typing import (
     Any,
     Callable,
+    final,
 )
 
 
@@ -104,6 +105,7 @@ def gc_disabled(run_gc_first: bool = False) -> Iterator[None]:
 
 
 #############################################################################
+@final
 class TestSuiteCompleteness(unittest.TestCase):
     """Verifies each test module's suite() includes all locally defined test classes to avoid accidentally orphaned tests."""
 

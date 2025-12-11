@@ -59,6 +59,7 @@ from typing import (
     Any,
     Callable,
     cast,
+    final,
 )
 from unittest.mock import (
     patch,
@@ -703,6 +704,7 @@ class IntegrationTestCase(ParametrizedTestCase):
 
 
 #############################################################################
+@final
 class SmokeTestCase(IntegrationTestCase):
     """Runs only a small subset of tests."""
 
@@ -732,6 +734,7 @@ class SmokeTestCase(IntegrationTestCase):
 
 
 #############################################################################
+@final
 class AdhocTestCase(IntegrationTestCase):
     """For testing isolated changes you are currently working on.
 
@@ -806,6 +809,7 @@ class AdhocTestCase(IntegrationTestCase):
 
 
 #############################################################################
+@final
 class IncrementalSendStepsTestCase(IntegrationTestCase):
 
     def test_snapshot_series_excluding_hourlies(self) -> None:
@@ -932,6 +936,7 @@ class IncrementalSendStepsTestCase(IntegrationTestCase):
 
 
 #############################################################################
+@final
 class TestSSHLatency(IntegrationTestCase):
 
     def run_latency_cmd(self, cmd: list[str], *, close_fds: bool = True) -> tuple[str, str]:
@@ -1028,6 +1033,7 @@ class TestSSHLatency(IntegrationTestCase):
 
 
 #############################################################################
+@final
 class TestSSHMasterIntermittentFailure(IntegrationTestCase):
     """Documents and verifies SSH master behavior under intermittent failure.
 
@@ -1116,6 +1122,7 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
 
 
 #############################################################################
+@final
 class LocalTestCase(IntegrationTestCase):
 
     def test_aaa_log_diagnostics_first(self) -> None:
@@ -5630,6 +5637,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
 
 
 #############################################################################
+@final
 class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_ssh_program_must_not_be_disabled_in_nonlocal_mode(self) -> None:

@@ -47,6 +47,7 @@ from typing import (
     Literal,
     NamedTuple,
     cast,
+    final,
 )
 
 from bzfs_main.argparse_actions import (
@@ -120,6 +121,7 @@ _UNSET_ENV_VARS_LATCH: Final[SynchronizedBool] = SynchronizedBool(True)
 
 
 #############################################################################
+@final
 class LogParams:
     """Option values for logging."""
 
@@ -202,6 +204,7 @@ class LogParams:
 
 
 #############################################################################
+@final
 class Params(MiniParams):
     """All parsed CLI options combined into a single bundle; simplifies passing around numerous settings and defaults."""
 
@@ -488,6 +491,7 @@ class Params(MiniParams):
 
 
 #############################################################################
+@final
 class Remote(MiniRemote):
     """Connection settings for either source or destination host."""
 
@@ -606,6 +610,7 @@ class Remote(MiniRemote):
 
 
 #############################################################################
+@final
 class CopyPropertiesConfig:
     """--zfs-recv-o* and --zfs-recv-x* option groups for copying or excluding ZFS properties on receive."""
 
@@ -631,6 +636,7 @@ class CopyPropertiesConfig:
 
 
 #############################################################################
+@final
 class SnapshotLabel(NamedTuple):
     """Contains the individual parts that are concatenated into a ZFS snapshot name."""
 
@@ -672,6 +678,7 @@ class SnapshotLabel(NamedTuple):
 
 
 #############################################################################
+@final
 class CreateSrcSnapshotConfig:
     """Option values for --create-src-snapshots, that is, for automatically creating source snapshots."""
 
@@ -752,6 +759,7 @@ class CreateSrcSnapshotConfig:
 
 #############################################################################
 @dataclass(frozen=True)
+@final
 class AlertConfig:
     """Thresholds controlling when alerts fire for snapshot age."""
 
@@ -762,6 +770,7 @@ class AlertConfig:
 
 #############################################################################
 @dataclass(frozen=True)
+@final
 class MonitorSnapshotAlert:
     """Alert configuration for a single monitored snapshot label."""
 
@@ -771,6 +780,7 @@ class MonitorSnapshotAlert:
 
 
 #############################################################################
+@final
 class MonitorSnapshotsConfig:
     """Option values for --monitor-snapshots*, that is, policy describing which snapshots to monitor for staleness."""
 

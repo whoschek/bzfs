@@ -66,6 +66,7 @@ from typing import (
     NoReturn,
     TypeVar,
     Union,
+    final,
 )
 
 import bzfs_main.argparse_actions
@@ -483,6 +484,7 @@ def main() -> None:
 
 
 #############################################################################
+@final
 class Job:
     """Coordinates subjobs per the CLI flags; Each subjob handles one host pair and may run in its own process or thread."""
 
@@ -1226,6 +1228,7 @@ class Job:
 
 
 #############################################################################
+@final
 class RejectArgumentAction(argparse.Action):
     """An argparse Action that immediately fails if it is ever triggered."""
 
@@ -1265,6 +1268,7 @@ def _log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str
 def _pretty_print_formatter(dictionary: dict[str, Any]) -> Any:
     """Lazy JSON formatter used to avoid overhead in disabled log levels."""
 
+    @final
     class PrettyPrintFormatter:
         """Wrapper returning formatted JSON on ``str`` conversion."""
 

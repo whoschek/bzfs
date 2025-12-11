@@ -37,6 +37,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Final,
+    final,
 )
 
 from bzfs_main.util.utils import (
@@ -146,6 +147,7 @@ def get_default_log_formatter(
     log_stdout_: int = LOG_STDOUT
     cols: int = 0 if log_params is None else log_params.terminal_columns
 
+    @final
     class DefaultLogFormatter(logging.Formatter):
         """Formatter adding timestamps and padding for progress output."""
 
@@ -187,6 +189,7 @@ def get_simple_logger(program: str, logger_name_suffix: str = "") -> Logger:
     level_prefixes_: dict[int, str] = LOG_LEVEL_PREFIXES.copy()
     logger_name = program + "." + logger_name_suffix if logger_name_suffix else program
 
+    @final
     class LevelFormatter(logging.Formatter):
         """Injects level prefix and program name into log records."""
 

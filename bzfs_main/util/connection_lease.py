@@ -93,6 +93,7 @@ import time
 from typing import (
     Final,
     NamedTuple,
+    final,
 )
 
 from bzfs_main.util.utils import (
@@ -116,6 +117,7 @@ NAMESPACE_DIR_LENGTH: Final[int] = 43  # 43 Base64 chars contain the entire SHA-
 
 
 #############################################################################
+@final
 class ConnectionLease(NamedTuple):
     """Purpose: Reduce SSH connection startup latency of a fresh bzfs process via safe OpenSSH ControlPath reuse.
 
@@ -154,6 +156,7 @@ class ConnectionLease(NamedTuple):
 
 
 #############################################################################
+@final
 class ConnectionLeaseManager:
     """Purpose: Reduce SSH connection startup latency of a fresh bzfs process via safe OpenSSH ControlPath reuse.
 

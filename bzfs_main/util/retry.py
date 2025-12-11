@@ -99,6 +99,7 @@ from typing import (
     Callable,
     Final,
     TypeVar,
+    final,
 )
 
 from bzfs_main.util.utils import (
@@ -206,6 +207,7 @@ class RetryableError(Exception):
 
 #############################################################################
 @dataclass(frozen=True)
+@final
 class Retry:
     """The current retry attempt number provided to callback functions; immutable."""
 
@@ -214,6 +216,7 @@ class Retry:
 
 
 #############################################################################
+@final
 class RetryPolicy:
     """Configuration controlling retry counts and backoff delays for run_with_retries(); immutable."""
 
@@ -290,6 +293,7 @@ def _format_pair(first: object, second: object) -> str:  # thread-safe
 
 
 @dataclass(frozen=True)
+@final
 class RetryConfig:
     """Configures termination behavior and logging for run_with_retries(); all defaults work out of the box; immutable."""
 
@@ -315,6 +319,7 @@ _DEFAULT_RETRY_CONFIG: Final[RetryConfig] = RetryConfig()  # constant
 
 #############################################################################
 @dataclass(frozen=True)
+@final
 class RetryOptions:
     """Convenience class that aggregates all knobs for run_with_retries(); all defaults work out of the box; immutable."""
 
