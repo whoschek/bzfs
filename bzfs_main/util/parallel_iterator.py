@@ -57,9 +57,9 @@ def parallel_iterator(
     """Executes multiple iterators in parallel/concurrently, with explicit backpressure and configurable result ordering;
     avoids pre-submitting the entire workload.
 
-    This function provides high-performance parallel execution of iterator-based tasks using a shared thread pool, with
-    precise control over result delivery ordering and concurrency management through a bounded buffer (a sliding window of
-    at most ``max_workers`` in-flight futures).
+    This function provides efficient parallel execution of iterator-based tasks using a shared thread pool, with precise
+    control over result delivery ordering and concurrency management through a bounded buffer (a sliding window of at most
+    ``max_workers`` in-flight futures).
 
     Purpose:
     --------
