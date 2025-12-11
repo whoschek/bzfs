@@ -32,7 +32,7 @@ Advanced Configuration:
 - Tune ``RetryPolicy`` parameters to control maximum retries, sleep bounds, and elapsed-time budget.
 - Use ``RetryConfig`` to control termination events, and logging settings.
 - Set ``log`` to ``None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
-- Pass ``termination_event`` via ``RetryConfig`` to support asynchronous cancellation between attempts.
+- Pass ``termination_event`` via ``RetryConfig`` to support async cancellation between attempts.
 - Use ``giveup(retryable_error)`` to stop retrying early based on domain-specific logic (for example, parsing ZFS stderr).
 
 Observability:
@@ -148,16 +148,17 @@ def run_with_retries(
                 will_retry = True
                 retry_count += 1
                 loglevel: int = config.info_loglevel
+                cfg = config
                 if retryable_error.no_sleep and retry_count <= 1:  # retry once immediately without backoff
                     if log is not None and log.isEnabledFor(loglevel):
-                        msg = f"{format_msg(config.display_msg, retryable_error)}[{retry_count}/{policy.max_retries}]"
+                        msg = format_msg(cfg.display_msg, retryable_error) + cfg.format_pair(retry_count, policy.max_retries)
                         log.log(loglevel, "%s", f"{msg} immediately{config.dots}", extra=config.extra)
                     after_attempt(retry, False, False, False, 0, retryable_error)
                 else:  # jitter: pick a random sleep duration within the range [min_sleep_nanos, c_max_sleep_nanos] as delay
                     rand = random.SystemRandom() if rand is None else rand
                     sleep_nanos: int = rand.randint(policy.min_sleep_nanos, c_max_sleep_nanos)
                     if log is not None and log.isEnabledFor(loglevel):
-                        msg = f"{format_msg(config.display_msg, retryable_error)}[{retry_count}/{policy.max_retries}]"
+                        msg = format_msg(cfg.display_msg, retryable_error) + cfg.format_pair(retry_count, policy.max_retries)
                         log.log(loglevel, "%s", f"{msg} in {format_duration(sleep_nanos)}{config.dots}", extra=config.extra)
                     after_attempt(retry, False, False, False, sleep_nanos, retryable_error)
                     termination_event.wait(sleep_nanos / 1_000_000_000)  # seconds; allow early wakeup on async termination
@@ -174,8 +175,9 @@ def run_with_retries(
                         config.warning_loglevel,
                         "%s",
                         f"{format_msg(config.display_msg, retryable_error)}exhausted; giving up because the last "
-                        f"[{retry_count}/{policy.max_retries}] retries across "
-                        f"[{format_duration(elapsed_nanos)}/{format_duration(policy.max_elapsed_nanos)}] failed",
+                        f"{config.format_pair(retry_count, policy.max_retries)} retries across "
+                        f"{config.format_pair(format_duration(elapsed_nanos), format_duration(policy.max_elapsed_nanos))} "
+                        "failed",
                         exc_info=retryable_error if config.exc_info else None,
                         stack_info=config.stack_info,
                         extra=config.extra,
@@ -283,14 +285,19 @@ def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:  # th
     return msg
 
 
+def _format_pair(first: object, second: object) -> str:  # thread-safe
+    return f"[{first}/{second}]"
+
+
 @dataclass(frozen=True)
 class RetryConfig:
     """Configures termination behavior and logging for run_with_retries(); all defaults work out of the box; immutable."""
 
-    termination_event: threading.Event | None = None  # optionally allows for asynchronous cancellation
+    termination_event: threading.Event | None = None  # optionally allows for async cancellation
     display_msg: str = "Retrying"
     dots: str = " ..."
     format_msg: Callable[[str, RetryableError], str] = _format_msg  # lambda: display_msg, retryable_error
+    format_pair: Callable[[object, object], str] = _format_pair  # lambda: first, second
     format_duration: Callable[[int], str] = human_readable_duration  # lambda: nanos
     info_loglevel: int = logging.INFO
     warning_loglevel: int = logging.WARNING
