@@ -55,7 +55,7 @@ from bzfs_main.util.utils import (
 
 # constants:
 BARRIER_CHAR: Final[str] = "~"
-COMPONENT_SEPARATOR: Final[str] = "/"  # same as ZFS dataset component separator
+COMPONENT_SEPARATOR: Final[str] = "/"  # ZFS dataset component separator
 
 
 #############################################################################

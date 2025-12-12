@@ -38,7 +38,7 @@ if [ "$exitcode" = "0" ]; then
 else
     echo "✗ $subject"  # FAILED
     if [ "$bzfs_test_no_run_quietly" = "" ]; then
-        cat "$tmpfile" | grep -v ') ... ok$'
+        grep -v ') ... ok$' "$tmpfile" || [ $? -eq 1 ]  # ignore grep exitcode 1 aka "no matches"
     fi
 fi
 rm -f "$tmpfile"
