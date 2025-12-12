@@ -123,10 +123,9 @@ To validate your changes, you MUST follow this exact sequence:
    - If the exit code is non-zero, iteratively fix the source code and re-run until the exit code is `0` (unless a
      failure is intentionally expected by TDD design).
 
-4. **Stage Your Own Untracked Files (if any):** Run `git add <paths>` for the files **you** added or renamed, but
-   exclude the files in `lab/` and `_tmp/` and the files the User or a third party added. This ensures that subsequent
-   `pre-commit` checks only see relevant files. *Note:* `pre-commit` only processes tracked files, even with
-   `--all-files`.
+4. **Stage Untracked Files:** Run `git add <paths>` for any new or renamed files that are part of this change, but
+   exclude the files in `lab/` and `_tmp/`. This ensures that subsequent `pre-commit` checks only see relevant files.
+   *Note:* `pre-commit` only processes tracked files, even with `--all-files`.
 
 5. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run all hooks specified in
    `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting with `ruff`, formatting with
