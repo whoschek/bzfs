@@ -55,6 +55,7 @@ from bzfs_main.util.utils import (
 
 # constants:
 BARRIER_CHAR: Final[str] = "~"
+COMPONENT_SEPARATOR: Final[str] = "/"  # same as ZFS dataset component separator
 
 
 #############################################################################
@@ -63,10 +64,10 @@ class CompletionCallbackResult(NamedTuple):
     """Result of a CompletionCallback invocation."""
 
     no_skip: bool
-    """True enqueues descendants, False skips the subtree."""
+    """True enqueues children, False skips the subtree."""
 
     fail: bool
-    """True marks overall run as failed; exceptions may be raised here."""
+    """True marks overall run as failed."""
 
 
 #############################################################################
@@ -104,6 +105,7 @@ class ParallelTaskTree:
         ] = lambda last_update_nanos, dataset, submit_count: 0,  # optionally spread tasks out over time; e.g. for jitter
         termination_event: threading.Event | None = None,  # optional event to request early async termination
         enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
+        barrier_name: str = BARRIER_CHAR,
         is_test_mode: bool = False,
     ) -> None:
         """Prepares to process datasets in parallel with dependency-aware scheduling and fault tolerance.
@@ -172,23 +174,28 @@ class ParallelTaskTree:
         - max_workers: Maximum number of parallel worker threads
         - executors: Factory returning an Executor to submit tasks to; None means 'auto-choose'
         - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
+        - barrier_name: Directory name that denotes a barrier within dataset/job strings (default '~'); must be non-empty and
+          not contain '/'
         - termination_event: Optional event to request early async termination; stops new submissions and cancels in-flight
           tasks
         """
         assert log is not None
         assert (not is_test_mode) or datasets == sorted(datasets), "List is not sorted"
         assert (not is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
+        if COMPONENT_SEPARATOR in barrier_name or not barrier_name:
+            raise ValueError(f"Invalid barrier_name: {barrier_name}")
         for dataset in datasets:
-            if dataset.startswith("/") or not dataset:
+            if dataset.startswith(COMPONENT_SEPARATOR) or not dataset:
                 raise ValueError(f"Invalid dataset name: {dataset}")
         assert callable(process_dataset)
         assert callable(priority)
         assert max_workers > 0
         assert callable(interval_nanos)
-        has_barrier: Final[bool] = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
+        has_barrier: Final[bool] = any(barrier_name in dataset.split(COMPONENT_SEPARATOR) for dataset in datasets)
         assert (enable_barriers is not False) or not has_barrier, "Barrier seen in datasets but barriers explicitly disabled"
 
         self._barriers_enabled: Final[bool] = bool(has_barrier or enable_barriers)
+        self._barrier_name: Final[str] = barrier_name
         self._log: Final[logging.Logger] = log
         self._datasets: Final[list[str]] = datasets
         self._process_dataset: Final[Callable[[str, int], CompletionCallback]] = process_dataset
@@ -324,10 +331,11 @@ class ParallelTaskTree:
         before the jobs of the pruning phase can start. More generally, with this algo, a job scheduler can specify that all
         jobs within a given job subtree (containing any nested combination of sequential and/or parallel jobs) must
         successfully complete before a certain other job within the job tree is started. This is specified via the barrier
-        directory named '~'. An example is "src_host1/createsnapshots/~/prune".
+        directory named by ``barrier_name`` (default '~'). An example is "src_host1/createsnapshots/~/prune".
 
-        Note that '~' is unambiguous as it is not a valid ZFS dataset name component per the naming rules enforced by the
-        'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs.
+        Note that the default '~' is unambiguous as it is not a valid ZFS dataset name component per the naming rules
+        enforced by the 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs. Custom barrier names should avoid colliding
+        with real dataset/job components.
         """
 
         def enqueue_children(node: _TreeNode) -> int:
@@ -338,7 +346,7 @@ class ParallelTaskTree:
                 abs_dataset: str = self._join_dataset(node.dataset, child)
                 child_node: _TreeNode = _make_tree_node(self._priority(abs_dataset), abs_dataset, grandchildren, parent=node)
                 k: int
-                if child != BARRIER_CHAR:
+                if child != self._barrier_name:
                     if abs_dataset in self._datasets_set:
                         # it's not a barrier; make job available for immediate start of processing
                         heapq.heappush(self._priority_queue, child_node)
@@ -384,7 +392,7 @@ class ParallelTaskTree:
 
     def _join_dataset(self, parent: str, child: str) -> str:
         """Concatenates parent and child dataset names; accommodates synthetic root node; interns for memory footprint."""
-        return self._datasets_set.interned(f"{parent}/{child}" if parent else child)
+        return self._datasets_set.interned(f"{parent}{COMPONENT_SEPARATOR}{child}" if parent else child)
 
 
 #############################################################################
@@ -433,7 +441,7 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
     interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint
     for dataset in sorted_datasets:
         current: _Tree = tree
-        for component in dataset.split("/"):
+        for component in dataset.split(COMPONENT_SEPARATOR):
             child: _Tree | None = current.get(component)
             if child is None:
                 child = {}

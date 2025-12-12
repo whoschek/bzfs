@@ -63,6 +63,7 @@ def suite() -> unittest.TestSuite:
         TestCustomPriorityOrder,
         TestBarriersCleared,
         TestProcessPoolExecutor,
+        TestBarrierName,
         TestParallelTaskTreeBenchmark,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
@@ -783,6 +784,95 @@ class TestProcessPoolExecutor(unittest.TestCase):
         self.assertTrue(any(worker_pid != main_pid for _, worker_pid, _ in PP_CALLS), PP_CALLS)
         # Callback runs in the main process
         self.assertTrue(all(main_pid == cb_main_pid for _, _, cb_main_pid in PP_CALLS), PP_CALLS)
+
+
+#############################################################################
+class TestBarrierName(unittest.TestCase):
+
+    def test_rejects_empty_barrier_name(self) -> None:
+        """Validates that barrier_name must be non-empty."""
+
+        log = MagicMock(logging.Logger)
+        datasets: list[str] = []
+
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+            raise AssertionError("process_dataset should not be called for invalid barrier_name")
+
+        with self.assertRaisesRegex(ValueError, r"Invalid barrier_name"):
+            run_parallel_tasktree(
+                log=log,
+                datasets=datasets,
+                process_dataset=process_dataset,
+                barrier_name="",
+                is_test_mode=True,
+            )
+
+    def test_rejects_barrier_name_with_slash(self) -> None:
+        """Validates that barrier_name must not contain '/'."""
+
+        log = MagicMock(logging.Logger)
+        datasets: list[str] = []
+
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+            raise AssertionError("process_dataset should not be called for invalid barrier_name")
+
+        for barrier_name in ["/", "a/b"]:
+            with self.subTest(barrier_name=barrier_name):
+                with self.assertRaisesRegex(ValueError, r"Invalid barrier_name"):
+                    run_parallel_tasktree(
+                        log=log,
+                        datasets=datasets,
+                        process_dataset=process_dataset,
+                        barrier_name=barrier_name,
+                        is_test_mode=True,
+                    )
+
+    def test_custom_barrier_name_waits_for_root(self) -> None:
+        """Validates that a custom barrier_name should behave like the default barrier."""
+
+        log = MagicMock(logging.Logger)
+        br = "##"
+        datasets = ["root", f"root/{br}/after"]
+
+        started: list[str] = []
+        root_done = threading.Event()
+        started_too_early = threading.Event()
+        lock = threading.Lock()
+
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+            with lock:
+                started.append(dataset)
+            if dataset == "root":
+
+                def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                    root_done.set()
+                    return CompletionCallbackResult(no_skip=True, fail=False)
+
+                return _completion_callback
+
+            if not root_done.is_set():
+                started_too_early.set()
+
+            def _completion_callback2(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                return CompletionCallbackResult(no_skip=True, fail=False)
+
+            return _completion_callback2
+
+        failed = run_parallel_tasktree(
+            log=log,
+            datasets=datasets,
+            process_dataset=process_dataset,
+            max_workers=2,
+            barrier_name=br,
+            is_test_mode=True,
+        )
+
+        self.assertFalse(failed)
+        self.assertCountEqual(datasets, started)
+        self.assertFalse(
+            started_too_early.is_set(),
+            msg=f"Barrier descendant started before root completed: started={started}",
+        )
 
 
 #############################################################################
