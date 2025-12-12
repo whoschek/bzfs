@@ -15,8 +15,8 @@
 """
 Purpose
 -----------------
-This module safely reduces SSH startup latency on bzfs process startup. Using this, a fresh bzfs CLI process can attach
-immediately to an existing OpenSSH ControlMaster connection, and in doing so skip TCP handshake, SSH handshake, key exchange,
+This module safely reduces SSH startup latency on bzfs process startup. Using this, a fresh bzfs CLI process can immediately
+attach to an existing OpenSSH ControlMaster connection, and in doing so skip TCP handshake, SSH handshake, key exchange,
 authentication, and other delays from multiple network round-trips. This way, the very first remote ZFS command starts
 hundreds of milliseconds earlier as compared to when creating an SSH connection from scratch. Crucially, this module
 guarantees that a bzfs process can (as long as it is alive) maintain exclusive access to the OpenSSH connections it has
@@ -268,7 +268,7 @@ class ConnectionLeaseManager:
                     f"shorten it by shortening the home directory path: {socket_path}"
                 )
 
-            free_path: str = os.path.join(self._free_dir, os.path.basename(socket_path))
+            free_path: str = os.path.join(self._free_dir, socket_name)
             lease: ConnectionLease | None = self._try_lock(free_path, open_flags=self._open_flags | os.O_CREAT)
             if lease is not None:
                 return lease

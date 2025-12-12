@@ -25,7 +25,7 @@ Example usage:
 
 import logging
 from subprocess import DEVNULL, PIPE
-from bzfs_main.util.connection import ConnectionPool, create_simple_minijob, create_simple_miniremote, run_ssh_command
+from bzfs_main.util.connection import ConnectionPool, create_simple_minijob, create_simple_miniremote
 from bzfs_main.util.retry import Retry, RetryPolicy, run_with_retries
 
 log = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ try:
     def run_cmd(retry: Retry) -> str:
         with connection_pool.connection() as conn:
             stdout: str = conn.run_ssh_command(
-                cmd=["echo", "hello"], conn=conn, job=job, check=True, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True
+                cmd=["echo", "hello"], job=job, check=True, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True
             ).stdout
             return stdout
 

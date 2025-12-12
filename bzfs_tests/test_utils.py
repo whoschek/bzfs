@@ -185,6 +185,10 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(has_duplicates([1, 1, 2, 3, 3, 4, 4, 5]))
         self.assertTrue(has_duplicates(["a", "b", "b", "c"]))
         self.assertFalse(has_duplicates(["ant", "bee", "cat"]))
+        self.assertFalse(has_duplicates([None]))
+        self.assertTrue(has_duplicates([None, None]))
+        self.assertTrue(has_duplicates([None, None, None]))
+        self.assertFalse(has_duplicates([1, 2, 3, 4, 5, None]))
 
     def test_is_descendant(self) -> None:
         self.assertTrue(is_descendant("pool/fs/child", "pool/fs"))

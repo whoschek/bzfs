@@ -29,7 +29,9 @@ import collections
 import contextlib
 import errno
 import hashlib
+import itertools
 import logging
+import operator
 import os
 import platform
 import pwd
@@ -387,7 +389,7 @@ def is_descendant(dataset: str, of_root_dataset: str) -> bool:
 
 def has_duplicates(sorted_list: list[Any]) -> bool:
     """Returns True if any adjacent items within the given sorted sequence are equal."""
-    return any(a == b for a, b in zip(sorted_list, sorted_list[1:]))
+    return any(map(operator.eq, sorted_list, itertools.islice(sorted_list, 1, None)))
 
 
 def has_siblings(sorted_datasets: list[str], is_test_mode: bool = False) -> bool:

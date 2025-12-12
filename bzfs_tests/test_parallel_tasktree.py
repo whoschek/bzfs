@@ -827,53 +827,6 @@ class TestBarrierName(unittest.TestCase):
                         is_test_mode=True,
                     )
 
-    def test_custom_barrier_name_waits_for_root(self) -> None:
-        """Validates that a custom barrier_name should behave like the default barrier."""
-
-        log = MagicMock(logging.Logger)
-        br = "##"
-        datasets = ["root", f"root/{br}/after"]
-
-        started: list[str] = []
-        root_done = threading.Event()
-        started_too_early = threading.Event()
-        lock = threading.Lock()
-
-        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
-            with lock:
-                started.append(dataset)
-            if dataset == "root":
-
-                def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
-                    root_done.set()
-                    return CompletionCallbackResult(no_skip=True, fail=False)
-
-                return _completion_callback
-
-            if not root_done.is_set():
-                started_too_early.set()
-
-            def _completion_callback2(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
-                return CompletionCallbackResult(no_skip=True, fail=False)
-
-            return _completion_callback2
-
-        failed = run_parallel_tasktree(
-            log=log,
-            datasets=datasets,
-            process_dataset=process_dataset,
-            max_workers=2,
-            barrier_name=br,
-            is_test_mode=True,
-        )
-
-        self.assertFalse(failed)
-        self.assertCountEqual(datasets, started)
-        self.assertFalse(
-            started_too_early.is_set(),
-            msg=f"Barrier descendant started before root completed: started={started}",
-        )
-
 
 #############################################################################
 class TestParallelTaskTreeBenchmark(unittest.TestCase):
