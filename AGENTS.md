@@ -120,8 +120,8 @@ To validate your changes, you MUST follow this exact sequence:
 3. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite.
 
    - Apply the [Command Verification Rules](#command-verification-rules).
-   - If the exit code is non-zero, iteratively fix the code and re-run until the exit code is `0` (unless a failure is
-     intentionally expected by TDD design).
+   - If the exit code is non-zero, iteratively fix the source code and re-run until the exit code is `0` (unless a
+     failure is intentionally expected by TDD design).
 
 4. **Stage Your Own Untracked Files (if any):** Run `git add <paths>` for the files **you** added or renamed, but
    exclude the files in `lab/` and `_tmp/` and the files the User or a third party added. This ensures that subsequent
@@ -256,6 +256,9 @@ Before committing any changes, you MUST follow this exact sequence:
   before the change. For example, NEVER add code comments that mention what you added or deleted or changed, NEVER add
   'used to do X, now does Y'. Instead, formulate code comments such that they are useful to readers who care about the
   current version but do not know or care about prior versions.
+- **Default to Immutability (except in test classes):** To reduce complexity, mark *new* long‑lived variables as `Final`
+  (module globals, class attributes, and `self.*` fields set in `__init__`) unless they must rebind. Mark *new* classes
+  `@final` and *new* dataclasses with `frozen=True` unless mutation or subclassing is required by design.
 - **Linter Suppressions: Last Resort Only:**
   - Do not add `# noqa:`, `# type:` annotations, etc, unless the linter cannot be satisfied in a reasonable way, in
     which case keep the annotation on the specific line and append a brief comment explaining the reason (≤ 10 words).
