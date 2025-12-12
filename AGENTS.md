@@ -163,8 +163,9 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
 4. **Split complex tasks into effective subtasks:** Before starting to implement code, estimate the size of the effort
    including the time you'll need to get the task done, to avoid biting off too much in any given iteration. If the task
    is complex, break it into smaller subtasks with bounded scope. Choose the scope of the first subtask such that it is
-   challenging but feasible in ~5-10 minutes. Pick the first subtask. Defer the remaining tasks to the next iteration by
-   putting them into the backlog. Output the backlog and the chosen (first) subtask.
+   challenging but feasible in ~5-10 minutes. Defer the remaining tasks to the next iteration by outputting them into
+   the backlog for Step 8 ("Iterate"). Track the backlog and the chosen (first) subtask (e.g., via `update_plan` if
+   available).
 
 5. **Write Tests First:** Using **TDD**, translate the chosen subtask's test specs into test code. Then run to see red
    (tests must initially fail as expected) using the [Change Validation Workflow](#change-validation-workflow) with
@@ -182,7 +183,7 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
    [Change Validation Workflow](#change-validation-workflow).
 
 8. **Iterate:** Report the tasks that are not yet complete or currently still in the backlog, and repeat the workflow
-   starting with Step 1.
+   starting with Step 1 for the next tasks/backlog items (without waiting for a new User message).
 
 # Commit Workflow
 
@@ -201,8 +202,8 @@ Before committing any changes, you MUST follow this exact sequence:
   - **Types:** `build`, `bump`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `style`, `test`
   - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`
 - The description should include the **Issue Number** (if available).
-- For non-trivial commits, the body of the commit message should address **What** the commit does, **Why** it exists,
-  and **How** it does what it does.
+- For complex commits, the body of the commit message should address **What** the commit does, **Why** it exists, and
+  **How** it does what it does.
 - Optionally, also include any other relevant context.
 
 # Guidelines and Best Practices
@@ -225,10 +226,10 @@ Before committing any changes, you MUST follow this exact sequence:
 
 - **Analyze:** If you are tasked to identify or fix a bug, collect, combine and analyze related issues, bug reports,
   recent changes, git diffs, and external data. Think hard to understand *why* the bug occurs, not just *what* it does.
-- **Analyze Non-trivial Bugs:** Before claiming a non-trivial bug, meticulously cross-check and validate it against the
-  existing unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug"
-  covered by a passing test indicates a flawed analysis.
-- **Use Tree of Thought with Verbalized Sampling for Non-trivial Bugs:** Simultaneously explore five completely distinct
+- **Analyze Complex Bugs:** Before claiming a complex bug, meticulously cross-check and validate it against the existing
+  unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug" covered by a
+  passing test indicates a flawed analysis.
+- **Use Tree of Thought with Verbalized Sampling for Complex Bugs:** Simultaneously explore five completely distinct
   promising approaches, and include their corresponding numeric probabilities in your response, sampled from the full
   distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver success, and explain
   your choice. **Perform a thorough root cause analysis**. You have plenty of time; go slow and make sure everything is
@@ -270,10 +271,10 @@ Your goal is to improve quality with zero functional regressions.
   summarizing the intended actions and changes, chosen tool, and validation steps. You have plenty of time; go slow and
   make sure everything is correct.
 
-- **Tree of Thought with Verbalized Sampling for Non-trivial Refactors:** Simultaneously explore five completely
-  distinct promising approaches, and include their corresponding numeric probabilities in your response, sampled from
-  the full distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver success, and
-  explain your choice. Then methodically execute each step of your plan.
+- **Tree of Thought with Verbalized Sampling for Complex Refactors:** Simultaneously explore five completely distinct
+  promising approaches, and include their corresponding numeric probabilities in your response, sampled from the full
+  distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver success, and explain
+  your choice. Then methodically execute each step of your plan.
 
 - **Preserve Public APIs:** Do not change CLI options.
 
