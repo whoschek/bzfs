@@ -1366,10 +1366,49 @@ class TestSubprocessRunWithSubprocesses(unittest.TestCase):
 
         self.assertEqual(1, len(created_procs))
         proc = cast(_FakeProc, created_procs[0])
-        self.assertEqual(0, proc.seen_timeout)
+        self.assertEqual(0.0, proc.seen_timeout)
         self.assertTrue(proc.killed)
         self.assertEqual({}, sp._child_pids)
         mock_term.assert_called_once()
+
+    def test_termination_event_set_during_spawn_forces_timeout(self) -> None:
+        """When termination_event becomes set after spawn, subprocess_run forces timeout=0 before communicate()."""
+        termination_event = threading.Event()
+        sp = Subprocesses(termination_event=termination_event)
+        created_procs: list[Any] = []
+
+        class _FakeProc:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.args = args
+                self.kwargs = kwargs
+                self.pid = 12345
+                self.killed: bool = False
+                self.seen_timeout: float | None = None
+                created_procs.append(self)
+                termination_event.set()
+
+            def communicate(self, _input: Any | None = None, timeout: float | None = None) -> tuple[bytes, bytes]:
+                self.seen_timeout = timeout
+                t: float = 0.0 if timeout is None else float(timeout)
+                raise subprocess.TimeoutExpired(cmd=self.args, timeout=t)
+
+            def kill(self) -> None:
+                self.killed = True
+
+        with (
+            patch("bzfs_main.util.utils.terminate_process_subtree") as mock_term,
+            patch("bzfs_main.util.utils.subprocess.Popen", new=_FakeProc),
+        ):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                sp.subprocess_run(["sleep", "1"], stdout=PIPE, stderr=PIPE, timeout=2.0)
+
+        self.assertTrue(termination_event.is_set())
+        self.assertEqual(1, len(created_procs))
+        proc = cast(_FakeProc, created_procs[0])
+        self.assertEqual(0.0, proc.seen_timeout)
+        self.assertTrue(proc.killed)
+        self.assertEqual({}, sp._child_pids)
+        mock_term.assert_called_once_with(root_pids=[proc.pid])
 
     def test_termination_event_real_sleep_exits_quickly(self) -> None:
         """Integration-style check: pre-set termination_event causes real subprocess_run to timeout promptly."""

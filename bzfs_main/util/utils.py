@@ -638,6 +638,9 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
             ctx = subprocesses.popen_and_track(*args, **kwargs)
         with ctx as proc:
             try:
+                sp = subprocesses
+                if sp is not None and sp._termination_event.is_set():  # noqa: SLF001  # pylint: disable=protected-access
+                    timeout = 0.0
                 stdout, stderr = proc.communicate(input_value, timeout=timeout)
             except BaseException as e:
                 try:
@@ -740,7 +743,7 @@ class Subprocesses:
     """
 
     def __init__(self, termination_event: threading.Event | None = None) -> None:
-        self._termination_event: Final[threading.Event | None] = termination_event
+        self._termination_event: Final[threading.Event] = termination_event or threading.Event()
         self._lock: Final[threading.Lock] = threading.Lock()
         self._child_pids: Final[dict[int, None]] = {}  # a set that preserves insertion order
 
@@ -763,9 +766,6 @@ class Subprocesses:
 
     def subprocess_run(self, *args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
         """Wrapper around utils.subprocess_run() that auto-registers/unregisters child PIDs for per-job termination."""
-        if self._termination_event is not None and self._termination_event.is_set():
-            kwargs = dict(kwargs)
-            kwargs["timeout"] = 0
         return subprocess_run(*args, **kwargs, subprocesses=self)
 
     def terminate_process_subtrees(self, sig: signal.Signals = signal.SIGTERM) -> None:
