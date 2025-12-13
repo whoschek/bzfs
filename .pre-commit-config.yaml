@@ -80,21 +80,23 @@ repos:
       - id: docformatter  # Reformat Python docstrings to follow PEP 257 and wrap them to a specific line length
         additional_dependencies: [tomli]
         # config options like `wrap-summaries` live in pyproject.toml
+  - repo: https://github.com/pycqa/isort
+    rev: 6.1.0
+    hooks:
+      - id: isort                       # Reformat imports more precisely than ruff (via force_grid_wrap)
+        stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
+      # config options like `force_grid_wrap` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.9
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
-  # - repo: https://github.com/pycqa/isort
-  #   rev: 6.1.0
-  #   hooks:
-  #     - id: isort                     # Reformat imports more precisely
   - repo: https://github.com/pycqa/pylint
     rev: v4.0.4
     hooks:
       - id: pylint                      # Run `pylint` linter to check if there are problems in the Python source code
         name: pylint (cyclic imports, etc)
-        stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run pylint --all-files --hook-stage manual'
+        stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
         files: '^(?!bzfs_tests/).*\.py$'  # Run on all Python files except bzfs_tests/
         # config options like `enable` live in pyproject.toml
   - repo: local
