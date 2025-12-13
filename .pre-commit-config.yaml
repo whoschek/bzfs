@@ -13,11 +13,12 @@
 #
 # Optional maintenance commands:
 #   * pre-commit run --all-files        # Run hooks on the whole repo
+#   * pre-commit run --all-files --hook-stage manual  # Also run manual hooks (e.g. pylint)
 #   * pre-commit autoupdate             # Bump pinned revs to latest released tags
 #   * pre-commit uninstall              # Remove the .git/hooks/pre-commit hook script
 #
-# These steps are also mirrored in CI (e.g. `pre-commit run --all-files`) to guarantee that
-# the same checks are enforced everywhere.
+# These steps are also mirrored in CI (`pre-commit run --all-files --hook-stage manual`) to
+# guarantee that the same checks are enforced everywhere.
 # ------------------------------------------------------------------------------------------
 fail_fast: true                         # Abort on first failing hook
 default_install_hook_types:

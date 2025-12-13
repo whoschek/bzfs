@@ -63,6 +63,7 @@ dev = [  # for development only
   "pre-commit==4.5.0",              # see https://github.com/pre-commit/pre-commit
   "black==25.11.0",                 # see https://github.com/psf/black
   "ruff==0.14.9",                   # see https://github.com/astral-sh/ruff
+  "isort==6.1.0",                   # see https://github.com/pycqa/isort
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
   "mypy==1.19.0",                   # see https://github.com/python/mypy
   "shellcheck-py==0.11.0.1",        # see https://github.com/shellcheck-py/shellcheck-py
@@ -274,7 +275,8 @@ known_first_party = ["bzfs_*"]
 split_on_trailing_comma = true
 include_trailing_comma = true
 use_parentheses = true
-force_grid_wrap = 1
+force_grid_wrap = 1  # ruff does not have this option, which is why we still use `isort`.
+                     # See https://github.com/astral-sh/ruff/issues/2601
 
 [tool.pylint.main]
 py-version = "3.9"

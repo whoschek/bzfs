@@ -191,10 +191,15 @@ Before committing any changes, you MUST follow this exact sequence:
 
 1. **User Permission:** Stop this Commit Workflow unless the User explicitly requests to commit.
 
-2. **Re-run Validation:** Execute the full [Change Validation Workflow](#change-validation-workflow). If it does not
+2. **Reformat Imports:** Run `isort --quiet .; pre-commit run ruff-check --all-files 1> /dev/null || true`
+
+3. **Re-run Validation:** Execute the full [Change Validation Workflow](#change-validation-workflow). If it does not
    pass 100%, stop and do not commit.
 
-3. **Commit:**
+4. **Final Slow Checks:** Run `pre-commit run --all-files --hook-stage manual` to also run manual hooks (e.g. pylint).
+   If it does not pass 100%, stop and do not commit.
+
+5. **Commit:**
 
 - Use `git commit -s` to sign off on your work.
 - Use conventional commit messages of the form **Type(Scope): Description (#Issue)**, for example 'feat(bzfs_jobrunner):
