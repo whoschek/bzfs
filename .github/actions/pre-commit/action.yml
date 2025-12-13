@@ -23,10 +23,6 @@ inputs:
     description: JSON array of Python versions allowed to run pre-commit (empty means always run)
     required: false
     default: '["3.10", "3.11", "3.12", "3.13", "3.14", "3.15", "3.16", "3.17", "3.18", "3.19"]'
-  precommit-version:
-    description: pre-commit version to install
-    required: false
-    default: '4.5.0'
 
 runs:
   using: 'composite'
@@ -36,7 +32,7 @@ runs:
     shell: bash
     run: |
       python -m pip install --upgrade pip
-      pip install --upgrade "pre-commit==${{ inputs.precommit-version }}"
+      pip install -e '.[dev]'
       # In CI, disable pre-commit fail_fast so all hooks run and report.
       # This keeps local developer experience unchanged (fail_fast remains true in the repo config).
       sed -i 's/^fail_fast:\s*true/fail_fast: false/' .pre-commit-config.yaml

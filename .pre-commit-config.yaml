@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------------------------------
 # pre‑commit configuration for this repository; see https://github.com/pre-commit/pre-commit
 # ------------------------------------------------------------------------------------------
-# How to enable the Git hook on your machine (do this once per clone):
+# How to enable the Git hook on your machine (do this once per git clone):
 #   1. Install the helper tool:
 #          pip install pre-commit
 #   2. From the project root directory run:
