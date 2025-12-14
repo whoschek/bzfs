@@ -182,12 +182,16 @@ class TestRunWithRetries(unittest.TestCase):
             calls.append(retry.count)
             raise RetryableError("fail") from ValueError("boom")
 
-        def giveup(retryable_error: RetryableError) -> bool:
+        def giveup(retry: Retry, elapsed_nanos: int, retryable_error: RetryableError) -> bool:
+            self.assertEqual(0, retry.count)
+            self.assertEqual(1234, elapsed_nanos)
+            self.assertIs(retry_policy, retry.policy)
             self.assertIsInstance(retryable_error, RetryableError)
             return True
 
-        with self.assertRaises(ValueError):
-            run_with_retries(fn, policy=retry_policy, config=RetryConfig(), giveup=giveup, log=mock_log)
+        with patch("time.monotonic_ns", side_effect=[0, 1234]):
+            with self.assertRaises(ValueError):
+                run_with_retries(fn, policy=retry_policy, config=RetryConfig(), giveup=giveup, log=mock_log)
 
         # giveup() must prevent additional retries
         self.assertEqual([0], calls)
@@ -427,6 +431,14 @@ class TestRetryConfigCopy(unittest.TestCase):
         self.assertTrue(copied.stack_info)
         self.assertEqual({"baz": 1}, copied.extra)
 
+    def test_repr_hides_extra_and_context(self) -> None:
+        """Ensures dataclass repr does not leak potentially sensitive context."""
+        cfg = RetryConfig(extra={"secret": "x"}, context={"token": "y"})
+        text = repr(cfg)
+        self.assertIn("RetryConfig(", text)
+        self.assertNotIn("extra=", text)
+        self.assertNotIn("context=", text)
+
 
 #############################################################################
 class TestRetryOptionsCopy(unittest.TestCase):
@@ -444,7 +456,7 @@ class TestRetryOptionsCopy(unittest.TestCase):
         original_policy = RetryPolicy(max_retries=1)
         original_config = RetryConfig(display_msg="orig")
 
-        def giveup(retryable_error: RetryableError) -> bool:
+        def giveup(retry: Retry, elapsed_nanos: int, retryable_error: RetryableError) -> bool:
             return True
 
         def after_attempt(

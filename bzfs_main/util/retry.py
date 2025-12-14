@@ -18,6 +18,8 @@ Purpose:
 --------
 - Provide a reusable retry helper for transient failures using configurable policy and config objects.
 - Centralize backoff, jitter, logging and metrics behavior while keeping call sites compact.
+- Prevent accidental retries: the loop retries only when the developer explicitly raises a ``RetryableError``, which reduces
+  the risk of retrying non-idempotent operations.
 - Avoid unnecessary complexity and add zero dependencies beyond the Python standard library.
 
 Usage:
@@ -25,7 +27,9 @@ Usage:
 - Wrap work in a callable ``fn(retry: Retry)`` and raise ``RetryableError`` for failures that should be retried.
 - Construct a policy via ``RetryPolicy(...)``
 - Call ``run_with_retries(fn=fn, policy=policy, log=logger)`` with a standard logging.Logger
-- On success, the result of ``fn`` is returned; on exhaustion, the original cause is re-raised with its traceback.
+- On success, the result of ``fn`` is returned. On exhaustion, run_with_retries()
+  (a) re-raises the original ``RetryableError.__cause__`` with its traceback, if present (recommended), and otherwise
+  (b) reraises the ``RetryableError`` itself.
 
 Advanced Configuration:
 -----------------------
@@ -33,7 +37,8 @@ Advanced Configuration:
 - Use ``RetryConfig`` to control termination events, and logging settings.
 - Set ``log`` to ``None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
 - Pass ``termination_event`` via ``RetryConfig`` to support async cancellation between attempts.
-- Use ``giveup(retryable_error)`` to stop retrying early based on domain-specific logic (for example, parsing ZFS stderr).
+- Use ``giveup(retry, elapsed_nanos, retryable_error)`` to stop retrying based on domain-specific logic (for example,
+  error/status codes or parsing ZFS stderr), including time-aware stop decisions.
 
 Observability:
 --------------
@@ -116,7 +121,9 @@ def run_with_retries(
     fn: Callable[[Retry], _T],  # typically a lambda
     policy: RetryPolicy,
     config: RetryConfig | None = None,
-    giveup: Callable[[RetryableError], bool] = lambda retryable_error: False,  # stop retrying early (domain-specific logic)
+    giveup: Callable[[Retry, int, RetryableError], bool] = (
+        lambda retry, elapsed_nanos, retryable_error: False  # stop retrying based on domain-specific logic
+    ),
     after_attempt: Callable[[Retry, bool, bool, bool, int, RetryableError | object, logging.Logger | None], None] = (
         lambda retry, is_success, is_exhausted, is_terminated, duration_nanos, result, log: None  # e.g. record metrics
     ),
@@ -144,7 +151,7 @@ def run_with_retries(
             if (
                 retry_count < policy.max_retries
                 and elapsed_nanos < policy.max_elapsed_nanos
-                and not giveup(retryable_error)
+                and not giveup(retry, elapsed_nanos, retryable_error)
                 and not termination_event.is_set()
             ):
                 will_retry = True
@@ -309,7 +316,8 @@ class RetryConfig:
     warning_loglevel: int = logging.WARNING  # optionally, set to logging.NOTSET to move logging aspect into after_attempt()
     exc_info: bool = False
     stack_info: bool = False
-    extra: Mapping[str, object] | None = None
+    extra: Mapping[str, object] | None = dataclasses.field(default=None, repr=False, compare=False, hash=False)
+    context: object = dataclasses.field(default=None, repr=False, compare=False, hash=False)  # optional domain specific info
 
     def copy(self, **override_kwargs: Any) -> RetryConfig:
         """Creates a new config copying an existing one with the specified fields overridden for customization."""
@@ -327,7 +335,9 @@ class RetryOptions:
 
     policy: RetryPolicy = RetryPolicy()  # noqa: RUF009
     config: RetryConfig = RetryConfig()
-    giveup: Callable[[RetryableError], bool] = lambda retryable_error: False  # stop retrying early (domain-specific logic)
+    giveup: Callable[[Retry, int, RetryableError], bool] = (
+        lambda retry, elapsed_nanos, retryable_error: False  # stop retrying based on domain-specific logic
+    )
     after_attempt: Callable[[Retry, bool, bool, bool, int, RetryableError | object, logging.Logger | None], None] = (
         lambda retry, is_success, is_exhausted, is_terminated, duration_nanos, result, log: None  # e.g. record metrics
     )
