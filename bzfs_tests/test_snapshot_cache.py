@@ -101,6 +101,7 @@ from bzfs_main.snapshot_cache import (
 )
 from bzfs_main.util.retry import (
     Retry,
+    RetryConfig,
     RetryPolicy,
 )
 from bzfs_main.util.utils import (
@@ -2265,7 +2266,7 @@ class TestSnapshotCache(AbstractTestCase):
                 any_failed = False
                 for idx, dataset in enumerate(datasets):
                     try:
-                        process_dataset(dataset, "tid", Retry(idx, policy=RetryPolicy()))
+                        process_dataset(dataset, "tid", Retry(idx, policy=RetryPolicy(), config=RetryConfig()))
                     except Exception:
                         any_failed = True
                 return any_failed

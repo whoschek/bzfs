@@ -41,6 +41,7 @@ Observability:
   and a duration in nanoseconds (elapsed or sleep time).
 - The last parameter passed to ``after_attempt`` is either the successful result or the most recent ``RetryableError``,
   enabling integration with metrics and tracing systems without coupling the retry loop to any specific backend.
+- Supply ``after_attempt`` to customize logging 100%, if necessary.
 
 Example Usage:
 --------------
@@ -116,8 +117,8 @@ def run_with_retries(
     policy: RetryPolicy,
     config: RetryConfig | None = None,
     giveup: Callable[[RetryableError], bool] = lambda retryable_error: False,  # stop retrying early (domain-specific logic)
-    after_attempt: Callable[[Retry, bool, bool, bool, int, RetryableError | object], None] = (
-        lambda retry, is_success, is_exhausted, is_terminated, duration_nanos, result: None  # e.g. record metrics
+    after_attempt: Callable[[Retry, bool, bool, bool, int, RetryableError | object, logging.Logger | None], None] = (
+        lambda retry, is_success, is_exhausted, is_terminated, duration_nanos, result, log: None  # e.g. record metrics
     ),
     log: logging.Logger | None = None,
 ) -> _T:
@@ -129,10 +130,10 @@ def run_with_retries(
     rand: random.Random | None = None
     start_time_nanos: int = time.monotonic_ns()
     while True:
-        retry: Retry = Retry(retry_count, policy)
+        retry: Retry = Retry(retry_count, policy, config)
         try:
             result: _T = fn(retry)  # Call the target function and supply retry attempt number
-            after_attempt(retry, True, False, False, time.monotonic_ns() - start_time_nanos, result)
+            after_attempt(retry, True, False, False, time.monotonic_ns() - start_time_nanos, result, log)
             return result
         except RetryableError as retryable_error:
             elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
@@ -154,14 +155,14 @@ def run_with_retries(
                     if log is not None and log.isEnabledFor(loglevel):
                         msg = format_msg(cfg.display_msg, retryable_error) + cfg.format_pair(retry_count, policy.max_retries)
                         log.log(loglevel, "%s", f"{msg} immediately{config.dots}", extra=config.extra)
-                    after_attempt(retry, False, False, False, 0, retryable_error)
+                    after_attempt(retry, False, False, False, 0, retryable_error, log)
                 else:  # jitter: pick a random sleep duration within the range [min_sleep_nanos, c_max_sleep_nanos] as delay
                     rand = random.SystemRandom() if rand is None else rand
                     sleep_nanos: int = rand.randint(policy.min_sleep_nanos, c_max_sleep_nanos)
                     if log is not None and log.isEnabledFor(loglevel):
                         msg = format_msg(cfg.display_msg, retryable_error) + cfg.format_pair(retry_count, policy.max_retries)
                         log.log(loglevel, "%s", f"{msg} in {format_duration(sleep_nanos)}{config.dots}", extra=config.extra)
-                    after_attempt(retry, False, False, False, sleep_nanos, retryable_error)
+                    after_attempt(retry, False, False, False, sleep_nanos, retryable_error, log)
                     termination_event.wait(sleep_nanos / 1_000_000_000)  # seconds; allow early wakeup on async termination
                     c_max_sleep_nanos = round(c_max_sleep_nanos * policy.exponential_base)  # exponential backoff
                     c_max_sleep_nanos = min(c_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap
@@ -183,7 +184,7 @@ def run_with_retries(
                         stack_info=config.stack_info,
                         extra=config.extra,
                     )
-                after_attempt(retry, False, True, termination_event.is_set(), elapsed_nanos, retryable_error)
+                after_attempt(retry, False, True, termination_event.is_set(), elapsed_nanos, retryable_error, log)
                 cause: BaseException | None = retryable_error.__cause__
                 if cause is None:
                     raise
@@ -213,6 +214,7 @@ class Retry:
 
     count: int
     policy: RetryPolicy
+    config: RetryConfig
 
 
 #############################################################################
@@ -303,8 +305,8 @@ class RetryConfig:
     format_msg: Callable[[str, RetryableError], str] = _format_msg  # lambda: display_msg, retryable_error
     format_pair: Callable[[object, object], str] = _format_pair  # lambda: first, second
     format_duration: Callable[[int], str] = human_readable_duration  # lambda: nanos
-    info_loglevel: int = logging.INFO
-    warning_loglevel: int = logging.WARNING
+    info_loglevel: int = logging.INFO  # optionally, set to logging.NOTSET to move logging aspect into after_attempt()
+    warning_loglevel: int = logging.WARNING  # optionally, set to logging.NOTSET to move logging aspect into after_attempt()
     exc_info: bool = False
     stack_info: bool = False
     extra: Mapping[str, object] | None = None
@@ -326,8 +328,8 @@ class RetryOptions:
     policy: RetryPolicy = RetryPolicy()  # noqa: RUF009
     config: RetryConfig = RetryConfig()
     giveup: Callable[[RetryableError], bool] = lambda retryable_error: False  # stop retrying early (domain-specific logic)
-    after_attempt: Callable[[Retry, bool, bool, bool, int, RetryableError | object], None] = (
-        lambda retry, is_success, is_exhausted, is_terminated, duration_nanos, result: None  # e.g. record metrics
+    after_attempt: Callable[[Retry, bool, bool, bool, int, RetryableError | object, logging.Logger | None], None] = (
+        lambda retry, is_success, is_exhausted, is_terminated, duration_nanos, result, log: None  # e.g. record metrics
     )
     log: logging.Logger | None = None
 

@@ -304,10 +304,17 @@ class TestRunWithRetries(unittest.TestCase):
             return "ok"
 
         def after_attempt(
-            retry: Retry, is_success: bool, is_exhausted: bool, is_terminated: bool, duration_nanos: int, result: object
+            retry: Retry,
+            is_success: bool,
+            is_exhausted: bool,
+            is_terminated: bool,
+            duration_nanos: int,
+            result: object,
+            log: Logger | None,
         ) -> None:
             events.append((retry.count, is_success, is_exhausted, is_terminated, duration_nanos, result))
             self.assertFalse(is_terminated)
+            self.assertIsNone(log)
 
         final_result = run_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
         self.assertEqual("ok", final_result)
@@ -348,9 +355,16 @@ class TestRunWithRetries(unittest.TestCase):
             raise RetryableError("fail", no_sleep=True) from ValueError("boom")
 
         def after_attempt(
-            retry: Retry, is_success: bool, is_exhausted: bool, is_terminated: bool, duration_nanos: int, result: object
+            retry: Retry,
+            is_success: bool,
+            is_exhausted: bool,
+            is_terminated: bool,
+            duration_nanos: int,
+            result: object,
+            log: Logger | None,
         ) -> None:
             events.append((retry.count, is_success, is_exhausted, is_terminated, duration_nanos, result))
+            self.assertIsNone(log)
 
         with self.assertRaises(ValueError):
             run_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
@@ -434,7 +448,13 @@ class TestRetryOptionsCopy(unittest.TestCase):
             return True
 
         def after_attempt(
-            retry: Retry, is_success: bool, is_exhausted: bool, is_terminated: bool, duration_nanos: int, result: object
+            retry: Retry,
+            is_success: bool,
+            is_exhausted: bool,
+            is_terminated: bool,
+            duration_nanos: int,
+            result: object,
+            log: Logger | None,
         ) -> None:
             return None
 

@@ -63,6 +63,7 @@ from bzfs_main.replication import (
 from bzfs_main.util.retry import (
     Retry,
     RetryableError,
+    RetryConfig,
     RetryPolicy,
 )
 from bzfs_main.util.utils import (
@@ -946,7 +947,7 @@ class TestReplication(AbstractTestCase):
             with patch.object(
                 job, "try_ssh_command", side_effect=lambda *args, **kwargs: fake_try_ssh_command(job, *args, **kwargs)
             ):
-                replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0, policy=RetryPolicy()))
+                replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0, policy=RetryPolicy(), config=RetryConfig()))
 
         self.assertTrue(captured_steps, "No steps captured")
         to_snaps_all = [snap for step in captured_steps[0] for snap in step[3]]
