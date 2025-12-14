@@ -305,8 +305,8 @@ class RetryConfig:
     format_msg: Callable[[str, RetryableError], str] = _format_msg  # lambda: display_msg, retryable_error
     format_pair: Callable[[object, object], str] = _format_pair  # lambda: first, second
     format_duration: Callable[[int], str] = human_readable_duration  # lambda: nanos
-    info_loglevel: int = logging.INFO  # optionally, set to logging.NOTSET to move logging aspect into after_attempt()
-    warning_loglevel: int = logging.WARNING  # optionally, set to logging.NOTSET to move logging aspect into after_attempt()
+    info_loglevel: int = logging.INFO  # optionally, set to logging.CRITICAL + 1 to move logging aspect into after_attempt()
+    warning_loglevel: int = logging.WARNING  # same, set to logging.CRITICAL + 1 to move logging aspect into after_attempt()
     exc_info: bool = False
     stack_info: bool = False
     extra: Mapping[str, object] | None = None
