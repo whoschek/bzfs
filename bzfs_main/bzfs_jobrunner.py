@@ -219,8 +219,8 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--create-src-snapshots", action="store_true",
         help="Take snapshots on the selected source hosts as necessary. Typically, this command should be called by a "
              "program (or cron job) running on each src host.\n\n")
-    parser.add_argument(  # `choices` are deprecated; use --replicate without argument instead
-        "--replicate", choices=["pull", "push"], default=None, const="pull", nargs="?", metavar="",
+    parser.add_argument(
+        "--replicate", action="store_true",
         help="Replicate snapshots from the selected source hosts to the selected destinations hosts as necessary. For pull "
              "mode (recommended), this command should be called by a program (or cron job) running on each dst "
              "host; for push mode, on the src host; for pull-push mode on a third-party host.\n\n")
@@ -383,20 +383,11 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI. "
                  "The basename must contain the substring 'bzfs_ssh_config'.\n\n")
     parser.add_argument(
-        "--src-user", default="", metavar="STRING",
-        help=argparse.SUPPRESS)  # deprecated; was renamed to --ssh-src-user
-    parser.add_argument(
-        "--dst-user", default="", metavar="STRING",
-        help=argparse.SUPPRESS)  # deprecated; was renamed to --ssh-dst-user
-    parser.add_argument(
         "--job-id", required=True, action=bzfs_main.argparse_actions.NonEmptyStringAction, metavar="STRING",
         help="The identifier that remains constant across all runs of this particular job; will be included in the log file "
              "name infix. Example: mytestjob\n\n")
     parser.add_argument(
-        "--jobid", default=None, action=bzfs_main.argparse_actions.NonEmptyStringAction, metavar="STRING",
-        help=argparse.SUPPRESS)   # deprecated; was renamed to --job-run
-    parser.add_argument(
-        "--job-run", default=None, action=bzfs_main.argparse_actions.NonEmptyStringAction, metavar="STRING",
+        "--job-run", default="", action=bzfs_main.argparse_actions.NonEmptyStringAction, metavar="STRING",
         help="The identifier of this particular run of the overall job; will be included in the log file name suffix. "
              "Default is a hex UUID. Example: 0badc0f003a011f0a94aef02ac16083c\n\n")
     workers_default = 100  # percent
@@ -579,15 +570,14 @@ class Job:
         if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
             random.SystemRandom().shuffle(src_hosts)
             dst_hosts = shuffle_dict(dst_hosts)
-        ssh_src_user: str = args.ssh_src_user or args.src_user  # --src-user is deprecated
-        ssh_dst_user: str = args.ssh_dst_user or args.dst_user  # --dst-user is deprecated
+        ssh_src_user: str = args.ssh_src_user
+        ssh_dst_user: str = args.ssh_dst_user
         ssh_src_port: int | None = args.ssh_src_port
         ssh_dst_port: int | None = args.ssh_dst_port
         ssh_src_config_file: str | None = args.ssh_src_config_file
         ssh_dst_config_file: str | None = args.ssh_dst_config_file
         job_id: str = _sanitize(args.job_id)
-        job_run: str = args.job_run if args.job_run is not None else args.jobid  # --jobid deprecat; was renamed to --job-run
-        job_run = _sanitize(job_run) if job_run else uuid.uuid1().hex
+        job_run: str = _sanitize(args.job_run) if args.job_run else uuid.uuid1().hex
         workers, workers_is_percent = args.workers
         max_workers: int = max(1, round((os.cpu_count() or 1) * workers / 100.0) if workers_is_percent else round(workers))
         worker_timeout_seconds: int = args.worker_timeout_seconds

@@ -268,8 +268,7 @@ class Params(MiniParams):
         self.force: Final[SynchronizedBool] = SynchronizedBool(args.force)
         self.force_once: Final[bool] = args.force_once
         self.force_unmount: Final[str] = "-f" if args.force_unmount else ""
-        force_hard: str = "-R" if args.force_destroy_dependents else ""
-        self.force_hard: Final[str] = "-R" if args.force_hard else force_hard  # --force-hard is deprecated
+        self.force_hard: Final[str] = "-R" if args.force_destroy_dependents else ""
 
         self.skip_parent: Final[bool] = args.skip_parent
         self.skip_missing_snapshots: Final[str] = args.skip_missing_snapshots
@@ -291,16 +290,14 @@ class Params(MiniParams):
         self.enable_privilege_elevation: Final[bool] = not args.no_privilege_elevation
         self.no_stream: Final[bool] = args.no_stream
         self.resume_recv: Final[bool] = not args.no_resume_recv
-        self.create_bookmarks: Final[str] = (
-            "none" if args.no_create_bookmark else args.create_bookmarks
-        )  # no_create_bookmark depr
+        self.create_bookmarks: Final[str] = args.create_bookmarks
         self.use_bookmark: Final[bool] = not args.no_use_bookmark
 
         self.src: Final[Remote] = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst: Final[Remote] = Remote("dst", args, self)  # dst dataset, host and ssh options
         self.create_src_snapshots_config: Final[CreateSrcSnapshotConfig] = CreateSrcSnapshotConfig(args, self)
         self.monitor_snapshots_config: Final[MonitorSnapshotsConfig] = MonitorSnapshotsConfig(args, self)
-        self.is_caching_snapshots: Final[bool] = args.cache_snapshots == "true"
+        self.is_caching_snapshots: Final[bool] = args.cache_snapshots
 
         self.compression_program: Final[str] = self._program_name(args.compression_program)
         self.compression_program_opts: Final[list[str]] = self.split_args(args.compression_program_opts)

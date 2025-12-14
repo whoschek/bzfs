@@ -124,7 +124,7 @@ daemons but this is benign as these new processes immediately exit with a messag
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN HELP OVERVIEW SECTION -->
 ```
-usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
+usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
                       [--prune-src-snapshots] [--prune-src-bookmarks]
                       [--prune-dst-snapshots]
                       [--monitor-src-snapshots]
@@ -167,7 +167,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
 
 <div id="--replicate"></div>
 
-**--replicate** *[]*
+**--replicate**
 
 *  Replicate snapshots from the selected source hosts to the selected destinations hosts as
     necessary. For pull mode (recommended), this command should be called by a program (or cron

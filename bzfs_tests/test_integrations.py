@@ -491,7 +491,7 @@ class IntegrationTestCase(ParametrizedTestCase):
             args = args + ["--skip-on-error=" + skip_on_error]
 
         args = args + ["--exclude-envvar-regex=EDITOR"]
-        args += ["--cache-snapshots=" + str(cache_snapshots).lower()]
+        args += ["--cache-snapshots"] if cache_snapshots else []
 
         job: bzfs.Job | bzfs_jobrunner.Job
         if use_jobrunner:
@@ -4806,7 +4806,7 @@ class LocalTestCase(IntegrationTestCase):
             dst_root_dataset,
             "--force-rollback-to-latest-common-snapshot",
             "--no-use-bookmark",
-            "--no-create-bookmark",
+            "--create-bookmarks=none",
             retries=1,
         )
         self.assert_snapshot_names(dst_root_dataset, ["s1", "s3"])
@@ -5268,7 +5268,7 @@ class LocalTestCase(IntegrationTestCase):
                 )
 
                 # replicate from src to dst:
-                run_jobrunner("--replicate=pull", *pull_args)
+                run_jobrunner("--replicate", *pull_args)
                 self.assertEqual(1, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
@@ -5298,14 +5298,14 @@ class LocalTestCase(IntegrationTestCase):
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
                 # replication to nonexistingpool target does nothing:
-                run_jobrunner("--replicate=pull", *pull_args_bad)
+                run_jobrunner("--replicate", *pull_args_bad)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
                 # replication to nonexistingpool destination pool does nothing:
                 run_jobrunner(
-                    "--replicate=pull",
+                    "--replicate",
                     "--root-dataset-pairs",
                     *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[3:]),
                 )
@@ -5375,7 +5375,7 @@ class LocalTestCase(IntegrationTestCase):
                 # replicate new snapshot from src to dst:
                 nonexisting_snap = "s1_nonexisting_2024-01-01_00:00:00_secondly"
                 take_snapshot(src_root_dataset, nonexisting_snap)
-                run_jobrunner("--replicate=pull", *pull_args)
+                run_jobrunner("--replicate", *pull_args)
                 self.assertEqual(3, len(snapshots(src_root_dataset)))
                 self.assertEqual(2, len(bookmarks(src_root_dataset)))
                 self.assertEqual(2, len(snapshots(dst_root_dataset)))
@@ -5415,7 +5415,7 @@ class LocalTestCase(IntegrationTestCase):
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
                 # push replication does nothing if target isn't mapped to destination host:
-                run_jobrunner("--replicate=push", "--workers=1", *push_args_bad)
+                run_jobrunner("--replicate", "--workers=1", *push_args_bad)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
@@ -5424,7 +5424,7 @@ class LocalTestCase(IntegrationTestCase):
                 dst_snapshot_plan_empty = {"z": {"onsite": {"daily": 0}}}
                 push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
                 push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
-                run_jobrunner("--replicate=push", *push_args_empty)
+                run_jobrunner("--replicate", *push_args_empty)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
@@ -5433,7 +5433,7 @@ class LocalTestCase(IntegrationTestCase):
                 dst_snapshot_plan_empty = {"z": {"onsite": {}}}
                 push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
                 push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
-                run_jobrunner("--replicate=push", *push_args_empty)
+                run_jobrunner("--replicate", *push_args_empty)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
@@ -5442,7 +5442,7 @@ class LocalTestCase(IntegrationTestCase):
                     continue  # only Linux supports 127.0.0.2 and 127.0.0.1 test scenario simultaneously by default
 
                 # push replicate successfully from src to dst:
-                run_jobrunner("--replicate=push", "--workers=1", *push_args)
+                run_jobrunner("--replicate", "--workers=1", *push_args)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(2, len(bookmarks(src_root_dataset)))
                 self.assertEqual(2, len(snapshots(dst_root_dataset)))
@@ -5551,7 +5551,7 @@ class LocalTestCase(IntegrationTestCase):
                 self.assertFalse(dataset_exists(dst_root_dataset))
 
                 # replicate empty targets from src to dst:
-                run_jobrunner("--replicate=pull", *pull_args_empty)
+                run_jobrunner("--replicate", *pull_args_empty)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assert_snapshot_name_regexes(dst_root_dataset, ["z_(?!onsite).*_yearly"])
 
@@ -5560,7 +5560,7 @@ class LocalTestCase(IntegrationTestCase):
                 dst_snapshot_plan_nonempty = {"z": {"onsite": {"yearly": 1, "daily": 0}}}
                 pull_args_nonempty = [arg for arg in pull_args if not arg.startswith("--dst-snapshot-plan=")]
                 pull_args_nonempty += [f"--dst-snapshot-plan={dst_snapshot_plan_nonempty}"]
-                run_jobrunner("--replicate=pull", *pull_args_nonempty)
+                run_jobrunner("--replicate", *pull_args_nonempty)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assert_snapshot_name_regexes(dst_root_dataset, ["z_onsite_.*_yearly"])
 

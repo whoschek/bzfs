@@ -7,7 +7,6 @@ __opts_bzfs='--bwlimit --cache-snapshots --compare-snapshot-lists --compression-
 
 __choices_bzfs() {
   case "$1" in
-    --cache-snapshots) echo false true ;;
     --compare-snapshot-lists) echo all dst dst+all src src+all src+dst src+dst+all ;;
     --compression-program) echo - gzip lz4 pigz pzstd zstd ;;
     --create-bookmarks) echo all hourly minutely none secondly ;;
@@ -53,7 +52,6 @@ __opts_bzfs_jobrunner='--create-src-snapshots --daemon-monitor-snapshots-frequen
 __choices_bzfs_jobrunner() {
   case "$1" in
     --jobrunner-log-level) echo CRITICAL DEBUG ERROR INFO TRACE WARN ;;
-    --replicate) echo pull push ;;
   esac
 }
 

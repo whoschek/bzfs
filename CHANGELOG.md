@@ -8,6 +8,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Fix potential delay of process exit when receiving SIGINT/SIGTERM while spawning a subprocess.
 - [bzfs] Make `run_with_retries()` more widely applicable.
 
+Removed CLI options that were deprecated in version ≤ 1.12.0:
+
+- [bzfs_jobrunner] Removed deprecated `--jobid` CLI option (was renamed to `--job-run`).
+- [bzfs_jobrunner] Removed deprecated `--src-user` and `--dst-user` CLI options (were renamed to `--ssh-src-user` and
+  `--ssh-dst-user`).
+- [bzfs_jobrunner] Removed deprecated `--replicate=xyz` CLI option (was replaced by `--replicate`).
+- [bzfs] Removed deprecated `--create-src-snapshots-enable-snapshots-changed-cache` CLI option (was replaced with
+  `--cache-snapshots`).
+- [bzfs] Removed deprecated `--cache-snapshots=true|false` CLI option (was replaced with `--cache-snapshots`).
+- [bzfs] Removed deprecated `--no-create-bookmark` CLI option (was replaced with `--create-bookmarks=none`).
+- [bzfs] Removed deprecated `--force-hard` CLI option (was renamed to `--force-destroy-dependents`).
+
 ## [1.15.1] - December 2, 2025
 
 - [bzfs] Include `--zfs-send-program-opts` also when resuming a previously interrupted `zfs receive -s`.

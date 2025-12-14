@@ -701,9 +701,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="Take snapshots immediately regardless of the creation time of any existing snapshot, even if snapshots "
              "are periodic and not actually due per the schedule.\n\n")
     parser.add_argument(
-        "--create-src-snapshots-enable-snapshots-changed-cache", action="store_true",
-        help=argparse.SUPPRESS)  # deprecated; was replaced by --cache-snapshots
-    parser.add_argument(
         "--zfs-send-program-opts", type=str, default="--raw --compressed", metavar="STRING",
         help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
              "The value is split on runs of one or more whitespace characters. "
@@ -764,9 +761,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="On destination, --force and --force-rollback-to-latest-common-snapshot and --delete-* will add the "
              "'-R' flag to their use of 'zfs rollback' and 'zfs destroy', causing them to delete dependents such as "
              "clones and bookmarks. This can be very destructive and is rarely advisable.\n\n")
-    parser.add_argument(
-        "--force-hard", action="store_true",  # deprecated; was renamed to --force-destroy-dependents
-        help=argparse.SUPPRESS)
     parser.add_argument(
         "--force-unmount", action="store_true",
         help="On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f' flag to their "
@@ -1030,8 +1024,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "usage because the former issues requests with a higher degree of parallelism than the latter. The "
              "degree is configurable with the --threads option (see below).\n\n")
     parser.add_argument(
-        "--cache-snapshots", choices=["true", "false"], default="false", const="true", nargs="?",
-        help="Default is '%(default)s'. If 'true', maintain a persistent local cache of recent snapshot creation times, "
+        "--cache-snapshots", action="store_true",
+        help="If --cache-snapshots is specified, maintain a persistent local cache of recent snapshot creation times, "
              "recent successful replication times, and recent monitoring times, and compare them to a quick "
              "'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if a new snapshot shall be created "
              "on the src, and if there are any changes that need to be replicated or monitored. Enabling the cache "
@@ -1160,9 +1154,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"`{PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --recursive --skip-replication "
              "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks notime 'all except latest 200' "
              "--include-snapshot-times-and-ranks 'anytime..90 days ago'`\n\n")
-    parser.add_argument(
-        "--no-create-bookmark", action="store_true",
-        help=argparse.SUPPRESS)  # deprecated; was replaced by --create-bookmarks=none
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
         help=f"For increased safety, in normal replication operation {PROG_NAME} replication also looks for bookmarks "

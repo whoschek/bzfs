@@ -622,9 +622,8 @@ usage: bzfs [-h] [--recursive]
             [--monitor-snapshots-dont-warn]
             [--monitor-snapshots-dont-crit]
             [--compare-snapshot-lists [{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]]
-            [--cache-snapshots [{true,false}]]
-            [--dryrun [{recv,send}]] [--verbose] [--quiet]
-            [--no-privilege-elevation] [--no-stream]
+            [--cache-snapshots] [--dryrun [{recv,send}]] [--verbose]
+            [--quiet] [--no-privilege-elevation] [--no-stream]
             [--no-resume-recv]
             [--create-bookmarks {all,hourly,minutely,secondly,none}]
             [--no-use-bookmark] [--ssh-cipher STRING]
@@ -1668,9 +1667,9 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--cache-snapshots"></div>
 
-**--cache-snapshots** *[{true,false}]*
+**--cache-snapshots**
 
-*  Default is 'false'. If 'true', maintain a persistent local cache of recent snapshot
+*  If --cache-snapshots is specified, maintain a persistent local cache of recent snapshot
     creation times, recent successful replication times, and recent monitoring times, and compare
     them to a quick 'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if
     a new snapshot shall be created on the src, and if there are any changes that need to be
