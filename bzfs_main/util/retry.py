@@ -29,7 +29,7 @@ Usage:
 - Call ``run_with_retries(fn=fn, policy=policy, log=logger)`` with a standard logging.Logger
 - On success, the result of ``fn`` is returned. On exhaustion, run_with_retries()
   (a) re-raises the original ``RetryableError.__cause__`` with its traceback, if present (recommended), and otherwise
-  (b) reraises the ``RetryableError`` itself.
+  (b) re-raises the ``RetryableError`` itself.
 
 Advanced Configuration:
 -----------------------
@@ -38,7 +38,7 @@ Advanced Configuration:
 - Set ``log`` to ``None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
 - Pass ``termination_event`` via ``RetryConfig`` to support async cancellation between attempts.
 - Use ``giveup(retry, elapsed_nanos, retryable_error)`` to stop retrying based on domain-specific logic (for example,
-  error/status codes or parsing ZFS stderr), including time-aware stop decisions.
+  error/status codes or parsing stderr), including time-aware stop decisions.
 
 Observability:
 --------------
@@ -225,25 +225,27 @@ class Retry:
 
 
 #############################################################################
+@dataclass(frozen=True)
 @final
 class RetryPolicy:
-    """Configuration controlling retry counts and backoff delays for run_with_retries(); immutable."""
+    """Configuration controlling max retry counts and backoff delays for run_with_retries(); immutable."""
 
-    @classmethod
-    def no_retries(cls) -> RetryPolicy:
-        """Returns a policy that never retries."""
-        return cls(
-            max_retries=0,
-            min_sleep_secs=0,
-            initial_max_sleep_secs=0,
-            max_sleep_secs=0,
-            max_elapsed_secs=0,
-        )
+    max_retries: int = 10
+    min_sleep_secs: float = 0
+    initial_max_sleep_secs: float = 0.125
+    max_sleep_secs: float = 10
+    max_elapsed_secs: float = 60
+    exponential_base: float = 2
+
+    max_elapsed_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
+    min_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
+    initial_max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
+    max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> RetryPolicy:
         """Factory that reads the policy from ArgumentParser via args."""
-        return cls(
+        return RetryPolicy(
             max_retries=getattr(args, "max_retries", 10),
             min_sleep_secs=getattr(args, "retry_min_sleep_secs", 0),
             initial_max_sleep_secs=getattr(args, "retry_initial_max_sleep_secs", 0.125),
@@ -252,40 +254,39 @@ class RetryPolicy:
             exponential_base=getattr(args, "retry_exponential_base", 2),
         )
 
-    def __init__(
-        self,
-        max_retries: int = 10,
-        min_sleep_secs: float = 0,
-        initial_max_sleep_secs: float = 0.125,
-        max_sleep_secs: float = 10,
-        max_elapsed_secs: float = 60,
-        exponential_base: float = 2,
-    ) -> None:
-        # immutable variables:
-        self.max_retries: Final[int] = max(0, max_retries)
-        self.exponential_base: Final[float] = max(1, exponential_base)
-        self.min_sleep_secs: Final[float] = max(0, min_sleep_secs)
-        self.initial_max_sleep_secs: Final[float] = max(0, initial_max_sleep_secs)
-        self.max_sleep_secs: Final[float] = max(0, max_sleep_secs)
-        self.max_elapsed_secs: Final[float] = max(0, max_elapsed_secs)
-        self.max_elapsed_nanos: Final[int] = int(self.max_elapsed_secs * 1_000_000_000)
+    @classmethod
+    def no_retries(cls) -> RetryPolicy:
+        """Returns a policy that never retries."""
+        return RetryPolicy(
+            max_retries=0,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=0,
+        )
+
+    def __post_init__(self) -> None:  # compute derived values
+        object.__setattr__(self, "max_retries", max(0, self.max_retries))
+        object.__setattr__(self, "exponential_base", max(1, self.exponential_base))
+        object.__setattr__(self, "min_sleep_secs", max(0, self.min_sleep_secs))
+        object.__setattr__(self, "initial_max_sleep_secs", max(0, self.initial_max_sleep_secs))
+        object.__setattr__(self, "max_sleep_secs", max(0, self.max_sleep_secs))
+        object.__setattr__(self, "max_elapsed_secs", max(0, self.max_elapsed_secs))
+        object.__setattr__(self, "max_elapsed_nanos", int(self.max_elapsed_secs * 1_000_000_000))
         min_sleep_nanos: int = int(self.min_sleep_secs * 1_000_000_000)
         initial_max_sleep_nanos: int = int(self.initial_max_sleep_secs * 1_000_000_000)
         max_sleep_nanos: int = int(self.max_sleep_secs * 1_000_000_000)
         min_sleep_nanos = max(1, min_sleep_nanos)
         max_sleep_nanos = max(min_sleep_nanos, max_sleep_nanos)
         initial_max_sleep_nanos = min(max_sleep_nanos, max(min_sleep_nanos, initial_max_sleep_nanos))
-        self.min_sleep_nanos: Final[int] = min_sleep_nanos
-        self.initial_max_sleep_nanos: Final[int] = initial_max_sleep_nanos
-        self.max_sleep_nanos: Final[int] = max_sleep_nanos
+        object.__setattr__(self, "min_sleep_nanos", min_sleep_nanos)
+        object.__setattr__(self, "initial_max_sleep_nanos", initial_max_sleep_nanos)
+        object.__setattr__(self, "max_sleep_nanos", max_sleep_nanos)
         assert 1 <= self.min_sleep_nanos <= self.initial_max_sleep_nanos <= self.max_sleep_nanos
 
-    def __repr__(self) -> str:
-        return (
-            f"RetryPolicy(max_retries={self.max_retries}, min_sleep_secs={self.min_sleep_secs}, "
-            f"initial_max_sleep_secs={self.initial_max_sleep_secs}, max_sleep_secs={self.max_sleep_secs}, "
-            f"max_elapsed_secs={self.max_elapsed_secs}, exponential_base={self.exponential_base})"
-        )
+    def copy(self, **override_kwargs: Any) -> RetryPolicy:
+        """Creates a new policy copying an existing one with the specified fields overridden for customization."""
+        return dataclasses.replace(self, **override_kwargs)
 
 
 #############################################################################
@@ -333,7 +334,7 @@ _DEFAULT_RETRY_CONFIG: Final[RetryConfig] = RetryConfig()  # constant
 class RetryOptions:
     """Convenience class that aggregates all knobs for run_with_retries(); all defaults work out of the box; immutable."""
 
-    policy: RetryPolicy = RetryPolicy()  # noqa: RUF009
+    policy: RetryPolicy = RetryPolicy()
     config: RetryConfig = RetryConfig()
     giveup: Callable[[Retry, int, RetryableError], bool] = (
         lambda retry, elapsed_nanos, retryable_error: False  # stop retrying based on domain-specific logic

@@ -43,6 +43,7 @@ from bzfs_main.util.retry import (
 def suite() -> unittest.TestSuite:
     test_cases = [
         TestRunWithRetries,
+        TestRetryPolicyCopy,
         TestRetryConfigCopy,
         TestRetryOptionsCopy,
     ]
@@ -382,6 +383,51 @@ class TestRunWithRetries(unittest.TestCase):
         self.assertIsInstance(result, RetryableError)
         self.assertGreaterEqual(last_retry_count, 0)
         self.assertGreaterEqual(duration_nanos, 0)
+
+
+#############################################################################
+class TestRetryPolicyCopy(unittest.TestCase):
+
+    def test_copy_returns_distinct_but_equal_policy(self) -> None:
+        """Ensures copy() returns a new RetryPolicy instance with identical field values when no overrides are given."""
+        original = RetryPolicy(
+            max_retries=1, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0, max_elapsed_secs=1
+        )
+        copied = original.copy()
+
+        self.assertIsNot(original, copied)
+        self.assertEqual(original, copied)
+
+    def test_copy_overrides_selected_fields(self) -> None:
+        """Ensures copy() correctly overrides selected fields while preserving others."""
+        original = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+            exponential_base=2,
+        )
+
+        copied = original.copy(max_retries=2, max_elapsed_secs=3)
+
+        self.assertIsNot(original, copied)
+        self.assertEqual(1, original.max_retries)
+        self.assertEqual(2, copied.max_retries)
+        self.assertEqual(1, original.max_elapsed_secs)
+        self.assertEqual(3, copied.max_elapsed_secs)
+        self.assertEqual(1_000_000_000, original.max_elapsed_nanos)
+        self.assertEqual(3_000_000_000, copied.max_elapsed_nanos)
+        self.assertEqual(original.exponential_base, copied.exponential_base)
+
+    def test_copy_disallows_overriding_derived_values(self) -> None:
+        """Ensures derived nano fields cannot be overridden via copy()."""
+        original = RetryPolicy(
+            max_retries=1, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0, max_elapsed_secs=1
+        )
+        # Python <= 3.12 raises ValueError; >= 3.13 raises TypeError.
+        with self.assertRaises((TypeError, ValueError)):
+            original.copy(max_elapsed_nanos=123)
 
 
 #############################################################################
