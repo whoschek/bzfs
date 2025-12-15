@@ -28,7 +28,7 @@ Usage:
 - Construct a policy via ``RetryPolicy(...)``
 - Call ``run_with_retries(fn=fn, policy=policy, log=logger)`` with a standard logging.Logger
 - On success, the result of ``fn`` is returned. On exhaustion, run_with_retries()
-  (a) re-raises the original ``RetryableError.__cause__`` with its traceback, if present (recommended), and otherwise
+  (a) re-raises the original ``RetryableError.__cause__`` if present (recommended), and otherwise
   (b) re-raises the ``RetryableError`` itself.
 
 Advanced Configuration:
@@ -70,7 +70,7 @@ Example Usage:
         max_elapsed_secs=60,
     )
     log = logging.getLogger(__name__)
-    result = run_with_retries(fn=unreliable_operation, policy=retry_policy, log=log)
+    result: str = run_with_retries(fn=unreliable_operation, policy=retry_policy, log=log)
     print(result)
 
     # Sample log output:
@@ -242,6 +242,8 @@ class RetryPolicy:
     initial_max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
     max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
 
+    context: object = dataclasses.field(default=None, repr=False, compare=False, hash=False)  # optional domain specific info
+
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> RetryPolicy:
         """Factory that reads the policy from ArgumentParser via args."""
@@ -252,6 +254,7 @@ class RetryPolicy:
             max_sleep_secs=getattr(args, "retry_max_sleep_secs", 10),
             max_elapsed_secs=getattr(args, "retry_max_elapsed_secs", 60),
             exponential_base=getattr(args, "retry_exponential_base", 2),
+            context=getattr(args, "retry_context", None),
         )
 
     @classmethod

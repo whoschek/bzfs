@@ -13,7 +13,7 @@
 # limitations under the License.
 #
 """Collection of helper functions used across bzfs; includes environment variable parsing, process management and lightweight
-concurrency primitives.
+concurrency primitives, etc.
 
 Everything in this module relies only on the Python standard library so other modules remain dependency free. Each utility
 favors simple, predictable behavior on all supported platforms.
