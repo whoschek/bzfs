@@ -64,7 +64,7 @@ dev = [  # for development only
   "black==25.11.0",                 # see https://github.com/psf/black
   "ruff==0.14.9",                   # see https://github.com/astral-sh/ruff
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
-  "mypy==1.19.0",                   # see https://github.com/python/mypy
+  "mypy==1.19.1",                   # see https://github.com/python/mypy
   "shellcheck-py==0.11.0.1",        # see https://github.com/shellcheck-py/shellcheck-py
   # "ast-grep-cli==0.39.9",         # see https://github.com/ast-grep/ast-grep
 ]

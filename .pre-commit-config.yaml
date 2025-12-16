@@ -58,7 +58,7 @@ repos:
       - id: shellcheck                  # Validate syntax of shell scripts
         exclude: '^\.github-workflow-scripts'
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.35.0
+    rev: 0.36.0
     hooks:
       - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
@@ -109,7 +109,7 @@ repos:
         additional_dependencies: ['pyrefly==0.45.0']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.0
+    rev: v1.19.1
     hooks:
       - id: mypy                             # Run `mypy` Python type checker
         exclude: '^\.git.*$'
