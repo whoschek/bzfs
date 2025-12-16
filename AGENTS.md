@@ -63,9 +63,9 @@ To understand the system's architecture and features, follow these steps:
 
 - **Instruction Precedence:** If there is any conflict, the User's explicit requests for the current session take
   precedence over any `AGENTS.md` rule.
-- For tasks that only involve analysis, explanation, documentation review, or design proposals without modifying
-  repository files, you may ignore the *Change Validation Workflow*, *Core Software Development Workflow*, and *Commit
-  Workflow*. Instead, apply the *Step by Step Reasoning Workflow* and focus on correctness of reasoning.
+- For tasks that only involve review, analysis, explanation, or design proposals without modifying repository files, you
+  may ignore the *Change Validation Workflow*, *Core Software Development Workflow*, and *Commit Workflow*. Instead,
+  apply the *Step by Step Reasoning Workflow* and focus on correctness of reasoning.
 - If the User literally requests `continue nonstop`, then go ahead and **safely continue** working until the acceptance
   criteria are satisfied, without asking the User again whether you should continue — the answer is always implicitly
   `continue`.
@@ -219,7 +219,7 @@ Before committing any changes, you MUST follow this exact sequence:
 3. Include steps that reproduce the observed behavior reliably, with minimal complexity, ideally with a script.
 4. Do not fabricate failure states that cannot be reached through real use of the system's public interface aka CLI.
 5. Carefully explain the real-world consequences to users in **clear, specific, detailed, realistic use cases**, and
-   associate impact severity (`High`, `Medium`, `Low`).
+   associate impact severity aka blast radius (`High`, `Medium`, `Low`).
 6. Describe known work-arounds and outline potential solutions.
 7. Finally, estimate the priority aka urgency of producing a fix (`P1`=Critical, `P2`=High, `P3`=Medium, `P4`=Low).
 8. Also collect any additional context relevant for diagnosing the bug, for example usage pattern, error messages, stack
