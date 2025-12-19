@@ -162,7 +162,7 @@ def run_with_retries(
     retry_count: int = 0
     elapsed_nanos: int = 0
     rng: random.Random | None = None
-    previous_outcomes: tuple[AttemptOutcome, ...] = ()  # pass *immutable* deque to callbacks
+    previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
     start_time_nanos: int = time.monotonic_ns()
     while True:
         giveup_reason: str = ""
@@ -247,7 +247,7 @@ def run_with_retries(
             if n > 0:  #  outcome will be passed to next attempt via Retry.previous_outcomes
                 if len(outcome.retry.previous_outcomes) > 0:
                     outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))  # detach to reduce memory footprint
-                previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # immutable deque
+                previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # *immutable* deque
             del outcome  # help gc
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
 

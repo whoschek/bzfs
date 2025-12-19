@@ -21,6 +21,7 @@ import argparse
 import logging
 import random
 import threading
+import time
 import unittest
 from logging import (
     Logger,
@@ -52,6 +53,7 @@ def suite() -> unittest.TestSuite:
         TestRetryConfigCopy,
         TestRetryOptionsCopy,
         TestAttemptOutcomeCopy,
+        TestRunWithRetriesBenchmark,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -873,3 +875,73 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
         self.assertEqual(999, copied.elapsed_nanos)
         self.assertEqual(0, copied.sleep_nanos)
         self.assertIsNone(copied.log)
+
+
+#############################################################################
+class TestRunWithRetriesBenchmark(unittest.TestCase):
+
+    def test_benchmark_run_with_retries_exhausted_r1k_n0_p0(self) -> None:
+        self.benchmark_run_with_retries_exhausted(runs=1000, max_retries=0, max_previous_outcomes=0)
+
+    def test_benchmark_run_with_retries_exhausted_r1k_n1_p1(self) -> None:
+        self.benchmark_run_with_retries_exhausted(runs=1000, max_retries=1, max_previous_outcomes=1)
+
+    def test_benchmark_run_with_retries_exhausted_r1k_n2_p1(self) -> None:
+        self.benchmark_run_with_retries_exhausted(runs=1000, max_retries=2, max_previous_outcomes=1)
+
+    def test_benchmark_run_with_retries_exhausted_r1k_n2_p2(self) -> None:
+        self.benchmark_run_with_retries_exhausted(runs=1000, max_retries=2, max_previous_outcomes=2)
+
+    @unittest.skip("benchmark; enable for performance comparison")
+    def test_benchmark_run_with_retries_exhausted_r100k_n1_p1(self) -> None:
+        self.benchmark_run_with_retries_exhausted(runs=100_000, max_retries=1, max_previous_outcomes=1)
+
+    def benchmark_run_with_retries_exhausted(self, runs: int, max_retries: int, max_previous_outcomes: int) -> None:
+        retry_policy = RetryPolicy(
+            max_retries=max_retries,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1000,
+            max_previous_outcomes=max_previous_outcomes,
+        )
+
+        def fn(_retry: Retry) -> None:
+            raise RetryableError("fail")
+
+        config = RetryConfig()
+        with self.assertRaises(RetryError) as cm:  # warmup
+            run_with_retries(fn, policy=retry_policy.copy(max_retries=100), config=config, log=None)
+        exc = cm.exception
+        self.assertEqual(100, exc.outcome.retry.count)
+        self.assertFalse(exc.outcome.is_terminated)
+        self.assertTrue(exc.outcome.is_exhausted)
+
+        log = logging.getLogger("TestRunWithRetriesBenchmark")
+        log.setLevel(logging.INFO)
+        if not log.handlers:
+            log.addHandler(logging.StreamHandler())
+
+        import gc
+
+        gc.collect()
+
+        iters = 0
+        start = time.perf_counter()
+        for _ in range(runs):
+            try:
+                iters += max_retries + 1
+                run_with_retries(fn, policy=retry_policy, config=config, log=None)
+            except RetryError:
+                pass
+            else:
+                self.fail("oops")
+        elapsed_secs = time.perf_counter() - start
+
+        iters_per_sec = float("inf") if elapsed_secs <= 0 else iters / elapsed_secs
+        runs_per_sec = float("inf") if elapsed_secs <= 0 else runs / elapsed_secs
+        log.info(
+            f"run_with_retries benchmark: "
+            f"runs={runs}, max_retries={max_retries}, max_previous_outcomes={max_previous_outcomes}, "
+            f"runs/sec={runs_per_sec:.0f}, iters/sec={iters_per_sec:.0f}, elapsed={elapsed_secs:.3f}s"
+        )
