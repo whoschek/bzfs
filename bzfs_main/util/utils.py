@@ -618,6 +618,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
     loglevel: int | None = kwargs.pop("loglevel", None)
     start_time_nanos: int = time.monotonic_ns()
     is_timeout: bool = False
+    is_cancel: bool = False
     exitcode: int | None = None
 
     def log_status() -> None:
@@ -625,7 +626,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
             _loglevel: int = loglevel if loglevel is not None else getenv_int("subprocess_run_loglevel", LOG_TRACE)
             if log.isEnabledFor(_loglevel):
                 elapsed_time: str = human_readable_float((time.monotonic_ns() - start_time_nanos) / 1_000_000) + "ms"
-                status: str = "timeout" if is_timeout else "success" if exitcode == 0 else "failure"
+                status = "cancel" if is_cancel else "timeout" if is_timeout else "success" if exitcode == 0 else "failure"
                 cmd = kwargs["args"] if "args" in kwargs else (args[0] if args else None)
                 cmd_str: str = " ".join(str(arg) for arg in iter(cmd)) if isinstance(cmd, (list, tuple)) else str(cmd)
                 log.log(_loglevel, f"Executed [{status}] [{elapsed_time}]: %s", cmd_str)
@@ -640,6 +641,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
             try:
                 sp = subprocesses
                 if sp is not None and sp._termination_event.is_set():  # noqa: SLF001  # pylint: disable=protected-access
+                    is_cancel = True
                     timeout = 0.0
                 stdout, stderr = proc.communicate(input_value, timeout=timeout)
             except BaseException as e:
