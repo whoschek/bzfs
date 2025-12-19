@@ -346,7 +346,7 @@ def _rollback_dst_dataset_if_necessary(
             stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
             no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-            raise RetryableError("Subprocess failed", display_msg="zfs rollback", no_sleep=no_sleep) from e
+            raise RetryableError("Subprocess failed", display_msg="zfs rollback", retry_immediately_once=no_sleep) from e
 
     if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
         log.info(f"{tid} Already up-to-date: %s", dst_dataset)
@@ -715,7 +715,9 @@ def _run_zfs_send_receive(
                 if isinstance(e, subprocess.CalledProcessError):
                     no_sleep = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr_to_str(e.stderr))
                 # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-                raise RetryableError("Subprocess failed", display_msg="zfs send/receive", no_sleep=no_sleep) from e
+                raise RetryableError(
+                    "Subprocess failed", display_msg="zfs send/receive", retry_immediately_once=no_sleep
+                ) from e
             else:
                 xprint(log, process.stdout, file=sys.stdout)
                 xprint(log, process.stderr, file=sys.stderr)
@@ -937,7 +939,7 @@ def _delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str
         stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
         no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
         # op isn't idempotent so retries regather current state from the start
-        raise RetryableError("Subprocess failed", display_msg="zfs destroy snapshot", no_sleep=no_sleep) from e
+        raise RetryableError("Subprocess failed", display_msg="zfs destroy snapshot", retry_immediately_once=no_sleep) from e
 
 
 def _delete_snapshot_cmd(p: Params, r: Remote, snapshots_to_delete: str) -> list[str]:
@@ -1061,7 +1063,7 @@ def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_
         if recv_resume_token:
             e = retryable_error.__cause__
             stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
-            retryable_error.no_sleep = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
+            retryable_error.retry_immediately_once = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
         # op isn't idempotent so retries regather current state from the start of replicate_dataset()
         raise
     if lines is None:

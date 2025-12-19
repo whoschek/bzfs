@@ -1303,7 +1303,12 @@ class TestJobMethods(AbstractTestCase):
             mock_run.return_value = None
 
             # Act: Should complete without conflict and run a single incremental send based on h1->d2.
-            replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0, policy=RetryPolicy(), config=RetryConfig()))
+            replicate_dataset(
+                job,
+                src_dataset,
+                tid="1/1",
+                retry=Retry(count=0, elapsed_nanos=0, policy=RetryPolicy(), config=RetryConfig(), previous_outcomes=()),
+            )
             # Assert: incremental planning was invoked (found common base -> incremental)
             mock_steps.assert_called_once()
             # And exactly one zfs send/receive pipeline executed

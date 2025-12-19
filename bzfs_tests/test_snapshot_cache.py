@@ -2266,7 +2266,17 @@ class TestSnapshotCache(AbstractTestCase):
                 any_failed = False
                 for idx, dataset in enumerate(datasets):
                     try:
-                        process_dataset(dataset, "tid", Retry(idx, policy=RetryPolicy(), config=RetryConfig()))
+                        process_dataset(
+                            dataset,
+                            "tid",
+                            Retry(
+                                count=idx,
+                                elapsed_nanos=0,
+                                policy=RetryPolicy(),
+                                config=RetryConfig(),
+                                previous_outcomes=(),
+                            ),
+                        )
                     except Exception:
                         any_failed = True
                 return any_failed

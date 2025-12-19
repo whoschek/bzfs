@@ -16,37 +16,57 @@
 
 Purpose:
 --------
-- Provide a reusable retry helper for transient failures using configurable policy and config objects.
+- Provide a reusable retry helper for transient failures using customizable policy and config objects.
 - Centralize backoff, jitter, logging and metrics behavior while keeping call sites compact.
 - Prevent accidental retries: the loop retries only when the developer explicitly raises a ``RetryableError``, which reduces
   the risk of retrying non-idempotent operations.
-- Avoid unnecessary complexity and add zero dependencies beyond the Python standard library.
+- Avoid unnecessary complexity and add zero dependencies beyond the Python standard library. Everything you need is in this
+  single Python file.
 
 Usage:
 ------
-- Wrap work in a callable ``fn(retry: Retry)`` and raise ``RetryableError`` for failures that should be retried.
+- Wrap work in a callable ``fn(retry: Retry)`` and therein raise ``RetryableError`` for failures that should be retried.
 - Construct a policy via ``RetryPolicy(...)``
 - Call ``run_with_retries(fn=fn, policy=policy, log=logger)`` with a standard logging.Logger
-- On success, the result of ``fn`` is returned. On exhaustion, run_with_retries()
-  (a) re-raises the original ``RetryableError.__cause__`` if present (recommended), and otherwise
-  (b) re-raises the ``RetryableError`` itself.
+- On success, the result of calling ``fn`` is returned.
+- On exhaustion, run_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
+  ``RetryError`` (wrapping the last ``RetryableError``), like so:
+  - if ``RetryPolicy.reraise`` is True and the last ``RetryableError.__cause__`` is not None, re-raise the last
+    ``RetryableError.__cause__`` with its original traceback.
+  - Otherwise, raise ``RetryError`` (wrapping the last ``RetryableError``, preserving its ``__cause__`` chain).
+  - The default is ``RetryPolicy.reraise=True``.
 
 Advanced Configuration:
 -----------------------
 - Tune ``RetryPolicy`` parameters to control maximum retries, sleep bounds, and elapsed-time budget.
 - Use ``RetryConfig`` to control termination events, and logging settings.
-- Set ``log`` to ``None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
+- Set ``log=None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
 - Pass ``termination_event`` via ``RetryConfig`` to support async cancellation between attempts.
-- Use ``giveup(retry, elapsed_nanos, retryable_error)`` to stop retrying based on domain-specific logic (for example,
-  error/status codes or parsing stderr), including time-aware stop decisions.
+- Use ``giveup(AttemptOutcome)`` to stop retrying based on domain-specific logic (for example, error/status codes or parsing
+  stderr), including time-aware decisions or decisions based on the previous N most recent AttemptOutcome objects (via
+  AttemptOutcome.retry.previous_outcomes)
 
 Observability:
 --------------
-- Supply ``after_attempt`` to collect per-attempt metrics such as success flag, exhausted/terminated state, attempt number,
-  and a duration in nanoseconds (elapsed or sleep time).
-- The last parameter passed to ``after_attempt`` is either the successful result or the most recent ``RetryableError``,
-  enabling integration with metrics and tracing systems without coupling the retry loop to any specific backend.
-- Supply ``after_attempt`` to customize logging 100%, if necessary.
+- Supply ``after_attempt(AttemptOutcome)`` to collect per-attempt metrics such as success flag, exhausted/terminated state,
+  attempt number, total elapsed duration (in nanoseconds), sleep duration (in nanoseconds), etc.
+- ``AttemptOutcome.result`` is either the successful result or the most recent ``RetryableError``, enabling integration with
+  metrics and tracing systems without coupling the retry loop to any specific backend.
+- Supply ``after_attempt`` to customize logging 100%, if necessary, in which case also set ``enable_logging=False``.
+
+Expert Configuration:
+---------------------
+- Set ``RetryPolicy.max_previous_outcomes > 0`` to pass the N most recent AttemptOutcome objects to callbacks (default is 0).
+- If ``RetryPolicy.max_previous_outcomes > 0``, you can use ``RetryableError(..., attachment=...)`` to carry domain-specific
+  state from a failed attempt to the next attempt via ``retry.previous_outcomes``. This pattern helps if attempt N+1 is a
+  function of attempt N or all prior attempts (e.g., switching endpoints or resuming from an offset).
+- Set ``backoff_strategy(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)`` to plug in a custom backoff
+  algorithm (e.g., decorrelated-jitter). The default is full-jitter exponential backoff with cap (aka industry standard).
+- To keep calling code retry-transparent, set ``RetryPolicy.reraise=True`` (the default) *and* raise retryable failures as
+  ``raise RetryableError(...) from exc``. Client code now won't notice whether run_with_retries is used or not.
+- To make exhaustion observable to calling code, set ``RetryPolicy.reraise=False``: run_with_retries() now always raises
+  ``RetryError`` (wrapping the last ``RetryableError``) on exhaustion, so callers now catch ``RetryError`` and can inspect
+  the last underlying exception via ``err.outcome``, ``err.__cause__``, and even ``err.__cause__.__cause__`` when present.
 
 Example Usage:
 --------------
@@ -59,7 +79,7 @@ Example Usage:
                 raise ValueError("temporary failure connecting to foo.example.com")
             return "ok"
         except ValueError as exc:
-            # Preserve the original cause for correct error propagation and logging
+            # Preserve the underlying cause for correct error propagation and logging
             raise RetryableError("temporary failure", display_msg="connect") from exc
 
     retry_policy = RetryPolicy(
@@ -94,11 +114,19 @@ import logging
 import random
 import threading
 import time
+from collections import (
+    deque,
+)
 from collections.abc import (
     Mapping,
+    MutableSequence,
+    Sequence,
 )
 from dataclasses import (
     dataclass,
+)
+from logging import (
+    Logger,
 )
 from typing import (
     Any,
@@ -114,103 +142,155 @@ from bzfs_main.util.utils import (
 
 #############################################################################
 _T = TypeVar("_T")
-_NO_TERMINATION_EVENT: Final[threading.Event] = threading.Event()  # constant
 
 
 def run_with_retries(
     fn: Callable[[Retry], _T],  # typically a lambda
     policy: RetryPolicy,
     config: RetryConfig | None = None,
-    giveup: Callable[[Retry, int, RetryableError], bool] = (
-        lambda retry, elapsed_nanos, retryable_error: False  # stop retrying based on domain-specific logic
-    ),
-    after_attempt: Callable[[Retry, bool, bool, bool, int, RetryableError | object, logging.Logger | None], None] = (
-        lambda retry, is_success, is_exhausted, is_terminated, duration_nanos, result, log: None  # e.g. record metrics
-    ),
-    log: logging.Logger | None = None,
+    giveup: Callable[[AttemptOutcome], str] = lambda outcome: "",  # stop retrying based on domain-specific logic
+    after_attempt: Callable[[AttemptOutcome], None] = lambda outcome: None,  # e.g. record metrics
+    log: Logger | None = None,
 ) -> _T:
-    """Runs the given function and retries on failure as indicated by policy and config; Thread-safe."""
+    """Runs the function ``fn`` and returns its result; retries on failure as indicated by policy and config; thread-safe.
+
+    On exhaustion, run_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
+    ``RetryError`` (wrapping the last ``RetryableError``), like so:
+    - if ``RetryPolicy.reraise`` is True and the last ``RetryableError.__cause__`` is not None, re-raise the last
+      ``RetryableError.__cause__`` with its original traceback.
+    - Otherwise, raise ``RetryError`` (wrapping the last ``RetryableError``, preserving its ``__cause__`` chain).
+    - The default is ``RetryPolicy.reraise=True``.
+    """
     config = _DEFAULT_RETRY_CONFIG if config is None else config
-    termination_event: threading.Event | None = config.termination_event
-    c_max_sleep_nanos: int = policy.initial_max_sleep_nanos
+    curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     retry_count: int = 0
-    rand: random.Random | None = None
+    elapsed_nanos: int = 0
+    rng: random.Random | None = None
+    previous_outcomes: Sequence[AttemptOutcome] = (
+        deque(maxlen=policy.max_previous_outcomes) if policy.max_previous_outcomes > 0 else ()
+    )
     start_time_nanos: int = time.monotonic_ns()
     while True:
-        retry: Retry = Retry(retry_count, policy, config)
+        giveup_reason: str = ""
+        retry: Retry = Retry(retry_count, elapsed_nanos, policy, config, tuple(previous_outcomes))
         try:
-            result: _T = fn(retry)  # Call the target function and supply retry attempt number
-            after_attempt(retry, True, False, False, time.monotonic_ns() - start_time_nanos, result, log)
+            result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
+            outcome: AttemptOutcome = AttemptOutcome(
+                retry, True, False, False, giveup_reason, time.monotonic_ns() - start_time_nanos, 0, result, log
+            )
+            after_attempt(outcome)
             return result
-        except RetryableError as retryable_error:
-            elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
-            termination_event = _NO_TERMINATION_EVENT if termination_event is None else termination_event
+        except RetryableError as retryable_err:
+            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+            if retry_count <= 0 and retryable_err.retry_immediately_once:  # retry once immediately without backoff
+                sleep_nanos: int = 0
+            else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
+                rng = random.SystemRandom() if rng is None else rng
+                sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
+                    retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_err
+                )
+                assert sleep_nanos >= 0
+                assert curr_max_sleep_nanos >= 0
+
             format_msg: Callable[[str, RetryableError], str] = config.format_msg  # lambda: display_msg, retryable_error
             format_duration: Callable[[int], str] = config.format_duration  # lambda: nanos
+            termination_event: threading.Event | None = config.termination_event
+            outcome = AttemptOutcome(
+                retry, False, False, False, giveup_reason, elapsed_nanos, sleep_nanos, retryable_err, log
+            )
             will_retry: bool = False
             if (
                 retry_count < policy.max_retries
                 and elapsed_nanos < policy.max_elapsed_nanos
-                and not giveup(retry, elapsed_nanos, retryable_error)
-                and not termination_event.is_set()
+                and (termination_event is None or not termination_event.is_set())
+                and not (giveup_reason := giveup(outcome))
             ):
                 will_retry = True
                 retry_count += 1
                 loglevel: int = config.info_loglevel
-                cfg = config
-                if retryable_error.no_sleep and retry_count <= 1:  # retry once immediately without backoff
-                    if log is not None and log.isEnabledFor(loglevel):
-                        msg = format_msg(cfg.display_msg, retryable_error) + cfg.format_pair(retry_count, policy.max_retries)
-                        log.log(loglevel, "%s", f"{msg} immediately{config.dots}", extra=config.extra)
-                    after_attempt(retry, False, False, False, 0, retryable_error, log)
-                else:  # jitter: pick a random sleep duration within the range [min_sleep_nanos, c_max_sleep_nanos] as delay
-                    rand = random.SystemRandom() if rand is None else rand
-                    sleep_nanos: int = rand.randint(policy.min_sleep_nanos, c_max_sleep_nanos)
-                    if log is not None and log.isEnabledFor(loglevel):
-                        msg = format_msg(cfg.display_msg, retryable_error) + cfg.format_pair(retry_count, policy.max_retries)
-                        log.log(loglevel, "%s", f"{msg} in {format_duration(sleep_nanos)}{config.dots}", extra=config.extra)
-                    after_attempt(retry, False, False, False, sleep_nanos, retryable_error, log)
-                    termination_event.wait(sleep_nanos / 1_000_000_000)  # seconds; allow early wakeup on async termination
-                    c_max_sleep_nanos = round(c_max_sleep_nanos * policy.exponential_base)  # exponential backoff
-                    c_max_sleep_nanos = min(c_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap
-            if termination_event.is_set() or not will_retry:
+                if log is not None and config.enable_logging and log.isEnabledFor(loglevel):
+                    msg = format_msg(config.display_msg, retryable_err) + config.format_pair(retry_count, policy.max_retries)
+                    log.log(loglevel, "%s", f"{msg} in {format_duration(sleep_nanos)}{config.dots}", extra=config.extra)
+                after_attempt(outcome)
+                _sleep(sleep_nanos, termination_event)
+            else:
+                sleep_nanos = 0
+
+            is_terminated: bool = False if termination_event is None else termination_event.is_set()
+            if is_terminated or not will_retry:
                 if (
                     policy.max_retries > 0
                     and log is not None
+                    and config.enable_logging
                     and log.isEnabledFor(config.warning_loglevel)
-                    and not termination_event.is_set()
+                    and not is_terminated
                 ):
+                    reason: str = f"{giveup_reason}; " if giveup_reason else ""
                     log.log(
                         config.warning_loglevel,
                         "%s",
-                        f"{format_msg(config.display_msg, retryable_error)}exhausted; giving up because the last "
+                        f"{format_msg(config.display_msg, retryable_err)}exhausted; giving up because {reason}the last "
                         f"{config.format_pair(retry_count, policy.max_retries)} retries across "
                         f"{config.format_pair(format_duration(elapsed_nanos), format_duration(policy.max_elapsed_nanos))} "
                         "failed",
-                        exc_info=retryable_error if config.exc_info else None,
+                        exc_info=retryable_err if config.exc_info else None,
                         stack_info=config.stack_info,
                         extra=config.extra,
                     )
-                after_attempt(retry, False, True, termination_event.is_set(), elapsed_nanos, retryable_error, log)
-                cause: BaseException | None = retryable_error.__cause__
-                if cause is None:
-                    raise
-                else:
+                outcome = AttemptOutcome(
+                    retry, False, True, is_terminated, giveup_reason, elapsed_nanos, sleep_nanos, retryable_err, log
+                )
+                after_attempt(outcome)
+                cause: BaseException | None = retryable_err.__cause__
+                if policy.reraise and cause is not None:
                     raise cause.with_traceback(cause.__traceback__)  # noqa: B904 intentional re-raise without chaining
+                else:
+                    raise RetryError(outcome) from retryable_err
+            if isinstance(previous_outcomes, MutableSequence):
+                outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))  # detach to reduce memory footprint
+                previous_outcomes.append(outcome)  #  will be passed to next attempt via Retry.previous_outcomes
+            del outcome, retry, giveup_reason  # help gc
+            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+
+
+def _sleep(sleep_nanos: int, termination_event: threading.Event | None) -> None:
+    if sleep_nanos > 0:
+        if termination_event is None:
+            time.sleep(sleep_nanos / 1_000_000_000)
+        else:
+            termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
 
 
 #############################################################################
 class RetryableError(Exception):
     """Indicates that the task that caused the underlying exception can be retried and might eventually succeed."""
 
-    def __init__(self, message: str, display_msg: object = None, no_sleep: bool = False) -> None:
+    def __init__(
+        self, message: str, display_msg: object = None, retry_immediately_once: bool = False, attachment: object = None
+    ) -> None:
         super().__init__(message)
-        self.display_msg: object = display_msg
-        self.no_sleep: bool = no_sleep
+        self.display_msg: object = display_msg  # for logging
+        self.retry_immediately_once: bool = retry_immediately_once  # retry once immediately without backoff?
+
+        self.attachment: object = attachment  # domain specific info passed to next attempt via Retry.previous_outcomes if
+        # RetryPolicy.max_previous_outcomes > 0. This helps when retrying is not just 'try again later', but
+        # 'try again differently based on what just happened'.
+        # Examples: switching network endpoints, adjusting per-attempt timeouts, capping retries by error-class, resuming
+        # with a token/offset, maintaining failure history for this invocation of run_with_retries().
+        # Example: 'cap retries to 3 for ECONNREFUSED but 12 for ETIMEDOUT' via attachment=collections.Counter
 
     def display_msg_str(self) -> str:
         """Returns the display_msg as a str; for logging."""
         return "" if self.display_msg is None else str(self.display_msg)
+
+
+#############################################################################
+@dataclass
+@final
+class RetryError(Exception):
+    """Indicates that retries have been exhausted; the last RetryableError is in RetryError.__cause__."""
+
+    outcome: AttemptOutcome
 
 
 #############################################################################
@@ -219,16 +299,39 @@ class RetryableError(Exception):
 class Retry:
     """The current retry attempt number provided to callback functions; immutable."""
 
-    count: int
-    policy: RetryPolicy
-    config: RetryConfig
+    count: int  # attempt number
+    elapsed_nanos: int  # total duration since start of this run_with_retries() invocation
+    policy: RetryPolicy = dataclasses.field(repr=False, compare=False)
+    config: RetryConfig = dataclasses.field(repr=False, compare=False)
+    previous_outcomes: Sequence[AttemptOutcome] = dataclasses.field(repr=False, compare=False)  # in curr run_with_retries()
+
+    def copy(self, **override_kwargs: Any) -> Retry:
+        """Creates a new Retry copying an existing one with the specified fields overridden for customization."""
+        return dataclasses.replace(self, **override_kwargs)
 
 
 #############################################################################
+def _full_jitter_backoff_strategy(
+    retry: Retry, curr_max_sleep_nanos: int, rand: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+) -> tuple[int, int]:
+    """Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
+    exponential backoff with cap to the next attempt."""
+    policy: RetryPolicy = retry.policy
+    sleep_nanos: int = rand.randint(policy.min_sleep_nanos, curr_max_sleep_nanos)  # nanos to delay until next attempt
+    curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
+    curr_max_sleep_nanos = min(curr_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap for next attempt
+    return sleep_nanos, curr_max_sleep_nanos
+
+
 @dataclass(frozen=True)
 @final
 class RetryPolicy:
-    """Configuration controlling max retry counts and backoff delays for run_with_retries(); immutable."""
+    """Configuration controlling max retry counts and backoff delays for run_with_retries(); immutable.
+
+    By default works as follows: The maximum duration to sleep between retries initially starts with initial_max_sleep_secs
+    and doubles on each retry, up to the final maximum of max_sleep_secs. On each retry a random sleep duration in the range
+    [min_sleep_secs, current max] is picked. In a nutshell: 0 <= min_sleep_secs <= initial_max_sleep_secs <= max_sleep_secs
+    """
 
     max_retries: int = 10
     min_sleep_secs: float = 0
@@ -242,7 +345,12 @@ class RetryPolicy:
     initial_max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
     max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
 
-    context: object = dataclasses.field(default=None, repr=False, compare=False, hash=False)  # optional domain specific info
+    backoff_strategy: Callable[[Retry, int, random.Random, int, RetryableError], tuple[int, int]] = dataclasses.field(
+        default=_full_jitter_backoff_strategy, repr=False  # retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
+    )
+    reraise: bool = True  # on exhaustion, the default (``True``) is to re-raise the underlying exception when present
+    max_previous_outcomes: int = 0  # pass the N=max_previous_outcomes most recent AttemptOutcome objects to callbacks
+    context: object = dataclasses.field(default=None, repr=False, compare=False)  # optional domain specific info
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> RetryPolicy:
@@ -254,6 +362,9 @@ class RetryPolicy:
             max_sleep_secs=getattr(args, "retry_max_sleep_secs", 10),
             max_elapsed_secs=getattr(args, "retry_max_elapsed_secs", 60),
             exponential_base=getattr(args, "retry_exponential_base", 2),
+            backoff_strategy=getattr(args, "retry_backoff_strategy", _full_jitter_backoff_strategy),
+            reraise=getattr(args, "retry_reraise", True),
+            max_previous_outcomes=getattr(args, "retry_max_previous_outcomes", 0),
             context=getattr(args, "retry_context", None),
         )
 
@@ -279,13 +390,17 @@ class RetryPolicy:
         min_sleep_nanos: int = int(self.min_sleep_secs * 1_000_000_000)
         initial_max_sleep_nanos: int = int(self.initial_max_sleep_secs * 1_000_000_000)
         max_sleep_nanos: int = int(self.max_sleep_secs * 1_000_000_000)
-        min_sleep_nanos = max(1, min_sleep_nanos)
         max_sleep_nanos = max(min_sleep_nanos, max_sleep_nanos)
         initial_max_sleep_nanos = min(max_sleep_nanos, max(min_sleep_nanos, initial_max_sleep_nanos))
         object.__setattr__(self, "min_sleep_nanos", min_sleep_nanos)
         object.__setattr__(self, "initial_max_sleep_nanos", initial_max_sleep_nanos)
         object.__setattr__(self, "max_sleep_nanos", max_sleep_nanos)
-        assert 1 <= self.min_sleep_nanos <= self.initial_max_sleep_nanos <= self.max_sleep_nanos
+        object.__setattr__(self, "max_previous_outcomes", max(0, self.max_previous_outcomes))
+        assert 0 <= self.min_sleep_nanos <= self.initial_max_sleep_nanos <= self.max_sleep_nanos
+        if not callable(self.backoff_strategy):
+            raise TypeError("RetryPolicy.backoff_strategy must be callable")
+        if not isinstance(self.reraise, bool):
+            raise TypeError("RetryPolicy.reraise must be bool")
 
     def copy(self, **override_kwargs: Any) -> RetryPolicy:
         """Creates a new policy copying an existing one with the specified fields overridden for customization."""
@@ -316,12 +431,13 @@ class RetryConfig:
     format_msg: Callable[[str, RetryableError], str] = _format_msg  # lambda: display_msg, retryable_error
     format_pair: Callable[[object, object], str] = _format_pair  # lambda: first, second
     format_duration: Callable[[int], str] = human_readable_duration  # lambda: nanos
-    info_loglevel: int = logging.INFO  # optionally, set to logging.NOTSET to move logging aspect into after_attempt()
-    warning_loglevel: int = logging.WARNING  # optionally, set to logging.NOTSET to move logging aspect into after_attempt()
+    info_loglevel: int = logging.INFO
+    warning_loglevel: int = logging.WARNING
+    enable_logging: bool = True  # set to False to move logging aspect into after_attempt()
     exc_info: bool = False
     stack_info: bool = False
-    extra: Mapping[str, object] | None = dataclasses.field(default=None, repr=False, compare=False, hash=False)
-    context: object = dataclasses.field(default=None, repr=False, compare=False, hash=False)  # optional domain specific info
+    extra: Mapping[str, object] | None = dataclasses.field(default=None, repr=False, compare=False)
+    context: object = dataclasses.field(default=None, repr=False, compare=False)  # optional domain specific info
 
     def copy(self, **override_kwargs: Any) -> RetryConfig:
         """Creates a new config copying an existing one with the specified fields overridden for customization."""
@@ -339,14 +455,31 @@ class RetryOptions:
 
     policy: RetryPolicy = RetryPolicy()
     config: RetryConfig = RetryConfig()
-    giveup: Callable[[Retry, int, RetryableError], bool] = (
-        lambda retry, elapsed_nanos, retryable_error: False  # stop retrying based on domain-specific logic
-    )
-    after_attempt: Callable[[Retry, bool, bool, bool, int, RetryableError | object, logging.Logger | None], None] = (
-        lambda retry, is_success, is_exhausted, is_terminated, duration_nanos, result, log: None  # e.g. record metrics
-    )
-    log: logging.Logger | None = None
+    giveup: Callable[[AttemptOutcome], str] = lambda outcome: ""  # stop retrying based on domain-specific logic
+    after_attempt: Callable[[AttemptOutcome], None] = lambda outcome: None  # e.g. record metrics
+    log: Logger | None = None
 
     def copy(self, **override_kwargs: Any) -> RetryOptions:
         """Creates a new object copying an existing one with the specified fields overridden for customization."""
+        return dataclasses.replace(self, **override_kwargs)
+
+
+#############################################################################
+@dataclass(frozen=True)
+@final
+class AttemptOutcome:
+    """Captures per-attempt state for ``after_attempt`` callbacks; immutable."""
+
+    retry: Retry
+    is_success: bool
+    is_exhausted: bool
+    is_terminated: bool
+    giveup_reason: str  # empty string means giveup() was not called or giveup() decided to not give up
+    elapsed_nanos: int  # total duration since the start of this run_with_retries() invocation
+    sleep_nanos: int  # duration of current sleep period
+    result: RetryableError | object = dataclasses.field(repr=False, compare=False)
+    log: Logger | None = dataclasses.field(repr=False, compare=False)
+
+    def copy(self, **override_kwargs: Any) -> AttemptOutcome:
+        """Creates a new outcome copying an existing one with the specified fields overridden for customization."""
         return dataclasses.replace(self, **override_kwargs)
