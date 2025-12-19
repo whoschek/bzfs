@@ -578,6 +578,34 @@ class TestRunWithRetries(unittest.TestCase):
         self.assertEqual([retry_policy.initial_max_sleep_nanos, 5], seen_state)
         self.assertEqual([5, 6], retry_sleep_nanos)
 
+    def test_run_with_retries_max_previous_outcomes_1(self) -> None:
+        """Ensures Retry.previous_outcomes retains only the most recent AttemptOutcome object."""
+        retry_policy = RetryPolicy(
+            max_retries=3,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+            max_previous_outcomes=1,
+        )
+        history_counts_per_attempt: list[list[int]] = []
+        nested_history_sizes_per_attempt: list[list[int]] = []
+
+        def fn(retry: Retry) -> str:
+            history_counts_per_attempt.append([outcome.retry.count for outcome in retry.previous_outcomes])
+            nested_history_sizes_per_attempt.append(
+                [len(outcome.retry.previous_outcomes) for outcome in retry.previous_outcomes]
+            )
+            for outcome in retry.previous_outcomes:
+                self.assertEqual((), outcome.retry.previous_outcomes)
+            if retry.count < 2:
+                raise RetryableError("fail", retry_immediately_once=(retry.count == 0)) from ValueError("boom")
+            return "ok"
+
+        self.assertEqual("ok", run_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=None))
+        self.assertEqual([[], [0], [1]], history_counts_per_attempt)
+        self.assertEqual([[], [0], [0]], nested_history_sizes_per_attempt)
+
     def test_run_with_retries_max_previous_outcomes_2(self) -> None:
         """Ensures Retry.previous_outcomes retains the last 2 AttemptOutcome objects."""
         retry_policy = RetryPolicy(

@@ -114,9 +114,6 @@ import logging
 import random
 import threading
 import time
-from collections import (
-    deque,
-)
 from collections.abc import (
     Mapping,
     Sequence,
@@ -165,11 +162,11 @@ def run_with_retries(
     retry_count: int = 0
     elapsed_nanos: int = 0
     rng: random.Random | None = None
-    previous_outcomes: Sequence[AttemptOutcome] = ()
+    previous_outcomes: tuple[AttemptOutcome, ...] = ()  # pass *immutable* deque to callbacks
     start_time_nanos: int = time.monotonic_ns()
     while True:
         giveup_reason: str = ""
-        retry: Retry = Retry(retry_count, elapsed_nanos, policy, config, tuple(previous_outcomes))
+        retry: Retry = Retry(retry_count, elapsed_nanos, policy, config, previous_outcomes)
         try:
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
             outcome: AttemptOutcome = AttemptOutcome(
@@ -246,11 +243,10 @@ def run_with_retries(
                 else:
                     raise RetryError(outcome) from retryable_error
 
-            if policy.max_previous_outcomes > 0:
+            n = policy.max_previous_outcomes
+            if n > 0:  #  outcome will be passed to next attempt via Retry.previous_outcomes
                 outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))  # detach to reduce memory footprint
-                if not isinstance(previous_outcomes, deque):  # lazy expansion to reduce memory footprint for common case
-                    previous_outcomes = deque(previous_outcomes, maxlen=policy.max_previous_outcomes)
-                previous_outcomes.append(outcome)  #  will be passed to next attempt via Retry.previous_outcomes
+                previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # immutable deque
             del outcome  # help gc
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
 
