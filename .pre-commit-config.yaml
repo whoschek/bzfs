@@ -87,7 +87,7 @@ repos:
         stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
       # config options like `force_grid_wrap` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.9
+    rev: v0.14.10
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
