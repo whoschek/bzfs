@@ -245,7 +245,8 @@ def run_with_retries(
 
             n = policy.max_previous_outcomes
             if n > 0:  #  outcome will be passed to next attempt via Retry.previous_outcomes
-                outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))  # detach to reduce memory footprint
+                if len(outcome.retry.previous_outcomes) > 0:
+                    outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))  # detach to reduce memory footprint
                 previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # immutable deque
             del outcome  # help gc
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
