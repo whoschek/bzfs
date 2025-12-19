@@ -180,23 +180,22 @@ def run_with_retries(
             )
             after_attempt(outcome)
             return result
-        except RetryableError as retryable_err:
+        except RetryableError as retryable_error:
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            if retry_count <= 0 and retryable_err.retry_immediately_once:  # retry once immediately without backoff
-                sleep_nanos: int = 0
+            if retry_count <= 0 and retryable_error.retry_immediately_once:
+                sleep_nanos: int = 0  # retry once immediately without backoff
             else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
                 rng = random.SystemRandom() if rng is None else rng
                 sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
-                    retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_err
+                    retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
                 )
                 assert sleep_nanos >= 0
                 assert curr_max_sleep_nanos >= 0
 
-            format_msg: Callable[[str, RetryableError], str] = config.format_msg  # lambda: display_msg, retryable_error
             format_duration: Callable[[int], str] = config.format_duration  # lambda: nanos
             termination_event: threading.Event | None = config.termination_event
             outcome = AttemptOutcome(
-                retry, False, False, False, giveup_reason, elapsed_nanos, sleep_nanos, retryable_err, log
+                retry, False, False, False, giveup_reason, elapsed_nanos, sleep_nanos, retryable_error, log
             )
             will_retry: bool = False
             if (
@@ -209,14 +208,16 @@ def run_with_retries(
                 retry_count += 1
                 loglevel: int = config.info_loglevel
                 if log is not None and config.enable_logging and log.isEnabledFor(loglevel):
-                    msg = format_msg(config.display_msg, retryable_err) + config.format_pair(retry_count, policy.max_retries)
+                    msg = config.format_msg(config.display_msg, retryable_error) + config.format_pair(
+                        retry_count, policy.max_retries
+                    )
                     log.log(loglevel, "%s", f"{msg} in {format_duration(sleep_nanos)}{config.dots}", extra=config.extra)
                 after_attempt(outcome)
                 _sleep(sleep_nanos, termination_event)
             else:
                 sleep_nanos = 0
 
-            is_terminated: bool = False if termination_event is None else termination_event.is_set()
+            is_terminated: bool = termination_event is not None and termination_event.is_set()
             if is_terminated or not will_retry:
                 if (
                     policy.max_retries > 0
@@ -229,27 +230,29 @@ def run_with_retries(
                     log.log(
                         config.warning_loglevel,
                         "%s",
-                        f"{format_msg(config.display_msg, retryable_err)}exhausted; giving up because {reason}the last "
+                        f"{config.format_msg(config.display_msg, retryable_error)}"
+                        f"exhausted; giving up because {reason}the last "
                         f"{config.format_pair(retry_count, policy.max_retries)} retries across "
                         f"{config.format_pair(format_duration(elapsed_nanos), format_duration(policy.max_elapsed_nanos))} "
                         "failed",
-                        exc_info=retryable_err if config.exc_info else None,
+                        exc_info=retryable_error if config.exc_info else None,
                         stack_info=config.stack_info,
                         extra=config.extra,
                     )
                 outcome = AttemptOutcome(
-                    retry, False, True, is_terminated, giveup_reason, elapsed_nanos, sleep_nanos, retryable_err, log
+                    retry, False, True, is_terminated, giveup_reason, elapsed_nanos, sleep_nanos, retryable_error, log
                 )
                 after_attempt(outcome)
-                cause: BaseException | None = retryable_err.__cause__
+                cause: BaseException | None = retryable_error.__cause__
                 if policy.reraise and cause is not None:
                     raise cause.with_traceback(cause.__traceback__)  # noqa: B904 intentional re-raise without chaining
                 else:
-                    raise RetryError(outcome) from retryable_err
+                    raise RetryError(outcome) from retryable_error
+
             if isinstance(previous_outcomes, MutableSequence):
                 outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))  # detach to reduce memory footprint
                 previous_outcomes.append(outcome)  #  will be passed to next attempt via Retry.previous_outcomes
-            del outcome, retry, giveup_reason  # help gc
+            del outcome  # help gc
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
 
 
@@ -263,7 +266,8 @@ def _sleep(sleep_nanos: int, termination_event: threading.Event | None) -> None:
 
 #############################################################################
 class RetryableError(Exception):
-    """Indicates that the task that caused the underlying exception can be retried and might eventually succeed."""
+    """Indicates that the task that caused the underlying exception can be retried and might eventually succeed;
+    ``run_with_retries()`` will pass this exception to callbacks via ``AttemptOutcome.result``."""
 
     def __init__(
         self, message: str, display_msg: object = None, retry_immediately_once: bool = False, attachment: object = None
@@ -306,7 +310,28 @@ class Retry:
     previous_outcomes: Sequence[AttemptOutcome] = dataclasses.field(repr=False, compare=False)  # in curr run_with_retries()
 
     def copy(self, **override_kwargs: Any) -> Retry:
-        """Creates a new Retry copying an existing one with the specified fields overridden for customization."""
+        """Creates a new object copying an existing one with the specified fields overridden for customization."""
+        return dataclasses.replace(self, **override_kwargs)
+
+
+#############################################################################
+@dataclass(frozen=True)
+@final
+class AttemptOutcome:
+    """Captures per-attempt state for ``after_attempt`` callbacks; immutable."""
+
+    retry: Retry
+    is_success: bool
+    is_exhausted: bool
+    is_terminated: bool
+    giveup_reason: str  # empty string means giveup() was not called or giveup() decided to not give up
+    elapsed_nanos: int  # total duration since the start of this run_with_retries() invocation
+    sleep_nanos: int  # duration of current sleep period
+    result: RetryableError | object = dataclasses.field(repr=False, compare=False)
+    log: Logger | None = dataclasses.field(repr=False, compare=False)
+
+    def copy(self, **override_kwargs: Any) -> AttemptOutcome:
+        """Creates a new outcome copying an existing one with the specified fields overridden for customization."""
         return dataclasses.replace(self, **override_kwargs)
 
 
@@ -461,25 +486,4 @@ class RetryOptions:
 
     def copy(self, **override_kwargs: Any) -> RetryOptions:
         """Creates a new object copying an existing one with the specified fields overridden for customization."""
-        return dataclasses.replace(self, **override_kwargs)
-
-
-#############################################################################
-@dataclass(frozen=True)
-@final
-class AttemptOutcome:
-    """Captures per-attempt state for ``after_attempt`` callbacks; immutable."""
-
-    retry: Retry
-    is_success: bool
-    is_exhausted: bool
-    is_terminated: bool
-    giveup_reason: str  # empty string means giveup() was not called or giveup() decided to not give up
-    elapsed_nanos: int  # total duration since the start of this run_with_retries() invocation
-    sleep_nanos: int  # duration of current sleep period
-    result: RetryableError | object = dataclasses.field(repr=False, compare=False)
-    log: Logger | None = dataclasses.field(repr=False, compare=False)
-
-    def copy(self, **override_kwargs: Any) -> AttemptOutcome:
-        """Creates a new outcome copying an existing one with the specified fields overridden for customization."""
         return dataclasses.replace(self, **override_kwargs)

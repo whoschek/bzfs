@@ -34,9 +34,9 @@ exitcode=${PIPESTATUS[0]}
 
 echo
 if [ "$exitcode" = "0" ]; then
-    echo "✓ $subject"  # PASSED
+    echo "✓ $subject PASSED"
 else
-    echo "✗ $subject"  # FAILED
+    echo "✗ $subject FAILED"
     if [ "$bzfs_test_no_run_quietly" = "" ]; then
         grep -v ') ... ok$' "$tmpfile" || [ $? -eq 1 ]  # ignore grep exitcode 1 aka "no matches"
     fi

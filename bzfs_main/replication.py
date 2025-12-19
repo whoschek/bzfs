@@ -344,9 +344,11 @@ def _rollback_dst_dataset_if_necessary(
             job.run_ssh_command(dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
         except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
             stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
-            no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
+            retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-            raise RetryableError("Subprocess failed", display_msg="zfs rollback", retry_immediately_once=no_sleep) from e
+            raise RetryableError(
+                "Subprocess failed", display_msg="zfs rollback", retry_immediately_once=retry_immediately_once
+            ) from e
 
     if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
         log.info(f"{tid} Already up-to-date: %s", dst_dataset)
@@ -708,15 +710,17 @@ def _run_zfs_send_receive(
                     cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=True, log=log
                 )
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-                no_sleep: bool = False
+                retry_immediately_once: bool = False
                 if not isinstance(e, UnicodeDecodeError):
                     xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
                     log.warning("%s", stderr_to_str(e.stderr).rstrip())
                 if isinstance(e, subprocess.CalledProcessError):
-                    no_sleep = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr_to_str(e.stderr))
+                    retry_immediately_once = _clear_resumable_recv_state_if_necessary(
+                        job, dst_dataset, stderr_to_str(e.stderr)
+                    )
                 # op isn't idempotent so retries regather current state from the start of replicate_dataset()
                 raise RetryableError(
-                    "Subprocess failed", display_msg="zfs send/receive", retry_immediately_once=no_sleep
+                    "Subprocess failed", display_msg="zfs send/receive", retry_immediately_once=retry_immediately_once
                 ) from e
             else:
                 xprint(log, process.stdout, file=sys.stdout)
@@ -937,9 +941,11 @@ def _delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str
         job.run_ssh_command(r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
         stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
-        no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
+        retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
         # op isn't idempotent so retries regather current state from the start
-        raise RetryableError("Subprocess failed", display_msg="zfs destroy snapshot", retry_immediately_once=no_sleep) from e
+        raise RetryableError(
+            "Subprocess failed", display_msg="zfs destroy snapshot", retry_immediately_once=retry_immediately_once
+        ) from e
 
 
 def _delete_snapshot_cmd(p: Params, r: Remote, snapshots_to_delete: str) -> list[str]:
