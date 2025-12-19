@@ -34,6 +34,7 @@ on:
         options:
         - test_ubuntu_24_04_fast
         - test_ubuntu_24_04_hpnssh
+        - test_ubuntu_24_04_zfs_2_4
         - test_ubuntu_24_04_zfs_2_4_latest
         - test_ubuntu_24_04_zfs_2_3_latest
         - test_ubuntu_24_04_zfs_2_2_latest
@@ -204,7 +205,56 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_4_latest:  # currently uses zfs-2.4.0-rcX
+  test_ubuntu_24_04_zfs_2_4:  # currently uses zfs-2.4.0
+    needs: create_iteration_test_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_4' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_4')
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
+        python-version: ["3.14"]
+      fail-fast: false
+    timeout-minutes: 110
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - name: Upgrade zfs kernel + userland to specific upstream zfs version
+      run: |
+        # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
+        sudo add-apt-repository ppa:patrickdk/zfs; sudo apt update
+        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
+        sudo apt-get -y install zfs-dkms zfsutils-linux
+        zfs --version
+    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+      uses: ./.github/actions/common
+      with:
+        python-version: ${{ matrix.python-version }}
+        install-zfs: false
+    - name: Display ZFS version and Python version
+      run: |
+        id -u -n
+        uname -a
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+    - name: Run tests
+      run: |
+        ./test.sh
+    - name: Run tests and generate code coverage
+      run: |
+        ./coverage.sh
+        echo "bzfs-testrun-success"
+    - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+      uses: ./.github/actions/coverage-upload
+
+
+  test_ubuntu_24_04_zfs_2_4_latest:  # currently uses zfs-2.4.0
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_4_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_4_latest')
     runs-on: ubuntu-24.04
@@ -268,10 +318,9 @@ jobs:
         persist-credentials: false
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
-        # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
-        sudo add-apt-repository ppa:patrickdk/zfs; sudo apt update
-        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
-        sudo apt-get -y install zfs-dkms zfsutils-linux
+        # see https://launchpad.net/~arter97/+archive/ubuntu/zfs
+        sudo add-apt-repository ppa:arter97/zfs; sudo apt update
+        sudo apt-get -y install zfs-dkms
         zfs --version
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/actions/common
@@ -302,7 +351,7 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.8
+  test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.9
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_2_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_2_latest')
     runs-on: ubuntu-24.04
@@ -318,9 +367,9 @@ jobs:
         persist-credentials: false
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
-        # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.2.8
-        sudo add-apt-repository ppa:weiers/openzfs-2.2.8; sudo apt update
-        sudo apt-get -y install openzfs-zfs-dkms
+        # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
+        sudo add-apt-repository ppa:arter97/zfs-lts; sudo apt update
+        sudo apt-get -y install zfs-dkms
         zfs --version
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/actions/common
@@ -572,6 +621,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - test_ubuntu_24_04_hpnssh
+      - test_ubuntu_24_04_zfs_2_4
       - test_ubuntu_24_04_zfs_2_4_latest
       - test_ubuntu_24_04_zfs_2_3_latest
       - test_ubuntu_24_04_zfs_2_2_latest
@@ -590,6 +640,11 @@ jobs:
         with:
           name: coverage-test_ubuntu_24_04_hpnssh
           path: coverage-test_ubuntu_24_04_hpnssh
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: coverage-test_ubuntu_24_04_zfs_2_4
+          path: coverage-test_ubuntu_24_04_zfs_2_4
       - name: Download coverage artifact
         uses: actions/download-artifact@v6
         with:
