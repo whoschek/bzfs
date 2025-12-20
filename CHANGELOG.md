@@ -6,7 +6,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - [bzfs] Include `--zfs-send-program-opts` also when resuming a previously interrupted `zfs receive -s`.
 - [bzfs] Fix potential delay of process exit when receiving SIGINT/SIGTERM while spawning a subprocess.
-- [bzfs] Make `run_with_retries()` more widely applicable.
+- [bzfs] Log better diagnostics on `subprocess_run()`.
+- [bzfs] Make `run_with_retries()` more widely applicable and more performant.
+- [bzfs] Make `run_ssh_command()` more widely applicable.
+- [bzfs] Make `process_datasets_in_parallel()` more widely applicable.
+- [bzfs] Also run nightly tests on zfs-2.4.0 and zfs-2.2.9.
 
 Removed CLI options that were deprecated in version ≤ 1.12.0:
 
