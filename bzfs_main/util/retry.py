@@ -141,11 +141,12 @@ _T = TypeVar("_T")
 
 
 def _after_attempt(_outcome: AttemptOutcome) -> None:
-    pass  # default impl does nothing
+    """Default implementation does nothing."""
 
 
 def _giveup(_outcome: AttemptOutcome) -> str:
-    return ""  # default impl does nothing
+    """Default implementation never gives up."""
+    return ""
 
 
 def run_with_retries(
@@ -210,10 +211,9 @@ def run_with_retries(
                 retry_count += 1
                 loglevel: int = config.info_loglevel
                 if log is not None and config.enable_logging and log.isEnabledFor(loglevel):
-                    msg = config.format_msg(config.display_msg, retryable_error) + config.format_pair(
-                        retry_count, policy.max_retries
-                    )
-                    log.log(loglevel, "%s", f"{msg} in {format_duration(sleep_nanos)}{config.dots}", extra=config.extra)
+                    m1: str = config.format_msg(config.display_msg, retryable_error)
+                    m2: str = config.format_pair(retry_count, policy.max_retries)
+                    log.log(loglevel, "%s", f"{m1}{m2} in {format_duration(sleep_nanos)}{config.dots}", extra=config.extra)
                 after_attempt(outcome)
                 _sleep(sleep_nanos, termination_event)
             else:
@@ -298,19 +298,29 @@ class RetryError(Exception):
     """Indicates that retries have been exhausted; the last RetryableError is in RetryError.__cause__."""
 
     outcome: AttemptOutcome
+    """Metadata that describes why and how run_with_retries() gave up."""
 
 
 #############################################################################
 @dataclass(frozen=True)
 @final
 class Retry:
-    """The current retry attempt number provided to callback functions; immutable."""
+    """Attempt metadata provided to callback functions; includes the current retry attempt number; immutable."""
 
-    count: int  # attempt number, count=0 is the first attempt, count=1 is the second attempt aka first retry
-    start_time_nanos: int  # value of time.monotonic_ns() at start of run_with_retries() invocation
+    count: int
+    """Attempt number, count=0 is the first attempt, count=1 is the second attempt aka first retry."""
+
+    start_time_nanos: int
+    """Value of time.monotonic_ns() at start of run_with_retries() invocation."""
+
     policy: RetryPolicy = dataclasses.field(repr=False, compare=False)
+    """Policy that was passed into fn(Retry)."""
+
     config: RetryConfig = dataclasses.field(repr=False, compare=False)
-    previous_outcomes: Sequence[AttemptOutcome] = dataclasses.field(repr=False, compare=False)  # in curr run_with_retries()
+    """Config that is used by run_with_retries()."""
+
+    previous_outcomes: Sequence[AttemptOutcome] = dataclasses.field(repr=False, compare=False)
+    """History/state of the N=max_previous_outcomes most recent outcomes for the current run_with_retries() invocation."""
 
     def copy(self, **override_kwargs: Any) -> Retry:
         """Creates a new object copying an existing one with the specified fields overridden for customization."""
@@ -324,14 +334,32 @@ class AttemptOutcome:
     """Captures per-attempt state for ``after_attempt`` callbacks; immutable."""
 
     retry: Retry
+    """Attempt metadata passed into fn(retry)."""
+
     is_success: bool
+    """False if fn(retry) raised a RetryableError, True otherwise."""
+
     is_exhausted: bool
+    """True if the loop is giving up retrying (possibly even due to is_terminated); False otherwise."""
+
     is_terminated: bool
-    giveup_reason: str  # empty string means giveup() was not called or giveup() decided to not give up
-    elapsed_nanos: int  # total duration since the start of run_with_retries() invocation and end of this fn() attempt
-    sleep_nanos: int  # duration of current sleep period
+    """True if termination_event has become set; False otherwise."""
+
+    giveup_reason: str
+    """Reason why run_with_retries() gave up (if it did give up); Empty string means giveup() was not called or giveup()
+    decided to not give up."""
+
+    elapsed_nanos: int
+    """Total duration since the start of run_with_retries() invocation and end of this fn() attempt."""
+
+    sleep_nanos: int
+    """Duration of current sleep period."""
+
     result: RetryableError | object = dataclasses.field(repr=False, compare=False)
+    """Result of fn(retry); a RetryableError on retryable failure or some other object on success."""
+
     log: Logger | None = dataclasses.field(repr=False, compare=False)
+    """Logger that was passed into run_with_retries()."""
 
     def copy(self, **override_kwargs: Any) -> AttemptOutcome:
         """Creates a new outcome copying an existing one with the specified fields overridden for customization."""
@@ -346,7 +374,7 @@ def _full_jitter_backoff_strategy(
     exponential backoff with cap to the next attempt."""
     policy: RetryPolicy = retry.policy
     if policy.min_sleep_nanos == curr_max_sleep_nanos:
-        sleep_nanos = curr_max_sleep_nanos
+        sleep_nanos = curr_max_sleep_nanos  # perf
     else:
         sleep_nanos = rand.randint(policy.min_sleep_nanos, curr_max_sleep_nanos)  # nanos to delay until next attempt
     curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
@@ -359,17 +387,25 @@ def _full_jitter_backoff_strategy(
 class RetryPolicy:
     """Configuration controlling max retry counts and backoff delays for run_with_retries(); immutable.
 
-    By default works as follows: The maximum duration to sleep between retries initially starts with initial_max_sleep_secs
-    and doubles on each retry, up to the final maximum of max_sleep_secs. On each retry a random sleep duration in the range
-    [min_sleep_secs, current max] is picked. In a nutshell: 0 <= min_sleep_secs <= initial_max_sleep_secs <= max_sleep_secs
+    By default works as follows: The maximum duration to sleep between retries initially starts with
+    ``initial_max_sleep_secs`` and doubles on each retry, up to the final maximum of ``max_sleep_secs``.
+    On each retry a random sleep duration in the range ``[min_sleep_secs, current max]`` is picked.
+    In a nutshell: ``0 <= min_sleep_secs <= initial_max_sleep_secs <= max_sleep_secs``
     """
 
     max_retries: int = 10
+    """The maximum number of times ``fn`` will be invoked additionally after the first attempt invocation; must be >= 0."""
+
     min_sleep_secs: float = 0
     initial_max_sleep_secs: float = 0.125
     max_sleep_secs: float = 10
+
     max_elapsed_secs: float = 60
+    """``fn`` will not be retried (or not retried anymore) once this much time has elapsed since the initial start of
+    run_with_retries()."""
+
     exponential_base: float = 2
+    """Growth factor for backoff algorithm to calculate sleep duration; must be >= 1."""
 
     max_elapsed_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
     min_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
@@ -379,9 +415,16 @@ class RetryPolicy:
     backoff_strategy: Callable[[Retry, int, random.Random, int, RetryableError], tuple[int, int]] = dataclasses.field(
         default=_full_jitter_backoff_strategy, repr=False  # retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
     )
-    reraise: bool = True  # on exhaustion, the default (``True``) is to re-raise the underlying exception when present
-    max_previous_outcomes: int = 0  # pass the N=max_previous_outcomes most recent AttemptOutcome objects to callbacks
-    context: object = dataclasses.field(default=None, repr=False, compare=False)  # optional domain specific info
+    """Strategy that implements a backoff algorithm to reduce resource contention."""
+
+    reraise: bool = True
+    """On exhaustion, the default (``True``) is to re-raise the underlying exception when present."""
+
+    max_previous_outcomes: int = 0
+    """Pass the N=max_previous_outcomes most recent AttemptOutcome objects to callbacks."""
+
+    context: object = dataclasses.field(default=None, repr=False, compare=False)
+    """Optional domain specific info."""
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> RetryPolicy:
@@ -462,12 +505,12 @@ class RetryConfig:
     format_msg: Callable[[str, RetryableError], str] = _format_msg  # lambda: display_msg, retryable_error
     format_pair: Callable[[object, object], str] = _format_pair  # lambda: first, second
     format_duration: Callable[[int], str] = human_readable_duration  # lambda: nanos
-    info_loglevel: int = logging.INFO
-    warning_loglevel: int = logging.WARNING
+    info_loglevel: int = logging.INFO  # loglevel used when not giving up
+    warning_loglevel: int = logging.WARNING  # loglevel used when giving up
     enable_logging: bool = True  # set to False to move logging aspect into after_attempt()
-    exc_info: bool = False
-    stack_info: bool = False
-    extra: Mapping[str, object] | None = dataclasses.field(default=None, repr=False, compare=False)
+    exc_info: bool = False  # passed into Logger.log()
+    stack_info: bool = False  # passed into Logger.log()
+    extra: Mapping[str, object] | None = dataclasses.field(default=None, repr=False, compare=False)  # passed to Logger.log()
     context: object = dataclasses.field(default=None, repr=False, compare=False)  # optional domain specific info
 
     def copy(self, **override_kwargs: Any) -> RetryConfig:
@@ -497,21 +540,21 @@ class RetryOptions:
 
 #############################################################################
 @final
-class _RngThreadLocal(threading.local):
-    """Caches a per-thread RNG for backoff jitter; avoids per-call allocations."""
+class _ThreadLocalRandomNumberGenerator(threading.local):
+    """Caches a per-thread random number generator."""
 
     def __init__(self) -> None:
         self.rng: random.Random | None = None
 
 
-_RNG_THREAD_LOCAL: Final[_RngThreadLocal] = _RngThreadLocal()
+_THREAD_LOCAL_RNG: Final[_ThreadLocalRandomNumberGenerator] = _ThreadLocalRandomNumberGenerator()
 
 
 def _thread_local_rng() -> random.Random:
-    """Returns a per-thread RNG for backoff jitter; lazily constructed."""
-    tls = _RNG_THREAD_LOCAL
-    rng = tls.rng
+    """Returns a per-thread RNG for backoff jitter; for perf avoids constructing a new random.Random() at high frequency."""
+    threadlocal: _ThreadLocalRandomNumberGenerator = _THREAD_LOCAL_RNG
+    rng: random.Random | None = threadlocal.rng
     if rng is None:
         rng = random.Random()  # noqa: S311
-        tls.rng = rng
+        threadlocal.rng = rng
     return rng
