@@ -951,7 +951,13 @@ class TestReplication(AbstractTestCase):
                     job,
                     src_dataset,
                     tid="1/1",
-                    retry=Retry(count=0, elapsed_nanos=0, policy=RetryPolicy(), config=RetryConfig(), previous_outcomes=()),
+                    retry=Retry(
+                        count=0,
+                        start_time_nanos=0,
+                        policy=RetryPolicy(),
+                        config=RetryConfig(),
+                        previous_outcomes=(),
+                    ),
                 )
 
         self.assertTrue(captured_steps, "No steps captured")

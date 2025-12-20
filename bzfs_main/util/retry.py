@@ -163,10 +163,10 @@ def run_with_retries(
     elapsed_nanos: int = 0
     rng: random.Random | None = None
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
-    start_time_nanos: int = time.monotonic_ns()
+    start_time_nanos: Final[int] = time.monotonic_ns()
     while True:
         giveup_reason: str = ""
-        retry: Retry = Retry(retry_count, elapsed_nanos, policy, config, previous_outcomes)
+        retry: Retry = Retry(retry_count, start_time_nanos, policy, config, previous_outcomes)
         try:
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
             outcome: AttemptOutcome = AttemptOutcome(
@@ -299,8 +299,8 @@ class RetryError(Exception):
 class Retry:
     """The current retry attempt number provided to callback functions; immutable."""
 
-    count: int  # attempt number
-    elapsed_nanos: int  # total duration since start of this run_with_retries() invocation
+    count: int  # attempt number, count=0 is the fist attempt, count=1 is the second attempt aka first retry
+    start_time_nanos: int  # value of time.monotonic_ns() at start of this run_with_retries() invocation
     policy: RetryPolicy = dataclasses.field(repr=False, compare=False)
     config: RetryConfig = dataclasses.field(repr=False, compare=False)
     previous_outcomes: Sequence[AttemptOutcome] = dataclasses.field(repr=False, compare=False)  # in curr run_with_retries()
@@ -321,7 +321,7 @@ class AttemptOutcome:
     is_exhausted: bool
     is_terminated: bool
     giveup_reason: str  # empty string means giveup() was not called or giveup() decided to not give up
-    elapsed_nanos: int  # total duration since the start of this run_with_retries() invocation
+    elapsed_nanos: int  # total duration since the start of this run_with_retries() invocation and end of this fn() attempt
     sleep_nanos: int  # duration of current sleep period
     result: RetryableError | object = dataclasses.field(repr=False, compare=False)
     log: Logger | None = dataclasses.field(repr=False, compare=False)

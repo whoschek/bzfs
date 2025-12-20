@@ -820,7 +820,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
         """Ensures copy() correctly overrides selected fields while preserving others."""
         original_retry = Retry(
             count=1,
-            elapsed_nanos=2,
+            start_time_nanos=100,
             policy=RetryPolicy(max_retries=1),
             config=RetryConfig(display_msg="orig"),
             previous_outcomes=(),
@@ -840,7 +840,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
 
         copied_retry = Retry(
             count=2,
-            elapsed_nanos=3,
+            start_time_nanos=200,
             policy=RetryPolicy(max_retries=2),
             config=RetryConfig(display_msg="copy"),
             previous_outcomes=(),
