@@ -880,23 +880,28 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
 #############################################################################
 class TestRunWithRetriesBenchmark(unittest.TestCase):
 
-    def test_benchmark_run_with_retries_exhausted_r1k_n0_p0(self) -> None:
-        self.benchmark_run_with_retries_exhausted(runs=1000, max_retries=0, max_previous_outcomes=0)
+    def test_benchmark_run_with_retries_exhausted_r1k_n0_p0_immediate_success_Yes(self) -> None:  # noqa: N802
+        self.benchmark(runs=1000, max_retries=0, max_previous_outcomes=0, immediate_success=True)
+
+    def test_benchmark_run_with_retries_exhausted_r1k_n0_p0_immediate_success_no(self) -> None:
+        self.benchmark(runs=1000, max_retries=0, max_previous_outcomes=0)
 
     def test_benchmark_run_with_retries_exhausted_r1k_n1_p1(self) -> None:
-        self.benchmark_run_with_retries_exhausted(runs=1000, max_retries=1, max_previous_outcomes=1)
+        self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=1)
 
     def test_benchmark_run_with_retries_exhausted_r1k_n2_p1(self) -> None:
-        self.benchmark_run_with_retries_exhausted(runs=1000, max_retries=2, max_previous_outcomes=1)
+        self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=1)
 
     def test_benchmark_run_with_retries_exhausted_r1k_n2_p2(self) -> None:
-        self.benchmark_run_with_retries_exhausted(runs=1000, max_retries=2, max_previous_outcomes=2)
+        self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=2)
 
     @unittest.skip("benchmark; enable for performance comparison")
     def test_benchmark_run_with_retries_exhausted_r100k_n1_p1(self) -> None:
-        self.benchmark_run_with_retries_exhausted(runs=100_000, max_retries=1, max_previous_outcomes=1)
+        self.benchmark(runs=100_000, max_retries=1, max_previous_outcomes=1)
 
-    def benchmark_run_with_retries_exhausted(self, runs: int, max_retries: int, max_previous_outcomes: int) -> None:
+    def benchmark(
+        self, runs: int, max_retries: int, max_previous_outcomes: int = 0, immediate_success: bool = False
+    ) -> None:
         retry_policy = RetryPolicy(
             max_retries=max_retries,
             min_sleep_secs=0,
@@ -907,15 +912,22 @@ class TestRunWithRetriesBenchmark(unittest.TestCase):
         )
 
         def fn(_retry: Retry) -> None:
-            raise RetryableError("fail")
+            if not immediate_success:
+                raise RetryableError("fail")
 
         config = RetryConfig()
-        with self.assertRaises(RetryError) as cm:  # warmup
+        try:  # warmup
             run_with_retries(fn, policy=retry_policy.copy(max_retries=100), config=config, log=None)
-        exc = cm.exception
-        self.assertEqual(100, exc.outcome.retry.count)
-        self.assertFalse(exc.outcome.is_terminated)
-        self.assertTrue(exc.outcome.is_exhausted)
+        except RetryError as exc:
+            if immediate_success:
+                self.fail("success expected")
+            else:
+                self.assertEqual(100, exc.outcome.retry.count)
+                self.assertFalse(exc.outcome.is_terminated)
+                self.assertTrue(exc.outcome.is_exhausted)
+        else:
+            if not immediate_success:
+                self.fail("failure expected")
 
         log = logging.getLogger("TestRunWithRetriesBenchmark")
         log.setLevel(logging.INFO)
@@ -934,8 +946,7 @@ class TestRunWithRetriesBenchmark(unittest.TestCase):
                 run_with_retries(fn, policy=retry_policy, config=config, log=None)
             except RetryError:
                 pass
-            else:
-                self.fail("oops")
+
         elapsed_secs = time.perf_counter() - start
 
         iters_per_sec = float("inf") if elapsed_secs <= 0 else iters / elapsed_secs

@@ -140,12 +140,16 @@ from bzfs_main.util.utils import (
 _T = TypeVar("_T")
 
 
+def _after_attempt(outcome: AttemptOutcome) -> None:
+    pass  # default impl does nothing
+
+
 def run_with_retries(
     fn: Callable[[Retry], _T],  # typically a lambda
     policy: RetryPolicy,
     config: RetryConfig | None = None,
     giveup: Callable[[AttemptOutcome], str] = lambda outcome: "",  # stop retrying based on domain-specific logic
-    after_attempt: Callable[[AttemptOutcome], None] = lambda outcome: None,  # e.g. record metrics
+    after_attempt: Callable[[AttemptOutcome], None] = _after_attempt,  # e.g. record metrics
     log: Logger | None = None,
 ) -> _T:
     """Runs the function ``fn`` and returns its result; retries on failure as indicated by policy and config; thread-safe.
@@ -160,7 +164,6 @@ def run_with_retries(
     config = _DEFAULT_RETRY_CONFIG if config is None else config
     curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     retry_count: int = 0
-    elapsed_nanos: int = 0
     rng: random.Random | None = None
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
     start_time_nanos: Final[int] = time.monotonic_ns()
@@ -169,13 +172,14 @@ def run_with_retries(
         retry: Retry = Retry(retry_count, start_time_nanos, policy, config, previous_outcomes)
         try:
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
-            outcome: AttemptOutcome = AttemptOutcome(
-                retry, True, False, False, giveup_reason, time.monotonic_ns() - start_time_nanos, 0, result, log
-            )
-            after_attempt(outcome)
+            if after_attempt is not _after_attempt:
+                outcome: AttemptOutcome = AttemptOutcome(
+                    retry, True, False, False, giveup_reason, time.monotonic_ns() - start_time_nanos, 0, result, log
+                )
+                after_attempt(outcome)
             return result
         except RetryableError as retryable_error:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+            elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
             if retry_count <= 0 and retryable_error.retry_immediately_once:
                 sleep_nanos: int = 0  # retry once immediately without backoff
             else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
@@ -249,7 +253,6 @@ def run_with_retries(
                     outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))  # detach to reduce memory footprint
                 previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # *immutable* deque
             del outcome  # help gc
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
 
 
 def _sleep(sleep_nanos: int, termination_event: threading.Event | None) -> None:
@@ -300,7 +303,7 @@ class Retry:
     """The current retry attempt number provided to callback functions; immutable."""
 
     count: int  # attempt number, count=0 is the fist attempt, count=1 is the second attempt aka first retry
-    start_time_nanos: int  # value of time.monotonic_ns() at start of this run_with_retries() invocation
+    start_time_nanos: int  # value of time.monotonic_ns() at start of run_with_retries() invocation
     policy: RetryPolicy = dataclasses.field(repr=False, compare=False)
     config: RetryConfig = dataclasses.field(repr=False, compare=False)
     previous_outcomes: Sequence[AttemptOutcome] = dataclasses.field(repr=False, compare=False)  # in curr run_with_retries()
@@ -321,7 +324,7 @@ class AttemptOutcome:
     is_exhausted: bool
     is_terminated: bool
     giveup_reason: str  # empty string means giveup() was not called or giveup() decided to not give up
-    elapsed_nanos: int  # total duration since the start of this run_with_retries() invocation and end of this fn() attempt
+    elapsed_nanos: int  # total duration since the start of run_with_retries() invocation and end of this fn() attempt
     sleep_nanos: int  # duration of current sleep period
     result: RetryableError | object = dataclasses.field(repr=False, compare=False)
     log: Logger | None = dataclasses.field(repr=False, compare=False)
@@ -477,7 +480,7 @@ class RetryOptions:
     policy: RetryPolicy = RetryPolicy()
     config: RetryConfig = RetryConfig()
     giveup: Callable[[AttemptOutcome], str] = lambda outcome: ""  # stop retrying based on domain-specific logic
-    after_attempt: Callable[[AttemptOutcome], None] = lambda outcome: None  # e.g. record metrics
+    after_attempt: Callable[[AttemptOutcome], None] = _after_attempt  # e.g. record metrics
     log: Logger | None = None
 
     def copy(self, **override_kwargs: Any) -> RetryOptions:
