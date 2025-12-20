@@ -140,15 +140,19 @@ from bzfs_main.util.utils import (
 _T = TypeVar("_T")
 
 
-def _after_attempt(outcome: AttemptOutcome) -> None:
+def _after_attempt(_outcome: AttemptOutcome) -> None:
     pass  # default impl does nothing
+
+
+def _giveup(_outcome: AttemptOutcome) -> str:
+    return ""  # default impl does nothing
 
 
 def run_with_retries(
     fn: Callable[[Retry], _T],  # typically a lambda
     policy: RetryPolicy,
     config: RetryConfig | None = None,
-    giveup: Callable[[AttemptOutcome], str] = lambda outcome: "",  # stop retrying based on domain-specific logic
+    giveup: Callable[[AttemptOutcome], str] = _giveup,  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = _after_attempt,  # e.g. record metrics
     log: Logger | None = None,
 ) -> _T:
@@ -183,7 +187,7 @@ def run_with_retries(
             if retry_count <= 0 and retryable_error.retry_immediately_once:
                 sleep_nanos: int = 0  # retry once immediately without backoff
             else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
-                rng = random.SystemRandom() if rng is None else rng
+                rng = _thread_local_rng() if rng is None else rng
                 sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
                     retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
                 )
@@ -302,7 +306,7 @@ class RetryError(Exception):
 class Retry:
     """The current retry attempt number provided to callback functions; immutable."""
 
-    count: int  # attempt number, count=0 is the fist attempt, count=1 is the second attempt aka first retry
+    count: int  # attempt number, count=0 is the first attempt, count=1 is the second attempt aka first retry
     start_time_nanos: int  # value of time.monotonic_ns() at start of run_with_retries() invocation
     policy: RetryPolicy = dataclasses.field(repr=False, compare=False)
     config: RetryConfig = dataclasses.field(repr=False, compare=False)
@@ -341,7 +345,10 @@ def _full_jitter_backoff_strategy(
     """Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
     exponential backoff with cap to the next attempt."""
     policy: RetryPolicy = retry.policy
-    sleep_nanos: int = rand.randint(policy.min_sleep_nanos, curr_max_sleep_nanos)  # nanos to delay until next attempt
+    if policy.min_sleep_nanos == curr_max_sleep_nanos:
+        sleep_nanos = curr_max_sleep_nanos
+    else:
+        sleep_nanos = rand.randint(policy.min_sleep_nanos, curr_max_sleep_nanos)  # nanos to delay until next attempt
     curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
     curr_max_sleep_nanos = min(curr_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap for next attempt
     return sleep_nanos, curr_max_sleep_nanos
@@ -479,10 +486,32 @@ class RetryOptions:
 
     policy: RetryPolicy = RetryPolicy()
     config: RetryConfig = RetryConfig()
-    giveup: Callable[[AttemptOutcome], str] = lambda outcome: ""  # stop retrying based on domain-specific logic
+    giveup: Callable[[AttemptOutcome], str] = _giveup  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = _after_attempt  # e.g. record metrics
     log: Logger | None = None
 
     def copy(self, **override_kwargs: Any) -> RetryOptions:
         """Creates a new object copying an existing one with the specified fields overridden for customization."""
         return dataclasses.replace(self, **override_kwargs)
+
+
+#############################################################################
+@final
+class _RngThreadLocal(threading.local):
+    """Caches a per-thread RNG for backoff jitter; avoids per-call allocations."""
+
+    def __init__(self) -> None:
+        self.rng: random.Random | None = None
+
+
+_RNG_THREAD_LOCAL: Final[_RngThreadLocal] = _RngThreadLocal()
+
+
+def _thread_local_rng() -> random.Random:
+    """Returns a per-thread RNG for backoff jitter; lazily constructed."""
+    tls = _RNG_THREAD_LOCAL
+    rng = tls.rng
+    if rng is None:
+        rng = random.Random()  # noqa: S311
+        tls.rng = rng
+    return rng

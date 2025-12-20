@@ -566,7 +566,7 @@ class TestRunWithRetries(unittest.TestCase):
             self.assertIsNone(outcome.log)
 
         rng = SequenceRandom([5, 6])
-        with patch("bzfs_main.util.retry.random.SystemRandom", return_value=rng):
+        with patch("bzfs_main.util.retry._thread_local_rng", return_value=rng):
             actual = run_with_retries(
                 fn,
                 policy=retry_policy,
@@ -894,6 +894,12 @@ class TestRunWithRetriesBenchmark(unittest.TestCase):
 
     def test_benchmark_run_with_retries_exhausted_r1k_n2_p2(self) -> None:
         self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=2)
+
+    def test_benchmark_run_with_retries_exhausted_r1k_n1_p0(self) -> None:
+        self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=0)
+
+    def test_benchmark_run_with_retries_exhausted_r1k_n5_p0(self) -> None:
+        self.benchmark(runs=1000, max_retries=5, max_previous_outcomes=0)
 
     @unittest.skip("benchmark; enable for performance comparison")
     def test_benchmark_run_with_retries_exhausted_r100k_n1_p1(self) -> None:
