@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.16.0] - Not yet released
+## [1.16.0] - December 20, 2025
 
 - [bzfs] Include `--zfs-send-program-opts` also when resuming a previously interrupted `zfs receive -s`.
 - [bzfs] Fix potential delay of process exit when receiving SIGINT/SIGTERM while spawning a subprocess.
@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Make `run_ssh_command()` more widely applicable.
 - [bzfs] Make `process_datasets_in_parallel()` more widely applicable.
 - [bzfs] Also run nightly tests on zfs-2.4.0 and zfs-2.2.9.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.15.0...v1.16.0
 
 Removed CLI options that were deprecated in version ≤ 1.12.0:
 
