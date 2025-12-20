@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bzfs"
-version = "1.16.0"
+version = "1.17.0.dev0"
 
 description = """
 bzfs is a reliable near real-time, parallel replication and backup command-line tool for ZFS. It replicates snapshots \
