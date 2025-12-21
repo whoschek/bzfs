@@ -52,6 +52,7 @@ def suite() -> unittest.TestSuite:
         TestRetryPolicyCopy,
         TestRetryConfigCopy,
         TestRetryOptionsCopy,
+        TestRetryOptionsCall,
         TestAttemptOutcomeCopy,
         TestRunWithRetriesBenchmark,
     ]
@@ -773,7 +774,7 @@ class TestRetryOptionsCopy(unittest.TestCase):
 
     def test_copy_returns_distinct_but_equal_options(self) -> None:
         """Ensures copy() returns a new RetryOptions instance with identical field values when no overrides are given."""
-        original = RetryOptions()
+        original: RetryOptions = RetryOptions()
         copied = original.copy()
 
         self.assertIsNot(original, copied)
@@ -791,7 +792,7 @@ class TestRetryOptionsCopy(unittest.TestCase):
             _ = outcome.giveup_reason
 
         log = MagicMock(spec=Logger)
-        original = RetryOptions(
+        original: RetryOptions = RetryOptions(
             policy=original_policy,
             config=original_config,
             giveup=giveup,
@@ -811,6 +812,41 @@ class TestRetryOptionsCopy(unittest.TestCase):
         self.assertIs(original.giveup, copied.giveup)
         self.assertIs(original.after_attempt, copied.after_attempt)
         self.assertIs(original.log, copied.log)
+
+
+#############################################################################
+class TestRetryOptionsCall(unittest.TestCase):
+
+    def test_default_fn_raises_not_implemented_error(self) -> None:
+        options: RetryOptions = RetryOptions()
+        with self.assertRaises(NotImplementedError) as ctx:
+            options()
+        self.assertEqual("Provide fn when calling RetryOptions", str(ctx.exception))
+
+    def test_retry_options_is_callable_and_runs(self) -> None:
+        """Ensures RetryOptions instances are callable and execute run_with_retries() with their own parameters."""
+        calls: list[int] = []
+
+        def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            if retry.count == 0:
+                raise RetryableError("transient")
+            return "ok"
+
+        retry_policy = RetryPolicy(
+            max_retries=1, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0, max_elapsed_secs=1
+        )
+        after_attempts: list[bool] = []
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            after_attempts.append(outcome.is_success)
+
+        options: RetryOptions[str] = RetryOptions(fn=fn, policy=retry_policy, after_attempt=after_attempt, log=None)
+
+        self.assertTrue(callable(options))
+        self.assertEqual("ok", options())
+        self.assertEqual([0, 1], calls)
+        self.assertEqual([False, True], after_attempts)
 
 
 #############################################################################
