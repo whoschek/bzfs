@@ -35,6 +35,7 @@ zfs list -t snapshot d4
 ```
 zfs list -t snapshot d1 d2
 zfs list -t snapshot d3 d4
+```
 
 - max_batch_items=N (seq or par):
 ```

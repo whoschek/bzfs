@@ -136,7 +136,7 @@ def cut(field: int, separator: str = "\t", *, lines: list[str]) -> list[str]:
 def drain(iterable: Iterable[Any]) -> None:
     """Consumes all items in the iterable, effectively draining it."""
     for _ in iterable:
-        _ = None  # help gc (iterable can block)
+        del _  # help gc (iterable can block)
 
 
 _K_ = TypeVar("_K_")

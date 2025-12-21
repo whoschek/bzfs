@@ -171,7 +171,7 @@ def parallel_iterator_results(
             yield curr_future.result()  # blocks until CLI returns
     else:
         todo_futures: set[Future[_T]] = set(fifo_buffer)
-        fifo_buffer.clear()  # help gc
+        del fifo_buffer  # help gc
         done_futures: set[Future[_T]]
         while todo_futures:
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks

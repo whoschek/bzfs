@@ -16,17 +16,18 @@
 
 Purpose:
 --------
-- Provide a reusable retry helper for transient failures using customizable policy and config objects.
+- Provide a reusable retry helper for transient failures using customizable policy, config and callbacks.
 - Centralize backoff, jitter, logging and metrics behavior while keeping call sites compact.
 - Prevent accidental retries: the loop retries only when the developer explicitly raises a ``RetryableError``, which reduces
   the risk of retrying non-idempotent operations.
+- Provide a thread-safe, fast implementation; avoid shared RNG contention.
 - Avoid unnecessary complexity and add zero dependencies beyond the Python standard library. Everything you need is in this
   single Python file.
 
 Usage:
 ------
 - Wrap work in a callable ``fn(retry: Retry)`` and therein raise ``RetryableError`` for failures that should be retried.
-- Construct a policy via ``RetryPolicy(...)``
+- Construct a policy via ``RetryPolicy(...)`` that specifies how ``RetryableError`` shall be retried.
 - Call ``run_with_retries(fn=fn, policy=policy, log=logger)`` with a standard logging.Logger
 - On success, the result of calling ``fn`` is returned.
 - On exhaustion, run_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
@@ -42,17 +43,18 @@ Advanced Configuration:
 - Use ``RetryConfig`` to control termination events, and logging settings.
 - Set ``log=None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
 - Pass ``termination_event`` via ``RetryConfig`` to support async cancellation between attempts.
-- Use ``giveup(AttemptOutcome)`` to stop retrying based on domain-specific logic (for example, error/status codes or parsing
-  stderr), including time-aware decisions or decisions based on the previous N most recent AttemptOutcome objects (via
-  AttemptOutcome.retry.previous_outcomes)
+- Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, error/status
+  codes or parsing stderr), including time-aware decisions or decisions based on the previous N most recent AttemptOutcome
+  objects (via AttemptOutcome.retry.previous_outcomes)
 
 Observability:
 --------------
-- Supply ``after_attempt(AttemptOutcome)`` to collect per-attempt metrics such as success flag, exhausted/terminated state,
-  attempt number, total elapsed duration (in nanoseconds), sleep duration (in nanoseconds), etc.
+- Supply an ``after_attempt(AttemptOutcome)`` callback to collect per-attempt metrics such as success flag,
+  exhausted/terminated state, attempt number, total elapsed duration (in nanoseconds), sleep duration (in nanoseconds), etc.
 - ``AttemptOutcome.result`` is either the successful result or the most recent ``RetryableError``, enabling integration with
   metrics and tracing systems without coupling the retry loop to any specific backend.
-- Supply ``after_attempt`` to customize logging 100%, if necessary, in which case also set ``enable_logging=False``.
+- Supply ``after_attempt`` to customize logging 100%, if necessary, in which case also set
+  ``RetryConfig.enable_logging=False``.
 
 Expert Configuration:
 ---------------------
@@ -185,7 +187,7 @@ def run_with_retries(
             return result
         except RetryableError as retryable_error:
             elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
-            if retry_count <= 0 and retryable_error.retry_immediately_once:
+            if retry_count == 0 and retryable_error.retry_immediately_once:
                 sleep_nanos: int = 0  # retry once immediately without backoff
             else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
                 rng = _thread_local_rng() if rng is None else rng
@@ -314,7 +316,7 @@ class Retry:
     """Value of time.monotonic_ns() at start of run_with_retries() invocation."""
 
     policy: RetryPolicy = dataclasses.field(repr=False, compare=False)
-    """Policy that was passed into fn(Retry)."""
+    """Policy that was passed into run_with_retries()."""
 
     config: RetryConfig = dataclasses.field(repr=False, compare=False)
     """Config that is used by run_with_retries()."""
@@ -337,7 +339,7 @@ class AttemptOutcome:
     """Attempt metadata passed into fn(retry)."""
 
     is_success: bool
-    """False if fn(retry) raised a RetryableError, True otherwise."""
+    """False if fn(retry) raised a RetryableError; True otherwise."""
 
     is_exhausted: bool
     """True if the loop is giving up retrying (possibly even due to is_terminated); False otherwise."""
@@ -346,8 +348,7 @@ class AttemptOutcome:
     """True if termination_event has become set; False otherwise."""
 
     giveup_reason: str
-    """Reason why run_with_retries() gave up (if it did give up); Empty string means giveup() was not called or giveup()
-    decided to not give up."""
+    """Reason returned by giveup(); Empty string means giveup() was not called or giveup() decided to not give up."""
 
     elapsed_nanos: int
     """Total duration since the start of run_with_retries() invocation and end of this fn() attempt."""
@@ -397,8 +398,13 @@ class RetryPolicy:
     """The maximum number of times ``fn`` will be invoked additionally after the first attempt invocation; must be >= 0."""
 
     min_sleep_secs: float = 0
+    """The minimum duration to sleep between retries ."""
+
     initial_max_sleep_secs: float = 0.125
+    """The initial maximum duration to sleep between retries."""
+
     max_sleep_secs: float = 10
+    """The final max duration to sleep between retries; 0 <= min_sleep_secs <= initial_max_sleep_secs <= max_sleep_secs."""
 
     max_elapsed_secs: float = 60
     """``fn`` will not be retried (or not retried anymore) once this much time has elapsed since the initial start of
@@ -540,21 +546,22 @@ class RetryOptions:
 
 #############################################################################
 @final
-class _ThreadLocalRandomNumberGenerator(threading.local):
+class _ThreadLocalRNG(threading.local):
     """Caches a per-thread random number generator."""
 
     def __init__(self) -> None:
         self.rng: random.Random | None = None
 
 
-_THREAD_LOCAL_RNG: Final[_ThreadLocalRandomNumberGenerator] = _ThreadLocalRandomNumberGenerator()
+_THREAD_LOCAL_RNG: Final[_ThreadLocalRNG] = _ThreadLocalRNG()
 
 
 def _thread_local_rng() -> random.Random:
-    """Returns a per-thread RNG for backoff jitter; for perf avoids constructing a new random.Random() at high frequency."""
-    threadlocal: _ThreadLocalRandomNumberGenerator = _THREAD_LOCAL_RNG
+    """Returns a per-thread RNG for backoff jitter; for perf avoids locking and initializing a new random.Random() at high
+    frequency."""
+    threadlocal: _ThreadLocalRNG = _THREAD_LOCAL_RNG
     rng: random.Random | None = threadlocal.rng
     if rng is None:
-        rng = random.Random()  # noqa: S311
+        rng = random.Random()  # noqa: S311 jitter isn't security sensitive, and random.SystemRandom.randint() is slow
         threadlocal.rng = rng
     return rng
