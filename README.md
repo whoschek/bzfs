@@ -560,6 +560,8 @@ export bzfs_test_mode=smoke        # small, quick integration test subset (takes
 # export bzfs_test_mode=functional # most integration tests but only in a single local config (takes ~3 minutes)
 # unset bzfs_test_mode             # all tests (takes ~15 mins)
 
+export bzfs_test_no_run_quietly=true  # print more than just a progress bar
+
 # Confirm passwordless ssh works on connecting to localhost loopback address
 # You should not get prompted for a password
 ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 echo hello
