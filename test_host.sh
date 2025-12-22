@@ -16,6 +16,7 @@
 # shellcheck disable=SC2154
 
 # Copies the local repo to the given remote user@host:path (via rsync) and runs tests there (via ssh).
+# The path in user@host:path must be a relative path without dots to prevent accidents.
 # Expects params to be provided via bzfs_test_* env vars.
 set -e
 cd "$(dirname "$(realpath "$0")")"
@@ -26,7 +27,7 @@ if [ "$bzfs_test_ssh_port" = "" ]; then
 fi
 case "$bzfs_test_remote_userhost" in ""|-*|*[![:alnum:]_.@-]* ) \
     echo "error: invalid bzfs_test_remote_userhost: $bzfs_test_remote_userhost" >&2; exit 1;; esac
-case "$bzfs_test_remote_path" in ""|-*|*[![:alnum:]/_.-]* ) \
+case "$bzfs_test_remote_path" in ""|-*|/*|*[![:alnum:]/_-]* ) \
     echo "error: invalid bzfs_test_remote_path: $bzfs_test_remote_path" >&2; exit 1;; esac
 case "$bzfs_test_ssh_port" in ""|*[![:digit:]]* ) \
     echo "error: invalid bzfs_test_ssh_port: $bzfs_test_ssh_port" >&2; exit 1;; esac
@@ -41,6 +42,7 @@ flags="-oServerAliveInterval=0 -x -T"
 rsync -a --delete --exclude=venv --compress-choice=zstd --compress-level=1 -e \
     "ssh -i $bzfs_test_remote_private_key -p $bzfs_test_ssh_port $flags" ./ \
     "$bzfs_test_remote_userhost:$bzfs_test_remote_path"
+
 # shellcheck disable=SC2086
 ssh -i "$bzfs_test_remote_private_key" -p "$bzfs_test_ssh_port" $flags "$bzfs_test_remote_userhost" \
     "bzfs_test_ssh_port=$bzfs_test_ssh_port" \

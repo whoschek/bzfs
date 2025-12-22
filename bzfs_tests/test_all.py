@@ -43,6 +43,7 @@ import bzfs_tests.test_progress_reporter
 import bzfs_tests.test_replication
 import bzfs_tests.test_retry
 import bzfs_tests.test_snapshot_cache
+import bzfs_tests.test_test_host_sh
 import bzfs_tests.test_utils
 from bzfs_main.util.utils import (
     getenv_any,
@@ -75,6 +76,7 @@ def main() -> None:
         bzfs_tests.test_replication,
         bzfs_tests.test_compare_snapshot_lists,
         bzfs_tests.test_snapshot_cache,
+        bzfs_tests.test_test_host_sh,
         bzfs_tests.test_jobrunner,
     ]
     incomplete_modules: list[types.ModuleType] = []
