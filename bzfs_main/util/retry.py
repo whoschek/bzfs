@@ -315,7 +315,7 @@ class Retry:
     """Attempt metadata provided to callback functions; includes the current retry attempt number; immutable."""
 
     count: int
-    """Attempt number, count=0 is the first attempt, count=1 is the second attempt aka first retry."""
+    """Attempt number; count=0 is the first attempt, count=1 is the second attempt aka first retry."""
 
     start_time_nanos: int
     """Value of time.monotonic_ns() at start of call_with_retries() invocation."""
@@ -356,13 +356,13 @@ class AttemptOutcome:
     """Reason returned by giveup(); Empty string means giveup() was not called or giveup() decided to not give up."""
 
     elapsed_nanos: int
-    """Total duration since the start of call_with_retries() invocation and end of this fn() attempt."""
+    """Total duration since the start of call_with_retries() invocation and the end of this fn() attempt."""
 
     sleep_nanos: int
     """Duration of current sleep period."""
 
     result: RetryableError | object = dataclasses.field(repr=False, compare=False)
-    """Result of fn(retry); a RetryableError on retryable failure or some other object on success."""
+    """Result of fn(retry); a RetryableError on retryable failure, or some other object on success."""
 
     log: Logger | None = dataclasses.field(repr=False, compare=False)
     """Logger that was passed into call_with_retries()."""
