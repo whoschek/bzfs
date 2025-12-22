@@ -48,7 +48,7 @@ from bzfs_main.util.retry import (
     Retry,
     RetryOptions,
     RetryPolicy,
-    run_with_retries,
+    call_with_retries,
 )
 from bzfs_main.util.utils import (
     dry,
@@ -105,7 +105,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         exception = None
         no_skip: bool = False
         try:
-            no_skip = run_with_retries(
+            no_skip = call_with_retries(
                 fn=lambda retry: process_dataset(dataset, tid, retry),
                 policy=retry_policy,
                 config=retry_options.config,

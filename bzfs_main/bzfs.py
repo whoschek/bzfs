@@ -29,7 +29,7 @@
 * The core replication algorithm is in run_task() and especially in replicate_datasets() and replicate_dataset().
 * The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
 * The --create-src-snapshots-* and --delete-* and --compare-* and --monitor-* algorithms also start in run_task().
-* The main retry logic is in run_with_retries() and clear_resumable_recv_state_if_necessary().
+* The main retry logic is in call_with_retries() and clear_resumable_recv_state_if_necessary().
 * Progress reporting for use during `zfs send/recv` data transfers is in class ProgressReporter.
 * Executing a CLI command on a local or remote host is in run_ssh_command().
 * Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool.
@@ -164,7 +164,7 @@ from bzfs_main.util.retry import (
     RetryableError,
     RetryConfig,
     RetryOptions,
-    run_with_retries,
+    call_with_retries,
 )
 from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
@@ -1675,7 +1675,7 @@ class Job(MiniJob):
     def try_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str | None:
         """Convenience method that auto-retries try_ssh_command() on failure."""
         p = self.params
-        return run_with_retries(
+        return call_with_retries(
             fn=lambda retry: self.try_ssh_command(*args, **kwargs),
             policy=p.retry_policy,
             config=self.retry_options.config,
@@ -1687,7 +1687,7 @@ class Job(MiniJob):
     def run_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str:
         """Convenience method that auto-retries run_ssh_command() on transport failure (not on remote command failure)."""
         p = self.params
-        return run_with_retries(
+        return call_with_retries(
             fn=lambda retry: self.run_ssh_command(*args, **kwargs),
             policy=p.retry_policy,
             config=self.retry_options.config,

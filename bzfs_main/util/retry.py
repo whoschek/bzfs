@@ -28,9 +28,9 @@ Usage:
 ------
 - Wrap work in a callable ``fn(retry: Retry)`` and therein raise ``RetryableError`` for failures that should be retried.
 - Construct a policy via ``RetryPolicy(...)`` that specifies how ``RetryableError`` shall be retried.
-- Call ``run_with_retries(fn=fn, policy=policy, log=logger)`` with a standard logging.Logger
+- Invoke ``call_with_retries(fn=fn, policy=policy, log=logger)`` with a standard logging.Logger
 - On success, the result of calling ``fn`` is returned.
-- On exhaustion, run_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
+- On exhaustion, call_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
   ``RetryError`` (wrapping the last ``RetryableError``), like so:
   - if ``RetryPolicy.reraise`` is True and the last ``RetryableError.__cause__`` is not None, re-raise the last
     ``RetryableError.__cause__`` with its original traceback.
@@ -68,15 +68,15 @@ Expert Configuration:
 - Or package up all knobs plus a ``fn(retry: Retry)`` function into a self-contained auto-retrying higher level function by
   constructing a ``RetryOptions`` object (which is a ``Callable`` function itself).
 - To keep calling code retry-transparent, set ``RetryPolicy.reraise=True`` (the default) *and* raise retryable failures as
-  ``raise RetryableError(...) from exc``. Client code now won't notice whether run_with_retries is used or not.
-- To make exhaustion observable to calling code, set ``RetryPolicy.reraise=False``: run_with_retries() now always raises
+  ``raise RetryableError(...) from exc``. Client code now won't notice whether call_with_retries is used or not.
+- To make exhaustion observable to calling code, set ``RetryPolicy.reraise=False``: call_with_retries() now always raises
   ``RetryError`` (wrapping the last ``RetryableError``) on exhaustion, so callers now catch ``RetryError`` and can inspect
   the last underlying exception via ``err.outcome``, ``err.__cause__``, and even ``err.__cause__.__cause__`` when present.
 
 Example Usage:
 --------------
     import logging
-    from bzfs_main.util.retry import Retry, RetryPolicy, RetryableError, run_with_retries
+    from bzfs_main.util.retry import Retry, RetryPolicy, RetryableError, call_with_retries
 
     def unreliable_operation(retry: Retry) -> str:
         try:
@@ -95,7 +95,7 @@ Example Usage:
         max_elapsed_secs=60,
     )
     log = logging.getLogger(__name__)
-    result: str = run_with_retries(fn=unreliable_operation, policy=retry_policy, log=log)
+    result: str = call_with_retries(fn=unreliable_operation, policy=retry_policy, log=log)
     print(result)
 
     # Sample log output:
@@ -156,7 +156,7 @@ def _giveup(_outcome: AttemptOutcome) -> str:
     return ""
 
 
-def run_with_retries(
+def call_with_retries(
     fn: Callable[[Retry], _T],  # typically a lambda
     policy: RetryPolicy,
     config: RetryConfig | None = None,
@@ -166,7 +166,7 @@ def run_with_retries(
 ) -> _T:
     """Runs the function ``fn`` and returns its result; retries on failure as indicated by policy and config; thread-safe.
 
-    On exhaustion, run_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
+    On exhaustion, call_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
     ``RetryError`` (wrapping the last ``RetryableError``), like so:
     - if ``RetryPolicy.reraise`` is True and the last ``RetryableError.__cause__`` is not None, re-raise the last
       ``RetryableError.__cause__`` with its original traceback.
@@ -277,7 +277,7 @@ def _sleep(sleep_nanos: int, termination_event: threading.Event | None) -> None:
 #############################################################################
 class RetryableError(Exception):
     """Indicates that the task that caused the underlying exception can be retried and might eventually succeed;
-    ``run_with_retries()`` will pass this exception to callbacks via ``AttemptOutcome.result``."""
+    ``call_with_retries()`` will pass this exception to callbacks via ``AttemptOutcome.result``."""
 
     def __init__(
         self, message: str, display_msg: object = None, retry_immediately_once: bool = False, attachment: object = None
@@ -290,7 +290,7 @@ class RetryableError(Exception):
         # RetryPolicy.max_previous_outcomes > 0. This helps when retrying is not just 'try again later', but
         # 'try again differently based on what just happened'.
         # Examples: switching network endpoints, adjusting per-attempt timeouts, capping retries by error-class, resuming
-        # with a token/offset, maintaining failure history for this invocation of run_with_retries().
+        # with a token/offset, maintaining failure history for this invocation of call_with_retries().
         # Example: 'cap retries to 3 for ECONNREFUSED but 12 for ETIMEDOUT' via attachment=collections.Counter
 
     def display_msg_str(self) -> str:
@@ -305,7 +305,7 @@ class RetryError(Exception):
     """Indicates that retries have been exhausted; the last RetryableError is in RetryError.__cause__."""
 
     outcome: AttemptOutcome
-    """Metadata that describes why and how run_with_retries() gave up."""
+    """Metadata that describes why and how call_with_retries() gave up."""
 
 
 #############################################################################
@@ -318,16 +318,16 @@ class Retry:
     """Attempt number, count=0 is the first attempt, count=1 is the second attempt aka first retry."""
 
     start_time_nanos: int
-    """Value of time.monotonic_ns() at start of run_with_retries() invocation."""
+    """Value of time.monotonic_ns() at start of call_with_retries() invocation."""
 
     policy: RetryPolicy = dataclasses.field(repr=False, compare=False)
-    """Policy that was passed into run_with_retries()."""
+    """Policy that was passed into call_with_retries()."""
 
     config: RetryConfig = dataclasses.field(repr=False, compare=False)
-    """Config that is used by run_with_retries()."""
+    """Config that is used by call_with_retries()."""
 
     previous_outcomes: Sequence[AttemptOutcome] = dataclasses.field(repr=False, compare=False)
-    """History/state of the N=max_previous_outcomes most recent outcomes for the current run_with_retries() invocation."""
+    """History/state of the N=max_previous_outcomes most recent outcomes for the current call_with_retries() invocation."""
 
     def copy(self, **override_kwargs: Any) -> Retry:
         """Creates a new object copying an existing one with the specified fields overridden for customization."""
@@ -356,7 +356,7 @@ class AttemptOutcome:
     """Reason returned by giveup(); Empty string means giveup() was not called or giveup() decided to not give up."""
 
     elapsed_nanos: int
-    """Total duration since the start of run_with_retries() invocation and end of this fn() attempt."""
+    """Total duration since the start of call_with_retries() invocation and end of this fn() attempt."""
 
     sleep_nanos: int
     """Duration of current sleep period."""
@@ -365,7 +365,7 @@ class AttemptOutcome:
     """Result of fn(retry); a RetryableError on retryable failure or some other object on success."""
 
     log: Logger | None = dataclasses.field(repr=False, compare=False)
-    """Logger that was passed into run_with_retries()."""
+    """Logger that was passed into call_with_retries()."""
 
     def copy(self, **override_kwargs: Any) -> AttemptOutcome:
         """Creates a new outcome copying an existing one with the specified fields overridden for customization."""
@@ -391,7 +391,7 @@ def _full_jitter_backoff_strategy(
 @dataclass(frozen=True)
 @final
 class RetryPolicy:
-    """Configuration controlling max retry counts and backoff delays for run_with_retries(); immutable.
+    """Configuration controlling max retry counts and backoff delays for call_with_retries(); immutable.
 
     By default works as follows: The maximum duration to sleep between retries initially starts with
     ``initial_max_sleep_secs`` and doubles on each retry, up to the final maximum of ``max_sleep_secs``.
@@ -413,7 +413,7 @@ class RetryPolicy:
 
     max_elapsed_secs: float = 60
     """``fn`` will not be retried (or not retried anymore) once this much time has elapsed since the initial start of
-    run_with_retries()."""
+    call_with_retries()."""
 
     exponential_base: float = 2
     """Growth factor for backoff algorithm to calculate sleep duration; must be >= 1."""
@@ -508,7 +508,7 @@ def _format_pair(first: object, second: object) -> str:  # thread-safe
 @dataclass(frozen=True)
 @final
 class RetryConfig:
-    """Configures termination behavior and logging for run_with_retries(); all defaults work out of the box; immutable."""
+    """Configures termination behavior and logging for call_with_retries(); all defaults work out of the box; immutable."""
 
     termination_event: threading.Event | None = None  # optionally allows for async cancellation
     display_msg: str = "Retrying"
@@ -541,7 +541,7 @@ def _fn(_retry: Retry) -> NoReturn:
 @dataclass(frozen=True)
 @final
 class RetryOptions(Generic[_T]):
-    """Convenience class that aggregates all knobs for run_with_retries(); and is itself callable too; immutable."""
+    """Convenience class that aggregates all knobs for call_with_retries(); and is itself callable too; immutable."""
 
     fn: Callable[[Retry], _T] = _fn
     policy: RetryPolicy = RetryPolicy()
@@ -555,8 +555,8 @@ class RetryOptions(Generic[_T]):
         return dataclasses.replace(self, **override_kwargs)
 
     def __call__(self) -> _T:
-        """Executes ``self.fn`` via the run_with_retries() retry loop using the stored parameters; thread-safe."""
-        return run_with_retries(
+        """Executes ``self.fn`` via the call_with_retries() retry loop using the stored parameters; thread-safe."""
+        return call_with_retries(
             fn=self.fn,
             policy=self.policy,
             config=self.config,
