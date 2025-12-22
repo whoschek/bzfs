@@ -32,6 +32,10 @@ case "$bzfs_test_ssh_port" in ""|*[![:digit:]]* ) \
     echo "error: invalid bzfs_test_ssh_port: $bzfs_test_ssh_port" >&2; exit 1;; esac
 case "$bzfs_test_remote_private_key" in ""|-*|*[![:alnum:]/_.-]* ) \
     echo "error: invalid bzfs_test_remote_private_key: $bzfs_test_remote_private_key" >&2; exit 1;; esac
+case "$bzfs_test_mode" in -*|*[![:alnum:]]* ) \
+    echo "error: invalid bzfs_test_mode: $bzfs_test_mode" >&2; exit 1;; esac
+case "$bzfs_test_no_run_quietly" in -*|*[![:alnum:]]* ) \
+    echo "error: invalid bzfs_test_no_run_quietly: $bzfs_test_no_run_quietly" >&2; exit 1;; esac
 
 flags="-oServerAliveInterval=0 -x -T"
 rsync -a --delete --exclude=venv --compress-choice=zstd --compress-level=1 -e \
@@ -39,4 +43,7 @@ rsync -a --delete --exclude=venv --compress-choice=zstd --compress-level=1 -e \
     "$bzfs_test_remote_userhost:$bzfs_test_remote_path"
 # shellcheck disable=SC2086
 ssh -i "$bzfs_test_remote_private_key" -p "$bzfs_test_ssh_port" $flags "$bzfs_test_remote_userhost" \
-    "bzfs_test_mode=$bzfs_test_mode" "bzfs_test_ssh_port=$bzfs_test_ssh_port" "$bzfs_test_remote_path/test.sh"
+    "bzfs_test_ssh_port=$bzfs_test_ssh_port" \
+    "bzfs_test_mode=$bzfs_test_mode" \
+    "bzfs_test_no_run_quietly=$bzfs_test_no_run_quietly" \
+    "$bzfs_test_remote_path/test.sh"
