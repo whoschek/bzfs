@@ -134,6 +134,7 @@ from typing import (
     Callable,
     Final,
     Generic,
+    NamedTuple,
     NoReturn,
     TypeVar,
     final,
@@ -180,98 +181,93 @@ def call_with_retries(
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
     start_time_nanos: Final[int] = time.monotonic_ns()
     while True:
-        giveup_reason: str = ""
         retry: Retry = Retry(retry_count, start_time_nanos, policy, config, previous_outcomes)
         try:
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
             if after_attempt is not _after_attempt:
-                outcome: AttemptOutcome = AttemptOutcome(
-                    retry, True, False, False, giveup_reason, time.monotonic_ns() - start_time_nanos, 0, result, log
-                )
+                elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
+                outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, "", elapsed_nanos, 0, result, log)
                 after_attempt(outcome)
             return result
         except RetryableError as retryable_error:
-            elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
-            if retry_count == 0 and retryable_error.retry_immediately_once:
-                sleep_nanos: int = 0  # retry once immediately without backoff
-            else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
-                rng = _thread_local_rng() if rng is None else rng
-                sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
-                    retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
-                )
-                assert sleep_nanos >= 0
-                assert curr_max_sleep_nanos >= 0
-
-            format_duration: Callable[[int], str] = config.format_duration  # lambda: nanos
+            elapsed_nanos = time.monotonic_ns() - start_time_nanos
             termination_event: threading.Event | None = config.termination_event
-            outcome = AttemptOutcome(
-                retry, False, False, False, giveup_reason, elapsed_nanos, sleep_nanos, retryable_error, log
-            )
-            will_retry: bool = False
-            if (
-                retry_count < policy.max_retries
-                and elapsed_nanos < policy.max_elapsed_nanos
-                and (termination_event is None or not termination_event.is_set())
-                and not (giveup_reason := giveup(outcome))
-            ):
-                will_retry = True
-                retry_count += 1
-                loglevel: int = config.info_loglevel
-                if log is not None and config.enable_logging and log.isEnabledFor(loglevel):
-                    m1: str = config.format_msg(config.display_msg, retryable_error)
-                    m2: str = config.format_pair(retry_count, policy.max_retries)
-                    log.log(loglevel, "%s", f"{m1}{m2} in {format_duration(sleep_nanos)}{config.dots}", extra=config.extra)
-                after_attempt(outcome)
-                _sleep(sleep_nanos, termination_event)
-            else:
-                sleep_nanos = 0
-
-            is_terminated: bool = termination_event is not None and termination_event.is_set()
-            if is_terminated or not will_retry:
-                if (
-                    policy.max_retries > 0
-                    and log is not None
-                    and config.enable_logging
-                    and log.isEnabledFor(config.warning_loglevel)
-                    and not is_terminated
-                ):
-                    reason: str = f"{giveup_reason}; " if giveup_reason else ""
-                    log.log(
-                        config.warning_loglevel,
-                        "%s",
-                        f"{config.format_msg(config.display_msg, retryable_error)}"
-                        f"exhausted; giving up because {reason}the last "
-                        f"{config.format_pair(retry_count, policy.max_retries)} retries across "
-                        f"{config.format_pair(format_duration(elapsed_nanos), format_duration(policy.max_elapsed_nanos))} "
-                        "failed",
-                        exc_info=retryable_error if config.exc_info else None,
-                        stack_info=config.stack_info,
-                        extra=config.extra,
+            giveup_reason: str = ""
+            sleep_nanos: int = 0
+            if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
+                if policy.max_sleep_nanos == 0 and policy.backoff_strategy is _full_jitter_backoff_strategy:
+                    pass  # perf: e.g. spin-before-block
+                elif retry_count == 0 and retryable_error.retry_immediately_once:
+                    pass  # retry once immediately without backoff
+                else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
+                    rng = _thread_local_rng() if rng is None else rng
+                    sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
+                        retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
                     )
-                outcome = AttemptOutcome(
-                    retry, False, True, is_terminated, giveup_reason, elapsed_nanos, sleep_nanos, retryable_error, log
-                )
-                after_attempt(outcome)
-                cause: BaseException | None = retryable_error.__cause__
-                if policy.reraise and cause is not None:
-                    raise cause.with_traceback(cause.__traceback__)  # noqa: B904 intentional re-raise without chaining
-                else:
-                    raise RetryError(outcome) from retryable_error
+                    assert sleep_nanos >= 0
+                    assert curr_max_sleep_nanos >= 0
 
-            n = policy.max_previous_outcomes
-            if n > 0:  #  outcome will be passed to next attempt via Retry.previous_outcomes
-                if len(outcome.retry.previous_outcomes) > 0:
-                    outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))  # detach to reduce memory footprint
-                previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # *immutable* deque
-            del outcome  # help gc
+                outcome = AttemptOutcome(retry, False, False, False, "", elapsed_nanos, sleep_nanos, retryable_error, log)
+                if (termination_event is None or not termination_event.is_set()) and not (giveup_reason := giveup(outcome)):
+                    retry_count += 1
+                    if log is not None and config.enable_logging and log.isEnabledFor(config.info_loglevel):
+                        m1: str = config.format_msg(config.display_msg, retryable_error)
+                        m2: str = config.format_pair(retry_count, policy.max_retries)
+                        m3: str = config.format_duration(sleep_nanos)
+                        log.log(config.info_loglevel, "%s", f"{m1}{m2} in {m3}{config.dots}", extra=config.extra)
+                    after_attempt(outcome)
+                    if sleep_nanos > 0:
+                        _sleep(sleep_nanos, termination_event)
+                    if termination_event is None or not termination_event.is_set():
+                        n = policy.max_previous_outcomes
+                        if n > 0:  #  outcome will be passed to next attempt via Retry.previous_outcomes
+                            if len(outcome.retry.previous_outcomes) > 0:  # detach to reduce memory footprint
+                                outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))
+                            previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # immutable
+                        del outcome  # help gc
+                        continue  # continue retry loop with next attempt
+                else:
+                    sleep_nanos = 0
+
+            # raise error
+            is_terminated: bool = termination_event is not None and termination_event.is_set()
+            if (
+                policy.max_retries > 0
+                and log is not None
+                and config.enable_logging
+                and log.isEnabledFor(config.warning_loglevel)
+                and not is_terminated
+            ):
+                reason: str = f"{giveup_reason}; " if giveup_reason else ""
+                format_duration: Callable[[int], str] = config.format_duration  # lambda: nanos
+                log.log(
+                    config.warning_loglevel,
+                    "%s",
+                    f"{config.format_msg(config.display_msg, retryable_error)}"
+                    f"exhausted; giving up because {reason}the last "
+                    f"{config.format_pair(retry_count, policy.max_retries)} retries across "
+                    f"{config.format_pair(format_duration(elapsed_nanos), format_duration(policy.max_elapsed_nanos))} "
+                    "failed",
+                    exc_info=retryable_error if config.exc_info else None,
+                    stack_info=config.stack_info,
+                    extra=config.extra,
+                )
+            outcome = AttemptOutcome(
+                retry, False, True, is_terminated, giveup_reason, elapsed_nanos, sleep_nanos, retryable_error, log
+            )
+            after_attempt(outcome)
+            cause: BaseException | None = retryable_error.__cause__
+            if policy.reraise and cause is not None:
+                raise cause.with_traceback(cause.__traceback__)  # noqa: B904 intentional re-raise without chaining
+            else:
+                raise RetryError(outcome) from retryable_error
 
 
 def _sleep(sleep_nanos: int, termination_event: threading.Event | None) -> None:
-    if sleep_nanos > 0:
-        if termination_event is None:
-            time.sleep(sleep_nanos / 1_000_000_000)
-        else:
-            termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
+    if termination_event is None:
+        time.sleep(sleep_nanos / 1_000_000_000)
+    else:
+        termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
 
 
 #############################################################################
@@ -299,45 +295,57 @@ class RetryableError(Exception):
 
 
 #############################################################################
-@dataclass
 @final
 class RetryError(Exception):
     """Indicates that retries have been exhausted; the last RetryableError is in RetryError.__cause__."""
 
-    outcome: AttemptOutcome
+    outcome: Final[AttemptOutcome]
     """Metadata that describes why and how call_with_retries() gave up."""
+
+    def __init__(self, outcome: AttemptOutcome) -> None:
+        super().__init__(outcome)
+        self.outcome = outcome
 
 
 #############################################################################
-@dataclass(frozen=True)
 @final
-class Retry:
+class Retry(NamedTuple):
     """Attempt metadata provided to callback functions; includes the current retry attempt number; immutable."""
 
-    count: int
+    count: int  # type: ignore[assignment]
     """Attempt number; count=0 is the first attempt, count=1 is the second attempt aka first retry."""
 
     start_time_nanos: int
     """Value of time.monotonic_ns() at start of call_with_retries() invocation."""
 
-    policy: RetryPolicy = dataclasses.field(repr=False, compare=False)
+    policy: RetryPolicy
     """Policy that was passed into call_with_retries()."""
 
-    config: RetryConfig = dataclasses.field(repr=False, compare=False)
+    config: RetryConfig
     """Config that is used by call_with_retries()."""
 
-    previous_outcomes: Sequence[AttemptOutcome] = dataclasses.field(repr=False, compare=False)
+    previous_outcomes: Sequence[AttemptOutcome]
     """History/state of the N=max_previous_outcomes most recent outcomes for the current call_with_retries() invocation."""
 
     def copy(self, **override_kwargs: Any) -> Retry:
         """Creates a new object copying an existing one with the specified fields overridden for customization."""
-        return dataclasses.replace(self, **override_kwargs)
+        return self._replace(**override_kwargs)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(count={self.count!r}, start_time_nanos={self.start_time_nanos!r})"
+
+    def __eq__(self, other: object) -> bool:
+        if type(other) is not Retry:
+            return False
+        return self.count == other.count and self.start_time_nanos == other.start_time_nanos
+
+    def __hash__(self) -> int:
+        return hash((self.count, self.start_time_nanos))
 
 
 #############################################################################
-@dataclass(frozen=True)
 @final
-class AttemptOutcome:
+class AttemptOutcome(NamedTuple):
     """Captures per-attempt state for ``after_attempt`` callbacks; immutable."""
 
     retry: Retry
@@ -361,15 +369,53 @@ class AttemptOutcome:
     sleep_nanos: int
     """Duration of current sleep period."""
 
-    result: RetryableError | object = dataclasses.field(repr=False, compare=False)
+    result: RetryableError | object
     """Result of fn(retry); a RetryableError on retryable failure, or some other object on success."""
 
-    log: Logger | None = dataclasses.field(repr=False, compare=False)
+    log: Logger | None
     """Logger that was passed into call_with_retries()."""
 
     def copy(self, **override_kwargs: Any) -> AttemptOutcome:
         """Creates a new outcome copying an existing one with the specified fields overridden for customization."""
-        return dataclasses.replace(self, **override_kwargs)
+        return self._replace(**override_kwargs)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"retry={self.retry!r}, "
+            f"is_success={self.is_success!r}, "
+            f"is_exhausted={self.is_exhausted!r}, "
+            f"is_terminated={self.is_terminated!r}, "
+            f"giveup_reason={self.giveup_reason!r}, "
+            f"elapsed_nanos={self.elapsed_nanos!r}, "
+            f"sleep_nanos={self.sleep_nanos!r})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if type(other) is not AttemptOutcome:
+            return False
+        return (
+            self.retry == other.retry
+            and self.is_success == other.is_success
+            and self.is_exhausted == other.is_exhausted
+            and self.is_terminated == other.is_terminated
+            and self.giveup_reason == other.giveup_reason
+            and self.elapsed_nanos == other.elapsed_nanos
+            and self.sleep_nanos == other.sleep_nanos
+        )
+
+    def __hash__(self) -> int:
+        return hash(
+            (
+                self.retry,
+                self.is_success,
+                self.is_exhausted,
+                self.is_terminated,
+                self.giveup_reason,
+                self.elapsed_nanos,
+                self.sleep_nanos,
+            )
+        )
 
 
 #############################################################################

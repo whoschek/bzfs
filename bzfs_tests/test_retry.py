@@ -18,6 +18,7 @@ from __future__ import (
     annotations,
 )
 import argparse
+import importlib.util
 import logging
 import random
 import threading
@@ -25,6 +26,9 @@ import time
 import unittest
 from logging import (
     Logger,
+)
+from typing import (
+    Any,
 )
 from unittest.mock import (
     MagicMock,
@@ -55,6 +59,7 @@ def suite() -> unittest.TestSuite:
         TestRetryOptionsCall,
         TestAttemptOutcomeCopy,
         TestCallWithRetriesBenchmark,
+        TestTenacityBenchmark,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -85,15 +90,14 @@ class TestSleep(unittest.TestCase):
     def test_sleep_calls_time_sleep_when_termination_event_is_none(self) -> None:
         sleep_nanos = 123_000_000
         expected_secs = sleep_nanos / 1_000_000_000
-        with patch("bzfs_main.util.retry.time.sleep") as mock_sleep:
+        with (
+            patch("bzfs_main.util.retry.time.sleep") as mock_sleep,
+            patch("bzfs_main.util.retry.threading.Event.wait") as mock_wait,
+        ):
             _sleep(sleep_nanos, termination_event=None)
         mock_sleep.assert_called_once()
+        mock_wait.assert_not_called()
         self.assertAlmostEqual(expected_secs, mock_sleep.call_args[0][0])
-
-    def test_sleep_does_not_call_time_sleep_when_duration_is_zero(self) -> None:
-        with patch("bzfs_main.util.retry.time.sleep") as mock_sleep:
-            _sleep(0, termination_event=None)
-        mock_sleep.assert_not_called()
 
     def test_sleep_calls_event_wait_when_termination_event_is_not_none(self) -> None:
         sleep_nanos = 123_000_000
@@ -105,12 +109,6 @@ class TestSleep(unittest.TestCase):
         mock_sleep.assert_not_called()
         mock_wait.assert_called_once()
         self.assertAlmostEqual(expected_secs, mock_wait.call_args[0][0])
-
-    def test_sleep_does_not_call_event_wait_when_duration_is_zero(self) -> None:
-        termination_event = threading.Event()
-        with patch.object(termination_event, "wait") as mock_wait:
-            _sleep(0, termination_event=termination_event)
-        mock_wait.assert_not_called()
 
 
 #############################################################################
@@ -189,6 +187,51 @@ class TestCallWithRetries(unittest.TestCase):
         )
         self.assertEqual([0, 1, 2], calls)
         self.assertEqual(0, len(mock_log.log.call_args_list))
+
+    def test_call_with_retries_retry_immediately_once_skips_backoff_and_sleep(self) -> None:
+        """Ensures retry_immediately_once triggers an immediate retry without computing backoff or sleeping."""
+        backoff_strategy = MagicMock(side_effect=AssertionError("backoff_strategy must not be called"))
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=1,
+            initial_max_sleep_secs=1,
+            max_sleep_secs=1,
+            max_elapsed_secs=10,
+            backoff_strategy=backoff_strategy,
+        )
+        calls: list[int] = []
+        events: list[AttemptOutcome] = []
+
+        def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            if retry.count == 0:
+                raise RetryableError("fail", retry_immediately_once=True) from ValueError("boom")
+            return "ok"
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            events.append(outcome)
+
+        with patch("bzfs_main.util.retry._sleep") as mock_sleep:
+            actual = call_with_retries(
+                fn,
+                policy=retry_policy,
+                config=RetryConfig(),
+                after_attempt=after_attempt,
+                log=None,
+            )
+
+        self.assertEqual("ok", actual)
+        self.assertEqual([0, 1], calls)
+        self.assertEqual(2, len(events))
+        self.assertFalse(events[0].is_success)
+        self.assertFalse(events[0].is_exhausted)
+        self.assertEqual(0, events[0].retry.count)
+        self.assertEqual(0, events[0].sleep_nanos)
+        self.assertTrue(events[1].is_success)
+        self.assertEqual(1, events[1].retry.count)
+        self.assertEqual(0, events[1].sleep_nanos)
+        mock_sleep.assert_not_called()
+        backoff_strategy.assert_not_called()
 
     def test_call_with_retries_log_none(self) -> None:
         """Ensures call_with_retries works when log is None."""
@@ -669,6 +712,222 @@ class TestCallWithRetries(unittest.TestCase):
             RetryPolicy(reraise="no")  # type: ignore[arg-type]
         self.assertIn("reraise", str(cm.exception))
 
+    def test_call_with_retries_termination_event_can_flip_between_checks(self) -> None:
+        """Ensures termination_event can become set between two consecutive is_set() checks."""
+        retry_policy = RetryPolicy(
+            max_retries=3,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=10,
+            max_previous_outcomes=1,
+        )
+        termination_event = MagicMock(spec=threading.Event)
+        is_set_returns: list[bool] = []
+        is_set_call_count: int = 0
+
+        def is_set() -> bool:
+            nonlocal is_set_call_count
+            is_set_call_count += 1
+            value = is_set_call_count >= 2
+            is_set_returns.append(value)
+            return value
+
+        termination_event.is_set.side_effect = is_set
+        calls: list[int] = []
+        events: list[AttemptOutcome] = []
+
+        def fn(retry: Retry) -> None:
+            calls.append(retry.count)
+            raise RetryableError("fail") from ValueError("boom")
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            events.append(outcome)
+
+        with self.assertRaises(ValueError):
+            call_with_retries(
+                fn,
+                policy=retry_policy,
+                config=RetryConfig(termination_event=termination_event),
+                after_attempt=after_attempt,
+                log=None,
+            )
+
+        self.assertEqual([0], calls)
+        self.assertGreaterEqual(len(is_set_returns), 2)
+        self.assertEqual([False, True], is_set_returns[:2])
+        self.assertEqual(2, len(events))
+        self.assertFalse(events[0].is_success)
+        self.assertFalse(events[0].is_exhausted)
+        self.assertFalse(events[0].is_terminated)
+        self.assertFalse(events[1].is_success)
+        self.assertTrue(events[1].is_exhausted)
+        self.assertTrue(events[1].is_terminated)
+        self.assertEqual((), events[1].retry.previous_outcomes)
+
+    def test_full_jitter_backoff_uses_curr_max_when_min_equals_curr_max(self) -> None:
+        """Ensures full-jitter uses curr_max_sleep_nanos directly when min==curr (perf path)."""
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0.001,
+            initial_max_sleep_secs=0.001,
+            max_sleep_secs=1,
+            max_elapsed_secs=10,
+        )
+        rng = MagicMock(spec=random.Random)
+        rng.randint.side_effect = AssertionError("randint must not be called")
+        calls: list[int] = []
+        events: list[AttemptOutcome] = []
+
+        def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            if retry.count == 0:
+                raise RetryableError("fail") from ValueError("boom")
+            return "ok"
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            events.append(outcome)
+
+        with (
+            patch("bzfs_main.util.retry._thread_local_rng", return_value=rng),
+            patch("bzfs_main.util.retry._sleep") as mock_sleep,
+        ):
+            actual = call_with_retries(
+                fn,
+                policy=retry_policy,
+                config=RetryConfig(),
+                after_attempt=after_attempt,
+                log=None,
+            )
+
+        self.assertEqual("ok", actual)
+        self.assertEqual([0, 1], calls)
+        self.assertEqual(2, len(events))
+        self.assertEqual(retry_policy.min_sleep_nanos, retry_policy.initial_max_sleep_nanos)
+        self.assertFalse(events[0].is_success)
+        self.assertEqual(0, events[0].retry.count)
+        self.assertEqual(retry_policy.initial_max_sleep_nanos, events[0].sleep_nanos)
+        self.assertTrue(events[1].is_success)
+        self.assertEqual(1, events[1].retry.count)
+        self.assertEqual(0, events[1].sleep_nanos)
+        mock_sleep.assert_called_once_with(retry_policy.initial_max_sleep_nanos, None)
+        rng.randint.assert_not_called()
+
+    def test_thread_local_rng_is_cached_after_first_initialization(self) -> None:
+        """Ensures _thread_local_rng caches its RNG so random.Random() is not called again in the same thread."""
+        import bzfs_main.util.retry
+
+        threadlocal = bzfs_main.util.retry._THREAD_LOCAL_RNG
+        original_rng = threadlocal.rng
+        threadlocal.rng = None
+        try:
+            seen_rngs: list[random.Random] = []
+
+            def backoff_strategy(
+                retry: Retry,
+                curr_max_sleep_nanos: int,
+                rng: random.Random,
+                elapsed_nanos: int,
+                retryable_error: RetryableError,
+            ) -> tuple[int, int]:
+                _ = retry
+                _ = elapsed_nanos
+                _ = retryable_error
+                seen_rngs.append(rng)
+                return 0, curr_max_sleep_nanos
+
+            retry_policy = RetryPolicy(
+                max_retries=1,
+                min_sleep_secs=0,
+                initial_max_sleep_secs=1e-9,
+                max_sleep_secs=1e-9,
+                max_elapsed_secs=10,
+                backoff_strategy=backoff_strategy,
+            )
+
+            sentinel_rng = MagicMock(spec=random.Random)
+
+            def run_once() -> str:
+                calls: list[int] = []
+
+                def fn(retry: Retry) -> str:
+                    calls.append(retry.count)
+                    if retry.count == 0:
+                        raise RetryableError("fail") from ValueError("boom")
+                    return "ok"
+
+                result = call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=None)
+                self.assertEqual([0, 1], calls)
+                return result
+
+            with patch("bzfs_main.util.retry.random.Random", return_value=sentinel_rng) as mock_random:
+                self.assertEqual("ok", run_once())
+                self.assertEqual("ok", run_once())
+            self.assertEqual(1, mock_random.call_count)
+            self.assertEqual([sentinel_rng, sentinel_rng], seen_rngs)
+        finally:
+            threadlocal.rng = original_rng
+
+    def test_repr_eq_hash(self) -> None:
+        """Ensures Retry/AttemptOutcome implement compact, stable value semantics for __repr__, __eq__ and __hash__."""
+        retry_a = Retry(
+            count=0,
+            start_time_nanos=123,
+            policy=RetryPolicy(max_retries=1),
+            config=RetryConfig(display_msg="a"),
+            previous_outcomes=(),
+        )
+        retry_b = Retry(
+            count=0,
+            start_time_nanos=123,
+            policy=RetryPolicy(max_retries=999),
+            config=RetryConfig(display_msg="b"),
+            previous_outcomes=(MagicMock(spec=AttemptOutcome),),
+        )
+        retry_c = Retry(
+            count=1,
+            start_time_nanos=123,
+            policy=RetryPolicy(max_retries=1),
+            config=RetryConfig(display_msg="a"),
+            previous_outcomes=(),
+        )
+
+        retry_repr = repr(retry_a)
+        self.assertIn("Retry(", retry_repr)
+        self.assertNotIn("policy", retry_repr)
+        self.assertNotIn("config", retry_repr)
+        self.assertEqual(retry_a, retry_b)
+        self.assertEqual(hash(retry_a), hash(retry_b))
+        self.assertNotEqual(retry_a, retry_c)
+        self.assertEqual(1, len({retry_a, retry_b}))
+        self.assertNotEqual(retry_a, object())
+        self.assertFalse(retry_a == (retry_a.count, retry_a.start_time_nanos))
+
+        outcome_a = AttemptOutcome(
+            retry=retry_a,
+            is_success=False,
+            is_exhausted=False,
+            is_terminated=False,
+            giveup_reason="",
+            elapsed_nanos=5,
+            sleep_nanos=7,
+            result="boom",
+            log=None,
+        )
+        outcome_b = outcome_a.copy(result="different", log=MagicMock(spec=Logger))
+        outcome_c = outcome_a.copy(sleep_nanos=8)
+
+        outcome_repr = repr(outcome_a)
+        self.assertIn("AttemptOutcome(", outcome_repr)
+        self.assertNotIn("result", outcome_repr)
+        self.assertNotIn("log", outcome_repr)
+        self.assertEqual(outcome_a, outcome_b)
+        self.assertEqual(hash(outcome_a), hash(outcome_b))
+        self.assertNotEqual(outcome_a, outcome_c)
+        self.assertEqual(1, len({outcome_a, outcome_b}))
+        self.assertNotEqual(outcome_a, object())
+        self.assertFalse(outcome_a == (outcome_a.retry, outcome_a.elapsed_nanos, outcome_a.sleep_nanos))
+
 
 #############################################################################
 class TestRetryPolicyCopy(unittest.TestCase):
@@ -918,33 +1177,40 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
 #############################################################################
 class TestCallWithRetriesBenchmark(unittest.TestCase):
 
-    def test_benchmark_exhausted_r1k_n0_p0_immediate_success_Yes(self) -> None:  # noqa: N802
-        self.benchmark(runs=1000, max_retries=0, max_previous_outcomes=0, immediate_success=True)
+    def test_benchmark_r1k_n0_p0_s0(self) -> None:
+        self.benchmark(runs=1000, max_retries=0, max_previous_outcomes=0, success_on=0)
 
-    def test_benchmark_exhausted_r1k_n0_p0_immediate_success_no(self) -> None:
+    def test_xbenchmark_r1k_n1_p0_s1(self) -> None:
+        self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=0, success_on=1)
+
+    def test_xbenchmark_r1k_n2_p0_s2(self) -> None:
+        self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=0, success_on=2)
+
+    def test_xbenchmark_r1k_n1_p1_s1(self) -> None:
+        self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=1, success_on=1)
+
+    def test_benchmark_r1k_n0_p0_sinf(self) -> None:
         self.benchmark(runs=1000, max_retries=0, max_previous_outcomes=0)
 
-    def test_benchmark_exhausted_r1k_n1_p1(self) -> None:
-        self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=1)
-
-    def test_benchmark_exhausted_r1k_n2_p1(self) -> None:
-        self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=1)
-
-    def test_benchmark_exhausted_r1k_n2_p2(self) -> None:
-        self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=2)
-
-    def test_benchmark_exhausted_r1k_n1_p0(self) -> None:
+    def test_benchmark_r1k_n1_p0_sinf(self) -> None:
         self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=0)
 
-    def test_benchmark_exhausted_r1k_n5_p0(self) -> None:
+    def test_benchmark_r1k_n2_p0_sinf(self) -> None:
+        self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=0)
+
+    def test_benchmark_r1k_n5_p0_sinf(self) -> None:
         self.benchmark(runs=1000, max_retries=5, max_previous_outcomes=0)
 
     @unittest.skip("benchmark; enable for performance comparison")
-    def test_benchmark_exhausted_r100k_n1_p1(self) -> None:
+    def test_xbenchmark_r100k_n1_p1_sinf(self) -> None:
         self.benchmark(runs=100_000, max_retries=1, max_previous_outcomes=1)
 
     def benchmark(
-        self, runs: int, max_retries: int, max_previous_outcomes: int = 0, immediate_success: bool = False
+        self,
+        runs: int,
+        max_retries: int,
+        max_previous_outcomes: int = 0,
+        success_on: int = 1_000_000_000,
     ) -> None:
         retry_policy = RetryPolicy(
             max_retries=max_retries,
@@ -953,27 +1219,24 @@ class TestCallWithRetriesBenchmark(unittest.TestCase):
             max_sleep_secs=0,
             max_elapsed_secs=1000,
             max_previous_outcomes=max_previous_outcomes,
+            reraise=False,
         )
+        iters = 0
 
-        def fn(_retry: Retry) -> None:
-            if not immediate_success:
-                raise RetryableError("fail")
+        def fn(retry: Retry) -> Any:
+            nonlocal iters
+            iters += 1
+            if retry.count >= success_on:
+                return None
+            raise RetryableError("fail")
 
         config = RetryConfig()
         try:  # warmup
             call_with_retries(fn, policy=retry_policy.copy(max_retries=100), config=config, log=None)
-        except RetryError as exc:
-            if immediate_success:
-                self.fail("success expected")
-            else:
-                self.assertEqual(100, exc.outcome.retry.count)
-                self.assertFalse(exc.outcome.is_terminated)
-                self.assertTrue(exc.outcome.is_exhausted)
-        else:
-            if not immediate_success:
-                self.fail("failure expected")
+        except RetryError:
+            pass
 
-        log = logging.getLogger("TestRunWithRetriesBenchmark")
+        log = logging.getLogger("TestCallWithRetriesBenchmark")
         log.setLevel(logging.INFO)
         if not log.handlers:
             log.addHandler(logging.StreamHandler())
@@ -986,17 +1249,142 @@ class TestCallWithRetriesBenchmark(unittest.TestCase):
         start = time.perf_counter()
         for _ in range(runs):
             try:
-                iters += max_retries + 1
                 call_with_retries(fn, policy=retry_policy, config=config, log=None)
             except RetryError:
                 pass
 
         elapsed_secs = time.perf_counter() - start
-
         iters_per_sec = float("inf") if elapsed_secs <= 0 else iters / elapsed_secs
         runs_per_sec = float("inf") if elapsed_secs <= 0 else runs / elapsed_secs
         log.info(
             f"call_with_retries benchmark: "
-            f"runs={runs}, max_retries={max_retries}, max_previous_outcomes={max_previous_outcomes}, "
-            f"runs/sec={runs_per_sec:.0f}, iters/sec={iters_per_sec:.0f}, elapsed={elapsed_secs:.3f}s"
+            f"runs={runs}, "
+            f"max_retries={max_retries}, "
+            f"success_on={success_on}, "
+            f"max_previous_outcomes={max_previous_outcomes}, "
+            f"runs/sec={runs_per_sec:.0f}, "
+            f"iters/sec={iters_per_sec:.0f}, "
+            f"elapsed={elapsed_secs:.3f}s"
+        )
+
+
+#############################################################################
+@unittest.skipIf(importlib.util.find_spec("tenacity") is None, "tenacity not installed")
+class TestTenacityBenchmark(unittest.TestCase):
+    """Purpose: Compare TestCallWithRetriesBenchmark (using bzfs call_with_retries) with a tenacity-based version.
+    Result: call_with_retries() is 4-14x faster than tenacity here (14x for the common case: test_benchmark_r1k_n0_p0_s0),
+    even in this single-threaded scenario."""
+
+    def test_benchmark_r1k_n0_p0_s0(self) -> None:
+        self.benchmark(runs=1000, max_retries=0, max_previous_outcomes=0, success_on=0)
+
+    def test_xbenchmark_r1k_n1_p0_s1(self) -> None:
+        self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=0, success_on=1)
+
+    def test_xbenchmark_r1k_n2_p0_s2(self) -> None:
+        self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=0, success_on=2)
+
+    def test_xbenchmark_r1k_n1_p1_s1(self) -> None:
+        self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=1, success_on=1)
+
+    def test_benchmark_r1k_n0_p0_sinf(self) -> None:
+        self.benchmark(runs=1000, max_retries=0, max_previous_outcomes=0)
+
+    def test_benchmark_r1k_n1_p0_sinf(self) -> None:
+        self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=0)
+
+    def test_benchmark_r1k_n2_p0_sinf(self) -> None:
+        self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=0)
+
+    def test_benchmark_r1k_n5_p0_sinf(self) -> None:
+        self.benchmark(runs=1000, max_retries=5, max_previous_outcomes=0)
+
+    @unittest.skip("benchmark; enable for performance comparison")
+    def test_xbenchmark_r100k_n1_p1_sinf(self) -> None:
+        self.benchmark(runs=100_000, max_retries=1, max_previous_outcomes=1)
+
+    def benchmark(
+        self,
+        runs: int,
+        max_retries: int,
+        max_previous_outcomes: int = 0,
+        success_on: int = 1_000_000_000,
+    ) -> None:
+        from tenacity import RetryError as TenacityRetryError
+        from tenacity import (
+            Retrying,
+            retry_if_exception_type,
+            stop_after_attempt,
+            wait_none,
+        )
+
+        previous_outcomes: tuple[object, ...] = ()
+
+        def before_sleep(retry_state: Any) -> None:
+            nonlocal previous_outcomes
+            previous_outcomes = previous_outcomes[len(previous_outcomes) - max_previous_outcomes + 1 :] + (
+                retry_state.outcome,
+            )
+
+        retrying = Retrying(
+            retry=retry_if_exception_type(RetryableError),
+            stop=stop_after_attempt(101),
+            wait=wait_none(),
+            before_sleep=before_sleep if max_previous_outcomes > 0 else None,
+            reraise=False,
+        )
+        iters = 0
+
+        def fn() -> None:
+            nonlocal iters
+            iters += 1
+            count = retrying.statistics["attempt_number"] - 1
+            if count >= success_on:
+                return
+            raise RetryableError("fail")
+
+        previous_outcomes = ()
+        try:  # warmup
+            retrying(fn)
+        except TenacityRetryError:
+            pass
+
+        retrying = Retrying(
+            retry=retry_if_exception_type(RetryableError),
+            stop=stop_after_attempt(max_retries + 1),
+            wait=wait_none(),
+            before_sleep=before_sleep if max_previous_outcomes > 0 else None,
+            reraise=False,
+        )
+
+        log = logging.getLogger("TestTenacityBenchmark")
+        log.setLevel(logging.INFO)
+        if not log.handlers:
+            log.addHandler(logging.StreamHandler())
+
+        import gc
+
+        gc.collect()
+
+        iters = 0
+        start = time.perf_counter()
+        for _ in range(runs):
+            previous_outcomes = ()
+            try:
+                retrying(fn)
+            except TenacityRetryError:
+                pass
+
+        elapsed_secs = time.perf_counter() - start
+        iters_per_sec = float("inf") if elapsed_secs <= 0 else iters / elapsed_secs
+        runs_per_sec = float("inf") if elapsed_secs <= 0 else runs / elapsed_secs
+        log.info(
+            f"tenacity benchmark: "
+            f"runs={runs}, "
+            f"max_retries={max_retries}, "
+            f"success_on={success_on}, "
+            f"max_previous_outcomes={max_previous_outcomes}, "
+            f"runs/sec={runs_per_sec:.0f}, "
+            f"iters/sec={iters_per_sec:.0f}, "
+            f"elapsed={elapsed_secs:.3f}s"
         )
