@@ -153,7 +153,23 @@ To validate your changes, you MUST follow this exact sequence:
 
 For tasks that change code, tests, or scripts in this repository, you MUST follow this exact sequence:
 
-1. **Getting up to Speed:** Read the git log to get up to speed on what was recently worked on.
+1. **Getting up to Speed:**
+
+   - Read the git log to get up to speed on what was recently worked on.
+   - If the User literally requests `plan2go=<path/to/plan.md>`:
+     - If `<path/to/plan.md>` does not exist:
+       - Look for a file literally named `spec.md` in the same directory as `<path/to/plan.md>`. Example:
+         `plan2go=.agent/plan.md` implies `.agent/spec.md`.
+       - If said `spec.md` does not exist, you MUST stop and ask the User how to proceed.
+       - Else, create `<path/to/plan.md>` by transforming the requirements/specifications in `spec.md` into a plan that
+         is effective and safe to execute for an AI agent.
+     - To understand what needs to be done read `<path/to/plan.md>`.
+     - Update `<path/to/plan.md>` whenever any of these change: plan, goals, constraints/assumptions, key decisions,
+       steps, progress state (Done/Now/Next). `<path/to/plan.md>` is the canonical source of truth for the plan and
+       progress. If the `update_plan` tool is available, prevent `update_plan` from diverging by updating it to a brief
+       high-level synthesis of `<path/to/plan.md>` (max 5–7 steps + statuses).
+     - Execute the plan in `<path/to/plan.md>` (subject to `AGENTS.md` rules) by continuing the workflow with Step 2
+       ("Stop if Already Done").
 
 2. **Stop if Already Done:** Determine if the acceptance criteria are already satisfied. If so, stop.
 
