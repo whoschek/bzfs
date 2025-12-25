@@ -53,17 +53,16 @@ Observability:
   exhausted/terminated state, attempt number, total elapsed duration (in nanoseconds), sleep duration (in nanoseconds), etc.
 - ``AttemptOutcome.result`` is either the successful result or the most recent ``RetryableError``, enabling integration with
   metrics and tracing systems without coupling the retry loop to any specific backend.
-- Supply ``after_attempt`` to customize logging 100%, if necessary, in which case also set
-  ``RetryConfig.enable_logging=False``.
+- Supply an ``after_attempt(AttemptOutcome)`` callback to customize logging 100%, if necessary.
 
 Expert Configuration:
 ---------------------
+- Set ``backoff_strategy(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)`` to plug in a custom backoff
+  algorithm (e.g., decorrelated-jitter). The default is full-jitter exponential backoff with cap (aka industry standard).
 - Set ``RetryPolicy.max_previous_outcomes > 0`` to pass the N most recent AttemptOutcome objects to callbacks (default is 0).
 - If ``RetryPolicy.max_previous_outcomes > 0``, you can use ``RetryableError(..., attachment=...)`` to carry domain-specific
   state from a failed attempt to the next attempt via ``retry.previous_outcomes``. This pattern helps if attempt N+1 is a
   function of attempt N or all prior attempts (e.g., switching endpoints or resuming from an offset).
-- Set ``backoff_strategy(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)`` to plug in a custom backoff
-  algorithm (e.g., decorrelated-jitter). The default is full-jitter exponential backoff with cap (aka industry standard).
 - Use ``RetryOptions`` as a 'bag of knobs' configuration template for functions that shall be retried in similar ways.
 - Or package up all knobs plus a ``fn(retry: Retry)`` function into a self-contained auto-retrying higher level function by
   constructing a ``RetryOptions`` object (which is a ``Callable`` function itself).
@@ -144,17 +143,49 @@ from bzfs_main.util.utils import (
     human_readable_duration,
 )
 
+
 #############################################################################
-_T = TypeVar("_T")
-
-
-def _after_attempt(_outcome: AttemptOutcome) -> None:
-    """Default implementation does nothing."""
-
-
 def _giveup(_outcome: AttemptOutcome) -> str:
     """Default implementation never gives up."""
     return ""
+
+
+def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
+    """Performs simple logging of retry attempt failures; the default for call_with_retries()."""
+    if outcome.is_success or outcome.log is None or not outcome.retry.config.enable_logging:
+        return
+    log: Logger = outcome.log
+    retry: Retry = outcome.retry
+    config: RetryConfig = retry.config
+    policy: RetryPolicy = retry.policy
+    assert isinstance(outcome.result, RetryableError)
+    retryable_error: RetryableError = outcome.result
+    if not outcome.is_exhausted:
+        if log.isEnabledFor(config.info_loglevel):  # Retrying X in Y ms ...
+            m1: str = config.format_msg(config.display_msg, retryable_error)
+            m2: str = config.format_pair(retry.count + 1, policy.max_retries)
+            m3: str = config.format_duration(outcome.sleep_nanos)
+            log.log(config.info_loglevel, "%s", f"{m1}{m2} in {m3}{config.dots}", extra=config.extra)
+    else:
+        if policy.max_retries > 0 and log.isEnabledFor(config.warning_loglevel) and not outcome.is_terminated:
+            reason: str = f"{outcome.giveup_reason}; " if outcome.giveup_reason else ""
+            format_duration: Callable[[int], str] = config.format_duration  # lambda: nanos
+            log.log(
+                config.warning_loglevel,
+                "%s",
+                f"{config.format_msg(config.display_msg, retryable_error)}"
+                f"exhausted; giving up because {reason}the last "
+                f"{config.format_pair(retry.count, policy.max_retries)} retries across "
+                f"{config.format_pair(format_duration(outcome.elapsed_nanos), format_duration(policy.max_elapsed_nanos))} "
+                "failed",
+                exc_info=retryable_error if config.exc_info else None,
+                stack_info=config.stack_info,
+                extra=config.extra,
+            )
+
+
+#############################################################################
+_T = TypeVar("_T")
 
 
 def call_with_retries(
@@ -162,7 +193,7 @@ def call_with_retries(
     policy: RetryPolicy,
     config: RetryConfig | None = None,
     giveup: Callable[[AttemptOutcome], str] = _giveup,  # stop retrying based on domain-specific logic
-    after_attempt: Callable[[AttemptOutcome], None] = _after_attempt,  # e.g. record metrics
+    after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     log: Logger | None = None,
 ) -> _T:
     """Runs the function ``fn`` and returns its result; retries on failure as indicated by policy and config; thread-safe.
@@ -184,7 +215,7 @@ def call_with_retries(
         retry: Retry = Retry(retry_count, start_time_nanos, policy, config, previous_outcomes)
         try:
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
-            if after_attempt is not _after_attempt:
+            if after_attempt is not after_attempt_log_failure:
                 elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
                 outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, "", elapsed_nanos, 0, result, log)
                 after_attempt(outcome)
@@ -209,49 +240,23 @@ def call_with_retries(
 
                 outcome = AttemptOutcome(retry, False, False, False, "", elapsed_nanos, sleep_nanos, retryable_error, log)
                 if (termination_event is None or not termination_event.is_set()) and not (giveup_reason := giveup(outcome)):
-                    retry_count += 1
-                    if log is not None and config.enable_logging and log.isEnabledFor(config.info_loglevel):
-                        m1: str = config.format_msg(config.display_msg, retryable_error)
-                        m2: str = config.format_pair(retry_count, policy.max_retries)
-                        m3: str = config.format_duration(sleep_nanos)
-                        log.log(config.info_loglevel, "%s", f"{m1}{m2} in {m3}{config.dots}", extra=config.extra)
                     after_attempt(outcome)
                     if sleep_nanos > 0:
                         _sleep(sleep_nanos, termination_event)
                     if termination_event is None or not termination_event.is_set():
-                        n = policy.max_previous_outcomes
+                        n: int = policy.max_previous_outcomes
                         if n > 0:  #  outcome will be passed to next attempt via Retry.previous_outcomes
-                            if len(outcome.retry.previous_outcomes) > 0:  # detach to reduce memory footprint
+                            if previous_outcomes:  # detach to reduce memory footprint
                                 outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))
-                            previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # immutable
+                            previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # imm deque
                         del outcome  # help gc
+                        retry_count += 1
                         continue  # continue retry loop with next attempt
                 else:
                     sleep_nanos = 0
 
             # raise error
             is_terminated: bool = termination_event is not None and termination_event.is_set()
-            if (
-                policy.max_retries > 0
-                and log is not None
-                and config.enable_logging
-                and log.isEnabledFor(config.warning_loglevel)
-                and not is_terminated
-            ):
-                reason: str = f"{giveup_reason}; " if giveup_reason else ""
-                format_duration: Callable[[int], str] = config.format_duration  # lambda: nanos
-                log.log(
-                    config.warning_loglevel,
-                    "%s",
-                    f"{config.format_msg(config.display_msg, retryable_error)}"
-                    f"exhausted; giving up because {reason}the last "
-                    f"{config.format_pair(retry_count, policy.max_retries)} retries across "
-                    f"{config.format_pair(format_duration(elapsed_nanos), format_duration(policy.max_elapsed_nanos))} "
-                    "failed",
-                    exc_info=retryable_error if config.exc_info else None,
-                    stack_info=config.stack_info,
-                    extra=config.extra,
-                )
             outcome = AttemptOutcome(
                 retry, False, True, is_terminated, giveup_reason, elapsed_nanos, sleep_nanos, retryable_error, log
             )
@@ -564,7 +569,7 @@ class RetryConfig:
     format_duration: Callable[[int], str] = human_readable_duration  # lambda: nanos
     info_loglevel: int = logging.INFO  # loglevel used when not giving up
     warning_loglevel: int = logging.WARNING  # loglevel used when giving up
-    enable_logging: bool = True  # set to False to move logging aspect into after_attempt()
+    enable_logging: bool = True  # set to False to disable logging
     exc_info: bool = False  # passed into Logger.log()
     stack_info: bool = False  # passed into Logger.log()
     extra: Mapping[str, object] | None = dataclasses.field(default=None, repr=False, compare=False)  # passed to Logger.log()
@@ -593,7 +598,7 @@ class RetryOptions(Generic[_T]):
     policy: RetryPolicy = RetryPolicy()
     config: RetryConfig = RetryConfig()
     giveup: Callable[[AttemptOutcome], str] = _giveup  # stop retrying based on domain-specific logic
-    after_attempt: Callable[[AttemptOutcome], None] = _after_attempt  # e.g. record metrics
+    after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
     log: Logger | None = None
 
     def copy(self, **override_kwargs: Any) -> RetryOptions[_T]:

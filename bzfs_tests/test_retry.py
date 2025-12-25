@@ -319,7 +319,7 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertEqual("boom", str(retry_error.__cause__.__cause__))
 
     def test_call_with_retries_giveup_stops_retries(self) -> None:
-        """Ensures giveup() stops retries immediately and logs a warning."""
+        """Ensures giveup() stops retries immediately and custom after_attempt disables default logging."""
         retry_policy = RetryPolicy(
             max_retries=5,
             min_sleep_secs=0,
@@ -360,9 +360,7 @@ class TestCallWithRetries(unittest.TestCase):
 
         # giveup() must prevent additional retries
         self.assertEqual([0], calls)
-        mock_log.log.assert_called_once()
-        log_call_args = mock_log.log.call_args[0]
-        self.assertEqual(logging.WARNING, log_call_args[0])
+        mock_log.log.assert_not_called()
         self.assertEqual(1, len(after_attempt_events))
         self.assertFalse(after_attempt_events[0].is_success)
         self.assertTrue(after_attempt_events[0].is_exhausted)
