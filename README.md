@@ -974,9 +974,8 @@ usage: bzfs [-h] [--recursive]
 
     * 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)
 
-    *Note:* If multiple RANKRANGEs are specified within a single
-    --include-snapshot-times-and-ranks option, each subsequent rank range operates on the output
-    of the preceding rank rage.
+    *Note:* At most one RANKRANGE may be specified per --include-snapshot-times-and-ranks
+    occurrence.
 
     *Note:* Percentage calculations are not based on the number of snapshots contained in the
     dataset on disk, but rather based on the number of snapshots arriving at the filter. For

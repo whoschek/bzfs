@@ -450,6 +450,9 @@ class TimeRangeAndRankRangeAction(argparse.Action):
 
         assert isinstance(values, list)
         assert len(values) > 0
+        if len(values) > 2:
+            opt: str = option_string or f"--{self.dest}"
+            parser.error(f"{opt}: At most one RANKRANGE is allowed per option occurrence.")
         value: str = values[0].strip()
         if value == "notime":
             value = "0..0"
