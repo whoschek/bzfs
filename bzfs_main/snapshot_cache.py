@@ -240,8 +240,8 @@ class SnapshotCache:
                 os_utime = os.utime
                 with os.scandir(os.path.dirname(cache_file)) as iterator:
                     for entry in iterator:
-                        os_utime(entry.path, times=zero_times)
-                os_utime(cache_file, times=zero_times)
+                        os_utime(entry.path, times=zero_times, follow_symlinks=False)
+                os_utime(cache_file, times=zero_times, follow_symlinks=False)
             except FileNotFoundError:
                 pass  # harmless
 
@@ -262,7 +262,7 @@ class SnapshotCache:
             if not p.dry_run:
                 if snapshots_changed == 0:
                     try:  # selective invalidation: only zero the dataset-level '=' cache file
-                        os.utime(dataset_cache_file, times=(0, 0))
+                        os.utime(dataset_cache_file, times=(0, 0), follow_symlinks=False)
                     except FileNotFoundError:
                         pass  # harmless
                 else:  # update dataset-level '=' cache monotonically; do NOT touch per-label creation caches here

@@ -150,7 +150,7 @@ class ConnectionLease(NamedTuple):
     def set_socket_mtime_to_now(self) -> None:
         """Sets the mtime of the lease's ControlPath socket file to now; noop if the file is missing."""
         try:
-            os.utime(self.socket_path, None)
+            os.utime(self.socket_path, None, follow_symlinks=False)
         except FileNotFoundError:
             pass  # harmless
 
