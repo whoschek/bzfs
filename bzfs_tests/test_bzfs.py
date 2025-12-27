@@ -1310,6 +1310,7 @@ class TestJobMethods(AbstractTestCase):
                 retry=Retry(
                     count=0,
                     start_time_nanos=0,
+                    attempt_start_time_nanos=0,
                     policy=RetryPolicy(),
                     config=RetryConfig(),
                     previous_outcomes=(),

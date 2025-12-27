@@ -867,10 +867,11 @@ class TestCallWithRetries(unittest.TestCase):
             threadlocal.rng = original_rng
 
     def test_repr_eq_hash(self) -> None:
-        """Ensures Retry/AttemptOutcome implement compact, stable value semantics for __repr__, __eq__ and __hash__."""
+        """Validates Retry/AttemptOutcome semantics for __repr__, __eq__ and __hash__."""
         retry_a = Retry(
             count=0,
             start_time_nanos=123,
+            attempt_start_time_nanos=123,
             policy=RetryPolicy(max_retries=1),
             config=RetryConfig(display_msg="a"),
             previous_outcomes=(),
@@ -878,6 +879,7 @@ class TestCallWithRetries(unittest.TestCase):
         retry_b = Retry(
             count=0,
             start_time_nanos=123,
+            attempt_start_time_nanos=123,
             policy=RetryPolicy(max_retries=999),
             config=RetryConfig(display_msg="b"),
             previous_outcomes=(MagicMock(spec=AttemptOutcome),),
@@ -885,6 +887,7 @@ class TestCallWithRetries(unittest.TestCase):
         retry_c = Retry(
             count=1,
             start_time_nanos=123,
+            attempt_start_time_nanos=123,
             policy=RetryPolicy(max_retries=1),
             config=RetryConfig(display_msg="a"),
             previous_outcomes=(),
@@ -894,10 +897,10 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertIn("Retry(", retry_repr)
         self.assertNotIn("policy", retry_repr)
         self.assertNotIn("config", retry_repr)
-        self.assertEqual(retry_a, retry_b)
-        self.assertEqual(hash(retry_a), hash(retry_b))
+        self.assertEqual(retry_a, retry_a)
+        self.assertNotEqual(retry_a, retry_b)
         self.assertNotEqual(retry_a, retry_c)
-        self.assertEqual(1, len({retry_a, retry_b}))
+        self.assertEqual(3, len({retry_a, retry_b, retry_c}))
         self.assertNotEqual(retry_a, object())
         self.assertFalse(retry_a == (retry_a.count, retry_a.start_time_nanos))
 
@@ -914,15 +917,17 @@ class TestCallWithRetries(unittest.TestCase):
         )
         outcome_b = outcome_a.copy(result="different", log=MagicMock(spec=Logger))
         outcome_c = outcome_a.copy(sleep_nanos=8)
+        outcome_d = outcome_a.copy(retry=retry_b)
 
         outcome_repr = repr(outcome_a)
         self.assertIn("AttemptOutcome(", outcome_repr)
         self.assertNotIn("result", outcome_repr)
         self.assertNotIn("log", outcome_repr)
-        self.assertEqual(outcome_a, outcome_b)
-        self.assertEqual(hash(outcome_a), hash(outcome_b))
+        self.assertEqual(outcome_a, outcome_a)
+        self.assertNotEqual(outcome_a, outcome_b)
         self.assertNotEqual(outcome_a, outcome_c)
-        self.assertEqual(1, len({outcome_a, outcome_b}))
+        self.assertNotEqual(outcome_a, outcome_d)
+        self.assertEqual(4, len({outcome_a, outcome_b, outcome_c, outcome_d}))
         self.assertNotEqual(outcome_a, object())
         self.assertFalse(outcome_a == (outcome_a.retry, outcome_a.elapsed_nanos, outcome_a.sleep_nanos))
 
@@ -1116,6 +1121,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
         original_retry = Retry(
             count=1,
             start_time_nanos=100,
+            attempt_start_time_nanos=100,
             policy=RetryPolicy(max_retries=1),
             config=RetryConfig(display_msg="orig"),
             previous_outcomes=(),
@@ -1136,6 +1142,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
         copied_retry = Retry(
             count=2,
             start_time_nanos=200,
+            attempt_start_time_nanos=200,
             policy=RetryPolicy(max_retries=2),
             config=RetryConfig(display_msg="copy"),
             previous_outcomes=(),
@@ -1170,6 +1177,29 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
         self.assertEqual(999, copied.elapsed_nanos)
         self.assertEqual(0, copied.sleep_nanos)
         self.assertIsNone(copied.log)
+
+    def test_attempt_elapsed_nanos(self) -> None:
+        """Computes per-attempt duration as attempt_end - attempt_start using nanosecond timestamps."""
+        retry = Retry(
+            count=0,
+            start_time_nanos=100,
+            attempt_start_time_nanos=150,
+            policy=RetryPolicy(max_retries=0),
+            config=RetryConfig(),
+            previous_outcomes=(),
+        )
+        outcome = AttemptOutcome(
+            retry=retry,
+            is_success=True,
+            is_exhausted=False,
+            is_terminated=False,
+            giveup_reason="",
+            elapsed_nanos=200,
+            sleep_nanos=0,
+            result=object(),
+            log=None,
+        )
+        self.assertEqual(150, outcome.attempt_elapsed_nanos())
 
 
 #############################################################################

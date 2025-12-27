@@ -212,7 +212,8 @@ def call_with_retries(
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
     start_time_nanos: Final[int] = time.monotonic_ns()
     while True:
-        retry: Retry = Retry(retry_count, start_time_nanos, policy, config, previous_outcomes)
+        attempt_start_time_nanos: int = time.monotonic_ns() if retry_count != 0 else start_time_nanos
+        retry: Retry = Retry(retry_count, start_time_nanos, attempt_start_time_nanos, policy, config, previous_outcomes)
         try:
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
             if after_attempt is not after_attempt_log_failure:
@@ -323,6 +324,9 @@ class Retry(NamedTuple):
     start_time_nanos: int
     """Value of time.monotonic_ns() at start of call_with_retries() invocation."""
 
+    attempt_start_time_nanos: int
+    """Value of time.monotonic_ns() at start of fn() invocation."""
+
     policy: RetryPolicy
     """Policy that was passed into call_with_retries()."""
 
@@ -337,15 +341,16 @@ class Retry(NamedTuple):
         return self._replace(**override_kwargs)
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(count={self.count!r}, start_time_nanos={self.start_time_nanos!r})"
+        return (
+            f"{self.__class__.__name__}(count={self.count!r}, start_time_nanos={self.start_time_nanos!r}, "
+            f"attempt_start_time_nanos={self.attempt_start_time_nanos!r})"
+        )
 
     def __eq__(self, other: object) -> bool:
-        if type(other) is not Retry:
-            return False
-        return self.count == other.count and self.start_time_nanos == other.start_time_nanos
+        return self is other
 
     def __hash__(self) -> int:
-        return hash((self.count, self.start_time_nanos))
+        return object.__hash__(self)
 
 
 #############################################################################
@@ -369,7 +374,7 @@ class AttemptOutcome(NamedTuple):
     """Reason returned by giveup(); Empty string means giveup() was not called or giveup() decided to not give up."""
 
     elapsed_nanos: int
-    """Total duration since the start of call_with_retries() invocation and the end of this fn() attempt."""
+    """Total duration between the start of call_with_retries() invocation and the end of this fn() attempt."""
 
     sleep_nanos: int
     """Duration of current sleep period."""
@@ -379,6 +384,10 @@ class AttemptOutcome(NamedTuple):
 
     log: Logger | None
     """Logger that was passed into call_with_retries()."""
+
+    def attempt_elapsed_nanos(self) -> int:
+        """Returns duration between the start of this fn() attempt and the end of this fn() attempt."""
+        return self.elapsed_nanos + self.retry.start_time_nanos - self.retry.attempt_start_time_nanos
 
     def copy(self, **override_kwargs: Any) -> AttemptOutcome:
         """Creates a new outcome copying an existing one with the specified fields overridden for customization."""
@@ -397,30 +406,10 @@ class AttemptOutcome(NamedTuple):
         )
 
     def __eq__(self, other: object) -> bool:
-        if type(other) is not AttemptOutcome:
-            return False
-        return (
-            self.retry == other.retry
-            and self.is_success == other.is_success
-            and self.is_exhausted == other.is_exhausted
-            and self.is_terminated == other.is_terminated
-            and self.giveup_reason == other.giveup_reason
-            and self.elapsed_nanos == other.elapsed_nanos
-            and self.sleep_nanos == other.sleep_nanos
-        )
+        return self is other
 
     def __hash__(self) -> int:
-        return hash(
-            (
-                self.retry,
-                self.is_success,
-                self.is_exhausted,
-                self.is_terminated,
-                self.giveup_reason,
-                self.elapsed_nanos,
-                self.sleep_nanos,
-            )
-        )
+        return object.__hash__(self)
 
 
 #############################################################################
