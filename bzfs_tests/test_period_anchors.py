@@ -179,6 +179,32 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = dt.replace(second=0, microsecond=0) + timedelta(minutes=1)
         self.assertEqual(expected, result)
 
+    def test_minutes_10minutely_non_boundary(self) -> None:
+        """Rounding up to the next 10-minute boundary snaps to minute multiples."""
+        dt = datetime(2025, 2, 11, 14, 5, 1, 500000, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 10, "minutely")
+        expected = dt.replace(minute=10, second=0, microsecond=0)
+        self.assertEqual(expected, result)
+
+    def test_minutes_10minutely_boundary(self) -> None:
+        """When dt is exactly on a 10-minute boundary, it is returned unchanged."""
+        dt = datetime(2025, 2, 11, 14, 10, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 10, "minutely")
+        self.assertEqual(dt, result)
+
+    def test_minutes_10minutely_non_boundary35(self) -> None:
+        """Rounding up to the next 10-minute boundary snaps to minute multiples."""
+        dt = datetime(2025, 2, 11, 14, 35, 1, 500000, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 10, "minutely")
+        expected = dt.replace(minute=40, second=0, microsecond=0)
+        self.assertEqual(expected, result)
+
+    def test_minutes_10minutely_boundary40(self) -> None:
+        """When dt is exactly on a 10-minute boundary, it is returned unchanged."""
+        dt = datetime(2025, 2, 11, 14, 40, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 10, "minutely")
+        self.assertEqual(dt, result)
+
     def test_minutes_boundary(self) -> None:
         """Rounding up to the next minute when dt is exactly on a minute boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 5, 0, 0, tzinfo=self.tz)
