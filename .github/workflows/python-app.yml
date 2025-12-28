@@ -636,57 +636,57 @@ jobs:
         with:
           persist-credentials: false
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04_hpnssh
           path: coverage-test_ubuntu_24_04_hpnssh
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_4
           path: coverage-test_ubuntu_24_04_zfs_2_4
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_4_latest
           path: coverage-test_ubuntu_24_04_zfs_2_4_latest
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_3_latest
           path: coverage-test_ubuntu_24_04_zfs_2_3_latest
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_2_latest
           path: coverage-test_ubuntu_24_04_zfs_2_2_latest
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04
           path: coverage-test_ubuntu_24_04
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_22_04
           path: coverage-test_ubuntu_22_04
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_22_04_zfs_0_8_x
           path: coverage-test_ubuntu_22_04_zfs_0_8_x
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_freebsd_15_0
           path: coverage-test_freebsd_15_0
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_freebsd_14_3
           path: coverage-test_freebsd_14_3
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_freebsd_13_4
           path: coverage-test_freebsd_13_4
@@ -721,7 +721,7 @@ jobs:
       BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
     steps:
       - name: Download combined coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-combine_coverage_reports
           path: site/branch
@@ -739,7 +739,7 @@ jobs:
             rm -fr "site/$branchname"
           fi
       - name: Upload site to workflow run page
-        uses: actions/upload-artifact@v5  # see https://github.com/actions/upload-artifact
+        uses: actions/upload-artifact@v6  # see https://github.com/actions/upload-artifact
         with:
           name: ${{ github.job }}
           include-hidden-files: true
@@ -765,7 +765,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Download website artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: generate_website
           path: generate_website
