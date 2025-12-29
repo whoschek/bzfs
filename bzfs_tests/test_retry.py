@@ -347,7 +347,7 @@ class TestCallWithRetries(unittest.TestCase):
         def after_attempt(outcome: AttemptOutcome) -> None:
             self.assertEqual(0, outcome.retry.count)
             self.assertIsInstance(outcome.result, RetryableError)
-            self.assertIs(mock_log, outcome.log)
+            self.assertIs(mock_log, outcome.retry.log)
             self.assertEqual(1234, outcome.elapsed_nanos)
             self.assertGreaterEqual(outcome.sleep_nanos, 0)
             after_attempt_events.append(outcome)
@@ -507,7 +507,7 @@ class TestCallWithRetries(unittest.TestCase):
             events.append(outcome)
             self.assertFalse(outcome.is_terminated)
             self.assertEqual("", outcome.giveup_reason)
-            self.assertIsNone(outcome.log)
+            self.assertIsNone(outcome.retry.log)
 
         final_result = call_with_retries(
             fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None
@@ -555,7 +555,7 @@ class TestCallWithRetries(unittest.TestCase):
         def after_attempt(outcome: AttemptOutcome) -> None:
             events.append(outcome)
             self.assertEqual("", outcome.giveup_reason)
-            self.assertIsNone(outcome.log)
+            self.assertIsNone(outcome.retry.log)
 
         with self.assertRaises(ValueError):
             call_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
@@ -607,7 +607,7 @@ class TestCallWithRetries(unittest.TestCase):
                 retry_sleep_nanos.append(outcome.sleep_nanos)
                 self.assertIsInstance(outcome.result, RetryableError)
                 self.assertGreaterEqual(outcome.elapsed_nanos, 0)
-            self.assertIsNone(outcome.log)
+            self.assertIsNone(outcome.retry.log)
 
         rng = SequenceRandom([5, 6])
         with patch("bzfs_main.util.retry._thread_local_rng", return_value=rng):
@@ -874,6 +874,7 @@ class TestCallWithRetries(unittest.TestCase):
             attempt_start_time_nanos=123,
             policy=RetryPolicy(max_retries=1),
             config=RetryConfig(display_msg="a"),
+            log=None,
             previous_outcomes=(),
         )
         retry_b = Retry(
@@ -882,6 +883,7 @@ class TestCallWithRetries(unittest.TestCase):
             attempt_start_time_nanos=123,
             policy=RetryPolicy(max_retries=999),
             config=RetryConfig(display_msg="b"),
+            log=MagicMock(spec=Logger),
             previous_outcomes=(MagicMock(spec=AttemptOutcome),),
         )
         retry_c = Retry(
@@ -890,6 +892,7 @@ class TestCallWithRetries(unittest.TestCase):
             attempt_start_time_nanos=123,
             policy=RetryPolicy(max_retries=1),
             config=RetryConfig(display_msg="a"),
+            log=None,
             previous_outcomes=(),
         )
 
@@ -913,9 +916,8 @@ class TestCallWithRetries(unittest.TestCase):
             elapsed_nanos=5,
             sleep_nanos=7,
             result="boom",
-            log=None,
         )
-        outcome_b = outcome_a.copy(result="different", log=MagicMock(spec=Logger))
+        outcome_b = outcome_a.copy(result="different")
         outcome_c = outcome_a.copy(sleep_nanos=8)
         outcome_d = outcome_a.copy(retry=retry_b)
 
@@ -1118,15 +1120,16 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
 
     def test_copy_overrides_selected_fields(self) -> None:
         """Ensures copy() correctly overrides selected fields while preserving others."""
+        original_log = MagicMock(spec=Logger)
         original_retry = Retry(
             count=1,
             start_time_nanos=100,
             attempt_start_time_nanos=100,
             policy=RetryPolicy(max_retries=1),
             config=RetryConfig(display_msg="orig"),
+            log=original_log,
             previous_outcomes=(),
         )
-        original_log = MagicMock(spec=Logger)
         original = AttemptOutcome(
             retry=original_retry,
             is_success=False,
@@ -1136,7 +1139,6 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             elapsed_nanos=123,
             sleep_nanos=456,
             result=RetryableError("result"),
-            log=original_log,
         )
 
         copied_retry = Retry(
@@ -1145,6 +1147,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             attempt_start_time_nanos=200,
             policy=RetryPolicy(max_retries=2),
             config=RetryConfig(display_msg="copy"),
+            log=None,
             previous_outcomes=(),
         )
         copied = original.copy(
@@ -1156,7 +1159,6 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             elapsed_nanos=999,
             sleep_nanos=0,
             result=object(),
-            log=None,
         )
 
         self.assertIsNot(original, copied)
@@ -1167,7 +1169,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
         self.assertEqual("", original.giveup_reason)
         self.assertEqual(123, original.elapsed_nanos)
         self.assertEqual(456, original.sleep_nanos)
-        self.assertIs(original_log, original.log)
+        self.assertIs(original_log, original.retry.log)
 
         self.assertIs(copied_retry, copied.retry)
         self.assertTrue(copied.is_success)
@@ -1176,7 +1178,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
         self.assertEqual("done", copied.giveup_reason)
         self.assertEqual(999, copied.elapsed_nanos)
         self.assertEqual(0, copied.sleep_nanos)
-        self.assertIsNone(copied.log)
+        self.assertIsNone(copied.retry.log)
 
     def test_attempt_elapsed_nanos(self) -> None:
         """Computes per-attempt duration as attempt_end - attempt_start using nanosecond timestamps."""
@@ -1186,6 +1188,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             attempt_start_time_nanos=150,
             policy=RetryPolicy(max_retries=0),
             config=RetryConfig(),
+            log=None,
             previous_outcomes=(),
         )
         outcome = AttemptOutcome(
@@ -1197,7 +1200,6 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             elapsed_nanos=200,
             sleep_nanos=0,
             result=object(),
-            log=None,
         )
         self.assertEqual(150, outcome.attempt_elapsed_nanos())
 

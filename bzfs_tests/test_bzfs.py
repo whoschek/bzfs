@@ -1313,6 +1313,7 @@ class TestJobMethods(AbstractTestCase):
                     attempt_start_time_nanos=0,
                     policy=RetryPolicy(),
                     config=RetryConfig(),
+                    log=None,
                     previous_outcomes=(),
                 ),
             )

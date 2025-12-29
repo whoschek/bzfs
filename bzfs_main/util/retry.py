@@ -151,13 +151,13 @@ def _giveup(_outcome: AttemptOutcome) -> str:
 
 
 def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
-    """Performs simple logging of retry attempt failures; the default for call_with_retries()."""
-    if outcome.is_success or outcome.log is None or not outcome.retry.config.enable_logging:
-        return
-    log: Logger = outcome.log
+    """Performs simple logging of retry attempt failures; the default for call_with_retries(); thread-safe."""
     retry: Retry = outcome.retry
-    config: RetryConfig = retry.config
+    if outcome.is_success or retry.log is None or not retry.config.enable_logging:
+        return
     policy: RetryPolicy = retry.policy
+    config: RetryConfig = retry.config
+    log: Logger = retry.log
     assert isinstance(outcome.result, RetryableError)
     retryable_error: RetryableError = outcome.result
     if not outcome.is_exhausted:
@@ -213,12 +213,12 @@ def call_with_retries(
     start_time_nanos: Final[int] = time.monotonic_ns()
     while True:
         attempt_start_time_nanos: int = time.monotonic_ns() if retry_count != 0 else start_time_nanos
-        retry: Retry = Retry(retry_count, start_time_nanos, attempt_start_time_nanos, policy, config, previous_outcomes)
+        retry: Retry = Retry(retry_count, start_time_nanos, attempt_start_time_nanos, policy, config, log, previous_outcomes)
         try:
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
             if after_attempt is not after_attempt_log_failure:
                 elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
-                outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, "", elapsed_nanos, 0, result, log)
+                outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, "", elapsed_nanos, 0, result)
                 after_attempt(outcome)
             return result
         except RetryableError as retryable_error:
@@ -239,7 +239,7 @@ def call_with_retries(
                     assert sleep_nanos >= 0
                     assert curr_max_sleep_nanos >= 0
 
-                outcome = AttemptOutcome(retry, False, False, False, "", elapsed_nanos, sleep_nanos, retryable_error, log)
+                outcome = AttemptOutcome(retry, False, False, False, "", elapsed_nanos, sleep_nanos, retryable_error)
                 if (termination_event is None or not termination_event.is_set()) and not (giveup_reason := giveup(outcome)):
                     after_attempt(outcome)
                     if sleep_nanos > 0:
@@ -259,7 +259,7 @@ def call_with_retries(
             # raise error
             is_terminated: bool = termination_event is not None and termination_event.is_set()
             outcome = AttemptOutcome(
-                retry, False, True, is_terminated, giveup_reason, elapsed_nanos, sleep_nanos, retryable_error, log
+                retry, False, True, is_terminated, giveup_reason, elapsed_nanos, sleep_nanos, retryable_error
             )
             after_attempt(outcome)
             cause: BaseException | None = retryable_error.__cause__
@@ -333,6 +333,9 @@ class Retry(NamedTuple):
     config: RetryConfig
     """Config that is used by call_with_retries()."""
 
+    log: Logger | None
+    """Logger that was passed into call_with_retries()."""
+
     previous_outcomes: Sequence[AttemptOutcome]
     """History/state of the N=max_previous_outcomes most recent outcomes for the current call_with_retries() invocation."""
 
@@ -381,9 +384,6 @@ class AttemptOutcome(NamedTuple):
 
     result: RetryableError | object
     """Result of fn(retry); a RetryableError on retryable failure, or some other object on success."""
-
-    log: Logger | None
-    """Logger that was passed into call_with_retries()."""
 
     def attempt_elapsed_nanos(self) -> int:
         """Returns duration between the start of this fn() attempt and the end of this fn() attempt."""
