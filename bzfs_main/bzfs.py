@@ -232,9 +232,7 @@ def main() -> None:
         with termination_signal_handler(termination_events=[termination_event]):
             run_main(argument_parser().parse_args(), sys.argv, termination_event=termination_event)
     except subprocess.CalledProcessError as e:
-        ret: int = e.returncode
-        ret = DIE_STATUS if isinstance(ret, int) and 1 <= ret <= STILL_RUNNING_STATUS else ret
-        sys.exit(ret)
+        sys.exit(normalize_called_process_error(e))
     finally:
         os.umask(prev_umask)  # restore prior global state
 
@@ -1021,10 +1019,13 @@ class Job(MiniJob):
         num_cache_hits: int = self.num_cache_hits
         num_cache_misses: int = self.num_cache_misses
         start_time_nanos: int = time.monotonic_ns()
-        run_in_parallel(
+        dst_alert, src_alert = run_in_parallel(
             lambda: self.monitor_snapshots(dst, sorted_dst_datasets),
             lambda: self.monitor_snapshots(src, sorted_src_datasets),
         )
+        exit_code, _exit_kind, exit_msg = min(dst_alert, src_alert)
+        if exit_code != 0:
+            die(exit_msg, -exit_code)
         elapsed: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
         num_cache_hits = self.num_cache_hits - num_cache_hits
         num_cache_misses = self.num_cache_misses - num_cache_misses
@@ -1037,7 +1038,7 @@ class Job(MiniJob):
             f"{task_description} [{len(sorted_src_datasets) + len(sorted_dst_datasets)} datasets; took {elapsed}{msg}]",
         )
 
-    def monitor_snapshots(self, remote: Remote, sorted_datasets: list[str]) -> None:
+    def monitor_snapshots(self, remote: Remote, sorted_datasets: list[str]) -> tuple[int, str, str]:
         """Checks snapshot freshness and warns or errors out when limits are exceeded.
 
         Alerts the user if the ZFS 'creation' time property of the latest or oldest snapshot for any specified snapshot name
@@ -1061,6 +1062,11 @@ class Job(MiniJob):
                 label: sha256_128_urlsafe_base64(label.notimestamp_str()) for label in labels
             }
         is_caching: bool = False
+        worst_alert: tuple[int, str, str] = (0, "", "")  # -exit_code, exit_kind, exit_msg
+
+        def record_alert(exit_code: int, exit_kind: str, exit_msg: str) -> None:
+            nonlocal worst_alert
+            worst_alert = min(worst_alert, (-exit_code, exit_kind, exit_msg))  # min() sorts "Latest" before "Oldest" on tie
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
             cache_label: str = os.path.join(MONITOR_CACHE_FILE_PREFIX, alert_cfg.kind[0], label_hashes[label], alerts_hash)
@@ -1099,12 +1105,12 @@ class Job(MiniJob):
                 msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, critical_millis)
                 log.critical("%s", msg)
                 if not p.monitor_snapshots_config.dont_crit:
-                    die(msg, exit_code=CRITICAL_STATUS)
+                    record_alert(CRITICAL_STATUS, alert_kind, msg)
             elif snapshot_age_millis > warning_millis:
                 msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, warning_millis)
                 log.warning("%s", msg)
                 if not p.monitor_snapshots_config.dont_warn:
-                    die(msg, exit_code=WARNING_STATUS)
+                    record_alert(WARNING_STATUS, alert_kind, msg)
             elif is_debug:
                 msg = m + "OK. " + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, delta_millis=-1)
                 log.debug("%s", msg)
@@ -1170,6 +1176,7 @@ class Job(MiniJob):
             for i in range(len(alerts)):
                 alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot="")
                 alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot="")
+        return worst_alert
 
     def replicate_datasets(self, src_datasets: list[str], task_description: str, max_workers: int) -> bool:
         """Replicates a list of datasets."""
@@ -1803,6 +1810,13 @@ def validate_port(port: str | int | None, message: str) -> None:
         port = str(port)
     if port and not port.isdigit():
         die(message + f"must be empty or a positive integer: '{port}'")
+
+
+def normalize_called_process_error(error: subprocess.CalledProcessError) -> int:
+    """Normalizes `CalledProcessError.returncode` to avoid reserved exit codes so callers don't misclassify them."""
+    ret: int = error.returncode
+    ret = DIE_STATUS if isinstance(ret, int) and 1 <= ret <= STILL_RUNNING_STATUS else ret
+    return ret
 
 
 #############################################################################

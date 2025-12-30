@@ -491,6 +491,7 @@ class Job:
 
         # mutable variables:
         self.first_exception: int | None = None
+        self.worst_exception: int | None = None
         self.stats: JobStats = JobStats(jobs_all=0)
         self.cache_existing_dst_pools: set[str] = set()
         self.cache_known_dst_pools: set[str] = set()
@@ -507,6 +508,7 @@ class Job:
 
     def _run_main(self, sys_argv: list[str]) -> None:
         self.first_exception = None
+        self.worst_exception = None
         log: Logger = self.log
         log.info("CLI arguments: %s", " ".join(sys_argv))
         nsp = argparse.Namespace(no_argument_file=True)  # disable --root-dataset-pairs='+file' option in DatasetPairsAction
@@ -810,7 +812,7 @@ class Job:
         )
         log.log(LOG_TRACE, "subjobs: \n%s", _pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds, args.jitter)
-        ex = self.first_exception
+        ex = self.worst_exception
         if isinstance(ex, int):
             assert ex != 0
             sys.exit(ex)
@@ -930,6 +932,8 @@ class Job:
         - Subjob failures are converted to return codes (not exceptions) so the policy does not invoke a termination handler
           on such failures and sibling subjobs continue unaffected. This preserves per-subjob isolation, both within a single
           process (thread-per-subjob mode; default) as well as in process-per-subjob mode (``--spawn-process-per-job``).
+        - The first failure is retained for diagnostics.
+        - Process exit code precedence is: fatal/non-monitor failure > monitor CRITICAL/WARNING > STILL_RUNNING > success.
         """
         self.stats = JobStats(len(subjobs))
         log = self.log
@@ -962,6 +966,7 @@ class Job:
             is_test_mode=self.is_test_mode,
         ):
             self.first_exception = DIE_STATUS if self.first_exception is None else self.first_exception
+            self.worst_exception = self.get_worst_exception(self.worst_exception, DIE_STATUS)
         stats = self.stats
         jobs_skipped = stats.jobs_all - stats.jobs_started
         msg = f"{stats}, skipped:" + percent(jobs_skipped, total=stats.jobs_all, print_total=True)
@@ -1000,6 +1005,7 @@ class Job:
                 with stats.lock:
                     if self.first_exception is None:
                         self.first_exception = DIE_STATUS if returncode is None else returncode
+                    self.worst_exception = self.get_worst_exception(self.worst_exception, returncode)
                 log.error("Worker job failed with exit code %s in %s: %s", returncode, elapsed_human, cmd_str)
             else:
                 log.debug("Worker job succeeded in %s: %s", elapsed_human, cmd_str)
@@ -1018,7 +1024,7 @@ class Job:
                 self._bzfs_run_main(cmd)
             return 0
         except subprocess.CalledProcessError as e:
-            return e.returncode
+            return bzfs.normalize_called_process_error(e)
         except SystemExit as e:
             assert e.code is None or isinstance(e.code, int)
             return e.code
@@ -1065,6 +1071,35 @@ class Job:
                     with contextlib.suppress(subprocess.TimeoutExpired):
                         proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
         return proc.returncode
+
+    @staticmethod
+    def get_worst_exception(existing_code: int | None, new_code: int | None) -> int:
+        """Process exit code precedence is: fatal/non-monitor failure > monitor CRITICAL/WARNING > STILL_RUNNING > success."""
+        new_code = DIE_STATUS if new_code is None else new_code
+        if existing_code is None:
+            return new_code
+        assert existing_code is not None
+        assert new_code is not None
+
+        nonfatal: tuple[int, ...] = (0, bzfs.WARNING_STATUS, bzfs.CRITICAL_STATUS, bzfs.STILL_RUNNING_STATUS)
+        existing_is_fatal = existing_code not in nonfatal
+        new_is_fatal = new_code not in nonfatal
+        if existing_is_fatal and new_is_fatal:
+            return max(existing_code, new_code)
+        if existing_is_fatal or new_is_fatal:
+            return existing_code if existing_is_fatal else new_code
+
+        monitor: tuple[int, ...] = (bzfs.WARNING_STATUS, bzfs.CRITICAL_STATUS)
+        existing_is_monitor = existing_code in monitor
+        new_is_monitor = new_code in monitor
+        if existing_is_monitor and new_is_monitor:
+            return max(existing_code, new_code)
+        if existing_is_monitor or new_is_monitor:
+            return existing_code if existing_is_monitor else new_code
+
+        assert existing_code in (0, bzfs.STILL_RUNNING_STATUS), existing_code
+        assert new_code in (0, bzfs.STILL_RUNNING_STATUS), new_code
+        return max(existing_code, new_code)
 
     def validate_src_hosts(self, src_hosts: list[str]) -> list[str]:
         """Checks ``src_hosts`` contains valid hostnames."""

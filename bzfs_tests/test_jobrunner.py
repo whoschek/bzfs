@@ -959,6 +959,16 @@ class TestRunSubJobInCurrentThread(AbstractTestCase):
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(7, result)
 
+    def test_called_process_error_normalizes_reserved_exit_codes(self, mock_bzfs_run_main: MagicMock) -> None:
+        cmd = ["bzfs", "foo"]
+        for returncode in (1, 2, 3, 4):
+            with self.subTest(returncode=returncode):
+                mock_bzfs_run_main.reset_mock()
+                mock_bzfs_run_main.side_effect = subprocess.CalledProcessError(returncode=returncode, cmd=cmd)
+                result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
+                self.assertEqual(DIE_STATUS, result)
+                mock_bzfs_run_main.assert_called_once_with(cmd)
+
     def test_system_exit_with_code(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = SystemExit(3)
@@ -1007,6 +1017,7 @@ class TestRunSubJob(AbstractTestCase):
         self.job = make_bzfs_jobrunner_job()
         self.job.stats.jobs_all = 1
         self.assertIsNone(self.job.first_exception)
+        self.assertIsNone(self.job.worst_exception)
 
     def test_success(self) -> None:
         """Run a successful subjob and silence its informational logs."""
@@ -1021,13 +1032,60 @@ class TestRunSubJob(AbstractTestCase):
             result = self.job.run_subjob(cmd=["false"], name="j0", timeout_secs=None, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
-        self.assertTrue(self.job.first_exception != 0)
+        self.assertEqual(1, self.job.first_exception)
+        self.assertIsInstance(self.job.worst_exception, int)
+        self.assertEqual(1, self.job.worst_exception)
 
         with suppress_output():
             result = self.job.run_subjob(cmd=["false"], name="j1", timeout_secs=None, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
-        self.assertTrue(self.job.first_exception != 0)
+        self.assertEqual(1, self.job.first_exception)
+        self.assertIsInstance(self.job.worst_exception, int)
+        self.assertEqual(1, self.job.worst_exception)
+
+    def test_first_failure_retained_worst_failure_propagated(self) -> None:
+        """Track first failing exit code for diagnostics but use worst exit code for final process status."""
+        self.job.stats.jobs_all = 2
+        with suppress_output():
+            rc1 = self.job.run_subjob(cmd=["false"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+        with suppress_output():
+            rc2 = self.job.run_subjob(cmd=["bash", "-c", "exit 2"], name="j1", timeout_secs=None, spawn_process_per_job=True)
+
+        self.assertEqual(1, rc1)
+        self.assertEqual(2, rc2)
+        self.assertEqual(1, self.job.first_exception)
+        self.assertEqual(2, self.job.worst_exception)
+
+    def test_still_running_is_lowest_priority(self) -> None:
+        """Ensure still-running status (4) never masks monitor (1/2) or fatal failures."""
+        self.job.stats.jobs_all = 3
+        with suppress_output():
+            rc1 = self.job.run_subjob(cmd=["bash", "-c", "exit 4"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+        with suppress_output():
+            rc2 = self.job.run_subjob(cmd=["bash", "-c", "exit 2"], name="j1", timeout_secs=None, spawn_process_per_job=True)
+        self.assertEqual(4, self.job.first_exception)
+        self.assertEqual(2, self.job.worst_exception)
+        with suppress_output():
+            rc3 = self.job.run_subjob(cmd=["bash", "-c", "exit 3"], name="j2", timeout_secs=None, spawn_process_per_job=True)
+
+        self.assertEqual(4, rc1)
+        self.assertEqual(2, rc2)
+        self.assertEqual(3, rc3)
+        self.assertEqual(3, self.job.worst_exception)
+
+    def test_monitor_status_beats_still_running_regardless_of_order(self) -> None:
+        """Ensure monitor WARNING/CRITICAL (1/2) always beats STILL_RUNNING (4), regardless of completion order."""
+        self.job.stats.jobs_all = 2
+        with suppress_output():
+            rc1 = self.job.run_subjob(cmd=["bash", "-c", "exit 2"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+        with suppress_output():
+            rc2 = self.job.run_subjob(cmd=["bash", "-c", "exit 4"], name="j1", timeout_secs=None, spawn_process_per_job=True)
+
+        self.assertEqual(2, rc1)
+        self.assertEqual(4, rc2)
+        self.assertEqual(2, self.job.first_exception)
+        self.assertEqual(2, self.job.worst_exception)
 
     def test_timeout(self) -> None:
         """Check subjobs respect timeouts and silence their logs."""
@@ -1064,6 +1122,8 @@ class TestErrorPropagation(AbstractTestCase):
                 )
         self.assertIsInstance(self.job.first_exception, int)
         self.assertEqual(DIE_STATUS, self.job.first_exception)
+        self.assertIsInstance(self.job.worst_exception, int)
+        self.assertEqual(DIE_STATUS, self.job.worst_exception)
         self.assertEqual(1, self.job.stats.jobs_started)
 
 

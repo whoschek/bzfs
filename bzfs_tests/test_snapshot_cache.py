@@ -82,6 +82,7 @@ from bzfs_main import (
     snapshot_cache,
 )
 from bzfs_main.bzfs import (
+    CRITICAL_STATUS,
     DatasetProperties,
     Job,
 )
@@ -398,6 +399,55 @@ class TestSnapshotCache(AbstractTestCase):
             at, mt = SnapshotCache(job).get_snapshots_changed2(cache_file)
             self.assertEqual(creation, at)
             self.assertEqual(changed, mt)
+
+    def test_monitor_snapshots_exits_with_worst_severity(self) -> None:
+        """Monitor checks all datasets and exits with the worst severity.
+
+        Tie-break: At equal severity, "Latest" takes precedence over "Oldest".
+        """
+        plan = {
+            "org": {
+                "tgt": {
+                    "secondly": {
+                        "latest": {"warning": "1 seconds", "critical": "100 seconds"},
+                        "oldest": {"warning": "1 seconds", "critical": "100 seconds"},
+                    }
+                }
+            }
+        }
+        with self.job_context(["--monitor-snapshots", str(plan), SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
+            now_secs = 1_000
+            job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(now_secs, tz=timezone.utc)
+            job.params.src.root_dataset = SRC_DATASET
+
+            ds_warn = f"{SRC_DATASET}/a"
+            ds_crit = f"{SRC_DATASET}/b"
+
+            def fake_handle_minmax_snapshots(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                fn_latest(0, now_secs - 10, ds_warn, "s")  # warning only
+                fn_latest(0, now_secs - 200, ds_crit, "s")  # critical
+                assert fn_oldest is not None
+                fn_oldest(0, now_secs - 200, ds_crit, "s")  # critical (tie-break with latest)
+                return []
+
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=False),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+            ):
+                exit_code, exit_kind, exit_msg = job.monitor_snapshots(job.params.src, [ds_warn, ds_crit])
+            self.assertEqual(-CRITICAL_STATUS, exit_code)
+            self.assertIn("Latest", exit_kind)
+            self.assertIn("Latest snapshot", exit_msg)
+            self.assertIn(ds_crit, exit_msg)
+            self.assertNotIn("Oldest snapshot", exit_msg)
 
     def test_last_replicated_cache_must_be_monotonic(self) -> None:
         """Purpose: Prove the src-->dst "last replicated" cache (the src-side "==" marker keyed by user/host+dst+filters)
