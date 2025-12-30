@@ -497,7 +497,7 @@ class Job(MiniJob):
     def print_replication_stats(self, start_time_nanos: int) -> None:
         """Logs overall replication statistics after a job cycle completes."""
         p, log = self.params, self.params.log
-        elapsed_nanos = time.monotonic_ns() - start_time_nanos
+        elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
         msg = p.dry(f"zfs sent {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if p.is_program_available("pv", "local"):
             sent_bytes: int = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
@@ -577,7 +577,7 @@ class Job(MiniJob):
             ):
                 die(f"Source and destination dataset trees must not overlap! {msg}")
 
-        suffx = DESCENDANTS_RE_SUFFIX  # also match descendants of a matching dataset
+        suffx: str = DESCENDANTS_RE_SUFFIX  # also match descendants of a matching dataset
         p.exclude_dataset_regexes, p.include_dataset_regexes = (
             p.tmp_exclude_dataset_regexes + compile_regexes(dataset_regexes(src, dst, p.abs_exclude_datasets), suffix=suffx),
             p.tmp_include_dataset_regexes + compile_regexes(dataset_regexes(src, dst, p.abs_include_datasets), suffix=suffx),
@@ -593,12 +593,12 @@ class Job(MiniJob):
         self.max_workers = {}
         self.max_datasets_per_minibatch_on_list_snaps = {}
         for r in [src, dst]:
-            cpus = int(p.available_programs[r.location].get("getconf_cpu_count", 8))
+            cpus: int = int(p.available_programs[r.location].get("getconf_cpu_count", 8))
             threads, is_percent = p.threads
             cpus = max(1, round(cpus * threads / 100.0) if is_percent else round(threads))
             self.max_workers[r.location] = cpus
-            bs = max(1, p.max_datasets_per_batch_on_list_snaps)  # 1024 by default
-            max_datasets_per_minibatch = p.max_datasets_per_minibatch_on_list_snaps
+            bs: int = max(1, p.max_datasets_per_batch_on_list_snaps)  # 1024 by default
+            max_datasets_per_minibatch: int = p.max_datasets_per_minibatch_on_list_snaps
             if max_datasets_per_minibatch <= 0:
                 max_datasets_per_minibatch = max(1, bs // cpus)
             max_datasets_per_minibatch = min(bs, max_datasets_per_minibatch)

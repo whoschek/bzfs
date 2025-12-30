@@ -426,7 +426,7 @@ def _replicate_dataset_fully(
         dry_run_no_send = dry_run_no_send or p.dry_run_no_send
         job.maybe_inject_params(error_trigger="full_zfs_send_params")
         humansize = humansize.rjust(_RIGHT_JUST * 3 + 2)
-        _run_zfs_send_receive(
+        _run_zfs_send_receive(  # do the real work
             job, src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "full_zfs_send"
         )
         latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
@@ -538,7 +538,7 @@ def _replicate_dataset_incrementally(
             dry_run_no_send = True
         dry_run_no_send = dry_run_no_send or p.dry_run_no_send
         job.maybe_inject_params(error_trigger="incr_zfs_send_params")
-        _run_zfs_send_receive(
+        _run_zfs_send_receive(  # do the real work
             job, src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "incr_zfs_send"
         )
         done_size += curr_size
@@ -566,7 +566,7 @@ def _format_size(num_bytes: int) -> str:
 def _prepare_zfs_send_receive(
     job: Job, src_dataset: str, send_cmd: list[str], recv_cmd: list[str], size_estimate_bytes: int, size_estimate_human: str
 ) -> tuple[str, str, str]:
-    """Constructs zfs send/recv pipelines with optional compression and pv."""
+    """Constructs zfs send/recv pipelines with optional compression, mbuffer and pv."""
     p = job.params
     send_cmd_str: str = shlex.join(send_cmd)
     recv_cmd_str: str = shlex.join(recv_cmd)
