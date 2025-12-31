@@ -48,6 +48,9 @@ from unittest.mock import (
 from bzfs_main import (
     bzfs_jobrunner,
 )
+from bzfs_main.bzfs import (
+    STILL_RUNNING_STATUS,
+)
 from bzfs_main.util.utils import (
     DIE_STATUS,
 )
@@ -71,6 +74,7 @@ def suite() -> unittest.TestSuite:
         TestRunSubJobSpawnProcessPerJob,
         TestRunSubJobInCurrentThread,
         TestRunSubJob,
+        TestGetWorstException,
         TestErrorPropagation,
         TestValidateSnapshotPlan,
         TestValidateMonitorSnapshotPlan,
@@ -1101,6 +1105,26 @@ class TestRunSubJob(AbstractTestCase):
         """Ensure missing commands raise FileNotFoundError without noisy logs."""
         with self.assertRaises(FileNotFoundError), suppress_output():
             self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+
+
+#############################################################################
+class TestGetWorstException(AbstractTestCase):
+
+    def test_fatal_exit_codes_choose_larger_code(self) -> None:
+        """Both inputs fatal => pick max(exit_code)."""
+        for existing_code, new_code, expected in ((7, 9, 9), (9, 7, 9), (5, 5, 5)):
+            with self.subTest(existing_code=existing_code, new_code=new_code):
+                self.assertEqual(expected, bzfs_jobrunner.Job.get_worst_exception(existing_code, new_code))
+
+    def test_success_and_still_running_choose_still_running(self) -> None:
+        """Non-monitor, non-fatal inputs (0/4) reach final max() branch in get_worst_exception()."""
+        for existing_code, new_code in (
+            (0, STILL_RUNNING_STATUS),
+            (STILL_RUNNING_STATUS, 0),
+            (STILL_RUNNING_STATUS, STILL_RUNNING_STATUS),
+        ):
+            with self.subTest(existing_code=existing_code, new_code=new_code):
+                self.assertEqual(STILL_RUNNING_STATUS, bzfs_jobrunner.Job.get_worst_exception(existing_code, new_code))
 
 
 #############################################################################
