@@ -54,6 +54,7 @@ Observability:
 - ``AttemptOutcome.result`` is either the successful result or the most recent ``RetryableError``, enabling integration with
   metrics and tracing systems without coupling the retry loop to any specific backend.
 - Supply an ``after_attempt(AttemptOutcome)`` callback to customize logging 100%, if necessary.
+- Use the ``multi_after_attempt()`` helper to invoke more than one callback handler in ``after_attempt(AttemptOutcome)``.
 
 Expert Configuration:
 ---------------------
@@ -119,6 +120,7 @@ import random
 import threading
 import time
 from collections.abc import (
+    Iterable,
     Mapping,
     Sequence,
 )
@@ -274,6 +276,19 @@ def _sleep(sleep_nanos: int, termination_event: threading.Event | None) -> None:
         time.sleep(sleep_nanos / 1_000_000_000)
     else:
         termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
+
+
+def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) -> Callable[[AttemptOutcome], None]:
+    """Returns a callback for ``call_with_retries(after_attempt=...)`` that invokes each handler in order; thread-safe."""
+    handlers = tuple(handlers)
+    if len(handlers) == 1 and handlers[0] is after_attempt_log_failure:
+        return after_attempt_log_failure  # perf
+
+    def _after_attempt(outcome: AttemptOutcome) -> None:
+        for handler in handlers:
+            handler(outcome)
+
+    return _after_attempt
 
 
 #############################################################################

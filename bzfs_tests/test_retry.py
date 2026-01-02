@@ -44,7 +44,9 @@ from bzfs_main.util.retry import (
     RetryOptions,
     RetryPolicy,
     _sleep,
+    after_attempt_log_failure,
     call_with_retries,
+    multi_after_attempt,
 )
 
 
@@ -932,6 +934,49 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertEqual(4, len({outcome_a, outcome_b, outcome_c, outcome_d}))
         self.assertNotEqual(outcome_a, object())
         self.assertFalse(outcome_a == (outcome_a.retry, outcome_a.elapsed_nanos, outcome_a.sleep_nanos))
+
+    def test_multi_after_attempt_can_be_passed_as_after_attempt(self) -> None:
+        """Ensures multi_after_attempt() composes multiple after_attempt handlers for call_with_retries()."""
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+        after_attempt1: list[bool] = []
+        after_attempt2: list[bool] = []
+        calls: list[int] = []
+
+        def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            if retry.count == 0:
+                raise RetryableError("fail", retry_immediately_once=True) from ValueError("boom")
+            return "ok"
+
+        def handler1(outcome: AttemptOutcome) -> None:
+            after_attempt1.append(outcome.is_success)
+
+        def handler2(outcome: AttemptOutcome) -> None:
+            after_attempt2.append(outcome.is_success)
+
+        self.assertEqual(
+            "ok",
+            call_with_retries(
+                fn,
+                policy=retry_policy,
+                config=RetryConfig(),
+                after_attempt=multi_after_attempt([handler1, handler2]),
+                log=None,
+            ),
+        )
+        self.assertEqual([0, 1], calls)
+        self.assertEqual([False, True], after_attempt1)
+        self.assertEqual([False, True], after_attempt2)
+
+    def test_multi_after_attempt_returns_default_handler(self) -> None:
+        """Ensures multi_after_attempt() returns after_attempt_log_failure without wrapper overhead."""
+        self.assertIs(after_attempt_log_failure, multi_after_attempt([after_attempt_log_failure]))
 
 
 #############################################################################
