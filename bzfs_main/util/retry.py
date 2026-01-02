@@ -146,7 +146,7 @@ from bzfs_main.util.utils import (
 
 #############################################################################
 def _giveup(_outcome: AttemptOutcome) -> str:
-    """Default implementation never gives up."""
+    """Default implementation never gives up; A non-empty string indicates the reason for giving up."""
     return ""
 
 
@@ -534,6 +534,7 @@ class RetryPolicy:
 
 #############################################################################
 def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:  # thread-safe
+    """Default implementation creates simple log message."""
     msg = display_msg + " " if display_msg else ""
     errmsg: str = retryable_error.display_msg_str()
     msg = msg + errmsg + " " if errmsg else msg
@@ -542,6 +543,7 @@ def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:  # th
 
 
 def _format_pair(first: object, second: object) -> str:  # thread-safe
+    """Default implementation creates simple log message part."""
     return f"[{first}/{second}]"
 
 
