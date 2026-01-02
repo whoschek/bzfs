@@ -397,6 +397,120 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertEqual(0, err.outcome.retry.count)
         self.assertEqual(1234, err.outcome.elapsed_nanos)
 
+    def test_call_with_retries_on_exhaustion_returns_fallback_and_overrides_reraise(self) -> None:
+        """Ensures on_exhaustion() can return a fallback value instead of raising on exhaustion."""
+        retry_policy = RetryPolicy(
+            max_retries=0, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0, max_elapsed_secs=1
+        )
+        events: list[str] = []
+
+        def fn(retry: Retry) -> str:
+            raise RetryableError("fail") from ValueError("boom")
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            self.assertTrue(outcome.is_exhausted)
+            events.append("after_attempt")
+
+        def on_exhaustion(outcome: AttemptOutcome) -> str:
+            self.assertTrue(outcome.is_exhausted)
+            self.assertIsInstance(outcome.result, RetryableError)
+            events.append("on_exhaustion")
+            return "fallback"
+
+        actual = call_with_retries(
+            fn,
+            policy=retry_policy,
+            config=RetryConfig(),
+            after_attempt=after_attempt,
+            on_exhaustion=on_exhaustion,
+            log=None,
+        )
+        self.assertEqual("fallback", actual)
+        self.assertEqual(["after_attempt", "on_exhaustion"], events)
+
+    def test_call_with_retries_on_exhaustion_called_exactly_once(self) -> None:
+        """Ensures on_exhaustion() is called once (only) on the exhaustion path."""
+        retry_policy = RetryPolicy(
+            max_retries=2, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0, max_elapsed_secs=1
+        )
+        calls: list[int] = []
+        after_attempt_calls: list[int] = []
+        on_exhaustion_calls: list[int] = []
+
+        def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            raise RetryableError("fail") from ValueError("boom")
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            after_attempt_calls.append(outcome.retry.count)
+
+        def on_exhaustion(outcome: AttemptOutcome) -> str:
+            on_exhaustion_calls.append(outcome.retry.count)
+            return "fallback"
+
+        actual = call_with_retries(
+            fn,
+            policy=retry_policy,
+            config=RetryConfig(),
+            after_attempt=after_attempt,
+            on_exhaustion=on_exhaustion,
+            log=None,
+        )
+        self.assertEqual("fallback", actual)
+        self.assertEqual([0, 1, 2], calls)
+        self.assertEqual([0, 1, 2], after_attempt_calls)
+        self.assertEqual([2], on_exhaustion_calls)
+
+    def test_call_with_retries_on_exhaustion_called_on_giveup(self) -> None:
+        """Ensures on_exhaustion() runs when giveup() stops retries early."""
+        retry_policy = RetryPolicy(
+            max_retries=5, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0, max_elapsed_secs=1
+        )
+
+        def fn(retry: Retry) -> str:
+            raise RetryableError("fail") from ValueError("boom")
+
+        def giveup(outcome: AttemptOutcome) -> str:
+            return "circuit breaker triggered"
+
+        def on_exhaustion(outcome: AttemptOutcome) -> str:
+            self.assertTrue(outcome.is_exhausted)
+            self.assertEqual("circuit breaker triggered", outcome.giveup_reason)
+            return "fallback"
+
+        actual = call_with_retries(
+            fn,
+            policy=retry_policy,
+            config=RetryConfig(),
+            giveup=giveup,
+            on_exhaustion=on_exhaustion,
+            log=None,
+        )
+        self.assertEqual("fallback", actual)
+
+    def test_call_with_retries_on_exhaustion_not_called_on_success(self) -> None:
+        """Ensures on_exhaustion() is not called if a later attempt succeeds."""
+        retry_policy = RetryPolicy(
+            max_retries=2, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0, max_elapsed_secs=1
+        )
+        calls: list[int] = []
+        on_exhaustion_calls: list[AttemptOutcome] = []
+
+        def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            if retry.count == 0:
+                raise RetryableError("fail", retry_immediately_once=True) from ValueError("boom")
+            return "ok"
+
+        def on_exhaustion(outcome: AttemptOutcome) -> str:
+            on_exhaustion_calls.append(outcome)
+            return "fallback"
+
+        actual = call_with_retries(fn, policy=retry_policy, config=RetryConfig(), on_exhaustion=on_exhaustion, log=None)
+        self.assertEqual("ok", actual)
+        self.assertEqual([0, 1], calls)
+        self.assertEqual([], on_exhaustion_calls)
+
     def test_call_with_retries_no_retries(self) -> None:
         """Ensures no retries or warning logs are emitted when retries are disabled."""
         retry_policy = RetryPolicy.no_retries()

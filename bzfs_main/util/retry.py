@@ -30,7 +30,7 @@ Usage:
 - Construct a policy via ``RetryPolicy(...)`` that specifies how ``RetryableError`` shall be retried.
 - Invoke ``call_with_retries(fn=fn, policy=policy, log=logger)`` with a standard logging.Logger
 - On success, the result of calling ``fn`` is returned.
-- On exhaustion, call_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
+- By default on exhaustion, call_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
   ``RetryError`` (wrapping the last ``RetryableError``), like so:
   - if ``RetryPolicy.reraise`` is True and the last ``RetryableError.__cause__`` is not None, re-raise the last
     ``RetryableError.__cause__`` with its original traceback.
@@ -46,6 +46,8 @@ Advanced Configuration:
 - Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, error/status
   codes or parsing stderr), including time-aware decisions or decisions based on the previous N most recent AttemptOutcome
   objects (via AttemptOutcome.retry.previous_outcomes)
+- Supply an ``on_exhaustion(AttemptOutcome)`` callback to customize behavior when giving up; it may raise an error or return
+  a fallback value.
 
 Observability:
 --------------
@@ -69,9 +71,10 @@ Expert Configuration:
   constructing a ``RetryOptions`` object (which is a ``Callable`` function itself).
 - To keep calling code retry-transparent, set ``RetryPolicy.reraise=True`` (the default) *and* raise retryable failures as
   ``raise RetryableError(...) from exc``. Client code now won't notice whether call_with_retries is used or not.
-- To make exhaustion observable to calling code, set ``RetryPolicy.reraise=False``: call_with_retries() now always raises
-  ``RetryError`` (wrapping the last ``RetryableError``) on exhaustion, so callers now catch ``RetryError`` and can inspect
-  the last underlying exception via ``err.outcome``, ``err.__cause__``, and even ``err.__cause__.__cause__`` when present.
+- To make exhaustion observable to calling code, set ``RetryPolicy.reraise=False``: by default call_with_retries() now always
+  raises ``RetryError`` (wrapping the last ``RetryableError``) on exhaustion, so callers now catch ``RetryError`` and can
+  inspect the last underlying exception via ``err.outcome``, ``err.__cause__``, and even ``err.__cause__.__cause__`` when
+  present.
 
 Example Usage:
 --------------
@@ -147,7 +150,7 @@ from bzfs_main.util.utils import (
 
 
 #############################################################################
-def _giveup(_outcome: AttemptOutcome) -> str:
+def _no_giveup(_outcome: AttemptOutcome) -> str:
     """Default implementation never gives up; A non-empty string indicates the reason for giving up."""
     return ""
 
@@ -186,6 +189,18 @@ def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
             )
 
 
+def default_on_exhaustion(outcome: AttemptOutcome) -> NoReturn:
+    """Default implementation of exhaustion behavior for call_with_retries(); always raises."""
+    assert outcome.is_exhausted
+    assert isinstance(outcome.result, RetryableError)
+    retryable_error: RetryableError = outcome.result
+    policy: RetryPolicy = outcome.retry.policy
+    cause: BaseException | None = retryable_error.__cause__
+    if policy.reraise and cause is not None:
+        raise cause.with_traceback(cause.__traceback__)
+    raise RetryError(outcome) from retryable_error
+
+
 #############################################################################
 _T = TypeVar("_T")
 
@@ -193,19 +208,24 @@ _T = TypeVar("_T")
 def call_with_retries(
     fn: Callable[[Retry], _T],  # typically a lambda
     policy: RetryPolicy,
+    *,
     config: RetryConfig | None = None,
-    giveup: Callable[[AttemptOutcome], str] = _giveup,  # stop retrying based on domain-specific logic
+    giveup: Callable[[AttemptOutcome], str] = _no_giveup,  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
+    on_exhaustion: Callable[[AttemptOutcome], _T] = default_on_exhaustion,  # raise error or return fallback value
     log: Logger | None = None,
 ) -> _T:
     """Runs the function ``fn`` and returns its result; retries on failure as indicated by policy and config; thread-safe.
 
-    On exhaustion, call_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
+    By default on exhaustion, call_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
     ``RetryError`` (wrapping the last ``RetryableError``), like so:
     - if ``RetryPolicy.reraise`` is True and the last ``RetryableError.__cause__`` is not None, re-raise the last
       ``RetryableError.__cause__`` with its original traceback.
     - Otherwise, raise ``RetryError`` (wrapping the last ``RetryableError``, preserving its ``__cause__`` chain).
     - The default is ``RetryPolicy.reraise=True``.
+
+    On the exhaustion path, ``on_exhaustion`` will be called exactly once (after the final after_attempt). The default
+    implementation raises as described above; custom ``on_exhaustion`` impls may return a fallback value instead of an error.
     """
     config = _DEFAULT_RETRY_CONFIG if config is None else config
     curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
@@ -257,18 +277,12 @@ def call_with_retries(
                         continue  # continue retry loop with next attempt
                 else:
                     sleep_nanos = 0
-
-            # raise error
             is_terminated: bool = termination_event is not None and termination_event.is_set()
             outcome = AttemptOutcome(
                 retry, False, True, is_terminated, giveup_reason, elapsed_nanos, sleep_nanos, retryable_error
             )
             after_attempt(outcome)
-            cause: BaseException | None = retryable_error.__cause__
-            if policy.reraise and cause is not None:
-                raise cause.with_traceback(cause.__traceback__)  # noqa: B904 intentional re-raise without chaining
-            else:
-                raise RetryError(outcome) from retryable_error
+            return on_exhaustion(outcome)  # raise error or return fallback value
 
 
 def _sleep(sleep_nanos: int, termination_event: threading.Event | None) -> None:
@@ -590,7 +604,7 @@ _DEFAULT_RETRY_CONFIG: Final[RetryConfig] = RetryConfig()  # constant
 
 
 #############################################################################
-def _fn(_retry: Retry) -> NoReturn:
+def _fn_not_implemented(_retry: Retry) -> NoReturn:
     """Default implementation always raises."""
     raise NotImplementedError("Provide fn when calling RetryOptions")
 
@@ -600,11 +614,12 @@ def _fn(_retry: Retry) -> NoReturn:
 class RetryOptions(Generic[_T]):
     """Convenience class that aggregates all knobs for call_with_retries(); and is itself callable too; immutable."""
 
-    fn: Callable[[Retry], _T] = _fn
+    fn: Callable[[Retry], _T] = _fn_not_implemented  # set this to make the RetryOptions object itself callable
     policy: RetryPolicy = RetryPolicy()
     config: RetryConfig = RetryConfig()
-    giveup: Callable[[AttemptOutcome], str] = _giveup  # stop retrying based on domain-specific logic
+    giveup: Callable[[AttemptOutcome], str] = _no_giveup  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
+    on_exhaustion: Callable[[AttemptOutcome], _T] = default_on_exhaustion  # raise error or return fallback value
     log: Logger | None = None
 
     def copy(self, **override_kwargs: Any) -> RetryOptions[_T]:
@@ -619,6 +634,7 @@ class RetryOptions(Generic[_T]):
             config=self.config,
             giveup=self.giveup,
             after_attempt=self.after_attempt,
+            on_exhaustion=self.on_exhaustion,
             log=self.log,
         )
 

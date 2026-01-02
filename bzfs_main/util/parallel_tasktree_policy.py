@@ -111,6 +111,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 config=retry_options.config,
                 giveup=retry_options.giveup,
                 after_attempt=retry_options.after_attempt,
+                on_exhaustion=retry_options.on_exhaustion,
                 log=log,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
