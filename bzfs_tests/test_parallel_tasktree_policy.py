@@ -27,6 +27,7 @@ from logging import (
     Logger,
 )
 from typing import (
+    TYPE_CHECKING,
     Any,
 )
 from unittest.mock import (
@@ -41,12 +42,17 @@ from bzfs_main.util.parallel_tasktree_policy import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
 from bzfs_main.util.retry import (
-    Retry,
+    RetryOptions,
     RetryPolicy,
 )
 from bzfs_tests.tools import (
     stop_on_failure_subtest,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
+    from bzfs_main.util.retry import (
+        Retry,
+    )
 
 
 #############################################################################
@@ -67,7 +73,6 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.default_kwargs: dict[str, Any] = {
             "log": self.log,
             "skip_on_error": "dataset",
-            "retry_policy": None,
             "dry_run": False,
             "is_test_mode": True,
         }
@@ -102,7 +107,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                 src_datasets = ["a1", "a1/b1", "a2"]
                 if i > 0:
                     self.log.isEnabledFor.side_effect = lambda level: level >= logging.DEBUG
-                    self.default_kwargs["retry_policy"] = RetryPolicy.no_retries()
+                    self.default_kwargs["retry_options"] = RetryOptions[bool]().copy(policy=RetryPolicy.no_retries())
                 failed = process_datasets_in_parallel_and_fault_tolerant(
                     datasets=src_datasets,
                     process_dataset=submit_no_skiptree,  # lambda

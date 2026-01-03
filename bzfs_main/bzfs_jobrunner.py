@@ -961,7 +961,6 @@ class Job:
             termination_event=self.termination_event,
             termination_handler=self.subprocesses.terminate_process_subtrees,
             task_name="Subjob",
-            retry_policy=None,  # no retries
             dry_run=False,
             is_test_mode=self.is_test_mode,
         ):

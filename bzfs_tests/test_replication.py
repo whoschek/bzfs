@@ -75,7 +75,7 @@ from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
 
-if TYPE_CHECKING:  # type-only imports for annotations
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import (
         Job,
     )

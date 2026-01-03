@@ -919,8 +919,7 @@ class Job(MiniJob):
                 enable_barriers=False,
                 task_name="--delete-dst-snapshots",
                 append_exception=self.append_exception,
-                retry_policy=p.retry_policy,
-                retry_options=self.retry_options,
+                retry_options=self.retry_options.copy(policy=p.retry_policy),
                 dry_run=p.dry_run,
                 is_test_mode=self.is_test_mode,
             )
@@ -1281,8 +1280,7 @@ class Job(MiniJob):
             enable_barriers=False,
             task_name="Replication",
             append_exception=self.append_exception,
-            retry_policy=p.retry_policy,
-            retry_options=self.retry_options,
+            retry_options=self.retry_options.copy(policy=p.retry_policy),
             dry_run=p.dry_run,
             is_test_mode=self.is_test_mode,
         )

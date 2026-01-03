@@ -74,8 +74,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     task_name: str = "Task",
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error
-    retry_policy: RetryPolicy | None = None,
-    retry_options: RetryOptions[bool] = RetryOptions(),  # noqa: B008
+    retry_options: RetryOptions[bool] = RetryOptions[bool]().copy(policy=RetryPolicy.no_retries()),  # noqa: B008
     dry_run: bool = False,
     is_test_mode: bool = False,
 ) -> bool:  # returns True if any dataset processing failed, False if all succeeded
@@ -95,7 +94,6 @@ def process_datasets_in_parallel_and_fault_tolerant(
     termination_event = threading.Event() if termination_event is None else termination_event
     assert "%" not in task_name
     assert callable(append_exception)
-    retry_policy = RetryPolicy.no_retries() if retry_policy is None else retry_policy
     len_datasets: int = len(datasets)
     is_debug: bool = log.isEnabledFor(logging.DEBUG)
 
@@ -108,7 +106,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         try:
             no_skip = call_with_retries(
                 fn=lambda retry: process_dataset(dataset, tid, retry),
-                policy=retry_policy,
+                policy=retry_options.policy,
                 config=retry_options.config,
                 giveup=retry_options.giveup,
                 after_attempt=retry_options.after_attempt,
