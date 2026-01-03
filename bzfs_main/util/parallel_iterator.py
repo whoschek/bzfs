@@ -50,6 +50,7 @@ _T = TypeVar("_T")
 
 def parallel_iterator(
     iterator_builder: Callable[[Executor], Iterable[Iterable[Future[_T]]]],
+    *,
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
     termination_event: threading.Event | None = None,  # optional event to request early async termination
@@ -126,7 +127,7 @@ def parallel_iterator(
     # Parallel SSH command execution with ordered results
     def build_ssh_commands(executor):
         return [
-            (executor.submit(run_ssh_cmd, cmd) for cmd in commands)
+            (executor.submit(run_ssh_cmd, cmd) for cmd in commands)  # lazy on-demand Python Generator of Future objects
         ]
 
     for result in parallel_iterator(build_ssh_commands, max_workers=4, ordered=True):
@@ -143,6 +144,7 @@ def parallel_iterator(
 
 def parallel_iterator_results(
     iterator: Iterator[Future[_T]],
+    *,
     max_workers: int,
     ordered: bool,
     termination_event: threading.Event | None = None,  # optional event to request early async termination
@@ -203,6 +205,7 @@ def run_in_parallel(fn1: Callable[[], _K], fn2: Callable[[], _V]) -> tuple[_K, _
 def batch_cmd_iterator(
     cmd_args: Iterable[str],  # list of arguments to be split across one or more commands
     fn: Callable[[list[str]], _T],  # callback that runs a CLI command with a single batch
+    *,
     max_batch_items: int = 2**29,  # max number of args per batch
     max_batch_bytes: int = 127 * 1024,  # max number of bytes per batch
     sep: str = " ",  # separator between batch args

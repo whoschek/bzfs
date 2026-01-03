@@ -561,8 +561,8 @@ class RetryPolicy:
 
 
 #############################################################################
-def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:  # thread-safe
-    """Default implementation creates simple log message."""
+def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:
+    """Default implementation creates simple log message; thread-safe."""
     msg = display_msg + " " if display_msg else ""
     errmsg: str = retryable_error.display_msg_str()
     msg = msg + errmsg + " " if errmsg else msg
@@ -570,8 +570,8 @@ def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:  # th
     return msg
 
 
-def _format_pair(first: object, second: object) -> str:  # thread-safe
-    """Default implementation creates simple log message part."""
+def _format_pair(first: object, second: object) -> str:
+    """Default implementation creates simple log message part; thread-safe."""
     return f"[{first}/{second}]"
 
 
