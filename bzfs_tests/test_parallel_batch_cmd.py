@@ -88,7 +88,7 @@ class TestItrSshCmdParallel(AbstractTestCase):
         job.params = p
         p.src = Remote("src", args, p)  # type: ignore[misc]  # cannot assign to final attribute
         job.params.connection_pools["src"] = ConnectionPools(
-            p.src, {SHARED: p.src.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
+            remote=p.src, capacities={SHARED: p.src.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
         )
         job.max_workers = {"src": 2}
         job.params.available_programs = {"src": {"os": "Linux"}, "local": {"os": "Linux"}}

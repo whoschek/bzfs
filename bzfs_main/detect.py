@@ -115,7 +115,7 @@ def detect_available_programs(job: Job) -> None:
                 p.zpool_features[loc] = {}  # cache miss, invalidate features of zpools before refetching from remote
         else:
             p.connection_pools[loc] = ConnectionPools(
-                r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
+                remote=r, capacities={SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
             )
         todo.append(r)
 

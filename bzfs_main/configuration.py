@@ -273,7 +273,7 @@ class Params(MiniParams):
         self.skip_parent: Final[bool] = args.skip_parent
         self.skip_missing_snapshots: Final[str] = args.skip_missing_snapshots
         self.skip_on_error: Final[str] = args.skip_on_error
-        self.retry_policy: Final[RetryPolicy] = RetryPolicy.from_namespace(args)
+        self.retry_policy: Final[RetryPolicy] = RetryPolicy.from_namespace(args).copy(reraise=True)
         self.skip_replication: Final[bool] = args.skip_replication
         self.delete_dst_snapshots: Final[bool] = args.delete_dst_snapshots is not None
         self.delete_dst_bookmarks: Final[bool] = args.delete_dst_snapshots == "bookmarks"

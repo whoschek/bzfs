@@ -228,9 +228,9 @@ def call_with_retries(
     implementation raises as described above; custom ``on_exhaustion`` impls may return a fallback value instead of an error.
     """
     config = _DEFAULT_RETRY_CONFIG if config is None else config
-    curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
-    retry_count: int = 0
     rng: random.Random | None = None
+    retry_count: int = 0
+    curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
     start_time_nanos: Final[int] = time.monotonic_ns()
     while True:
@@ -258,8 +258,7 @@ def call_with_retries(
                     sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
                         retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
                     )
-                    assert sleep_nanos >= 0
-                    assert curr_max_sleep_nanos >= 0
+                    assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, sleep_nanos
 
                 outcome = AttemptOutcome(retry, False, False, False, "", elapsed_nanos, sleep_nanos, retryable_error)
                 if (termination_event is None or not termination_event.is_set()) and not (giveup_reason := giveup(outcome)):

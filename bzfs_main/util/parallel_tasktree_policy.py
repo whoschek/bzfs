@@ -57,6 +57,7 @@ from bzfs_main.util.utils import (
 
 
 def process_datasets_in_parallel_and_fault_tolerant(
+    *,
     log: logging.Logger,
     datasets: list[str],  # (sorted) list of datasets to process
     process_dataset: Callable[
@@ -74,7 +75,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error
     retry_policy: RetryPolicy | None = None,
-    retry_options: RetryOptions = RetryOptions(),  # noqa: B008
+    retry_options: RetryOptions[bool] = RetryOptions(),  # noqa: B008
     dry_run: bool = False,
     is_test_mode: bool = False,
 ) -> bool:  # returns True if any dataset processing failed, False if all succeeded

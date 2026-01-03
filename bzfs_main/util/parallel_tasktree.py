@@ -94,6 +94,7 @@ class ParallelTaskTree:
 
     def __init__(
         self,
+        *,
         log: logging.Logger,
         datasets: list[str],  # (sorted) list of datasets to process
         process_dataset: Callable[[str, int], CompletionCallback],  # lambda: dataset, tid; must be thread-safe

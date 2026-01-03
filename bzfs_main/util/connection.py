@@ -155,6 +155,7 @@ class MiniRemote(Protocol):
 
 #############################################################################
 def create_simple_miniremote(
+    *,
     log: logging.Logger,
     ssh_user_host: str = "",  # option passed to `ssh` CLI; empty string indicates local mode
     ssh_port: int | None = None,  # option passed to `ssh` CLI
@@ -246,7 +247,9 @@ def create_simple_miniremote(
     )
 
 
-def create_simple_minijob(timeout_duration_secs: float | None = None, subprocesses: Subprocesses | None = None) -> MiniJob:
+def create_simple_minijob(
+    *, timeout_duration_secs: float | None = None, subprocesses: Subprocesses | None = None
+) -> MiniJob:
     """Factory that returns a simple implementation of the MiniJob interface."""
 
     @dataclass(frozen=True)  # aka immutable
@@ -302,6 +305,7 @@ class Connection:
         self,
         remote: MiniRemote,
         max_concurrent_ssh_sessions_per_tcp_connection: int,
+        *,
         lease: ConnectionLease | None = None,
     ) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
@@ -332,6 +336,7 @@ class Connection:
     def run_ssh_command(
         self,
         cmd: list[str],
+        *,
         job: MiniJob,
         loglevel: int = logging.INFO,
         is_dry: bool = False,
@@ -544,7 +549,7 @@ class ConnectionPool:
 class ConnectionPools:
     """A bunch of named connection pools with various multiplexing capacities."""
 
-    def __init__(self, remote: MiniRemote, capacities: dict[str, int]) -> None:
+    def __init__(self, remote: MiniRemote, *, capacities: dict[str, int]) -> None:
         """Creates one connection pool per name with the given capacities."""
         self._pools: Final[dict[str, ConnectionPool]] = {
             name: ConnectionPool(remote, name, capacity) for name, capacity in capacities.items()

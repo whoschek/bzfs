@@ -321,11 +321,11 @@ class TestConnectionPool(AbstractTestCase):
 
     def test_pools(self) -> None:
         with self.assertRaises(AssertionError):
-            ConnectionPools(self.dst, {SHARED: 0})
+            ConnectionPools(remote=self.dst, capacities={SHARED: 0})
 
-        ConnectionPools(self.dst, {}).shutdown("foo")
+        ConnectionPools(remote=self.dst, capacities={}).shutdown("foo")
 
-        pools = ConnectionPools(self.dst, {SHARED: 8, DEDICATED: 1})
+        pools = ConnectionPools(remote=self.dst, capacities={SHARED: 8, DEDICATED: 1})
         self.assertIsNotNone(pools.pool(SHARED))
         self.assertIsNotNone(repr(pools))
         self.assertIsNotNone(str(pools))
@@ -747,7 +747,7 @@ class TestRunSshCommand(AbstractTestCase):
                 location="dst", ssh_user_host="", reuse_ssh_connection=True, ssh_control_persist_secs=90, ssh_extra_opts=[]
             ),
         )
-        self.conn_pools = ConnectionPools(self.remote, {SHARED: 1})
+        self.conn_pools = ConnectionPools(remote=self.remote, capacities={SHARED: 1})
         self.conn_pool = self.conn_pools.pool(SHARED)
         self.conn: Connection | None = None
 
