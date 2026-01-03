@@ -214,7 +214,7 @@ def get_home_directory() -> str:
     return pwd.getpwuid(os.getuid()).pw_dir
 
 
-def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int | None = None) -> str:
+def human_readable_bytes(num_bytes: float, *, separator: str = " ", precision: int | None = None) -> str:
     """Formats 'num_bytes' as a human-readable size; for example "567 MiB"."""
     sign = "-" if num_bytes < 0 else ""
     s = abs(num_bytes)
@@ -228,7 +228,7 @@ def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int 
     return f"{sign}{formatted_num}{separator}{units[i]}"
 
 
-def human_readable_duration(duration: float, unit: str = "ns", separator: str = "", precision: int | None = None) -> str:
+def human_readable_duration(duration: float, *, unit: str = "ns", separator: str = "", precision: int | None = None) -> str:
     """Formats a duration in human units, automatically scaling as needed; for example "567ms"."""
     sign = "-" if duration < 0 else ""
     t = abs(duration)
@@ -279,7 +279,7 @@ def human_readable_float(number: float) -> str:
     return "0" if result == "-0" else result
 
 
-def percent(number: int, total: int, print_total: bool = False) -> str:
+def percent(number: int, total: int, *, print_total: bool = False) -> str:
     """Returns percentage string of ``number`` relative to ``total``."""
     tot: str = f"/{total}" if print_total else ""
     return f"{number}{tot}={'inf' if total == 0 else human_readable_float(100 * number / total)}%"
@@ -347,6 +347,7 @@ def find_match(
     predicate: Callable[[_P], bool],
     start: int | None = None,
     end: int | None = None,
+    *,
     reverse: bool = False,
     raises: bool | str | Callable[[], str] = False,  # raises: bool | str | Callable = False,  # python >= 3.10
 ) -> int:
@@ -494,7 +495,7 @@ def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexLis
     return False
 
 
-def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
+def compile_regexes(regexes: list[str], *, suffix: str = "") -> RegexList:
     """Compiles regex strings and keeps track of negations."""
     assert isinstance(regexes, list)
     compiled_regexes: RegexList = []
@@ -549,7 +550,7 @@ def stderr_to_str(stderr: Any) -> str:
     return str(stderr) if not isinstance(stderr, bytes) else stderr.decode("utf-8", errors="replace")
 
 
-def xprint(log: logging.Logger, value: Any, run: bool = True, end: str = "\n", file: TextIO | None = None) -> None:
+def xprint(log: logging.Logger, value: Any, *, run: bool = True, end: str = "\n", file: TextIO | None = None) -> None:
     """Optionally logs ``value`` at stdout/stderr level."""
     if run and value:
         value = value if end else str(value).rstrip()
@@ -562,7 +563,7 @@ def sha256_hex(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def sha256_urlsafe_base64(text: str, padding: bool = True) -> str:
+def sha256_urlsafe_base64(text: str, *, padding: bool = True) -> str:
     """Returns the URL-safe base64-encoded sha256 value for the given text."""
     digest: bytes = hashlib.sha256(text.encode()).digest()
     s: str = base64.urlsafe_b64encode(digest).decode()
@@ -582,7 +583,7 @@ def sha256_85_urlsafe_base64(text: str) -> str:
 
 
 def urlsafe_base64(
-    value: int, max_value: int = 2**64 - 1, padding: bool = True, byteorder: Literal["little", "big"] = "big"
+    value: int, max_value: int = 2**64 - 1, *, padding: bool = True, byteorder: Literal["little", "big"] = "big"
 ) -> str:
     """Returns the URL-safe base64 string encoding of the int value, assuming it is contained in the range [0..max_value]."""
     assert 0 <= value <= max_value
@@ -661,7 +662,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
 
 
 def terminate_process_subtree(
-    except_current_process: bool = True, root_pids: list[int] | None = None, sig: signal.Signals = signal.SIGTERM
+    *, except_current_process: bool = True, root_pids: list[int] | None = None, sig: signal.Signals = signal.SIGTERM
 ) -> None:
     """For each root PID: Sends the given signal to the root PID and all its descendant processes."""
     current_pid: int = os.getpid()
@@ -714,6 +715,7 @@ def _get_descendant_processes(root_pids: list[int]) -> list[list[int]]:
 @contextlib.contextmanager
 def termination_signal_handler(
     termination_events: list[threading.Event],
+    *,
     termination_handler: Callable[[], None] = lambda: terminate_process_subtree(),
 ) -> Iterator[None]:
     """Context manager that installs SIGINT/SIGTERM handlers that set all ``termination_events`` and, by default, terminate
@@ -864,7 +866,7 @@ def validate_file_permissions(path: str, mode: int) -> None:
         )
 
 
-def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
+def parse_duration_to_milliseconds(duration: str, *, regex_suffix: str = "", context: str = "") -> int:
     """Parses human duration strings like '5m' or '2 hours' to milliseconds."""
     unit_milliseconds: dict[str, int] = {
         "milliseconds": 1,

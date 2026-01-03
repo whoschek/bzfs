@@ -265,7 +265,7 @@ class TestHelperFunctions(unittest.TestCase):
         assert_full_match("foo", "!foo", re_suffix)
         assert_full_match("foo", "!foo")
         with self.assertRaises(re.error):
-            compile_regexes(["fo$o"], re_suffix)
+            compile_regexes(["fo$o"], suffix=re_suffix)
 
     def test_is_included_with_negated_exclude_regex(self) -> None:
         """Negated exclude regex excludes non-matching names but not matching ones."""
