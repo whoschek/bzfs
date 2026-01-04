@@ -25,7 +25,6 @@ from __future__ import (
 import argparse
 import base64
 import bisect
-import collections
 import contextlib
 import errno
 import hashlib
@@ -145,16 +144,18 @@ _V_ = TypeVar("_V_")
 _R_ = TypeVar("_R_")
 
 
-def shuffle_dict(dictionary: dict[_K_, _V_], rand: random.Random = random.SystemRandom()) -> dict[_K_, _V_]:  # noqa: B008
+def shuffle_dict(dictionary: dict[_K_, _V_], /, rand: random.Random = random.SystemRandom()) -> dict[_K_, _V_]:  # noqa: B008
     """Returns a new dict with items shuffled randomly."""
     items: list[tuple[_K_, _V_]] = list(dictionary.items())
     rand.shuffle(items)
     return dict(items)
 
 
-def sorted_dict(dictionary: dict[_K_, _V_]) -> dict[_K_, _V_]:
-    """Returns a new dict with items sorted primarily by key and secondarily by value."""
-    return dict(sorted(dictionary.items()))
+def sorted_dict(
+    dictionary: dict[_K_, _V_], /, *, key: Callable[[tuple[_K_, _V_]], Any] | None = None, reverse: bool = False
+) -> dict[_K_, _V_]:
+    """Returns a new dict with items sorted, primarily by key and secondarily by value (unless a custom key is supplied)."""
+    return dict(sorted(dictionary.items(), key=key, reverse=reverse))
 
 
 def tail(file: str, n: int, errors: str | None = None) -> Sequence[str]:
@@ -352,15 +353,15 @@ def find_match(
     reverse: bool = False,
     raises: bool | object | Callable[[], object] = False,  # raises: bool | object | Callable = False,  # python >= 3.10
 ) -> int:
-    """Returns the integer index within seq of the first item (or last item if reverse==True) that matches the given
+    """Returns the integer index within ``seq`` of the first item (or last item if reverse=True) that matches the given
     predicate condition.
 
-    If no matching item is found returns -1 or ValueError, depending on the raises parameter, which is a bool indicating
+    If no matching item is found returns -1 or ValueError, depending on the ``raises`` parameter, which is a bool indicating
     whether to raise an error, or an object containing the error message, but can also be a Callable/lambda in order to
     support efficient deferred generation of error messages.
 
-    Analog to str.find(), including slicing semantics with parameters start and end, i.e. respects Python slicing semantics
-    for start/end (including clamping). For example, seq can be a list, tuple or str.
+    Analog to ``str.find()``, including slicing semantics with parameters start and end, i.e. respects Python slicing
+    semantics for start/end (including clamping). For example, seq can be a list, tuple or str.
 
     Example usage:
         lst = ["a", "b", "-c", "d"]
@@ -470,7 +471,7 @@ def xappend(lst: list[_TAPPEND], *items: _TAPPEND | Iterable[_TAPPEND]) -> list[
     """Appends each of the items to the given list if the item is "truthy", for example not None and not an empty string; If
     an item is an iterable does so recursively, flattening the output."""
     for item in items:
-        if isinstance(item, str) or not isinstance(item, collections.abc.Iterable):
+        if isinstance(item, str) or not isinstance(item, Iterable):
             if item:
                 lst.append(item)
         else:

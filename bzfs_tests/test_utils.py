@@ -513,19 +513,27 @@ class TestSortedDict(unittest.TestCase):
 
     def test_sorted_dict_empty_dictionary_returns_empty(self) -> None:
         result: dict[str, int] = sorted_dict({})
-        self.assertEqual({}, result)
+        self.assertEqual([], list(result.items()))
 
     def test_sorted_dict_single_key_value_pair_is_sorted_correctly(self) -> None:
         result: dict[str, int] = sorted_dict({"a": 1})
-        self.assertEqual({"a": 1}, result)
+        self.assertEqual([("a", 1)], list(result.items()))
 
     def test_sorted_dict_multiple_key_value_pairs_are_sorted_by_keys(self) -> None:
         result: dict[str, int] = sorted_dict({"b": 2, "a": 1, "c": 3})
-        self.assertEqual({"a": 1, "b": 2, "c": 3}, result)
+        self.assertEqual([("a", 1), ("b", 2), ("c", 3)], list(result.items()))
 
     def test_sorted_dict_with_numeric_keys_is_sorted_correctly(self) -> None:
         result: dict[int, str] = sorted_dict({3: "three", 1: "one", 2: "two"})
-        self.assertEqual({1: "one", 2: "two", 3: "three"}, result)
+        self.assertEqual([(1, "one"), (2, "two"), (3, "three")], list(result.items()))
+
+    def test_sorted_dict_key_sorts_by_value(self) -> None:
+        result: dict[str, int] = sorted_dict({"b": 2, "a": 3, "c": 1}, key=lambda item: item[1])
+        self.assertEqual([("c", 1), ("b", 2), ("a", 3)], list(result.items()))
+
+    def test_sorted_dict_reverse_reverses_sort_order(self) -> None:
+        result: dict[str, int] = sorted_dict({"b": 2, "a": 1, "c": 3}, reverse=True)
+        self.assertEqual([("c", 3), ("b", 2), ("a", 1)], list(result.items()))
 
     def test_sorted_dict_with_mixed_key_types_raises_error(self) -> None:
         with self.assertRaises(TypeError):

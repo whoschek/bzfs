@@ -484,7 +484,7 @@ class RetryPolicy:
     call_with_retries()."""
 
     exponential_base: float = 2
-    """Growth factor for backoff algorithm to calculate sleep duration; must be >= 1."""
+    """Growth factor (aka multiplier) for backoff algorithm to calculate sleep duration; must be >= 1."""
 
     max_elapsed_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
     min_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
@@ -558,7 +558,7 @@ class RetryPolicy:
     def copy(self, **override_kwargs: Any) -> RetryPolicy:
         """Creates a new policy copying an existing one with the specified fields overridden for customization.
 
-        Example usage: policy = RetryPolicy().copy(max_sleep_secs=2, max_elapsed_secs=10)
+        Example usage: policy = retry_policy.copy(max_sleep_secs=2, max_elapsed_secs=10)
         """
         return dataclasses.replace(self, **override_kwargs)
 
@@ -627,7 +627,7 @@ class RetryOptions(Generic[_T]):
     def copy(self, **override_kwargs: Any) -> RetryOptions[_T]:
         """Creates a new object copying an existing one with the specified fields overridden for customization.
 
-        Example usage: retry_options = RetryOptions().copy(policy=RetryPolicy.no_retries())
+        Example usage: retry_options.copy(policy=policy.copy(max_sleep_secs=2, max_elapsed_secs=10))
         """
         return dataclasses.replace(self, **override_kwargs)
 
