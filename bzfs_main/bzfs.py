@@ -1566,7 +1566,6 @@ class Job(MiniJob):
                 assert len(snapshots) > 0
                 datasets_with_snapshots.add(dataset)
                 snapshot_names: tuple[str, ...] = tuple(snapshot[-1] for snapshot in snapshots)
-                reversed_snapshot_names: tuple[str, ...] = snapshot_names[::-1]
                 year_with_4_digits_regex: re.Pattern[str] = YEAR_WITH_FOUR_DIGITS_REGEX
                 year_with_4_digits_regex_fullmatch = year_with_4_digits_regex.fullmatch
                 startswith = str.startswith
@@ -1584,15 +1583,15 @@ class Job(MiniJob):
                     for fn, is_reverse in fns:
                         creation_unixtime_secs: int = 0  # find creation time of latest or oldest snapshot matching the label
                         minmax_snapshot: str = ""
-                        for j, snapshot_name in enumerate(reversed_snapshot_names if is_reverse else snapshot_names):
+                        for j in range(len(snapshot_names) - 1, -1, -1) if is_reverse else range(len(snapshot_names)):
+                            snapshot_name: str = snapshot_names[j]
                             if (
                                 endswith(snapshot_name, end)  # aka snapshot_name.endswith(end)
                                 and startswith(snapshot_name, start)  # aka snapshot_name.startswith(start)
                                 and len(snapshot_name) >= minlen
                                 and (has_infix or year_with_4_digits_regex_fullmatch(snapshot_name, startlen, startlen_4))
                             ):
-                                k: int = len(snapshots) - j - 1 if is_reverse else j
-                                creation_unixtime_secs = snapshots[k][1]
+                                creation_unixtime_secs = snapshots[j][1]
                                 minmax_snapshot = snapshot_name
                                 break
                         fn(i, creation_unixtime_secs, dataset, minmax_snapshot)

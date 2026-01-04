@@ -78,6 +78,7 @@ from typing import (
     Literal,
     NoReturn,
     Protocol,
+    SupportsIndex,
     TextIO,
     TypeVar,
     cast,
@@ -345,17 +346,21 @@ _P = TypeVar("_P")
 def find_match(
     seq: Sequence[_P],
     predicate: Callable[[_P], bool],
-    start: int | None = None,
-    end: int | None = None,
+    start: SupportsIndex | None = None,
+    end: SupportsIndex | None = None,
     *,
     reverse: bool = False,
-    raises: bool | str | Callable[[], str] = False,  # raises: bool | str | Callable = False,  # python >= 3.10
+    raises: bool | object | Callable[[], object] = False,  # raises: bool | object | Callable = False,  # python >= 3.10
 ) -> int:
     """Returns the integer index within seq of the first item (or last item if reverse==True) that matches the given
-    predicate condition. If no matching item is found returns -1 or ValueError, depending on the raises parameter, which is a
-    bool indicating whether to raise an error, or a string containing the error message, but can also be a Callable/lambda in
-    order to support efficient deferred generation of error messages. Analog to str.find(), including slicing semantics with
-    parameters start and end. For example, seq can be a list, tuple or str.
+    predicate condition.
+
+    If no matching item is found returns -1 or ValueError, depending on the raises parameter, which is a bool indicating
+    whether to raise an error, or an object containing the error message, but can also be a Callable/lambda in order to
+    support efficient deferred generation of error messages.
+
+    Analog to str.find(), including slicing semantics with parameters start and end, i.e. respects Python slicing semantics
+    for start/end (including clamping). For example, seq can be a list, tuple or str.
 
     Example usage:
         lst = ["a", "b", "-c", "d"]
@@ -365,15 +370,15 @@ def find_match(
         i = find_match(lst, lambda arg: arg.startswith("-"), raises=f"Tag {tag} not found in {file}")
         i = find_match(lst, lambda arg: arg.startswith("-"), raises=lambda: f"Tag {tag} not found in {file}")
     """
-    offset: int = 0 if start is None else start if start >= 0 else len(seq) + start
-    if start is not None or end is not None:
-        seq = seq[start:end]
-    for i, item in enumerate(reversed(seq) if reverse else seq):
-        if predicate(item):
-            if reverse:
-                return len(seq) - i - 1 + offset
-            else:
-                return i + offset
+    if start is None and end is None:
+        for i in range(len(seq) - 1, -1, -1) if reverse else range(len(seq)):
+            if predicate(seq[i]):
+                return i
+    else:
+        slice_start, slice_end, _ = slice(start, end).indices(len(seq))
+        for i in range(slice_end - 1, slice_start - 1, -1) if reverse else range(slice_start, slice_end):
+            if predicate(seq[i]):
+                return i
     if raises is False or raises is None:
         return -1
     if raises is True:

@@ -49,6 +49,9 @@ from datetime import (
     timezone,
     tzinfo,
 )
+from enum import (
+    IntEnum,
+)
 from logging import (
     Logger,
 )
@@ -59,6 +62,7 @@ from subprocess import (
 from typing import (
     Any,
     Callable,
+    SupportsIndex,
     Union,
     cast,
 )
@@ -1053,6 +1057,10 @@ class TestFindMatch(unittest.TestCase):
         self.assertEqual(2, find_match(lst, condition, start=-3, end=None, reverse=False))
         self.assertEqual(3, find_match(lst, condition, start=-3, end=None, reverse=True))
 
+        lst = ["-a", "b", "-c", "d"]
+        self.assertEqual(0, find_match(lst, condition, start=-999, end=None, reverse=False))
+        self.assertEqual(2, find_match(lst, condition, start=-999, end=None, reverse=True))
+
         lst = ["-a", "-b", "c", "d"]
         self.assertEqual(0, find_match(lst, condition, end=-1, reverse=False))
         self.assertEqual(1, find_match(lst, condition, end=-1, reverse=True))
@@ -1068,6 +1076,81 @@ class TestFindMatch(unittest.TestCase):
         self.assertEqual(2, find_match(lst, condition, start=1, end=-1, reverse=True))
         self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=False))
         self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=True))
+
+    def test_raises_when_no_match_without_slice(self) -> None:
+        """Covers raises-paths when start/end are None (no slicing)."""
+
+        def condition(arg: str) -> bool:
+            return arg.startswith("-")
+
+        lst: list[str] = ["a", "b"]
+        for reverse in (False, True):
+            with self.subTest(reverse=reverse):
+                with self.assertRaises(ValueError) as cm:
+                    find_match(lst, condition, reverse=reverse, raises=True)
+                self.assertEqual("No matching item found in sequence", str(cm.exception))
+
+                with self.assertRaises(ValueError) as cm:
+                    find_match(lst, condition, reverse=reverse, raises=lambda: "foo")
+                self.assertEqual("foo", str(cm.exception))
+
+    def test_slicing_semantics_clamping(self) -> None:
+        """find_match() must match Python slicing semantics for start/end, including clamping."""
+
+        class Idx(IntEnum):
+            NEG_HUGE = -999
+            POS_HUGE = 999
+            NEG_TEN = -10
+            NEG_ONE = -1
+            ZERO = 0
+            ONE = 1
+            THREE = 3
+            FOUR = 4
+
+        def condition(arg: str) -> bool:
+            return arg.startswith("-")
+
+        seq: list[str] = ["-0", "a", "-2", "b", "-4"]
+
+        def expected(
+            *,
+            start: int | SupportsIndex | None,
+            end: int | SupportsIndex | None,
+            reverse: bool,
+        ) -> int:
+            sliced = seq[start:end]
+            slice_start, _, _ = slice(start, end).indices(len(seq))
+            if reverse:
+                for j in range(len(sliced) - 1, -1, -1):
+                    if condition(sliced[j]):
+                        return slice_start + j
+            else:
+                for j in range(len(sliced)):
+                    if condition(sliced[j]):
+                        return slice_start + j
+            return -1
+
+        cases: list[tuple[SupportsIndex | None, SupportsIndex | None]] = [
+            (None, None),
+            (Idx.NEG_HUGE, None),
+            (Idx.POS_HUGE, None),
+            (None, Idx.NEG_HUGE),
+            (None, Idx.POS_HUGE),
+            (Idx.NEG_TEN, Idx.NEG_ONE),
+            (Idx.ONE, Idx.POS_HUGE),
+            (Idx.ONE, Idx.FOUR),
+            (Idx.THREE, Idx.NEG_HUGE),
+            (Idx.NEG_ONE, Idx.ZERO),  # start > end after normalization -> empty slice
+        ]
+        for start, end in cases:
+            with self.subTest(start=start, end=end):
+                self.assertEqual(
+                    expected(start=start, end=end, reverse=False), find_match(seq, condition, start=start, end=end)
+                )
+                self.assertEqual(
+                    expected(start=start, end=end, reverse=True),
+                    find_match(seq, condition, start=start, end=end, reverse=True),
+                )
 
     def assert_find_match(
         self,
