@@ -376,7 +376,7 @@ class TestCallWithRetries(unittest.TestCase):
             calls.append(retry.count)
             raise RetryableError("fail") from ValueError("boom")
 
-        def giveup(outcome: AttemptOutcome) -> str:
+        def giveup(outcome: AttemptOutcome) -> object | None:
             self.assertEqual(0, outcome.retry.count)
             self.assertEqual(1234, outcome.elapsed_nanos)
             self.assertGreaterEqual(outcome.sleep_nanos, 0)
@@ -419,7 +419,7 @@ class TestCallWithRetries(unittest.TestCase):
         def fn(retry: Retry) -> None:
             raise RetryableError("fail") from ValueError("boom")
 
-        def giveup(outcome: AttemptOutcome) -> str:
+        def giveup(outcome: AttemptOutcome) -> object | None:
             self.assertEqual(0, outcome.retry.count)
             self.assertEqual(1234, outcome.elapsed_nanos)
             self.assertGreaterEqual(outcome.sleep_nanos, 0)
@@ -510,7 +510,7 @@ class TestCallWithRetries(unittest.TestCase):
         def fn(retry: Retry) -> str:
             raise RetryableError("fail") from ValueError("boom")
 
-        def giveup(outcome: AttemptOutcome) -> str:
+        def giveup(outcome: AttemptOutcome) -> object | None:
             return "circuit breaker triggered"
 
         def on_exhaustion(outcome: AttemptOutcome) -> str:
@@ -662,7 +662,7 @@ class TestCallWithRetries(unittest.TestCase):
         def after_attempt(outcome: AttemptOutcome) -> None:
             events.append(outcome)
             self.assertFalse(outcome.is_terminated)
-            self.assertEqual("", outcome.giveup_reason)
+            self.assertIsNone(outcome.giveup_reason)
             self.assertIsNone(outcome.retry.log)
 
         final_result = call_with_retries(
@@ -689,7 +689,7 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertEqual(2, outcome.retry.count)
         self.assertTrue(outcome.is_success)
         self.assertFalse(outcome.is_exhausted)
-        self.assertEqual("", outcome.giveup_reason)
+        self.assertIsNone(outcome.giveup_reason)
         self.assertEqual("ok", outcome.result)
         self.assertGreaterEqual(outcome.elapsed_nanos, 0)
         self.assertEqual(0, outcome.sleep_nanos)
@@ -710,7 +710,7 @@ class TestCallWithRetries(unittest.TestCase):
 
         def after_attempt(outcome: AttemptOutcome) -> None:
             events.append(outcome)
-            self.assertEqual("", outcome.giveup_reason)
+            self.assertIsNone(outcome.giveup_reason)
             self.assertIsNone(outcome.retry.log)
 
         with self.assertRaises(ValueError):
@@ -722,7 +722,7 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertFalse(outcome.is_success)
         self.assertTrue(outcome.is_exhausted)
         self.assertFalse(outcome.is_terminated)
-        self.assertEqual("", outcome.giveup_reason)
+        self.assertIsNone(outcome.giveup_reason)
         self.assertIsInstance(outcome.result, RetryableError)
         self.assertGreaterEqual(outcome.retry.count, 0)
         self.assertGreaterEqual(outcome.elapsed_nanos, 0)
@@ -1016,7 +1016,7 @@ class TestCallWithRetries(unittest.TestCase):
             is_success=False,
             is_exhausted=False,
             is_terminated=False,
-            giveup_reason="",
+            giveup_reason=None,
             elapsed_nanos=5,
             sleep_nanos=7,
             result="boom",
@@ -1095,7 +1095,7 @@ class TestCallWithRetries(unittest.TestCase):
             is_success=False,
             is_exhausted=False,
             is_terminated=False,
-            giveup_reason="",
+            giveup_reason=None,
             elapsed_nanos=0,
             sleep_nanos=0,
             result=RetryableError("boom"),
@@ -1111,14 +1111,17 @@ class TestCallWithRetries(unittest.TestCase):
         handler1.assert_called_once_with(outcome)
         handler2.assert_not_called()
 
-        handler3 = MagicMock(return_value="")
+        handler3 = MagicMock(return_value=None)
         handler4 = MagicMock(return_value="second reason")
         giveup = any_giveup([handler3, handler4])
         self.assertEqual("second reason", giveup(outcome))
         handler3.assert_called_once_with(outcome)
         handler4.assert_called_once_with(outcome)
 
-        giveup = any_giveup([lambda _outcome: "", lambda _outcome: ""])
+        giveup = any_giveup([lambda _outcome: None, lambda _outcome: None])
+        self.assertIsNone(giveup(outcome))
+
+        giveup = any_giveup([lambda _outcome: "", lambda _outcome: "Must short-circuit"])
         self.assertEqual("", giveup(outcome))
 
 
@@ -1342,7 +1345,7 @@ class TestMiscBackoffStrategies(unittest.TestCase):
 
         def after_attempt(outcome: AttemptOutcome) -> None:
             self.assertFalse(outcome.is_terminated)
-            self.assertEqual("", outcome.giveup_reason)
+            self.assertIsNone(outcome.giveup_reason)
             if not outcome.is_success and not outcome.is_exhausted:
                 retry_sleep_nanos.append(outcome.sleep_nanos)
                 self.assertIsInstance(outcome.result, RetryableError)
@@ -1482,7 +1485,7 @@ class TestRetryOptionsCopy(unittest.TestCase):
         original_policy = RetryPolicy(max_retries=1)
         original_config = RetryConfig(display_msg="orig")
 
-        def giveup(outcome: AttemptOutcome) -> str:
+        def giveup(outcome: AttemptOutcome) -> object | None:
             return "circuit breaker triggered"
 
         def after_attempt(outcome: AttemptOutcome) -> None:
@@ -1566,7 +1569,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             is_success=False,
             is_exhausted=False,
             is_terminated=False,
-            giveup_reason="",
+            giveup_reason=None,
             elapsed_nanos=123,
             sleep_nanos=456,
             result=RetryableError("result"),
@@ -1597,7 +1600,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
         self.assertFalse(original.is_success)
         self.assertFalse(original.is_exhausted)
         self.assertFalse(original.is_terminated)
-        self.assertEqual("", original.giveup_reason)
+        self.assertIsNone(original.giveup_reason)
         self.assertEqual(123, original.elapsed_nanos)
         self.assertEqual(456, original.sleep_nanos)
         self.assertIs(original_log, original.retry.log)
@@ -1627,7 +1630,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             is_success=True,
             is_exhausted=False,
             is_terminated=False,
-            giveup_reason="",
+            giveup_reason=None,
             elapsed_nanos=200,
             sleep_nanos=0,
             result=object(),
