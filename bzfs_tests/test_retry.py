@@ -49,8 +49,10 @@ from bzfs_main.util.retry import (
     RetryPolicy,
     _sleep,
     after_attempt_log_failure,
+    any_giveup,
     call_with_retries,
     multi_after_attempt,
+    no_giveup,
 )
 
 
@@ -1077,6 +1079,47 @@ class TestCallWithRetries(unittest.TestCase):
     def test_multi_after_attempt_returns_default_handler(self) -> None:
         """Ensures multi_after_attempt() returns after_attempt_log_failure without wrapper overhead."""
         self.assertIs(after_attempt_log_failure, multi_after_attempt([after_attempt_log_failure]))
+
+    def test_any_giveup(self) -> None:
+        retry = Retry(
+            count=0,
+            start_time_nanos=1,
+            attempt_start_time_nanos=1,
+            policy=RetryPolicy(max_retries=0),
+            config=RetryConfig(),
+            log=None,
+            previous_outcomes=(),
+        )
+        outcome = AttemptOutcome(
+            retry=retry,
+            is_success=False,
+            is_exhausted=False,
+            is_terminated=False,
+            giveup_reason="",
+            elapsed_nanos=0,
+            sleep_nanos=0,
+            result=RetryableError("boom"),
+        )
+
+        self.assertIs(no_giveup, any_giveup([]))
+        self.assertIs(no_giveup, any_giveup([no_giveup]))
+
+        handler1 = MagicMock(return_value="first reason")
+        handler2 = MagicMock(side_effect=AssertionError("Must short-circuit"))
+        giveup = any_giveup([handler1, handler2])
+        self.assertEqual("first reason", giveup(outcome))
+        handler1.assert_called_once_with(outcome)
+        handler2.assert_not_called()
+
+        handler3 = MagicMock(return_value="")
+        handler4 = MagicMock(return_value="second reason")
+        giveup = any_giveup([handler3, handler4])
+        self.assertEqual("second reason", giveup(outcome))
+        handler3.assert_called_once_with(outcome)
+        handler4.assert_called_once_with(outcome)
+
+        giveup = any_giveup([lambda _outcome: "", lambda _outcome: ""])
+        self.assertEqual("", giveup(outcome))
 
 
 #############################################################################

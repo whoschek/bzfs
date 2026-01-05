@@ -46,6 +46,7 @@ Advanced Configuration:
 - Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, error/status
   codes or parsing stderr), including time-aware decisions or decisions based on the previous N most recent AttemptOutcome
   objects (via AttemptOutcome.retry.previous_outcomes)
+- Use the ``any_giveup()`` helper to consult more than one callback handler in ``giveup(AttemptOutcome)``.
 - Supply an ``on_exhaustion(AttemptOutcome)`` callback to customize behavior when giving up; it may raise an error or return
   a fallback value.
 
@@ -147,7 +148,7 @@ from bzfs_main.util.utils import (
 
 
 #############################################################################
-def _no_giveup(_outcome: AttemptOutcome) -> str:
+def no_giveup(outcome: AttemptOutcome) -> str:
     """Default implementation never gives up; A non-empty string indicates the reason for giving up."""
     return ""
 
@@ -207,7 +208,7 @@ def call_with_retries(
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
     config: RetryConfig | None = None,  # controls logging settings and async cancellation between attempts
-    giveup: Callable[[AttemptOutcome], str] = _no_giveup,  # stop retrying based on domain-specific logic
+    giveup: Callable[[AttemptOutcome], str] = no_giveup,  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     on_exhaustion: Callable[[AttemptOutcome], _T] = default_on_exhaustion,  # raise error or return fallback value
     log: logging.Logger | None = None,
@@ -299,6 +300,22 @@ def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) ->
             handler(outcome)
 
     return _after_attempt
+
+
+def any_giveup(handlers: Iterable[Callable[[AttemptOutcome], str]]) -> Callable[[AttemptOutcome], str]:
+    """Returns a callback for ``call_with_retries(giveup=...)`` that returns first non-empty giveup_reason; thread-safe."""
+    handlers = tuple(handlers)
+    if len(handlers) == 0 or (len(handlers) == 1 and handlers[0] is no_giveup):
+        return no_giveup  # perf
+
+    def _giveup(outcome: AttemptOutcome) -> str:
+        for handler in handlers:
+            giveup_reason: str = handler(outcome)
+            if giveup_reason:
+                return giveup_reason
+        return ""  # don't give up
+
+    return _giveup
 
 
 #############################################################################
@@ -616,7 +633,7 @@ class RetryOptions(Generic[_T]):
     fn: Callable[[Retry], _T] = _fn_not_implemented  # set this to make the RetryOptions object itself callable
     policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
     config: RetryConfig = RetryConfig()  # controls logging settings and async cancellation between attempts
-    giveup: Callable[[AttemptOutcome], str] = _no_giveup  # stop retrying based on domain-specific logic
+    giveup: Callable[[AttemptOutcome], str] = no_giveup  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
     on_exhaustion: Callable[[AttemptOutcome], _T] = default_on_exhaustion  # raise error or return fallback value
     log: logging.Logger | None = None
