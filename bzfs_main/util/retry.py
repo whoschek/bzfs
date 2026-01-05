@@ -40,7 +40,7 @@ Usage:
 Advanced Configuration:
 -----------------------
 - Tune ``RetryPolicy`` parameters to control maximum retries, sleep bounds, and elapsed-time budget.
-- Use ``RetryConfig`` to control termination events, and logging settings.
+- Use ``RetryConfig`` to control logging settings and termination events.
 - Set ``log=None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
 - Pass ``termination_event`` via ``RetryConfig`` to support async cancellation between attempts.
 - Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, error/status
@@ -130,9 +130,6 @@ from collections.abc import (
 from dataclasses import (
     dataclass,
 )
-from logging import (
-    Logger,
-)
 from typing import (
     Any,
     Callable,
@@ -162,7 +159,7 @@ def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
         return
     policy: RetryPolicy = retry.policy
     config: RetryConfig = retry.config
-    log: Logger = retry.log
+    log: logging.Logger = retry.log
     assert isinstance(outcome.result, RetryableError)
     retryable_error: RetryableError = outcome.result
     if not outcome.is_exhausted:
@@ -190,7 +187,7 @@ def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
 
 
 def default_on_exhaustion(outcome: AttemptOutcome) -> NoReturn:
-    """Default implementation of exhaustion behavior for call_with_retries(); always raises."""
+    """Default implementation of exhaustion behavior for call_with_retries(); always raises; thread-safe."""
     assert outcome.is_exhausted
     assert isinstance(outcome.result, RetryableError)
     retryable_error: RetryableError = outcome.result
@@ -206,14 +203,14 @@ _T = TypeVar("_T")
 
 
 def call_with_retries(
-    fn: Callable[[Retry], _T],  # typically a lambda
-    policy: RetryPolicy,
+    fn: Callable[[Retry], _T],  # typically a lambda; wraps work and raises RetryableError for failures that shall be retried
+    policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
-    config: RetryConfig | None = None,
+    config: RetryConfig | None = None,  # controls logging settings and async cancellation between attempts
     giveup: Callable[[AttemptOutcome], str] = _no_giveup,  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     on_exhaustion: Callable[[AttemptOutcome], _T] = default_on_exhaustion,  # raise error or return fallback value
-    log: Logger | None = None,
+    log: logging.Logger | None = None,
 ) -> _T:
     """Runs the function ``fn`` and returns its result; retries on failure as indicated by policy and config; thread-safe.
 
@@ -361,7 +358,7 @@ class Retry(NamedTuple):
     config: RetryConfig
     """Config that is used by call_with_retries()."""
 
-    log: Logger | None
+    log: logging.Logger | None
     """Logger that was passed into call_with_retries()."""
 
     previous_outcomes: Sequence[AttemptOutcome]
@@ -445,7 +442,7 @@ def _full_jitter_backoff_strategy(
     retry: Retry, curr_max_sleep_nanos: int, rand: random.Random, elapsed_nanos: int, retryable_error: RetryableError
 ) -> tuple[int, int]:
     """Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
-    exponential backoff with cap to the next attempt."""
+    exponential backoff with cap to the next attempt; thread-safe."""
     policy: RetryPolicy = retry.policy
     if policy.min_sleep_nanos == curr_max_sleep_nanos:
         sleep_nanos = curr_max_sleep_nanos  # perf
@@ -556,7 +553,7 @@ class RetryPolicy:
             raise TypeError("RetryPolicy.reraise must be bool")
 
     def copy(self, **override_kwargs: Any) -> RetryPolicy:
-        """Creates a new policy copying an existing one with the specified fields overridden for customization.
+        """Creates a new policy copying an existing one with the specified fields overridden for customization; thread-safe.
 
         Example usage: policy = retry_policy.copy(max_sleep_secs=2, max_elapsed_secs=10)
         """
@@ -617,17 +614,17 @@ class RetryOptions(Generic[_T]):
     """Convenience class that aggregates all knobs for call_with_retries(); and is itself callable too; immutable."""
 
     fn: Callable[[Retry], _T] = _fn_not_implemented  # set this to make the RetryOptions object itself callable
-    policy: RetryPolicy = RetryPolicy()
-    config: RetryConfig = RetryConfig()
+    policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
+    config: RetryConfig = RetryConfig()  # controls logging settings and async cancellation between attempts
     giveup: Callable[[AttemptOutcome], str] = _no_giveup  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
     on_exhaustion: Callable[[AttemptOutcome], _T] = default_on_exhaustion  # raise error or return fallback value
-    log: Logger | None = None
+    log: logging.Logger | None = None
 
     def copy(self, **override_kwargs: Any) -> RetryOptions[_T]:
-        """Creates a new object copying an existing one with the specified fields overridden for customization.
+        """Creates a new object copying an existing one with the specified fields overridden for customization; thread-safe.
 
-        Example usage: retry_options.copy(policy=policy.copy(max_sleep_secs=2, max_elapsed_secs=10))
+        Example usage: retry_options.copy(policy=policy.copy(max_sleep_secs=2, max_elapsed_secs=10), log=None)
         """
         return dataclasses.replace(self, **override_kwargs)
 
