@@ -146,6 +146,9 @@ from bzfs_main.util.utils import (
     human_readable_duration,
 )
 
+# constants:
+INFINITY_MAX_RETRIES: Final[int] = 2**63 - 1  # a number that's essentially infinity for all practical retry purposes
+
 
 #############################################################################
 def no_giveup(outcome: AttemptOutcome) -> object | None:
@@ -484,7 +487,7 @@ class RetryPolicy:
     In a nutshell: ``0 <= min_sleep_secs <= initial_max_sleep_secs <= max_sleep_secs``
     """
 
-    max_retries: int = 10
+    max_retries: int = INFINITY_MAX_RETRIES
     """The maximum number of times ``fn`` will be invoked additionally after the first attempt invocation; must be >= 0."""
 
     min_sleep_secs: float = 0
@@ -526,7 +529,7 @@ class RetryPolicy:
     def from_namespace(cls, args: argparse.Namespace) -> RetryPolicy:
         """Factory that reads the policy from ArgumentParser via args."""
         return RetryPolicy(
-            max_retries=getattr(args, "max_retries", 10),
+            max_retries=getattr(args, "max_retries", INFINITY_MAX_RETRIES),
             min_sleep_secs=getattr(args, "retry_min_sleep_secs", 0),
             initial_max_sleep_secs=getattr(args, "retry_initial_max_sleep_secs", 0.125),
             max_sleep_secs=getattr(args, "retry_max_sleep_secs", 10),
@@ -592,6 +595,7 @@ def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:
 
 def _format_pair(first: object, second: object) -> str:
     """Default implementation creates simple log message part; thread-safe."""
+    second = "∞" if INFINITY_MAX_RETRIES == second else second  # noqa: SIM300
     return f"[{first}/{second}]"
 
 

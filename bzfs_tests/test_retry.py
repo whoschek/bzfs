@@ -40,6 +40,7 @@ from unittest.mock import (
 )
 
 from bzfs_main.util.retry import (
+    INFINITY_MAX_RETRIES,
     AttemptOutcome,
     Retry,
     RetryableError,
@@ -641,6 +642,29 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertEqual("Retrying [2/2] in 0ns ...", info_call_args[2])
         self.assertEqual(logging.ERROR, warning_call_args[0])
         self.assertTrue(warning_call_args[2].startswith("Retrying exhausted; giving up because the last [2/2] retries"))
+
+    def test_call_with_retries_infinity_max_retries_log_display(self) -> None:
+        """Ensures INFINITY_MAX_RETRIES displays as '∞' in after_attempt_log_failure log output."""
+        retry_policy = RetryPolicy(
+            max_retries=INFINITY_MAX_RETRIES,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+        mock_log = MagicMock(spec=Logger)
+        mock_log.isEnabledFor.return_value = True
+
+        def fn(retry: Retry) -> str:
+            if retry.count == 0:
+                raise RetryableError("fail", retry_immediately_once=True) from ValueError("boom")
+            return "ok"
+
+        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=mock_log))
+        self.assertEqual(1, mock_log.log.call_count)
+        info_call_args = mock_log.log.call_args_list[0][0]
+        self.assertEqual(logging.INFO, info_call_args[0])
+        self.assertEqual("Retrying [1/∞] in 0ns ...", info_call_args[2])
 
     def test_call_with_retries_after_attempt_success(self) -> None:
         """Ensures after_attempt is invoked for both retries and final success with correct flags."""
