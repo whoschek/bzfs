@@ -24,11 +24,15 @@ import random
 import threading
 import time
 import unittest
+from collections.abc import (
+    Iterable,
+)
 from logging import (
     Logger,
 )
 from typing import (
     Any,
+    Callable,
 )
 from unittest.mock import (
     MagicMock,
@@ -55,6 +59,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestSleep,
         TestCallWithRetries,
+        TestMiscBackoffStrategies,
         TestRetryPolicyCopy,
         TestRetryConfigCopy,
         TestRetryOptionsCopy,
@@ -111,20 +116,6 @@ class TestSleep(unittest.TestCase):
         mock_sleep.assert_not_called()
         mock_wait.assert_called_once()
         self.assertAlmostEqual(expected_secs, mock_wait.call_args[0][0])
-
-
-#############################################################################
-def decorrelated_jitter_backoff_strategy(
-    retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
-) -> tuple[int, int]:
-    """Decorrelated-jitter picks a random sleep_nanos duration from the range [base, prev*3] with cap and returns sleep_nanos
-    as the next state."""
-    policy: RetryPolicy = retry.policy
-    prev_sleep_nanos: int = policy.min_sleep_nanos if retry.count <= 0 else curr_max_sleep_nanos
-    upper_bound: int = max(prev_sleep_nanos * 3, policy.min_sleep_nanos)
-    sample: int = rng.randint(policy.min_sleep_nanos, upper_bound)
-    sleep_nanos: int = min(policy.max_sleep_nanos, sample)
-    return sleep_nanos, sleep_nanos
 
 
 #############################################################################
@@ -319,6 +310,53 @@ class TestCallWithRetries(unittest.TestCase):
         assert isinstance(retry_error.__cause__, RetryableError)
         self.assertIsInstance(retry_error.__cause__.__cause__, ValueError)
         self.assertEqual("boom", str(retry_error.__cause__.__cause__))
+
+    def test_call_with_retries_after_attempt_retryable_error_on_success_retries(self) -> None:
+        """Ensures raising RetryableError from after_attempt() on a successful attempt triggers a retry."""
+        retry_policy = RetryPolicy(max_retries=3, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
+        fn_calls: list[int] = []
+        after_attempt_events: list[tuple[bool, bool, int]] = []
+        raised_once: bool = False
+
+        def fn(retry: Retry) -> str:
+            fn_calls.append(retry.count)
+            return "ok"
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            nonlocal raised_once
+            after_attempt_events.append((outcome.is_success, outcome.is_exhausted, outcome.retry.count))
+            if outcome.is_success and not raised_once:
+                raised_once = True
+                raise RetryableError("retry from after_attempt")
+
+        actual = call_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
+        self.assertTrue(raised_once)
+        self.assertEqual("ok", actual)
+        self.assertEqual([0, 1], fn_calls)
+        self.assertEqual([(True, False, 0), (False, False, 0), (True, False, 1)], after_attempt_events)
+
+    def test_call_with_retries_after_attempt_retryable_error_on_failure_aborts(self) -> None:
+        """Ensures raising RetryableError from after_attempt() on failure aborts without additional retries."""
+        retry_policy = RetryPolicy(max_retries=3, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
+        fn_calls: list[int] = []
+        after_attempt_calls: list[int] = []
+
+        def fn(retry: Retry) -> None:
+            fn_calls.append(retry.count)
+            raise RetryableError("attempt failed")
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            after_attempt_calls.append(outcome.retry.count)
+            if not outcome.is_success and not outcome.is_exhausted:
+                raise RetryableError("after_attempt abort")
+
+        with patch("bzfs_main.util.retry._sleep") as mock_sleep:
+            with self.assertRaises(RetryableError):
+                call_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
+
+        self.assertEqual([0], fn_calls)
+        self.assertEqual([0], after_attempt_calls)
+        mock_sleep.assert_not_called()
 
     def test_call_with_retries_giveup_stops_retries(self) -> None:
         """Ensures giveup() stops retries immediately and custom after_attempt disables default logging."""
@@ -688,58 +726,6 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertGreaterEqual(outcome.elapsed_nanos, 0)
         self.assertGreaterEqual(outcome.sleep_nanos, 0)
 
-    def test_call_with_retries_using_decorrelated_jitter_as_custom_backoff_strategy(self) -> None:
-        """Ensures decorrelated-jitter can be used as a custom backoff_strategy."""
-        seen_state: list[int] = []
-
-        def recording_strategy(
-            retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
-        ) -> tuple[int, int]:
-            seen_state.append(curr_max_sleep_nanos)
-            return decorrelated_jitter_backoff_strategy(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)
-
-        retry_policy = RetryPolicy(
-            max_retries=3,
-            min_sleep_secs=4e-9,  # 4ns base
-            initial_max_sleep_secs=8e-9,  # intentionally != base; impl should still start at base
-            max_sleep_secs=16e-9,  # 16ns cap
-            max_elapsed_secs=1,
-            exponential_base=2,
-            backoff_strategy=recording_strategy,
-        )
-        calls: list[int] = []
-        retry_sleep_nanos: list[int] = []
-
-        def fn(retry: Retry) -> str:
-            calls.append(retry.count)
-            if retry.count < 2:
-                raise RetryableError("fail") from ValueError("boom")
-            return "ok"
-
-        def after_attempt(outcome: AttemptOutcome) -> None:
-            self.assertFalse(outcome.is_terminated)
-            self.assertEqual("", outcome.giveup_reason)
-            if not outcome.is_success and not outcome.is_exhausted:
-                retry_sleep_nanos.append(outcome.sleep_nanos)
-                self.assertIsInstance(outcome.result, RetryableError)
-                self.assertGreaterEqual(outcome.elapsed_nanos, 0)
-            self.assertIsNone(outcome.retry.log)
-
-        rng = SequenceRandom([5, 6])
-        with patch("bzfs_main.util.retry._thread_local_rng", return_value=rng):
-            actual = call_with_retries(
-                fn,
-                policy=retry_policy,
-                config=RetryConfig(termination_event=threading.Event()),
-                after_attempt=after_attempt,
-                log=None,
-            )
-
-        self.assertEqual("ok", actual)
-        self.assertEqual([0, 1, 2], calls)
-        self.assertEqual([retry_policy.initial_max_sleep_nanos, 5], seen_state)
-        self.assertEqual([5, 6], retry_sleep_nanos)
-
     def test_call_with_retries_max_previous_outcomes_1(self) -> None:
         """Ensures Retry.previous_outcomes retains only the most recent AttemptOutcome object."""
         retry_policy = RetryPolicy(
@@ -1091,6 +1077,249 @@ class TestCallWithRetries(unittest.TestCase):
     def test_multi_after_attempt_returns_default_handler(self) -> None:
         """Ensures multi_after_attempt() returns after_attempt_log_failure without wrapper overhead."""
         self.assertIs(after_attempt_log_failure, multi_after_attempt([after_attempt_log_failure]))
+
+
+#############################################################################
+class TestMiscBackoffStrategies(unittest.TestCase):
+
+    BackoffStrategy = Callable[[Retry, int, random.Random, int, RetryableError], tuple[int, int]]  # type alias
+
+    @staticmethod
+    def random_backoff_strategy(
+        retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+    ) -> tuple[int, int]:
+        policy: RetryPolicy = retry.policy
+        sleep_nanos: int = rng.randint(policy.min_sleep_nanos, policy.max_sleep_nanos)
+        return sleep_nanos, curr_max_sleep_nanos
+
+    @staticmethod
+    def no_jitter_exponential_backoff_strategy(
+        retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+    ) -> tuple[int, int]:
+        policy: RetryPolicy = retry.policy
+        sleep_nanos: int = curr_max_sleep_nanos
+        curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
+        curr_max_sleep_nanos = min(curr_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap for next attempt
+        return sleep_nanos, curr_max_sleep_nanos
+
+    @staticmethod
+    def decorrelated_jitter_backoff_strategy(
+        retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+    ) -> tuple[int, int]:
+        """Decorrelated-jitter picks random sleep in [base, prev*3] with cap; next state is sleep."""
+        policy: RetryPolicy = retry.policy
+        prev_sleep_nanos: int = policy.min_sleep_nanos if retry.count <= 0 else curr_max_sleep_nanos
+        upper_bound: int = max(prev_sleep_nanos * 3, policy.min_sleep_nanos)
+        sample: int = rng.randint(policy.min_sleep_nanos, upper_bound)
+        sleep_nanos: int = min(policy.max_sleep_nanos, sample)
+        return sleep_nanos, sleep_nanos
+
+    @staticmethod
+    def fixed_backoff_strategy(sleep_nanos: int) -> BackoffStrategy:
+        """Returns a strategy that always sleeps a fixed number of nanoseconds."""
+        sleep_nanos = max(0, sleep_nanos)
+
+        def _strategy(
+            retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+        ) -> tuple[int, int]:
+            return sleep_nanos, curr_max_sleep_nanos
+
+        return _strategy
+
+    @staticmethod
+    def exception_driven_backoff_strategy(sleep_nanos_fn: Callable[[BaseException], int]) -> BackoffStrategy:
+        """Returns a strategy whose sleep duration is derived from the last exception."""
+
+        def _strategy(
+            retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+        ) -> tuple[int, int]:
+            exc: BaseException = retryable_error.__cause__ if retryable_error.__cause__ is not None else retryable_error
+            sleep_nanos = max(0, sleep_nanos_fn(exc))
+            return sleep_nanos, curr_max_sleep_nanos
+
+        return _strategy
+
+    @staticmethod
+    def linear_backoff_strategy(
+        *,
+        start_sleep_nanos: int = 0,
+        increment_sleep_nanos: int = 10 * 1_000_000_000,
+        max_sleep_nanos: int = 60 * 1_000_000_000,
+    ) -> BackoffStrategy:
+
+        def _strategy(
+            retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+        ) -> tuple[int, int]:
+            sleep_nanos = start_sleep_nanos + (increment_sleep_nanos * retry.count)
+            sleep_nanos = max(0, min(sleep_nanos, max_sleep_nanos))
+            return sleep_nanos, curr_max_sleep_nanos
+
+        return _strategy
+
+    @staticmethod
+    def chained_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffStrategy:
+        """Returns a strategy that walks a list of other strategies by retry count, then sticks to the last strategy."""
+        strategies = tuple(strategies)
+        if not strategies:
+            raise ValueError("chained_backoff_strategy requires at least one strategy")
+
+        def _strategy(
+            retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+        ) -> tuple[int, int]:
+            strategy = strategies[min(max(retry.count, 0), len(strategies) - 1)]
+            return strategy(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)
+
+        return _strategy
+
+    @staticmethod
+    def sum_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffStrategy:
+        """Returns a strategy that sums the sleeps of multiple other strategies."""
+        strategies = tuple(strategies)
+
+        def _strategy(
+            retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+        ) -> tuple[int, int]:
+            sleep_nanos_sum = 0
+            for strategy in strategies:
+                sleep_nanos, curr_max_sleep_nanos = strategy(
+                    retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
+                )
+                sleep_nanos_sum += sleep_nanos
+            return sleep_nanos_sum, curr_max_sleep_nanos
+
+        return _strategy
+
+    def test_linear_backoff_strategy(self) -> None:
+        strategy = self.linear_backoff_strategy(
+            start_sleep_nanos=1_000_000_000, increment_sleep_nanos=2_000_000_000, max_sleep_nanos=5_000_000_000
+        )
+        sleeps, mock_sleep = self._run_and_collect_sleep_nanos(backoff_strategy=strategy, failures=4)
+        self.assertEqual([1_000_000_000, 3_000_000_000, 5_000_000_000, 5_000_000_000], sleeps)
+        self.assertEqual(4, mock_sleep.call_count)
+
+    def test_exception_driven_backoff_strategy_uses_cause_if_present(self) -> None:
+        strategy = self.exception_driven_backoff_strategy(
+            lambda exc: 7_000_000_000 if isinstance(exc, ValueError) else 11_000_000_000
+        )
+        sleeps, mock_sleep = self._run_and_collect_sleep_nanos(backoff_strategy=strategy, failures=1, with_cause=True)
+        self.assertEqual([7_000_000_000], sleeps)
+        self.assertEqual(1, mock_sleep.call_count)
+
+    def test_exception_driven_backoff_strategy_uses_retryable_error_if_no_cause(self) -> None:
+        strategy = self.exception_driven_backoff_strategy(
+            lambda exc: 7_000_000_000 if isinstance(exc, ValueError) else 11_000_000_000
+        )
+        sleeps, mock_sleep = self._run_and_collect_sleep_nanos(backoff_strategy=strategy, failures=1, with_cause=False)
+        self.assertEqual([11_000_000_000], sleeps)
+        self.assertEqual(1, mock_sleep.call_count)
+
+    def test_chained_backoff_strategy(self) -> None:
+        chained = self.chained_backoff_strategy(
+            [
+                self.fixed_backoff_strategy(1_000_000_000),
+                self.fixed_backoff_strategy(2_000_000_000),
+                self.fixed_backoff_strategy(3_000_000_000),
+            ]
+        )
+        sleeps, mock_sleep = self._run_and_collect_sleep_nanos(backoff_strategy=chained, failures=4)
+        self.assertEqual([1_000_000_000, 2_000_000_000, 3_000_000_000, 3_000_000_000], sleeps)
+        self.assertEqual(4, mock_sleep.call_count)
+
+    def test_sum_backoff_strategy(self) -> None:
+        combined = self.sum_backoff_strategy(
+            [self.fixed_backoff_strategy(1_000_000_000), self.fixed_backoff_strategy(2_000_000_000)]
+        )
+        sleeps, mock_sleep = self._run_and_collect_sleep_nanos(backoff_strategy=combined, failures=2)
+        self.assertEqual([3_000_000_000, 3_000_000_000], sleeps)
+        self.assertEqual(2, mock_sleep.call_count)
+
+    def _run_and_collect_sleep_nanos(
+        self, *, backoff_strategy: BackoffStrategy, failures: int, rng: object | None = None, with_cause: bool = True
+    ) -> tuple[list[int], MagicMock]:
+        """Runs a few retries and collects AttemptOutcome.sleep_nanos for each retry."""
+        retry_policy = RetryPolicy(
+            max_retries=failures,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=10,
+            backoff_strategy=backoff_strategy,
+        )
+        sleep_nanos: list[int] = []
+
+        def fn(retry: Retry) -> str:
+            if retry.count < failures:
+                if with_cause:
+                    raise RetryableError("fail") from ValueError("boom")
+                raise RetryableError("fail")
+            return "ok"
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            if not outcome.is_success and not outcome.is_exhausted:
+                sleep_nanos.append(outcome.sleep_nanos)
+
+        rng_patch = patch("bzfs_main.util.retry._thread_local_rng", return_value=rng) if rng is not None else None
+        with patch("bzfs_main.util.retry._sleep") as mock_sleep:
+            if rng_patch is None:
+                call_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
+            else:
+                with rng_patch:
+                    call_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
+        return sleep_nanos, mock_sleep
+
+    def test_call_with_retries_using_decorrelated_jitter_as_custom_backoff_strategy(self) -> None:
+        """Ensures decorrelated-jitter can be used as a custom backoff_strategy."""
+        seen_state: list[int] = []
+
+        def recording_strategy(
+            retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+        ) -> tuple[int, int]:
+            seen_state.append(curr_max_sleep_nanos)
+            return self.decorrelated_jitter_backoff_strategy(
+                retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
+            )
+
+        retry_policy = RetryPolicy(
+            max_retries=3,
+            min_sleep_secs=4e-9,  # 4ns base
+            initial_max_sleep_secs=8e-9,  # intentionally != base; impl should still start at base
+            max_sleep_secs=16e-9,  # 16ns cap
+            max_elapsed_secs=1,
+            exponential_base=2,
+            backoff_strategy=recording_strategy,
+        )
+        calls: list[int] = []
+        retry_sleep_nanos: list[int] = []
+
+        def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            if retry.count < 2:
+                raise RetryableError("fail") from ValueError("boom")
+            return "ok"
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            self.assertFalse(outcome.is_terminated)
+            self.assertEqual("", outcome.giveup_reason)
+            if not outcome.is_success and not outcome.is_exhausted:
+                retry_sleep_nanos.append(outcome.sleep_nanos)
+                self.assertIsInstance(outcome.result, RetryableError)
+                self.assertGreaterEqual(outcome.elapsed_nanos, 0)
+            self.assertIsNone(outcome.retry.log)
+
+        rng = SequenceRandom([5, 6])
+        with patch("bzfs_main.util.retry._thread_local_rng", return_value=rng):
+            actual = call_with_retries(
+                fn,
+                policy=retry_policy,
+                config=RetryConfig(termination_event=threading.Event()),
+                after_attempt=after_attempt,
+                log=None,
+            )
+
+        self.assertEqual("ok", actual)
+        self.assertEqual([0, 1, 2], calls)
+        self.assertEqual([retry_policy.initial_max_sleep_nanos, 5], seen_state)
+        self.assertEqual([5, 6], retry_sleep_nanos)
 
 
 #############################################################################
