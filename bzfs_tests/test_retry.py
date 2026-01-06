@@ -1373,7 +1373,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         self.assertEqual(1, mock_sleep.call_count)
 
     def test_retry_after_backoff_strategy_delegates_when_retry_after_is_none(self) -> None:
-        delegate = MagicMock(return_value=(111, 222))
         policy = RetryPolicy(max_retries=0, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=10)
         retry = Retry(
             count=0,
@@ -1387,6 +1386,7 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         err = RetryableError("fail")
         rng = random.Random(0)
 
+        delegate = MagicMock(return_value=(111, 222))
         backoff_strategy: BackoffStrategy = self.retry_after_backoff_strategy(fallback=delegate)
         sleep_nanos, next_curr_max = backoff_strategy(retry, 123, rng, 0, err)
         self.assertEqual(111, sleep_nanos)
@@ -1394,7 +1394,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         delegate.assert_called_once_with(retry, 123, rng, 0, err)
 
     def test_retry_after_backoff_strategy_does_not_delegate_when_retry_after_is_present(self) -> None:
-        delegate = MagicMock(side_effect=AssertionError("delegate must not be called"))
         policy = RetryPolicy(max_retries=0, min_sleep_secs=10, initial_max_sleep_secs=0, max_sleep_secs=10)
         retry = Retry(
             count=0,
@@ -1409,6 +1408,7 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         setattr(err, "retry_after", 500)  # noqa: B010
         rng = random.Random(0)
 
+        delegate = MagicMock(side_effect=AssertionError("delegate must not be called"))
         backoff_strategy: BackoffStrategy = self.retry_after_backoff_strategy(fallback=delegate)
         sleep_nanos, next_curr_max = backoff_strategy(retry, 123, rng, 0, err)
         self.assertEqual(500, sleep_nanos)

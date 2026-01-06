@@ -359,20 +359,19 @@ class RetryableError(Exception):
         self,
         message: str,
         *,
-        display_msg: object = None,
-        retry_immediately_once: bool = False,
-        attachment: object = None,
-    ) -> None:
-        super().__init__(message)
-        self.display_msg: object = display_msg  # for logging
-        self.retry_immediately_once: bool = retry_immediately_once  # retry once immediately without backoff?
-
-        self.attachment: object = attachment  # domain specific info passed to next attempt via Retry.previous_outcomes if
+        display_msg: object = None,  # for logging
+        retry_immediately_once: bool = False,  # retry once immediately without backoff?
+        attachment: object = None,  # optional domain specific info passed to next attempt via Retry.previous_outcomes if
         # RetryPolicy.max_previous_outcomes > 0. This helps when retrying is not just 'try again later', but
         # 'try again differently based on what just happened'.
         # Examples: switching network endpoints, adjusting per-attempt timeouts, capping retries by error-class, resuming
         # with a token/offset, maintaining failure history for this invocation of call_with_retries().
         # Example: 'cap retries to 3 for ECONNREFUSED but 12 for ETIMEDOUT' via attachment=collections.Counter
+    ) -> None:
+        super().__init__(message)
+        self.display_msg: object = display_msg
+        self.retry_immediately_once: bool = retry_immediately_once
+        self.attachment: object = attachment
 
     def display_msg_str(self) -> str:
         """Returns the display_msg as a str; for logging."""
