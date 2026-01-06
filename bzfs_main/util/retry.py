@@ -153,7 +153,7 @@ INFINITY_MAX_RETRIES: Final[int] = 2**63 - 1  # a number that's essentially infi
 #############################################################################
 def no_giveup(outcome: AttemptOutcome) -> object | None:
     """Default implementation of ``giveup`` callback for call_with_retries(); never gives up; returning anything other than
-    ``None`` indicates to give up; thread-safe."""
+    ``None`` indicates to give up retrying; thread-safe."""
     return None
 
 
@@ -252,7 +252,7 @@ def call_with_retries(
             giveup_reason: object | None = None
             sleep_nanos: int = 0
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
-                if policy.max_sleep_nanos == 0 and policy.backoff_strategy is _full_jitter_backoff_strategy:
+                if policy.max_sleep_nanos == 0 and policy.backoff_strategy is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
                 elif retry_count == 0 and retryable_error.retry_immediately_once:
                     pass  # retry once immediately without backoff
@@ -356,7 +356,12 @@ class RetryableError(Exception):
     ``call_with_retries()`` will pass this exception to callbacks via ``AttemptOutcome.result``."""
 
     def __init__(
-        self, message: str, display_msg: object = None, retry_immediately_once: bool = False, attachment: object = None
+        self,
+        message: str,
+        *,
+        display_msg: object = None,
+        retry_immediately_once: bool = False,
+        attachment: object = None,
     ) -> None:
         super().__init__(message)
         self.display_msg: object = display_msg  # for logging
@@ -487,7 +492,7 @@ class AttemptOutcome(NamedTuple):
 
 
 #############################################################################
-def _full_jitter_backoff_strategy(
+def full_jitter_backoff_strategy(
     retry: Retry, curr_max_sleep_nanos: int, rand: random.Random, elapsed_nanos: int, retryable_error: RetryableError
 ) -> tuple[int, int]:
     """Default implementation of ``backoff_strategy`` callback for RetryPolicy.
@@ -541,7 +546,7 @@ class RetryPolicy:
     max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
 
     backoff_strategy: Callable[[Retry, int, random.Random, int, RetryableError], tuple[int, int]] = dataclasses.field(
-        default=_full_jitter_backoff_strategy, repr=False  # retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
+        default=full_jitter_backoff_strategy, repr=False  # retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
     )
     """Strategy that implements a backoff algorithm to reduce resource contention."""
 
@@ -564,7 +569,7 @@ class RetryPolicy:
             max_sleep_secs=getattr(args, "retry_max_sleep_secs", 10),
             max_elapsed_secs=getattr(args, "retry_max_elapsed_secs", 60),
             exponential_base=getattr(args, "retry_exponential_base", 2),
-            backoff_strategy=getattr(args, "retry_backoff_strategy", _full_jitter_backoff_strategy),
+            backoff_strategy=getattr(args, "retry_backoff_strategy", full_jitter_backoff_strategy),
             reraise=getattr(args, "retry_reraise", True),
             max_previous_outcomes=getattr(args, "retry_max_previous_outcomes", 0),
             context=getattr(args, "retry_context", None),
