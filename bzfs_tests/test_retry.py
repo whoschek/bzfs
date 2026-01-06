@@ -50,6 +50,7 @@ from bzfs_main.util.retry import (
     RetryPolicy,
     _sleep,
     after_attempt_log_failure,
+    all_giveup,
     any_giveup,
     call_with_retries,
     multi_after_attempt,
@@ -1125,7 +1126,6 @@ class TestCallWithRetries(unittest.TestCase):
             result=RetryableError("boom"),
         )
 
-        self.assertIs(no_giveup, any_giveup([]))
         self.assertIs(no_giveup, any_giveup([no_giveup]))
 
         handler1 = MagicMock(return_value="first reason")
@@ -1147,6 +1147,73 @@ class TestCallWithRetries(unittest.TestCase):
 
         giveup = any_giveup([lambda _outcome: "", lambda _outcome: "Must short-circuit"])
         self.assertEqual("", giveup(outcome))
+
+    def test_all_giveup(self) -> None:
+        retry = Retry(
+            count=0,
+            start_time_nanos=0,
+            attempt_start_time_nanos=0,
+            policy=RetryPolicy(max_retries=0),
+            config=RetryConfig(),
+            log=None,
+            previous_outcomes=(),
+        )
+        outcome = AttemptOutcome(
+            retry=retry,
+            is_success=False,
+            is_exhausted=False,
+            is_terminated=False,
+            giveup_reason=None,
+            elapsed_nanos=0,
+            sleep_nanos=0,
+            result=RetryableError("fail"),
+        )
+
+        giveup = all_giveup([no_giveup])
+        self.assertIs(no_giveup, giveup)
+
+        giveup = all_giveup([])
+        self.assertIsNone(giveup(outcome))
+
+        calls: list[str] = []
+
+        def handler_returns_none(_outcome: AttemptOutcome) -> object | None:
+            calls.append("h1")
+            return None
+
+        handler2 = MagicMock(side_effect=AssertionError("handler2 must not be called"))
+        giveup = all_giveup([handler_returns_none, handler2])
+        self.assertIsNone(giveup(outcome))
+        self.assertEqual(["h1"], calls)
+
+        calls = []
+
+        def handler_returns_r1_then_continue(_outcome: AttemptOutcome) -> object | None:
+            calls.append("h1")
+            return "r1"
+
+        def handler_returns_none_then_stop(_outcome: AttemptOutcome) -> object | None:
+            calls.append("h2")
+            return None
+
+        handler3 = MagicMock(side_effect=AssertionError("handler3 must not be called"))
+        giveup = all_giveup([handler_returns_r1_then_continue, handler_returns_none_then_stop, handler3])
+        self.assertIsNone(giveup(outcome))
+        self.assertEqual(["h1", "h2"], calls)
+
+        calls = []
+
+        def handler_returns_r1(_outcome: AttemptOutcome) -> object | None:
+            calls.append("h1")
+            return "r1"
+
+        def handler_returns_r2(_outcome: AttemptOutcome) -> object | None:
+            calls.append("h2")
+            return "r2"
+
+        giveup = all_giveup([handler_returns_r1, handler_returns_r2])
+        self.assertEqual("r2", giveup(outcome))
+        self.assertEqual(["h1", "h2"], calls)
 
 
 #############################################################################

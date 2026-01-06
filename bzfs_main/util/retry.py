@@ -46,7 +46,7 @@ Advanced Configuration:
 - Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, error/status
   codes or parsing stderr), including time-aware decisions or decisions based on the previous N most recent AttemptOutcome
   objects (via AttemptOutcome.retry.previous_outcomes)
-- Use the ``any_giveup()`` helper to consult more than one callback handler in ``giveup(AttemptOutcome)``.
+- Use the ``any_giveup()`` / ``all_giveup()`` helper to consult more than one callback handler in ``giveup(AttemptOutcome)``.
 - Supply an ``on_exhaustion(AttemptOutcome)`` callback to customize behavior when giving up; it may raise an error or return
   a fallback value.
 
@@ -296,7 +296,8 @@ def _sleep(sleep_nanos: int, termination_event: threading.Event | None) -> None:
 
 
 def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) -> Callable[[AttemptOutcome], None]:
-    """Returns a callback for ``call_with_retries(after_attempt=...)`` that invokes each handler in order; thread-safe."""
+    """Composes independent ``after_attempt`` handlers into one ``call_with_retries(after_attempt=...)`` callback that
+    invokes each handler in order; thread-safe."""
     handlers = tuple(handlers)
     if len(handlers) == 1 and handlers[0] is after_attempt_log_failure:
         return after_attempt_log_failure  # perf
@@ -309,9 +310,13 @@ def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) ->
 
 
 def any_giveup(handlers: Iterable[Callable[[AttemptOutcome], object | None]]) -> Callable[[AttemptOutcome], object | None]:
-    """Returns a callback for ``call_with_retries(giveup=...)`` that returns first non-None giveup_reason; thread-safe."""
+    """Composes independent ``giveup`` handlers into one ``call_with_retries(giveup=...)`` callback that gives up retrying if
+    *any* handler gives up; that is if any handler returns a non-``None`` reason; thread-safe.
+
+    Handlers are evaluated in order and short-circuit: On giving up returns the first handler's reason for giving up.
+    """
     handlers = tuple(handlers)
-    if len(handlers) == 0 or (len(handlers) == 1 and handlers[0] is no_giveup):
+    if len(handlers) == 1 and handlers[0] is no_giveup:
         return no_giveup  # perf
 
     def _giveup(outcome: AttemptOutcome) -> object | None:
@@ -320,6 +325,27 @@ def any_giveup(handlers: Iterable[Callable[[AttemptOutcome], object | None]]) ->
             if giveup_reason is not None:
                 return giveup_reason
         return None  # don't give up
+
+    return _giveup
+
+
+def all_giveup(handlers: Iterable[Callable[[AttemptOutcome], object | None]]) -> Callable[[AttemptOutcome], object | None]:
+    """Composes independent ``giveup`` handlers into one ``call_with_retries(giveup=...)`` callback that gives up retrying if
+    *all* handlers give up; that is if all handlers return a non-``None`` reason; thread-safe.
+
+    Handlers are evaluated in order and short-circuit: stops at first ``None``; else returns the last non-``None`` reason.
+    """
+    handlers = tuple(handlers)
+    if len(handlers) == 1 and handlers[0] is no_giveup:
+        return no_giveup  # perf
+
+    def _giveup(outcome: AttemptOutcome) -> object | None:
+        giveup_reason: object | None = None
+        for handler in handlers:
+            giveup_reason = handler(outcome)
+            if giveup_reason is None:
+                return None  # don't give up
+        return giveup_reason
 
     return _giveup
 
