@@ -190,7 +190,7 @@ def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
             )
 
 
-def default_on_exhaustion(outcome: AttemptOutcome) -> NoReturn:
+def on_exhaustion_raise(outcome: AttemptOutcome) -> NoReturn:
     """Default implementation of exhaustion behavior for call_with_retries(); always raises; thread-safe."""
     assert outcome.is_exhausted
     assert isinstance(outcome.result, RetryableError)
@@ -213,7 +213,7 @@ def call_with_retries(
     config: RetryConfig | None = None,  # controls logging settings and async cancellation between attempts
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
-    on_exhaustion: Callable[[AttemptOutcome], _T] = default_on_exhaustion,  # raise error or return fallback value
+    on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
     log: logging.Logger | None = None,
 ) -> _T:
     """Runs the function ``fn`` and returns its result; retries on failure as indicated by policy and config; thread-safe.
@@ -306,9 +306,7 @@ def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) ->
     return _after_attempt
 
 
-def any_giveup(
-    handlers: Iterable[Callable[[AttemptOutcome], object | None]],
-) -> Callable[[AttemptOutcome], object | None]:
+def any_giveup(handlers: Iterable[Callable[[AttemptOutcome], object | None]]) -> Callable[[AttemptOutcome], object | None]:
     """Returns a callback for ``call_with_retries(giveup=...)`` that returns first non-None giveup_reason; thread-safe."""
     handlers = tuple(handlers)
     if len(handlers) == 0 or (len(handlers) == 1 and handlers[0] is no_giveup):
@@ -642,7 +640,7 @@ class RetryOptions(Generic[_T]):
     config: RetryConfig = RetryConfig()  # controls logging settings and async cancellation between attempts
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
-    on_exhaustion: Callable[[AttemptOutcome], _T] = default_on_exhaustion  # raise error or return fallback value
+    on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise  # raise error or return fallback value
     log: logging.Logger | None = None
 
     def copy(self, **override_kwargs: Any) -> RetryOptions[_T]:

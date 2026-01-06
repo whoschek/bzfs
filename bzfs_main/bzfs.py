@@ -165,7 +165,7 @@ from bzfs_main.util.retry import (
     RetryConfig,
     RetryOptions,
     call_with_retries,
-    default_on_exhaustion,
+    on_exhaustion_raise,
 )
 from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
@@ -1686,7 +1686,7 @@ class Job(MiniJob):
             config=self.retry_options.config,
             giveup=self.retry_options.giveup,
             after_attempt=self.retry_options.after_attempt,
-            on_exhaustion=default_on_exhaustion,
+            on_exhaustion=on_exhaustion_raise,
             log=p.log,
         )
 
@@ -1699,7 +1699,7 @@ class Job(MiniJob):
             config=self.retry_options.config,
             giveup=self.retry_options.giveup,
             after_attempt=self.retry_options.after_attempt,
-            on_exhaustion=default_on_exhaustion,
+            on_exhaustion=on_exhaustion_raise,
             log=p.log,
         )
 
