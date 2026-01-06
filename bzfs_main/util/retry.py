@@ -152,12 +152,14 @@ INFINITY_MAX_RETRIES: Final[int] = 2**63 - 1  # a number that's essentially infi
 
 #############################################################################
 def no_giveup(outcome: AttemptOutcome) -> object | None:
-    """Default implementation never gives up; returning anything other than ``None`` indicates to give up."""
+    """Default implementation of ``giveup`` callback for call_with_retries(); never gives up; returning anything other than
+    ``None`` indicates to give up; thread-safe."""
     return None
 
 
 def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
-    """Performs simple logging of retry attempt failures; the default for call_with_retries(); thread-safe."""
+    """Default implementation of ``after_attempt`` callback for call_with_retries(); performs simple logging of retry attempt
+    failures; thread-safe."""
     retry: Retry = outcome.retry
     if outcome.is_success or retry.log is None or not retry.config.enable_logging:
         return
@@ -191,7 +193,7 @@ def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
 
 
 def on_exhaustion_raise(outcome: AttemptOutcome) -> NoReturn:
-    """Default implementation of exhaustion behavior for call_with_retries(); always raises; thread-safe."""
+    """Default implementation of ``on_exhaustion`` callback for call_with_retries(); always raises; thread-safe."""
     assert outcome.is_exhausted
     assert isinstance(outcome.result, RetryableError)
     retryable_error: RetryableError = outcome.result
@@ -462,8 +464,11 @@ class AttemptOutcome(NamedTuple):
 def _full_jitter_backoff_strategy(
     retry: Retry, curr_max_sleep_nanos: int, rand: random.Random, elapsed_nanos: int, retryable_error: RetryableError
 ) -> tuple[int, int]:
-    """Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
-    exponential backoff with cap to the next attempt; thread-safe."""
+    """Default implementation of ``backoff_strategy`` callback for RetryPolicy.
+
+    Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
+    exponential backoff with cap to the next attempt; thread-safe.
+    """
     policy: RetryPolicy = retry.policy
     if policy.min_sleep_nanos == curr_max_sleep_nanos:
         sleep_nanos = curr_max_sleep_nanos  # perf
@@ -489,7 +494,7 @@ class RetryPolicy:
     """The maximum number of times ``fn`` will be invoked additionally after the first attempt invocation; must be >= 0."""
 
     min_sleep_secs: float = 0
-    """The minimum duration to sleep between retries ."""
+    """The minimum duration to sleep between retries."""
 
     initial_max_sleep_secs: float = 0.125
     """The initial maximum duration to sleep between retries."""
@@ -583,7 +588,7 @@ class RetryPolicy:
 
 #############################################################################
 def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:
-    """Default implementation creates simple log message; thread-safe."""
+    """Default implementation of ``format_msg`` callback for RetryConfig; creates simple log message; thread-safe."""
     msg = display_msg + " " if display_msg else ""
     errmsg: str = retryable_error.display_msg_str()
     msg = msg + errmsg + " " if errmsg else msg
@@ -592,7 +597,7 @@ def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:
 
 
 def _format_pair(first: object, second: object) -> str:
-    """Default implementation creates simple log message part; thread-safe."""
+    """Default implementation of ``format_pair`` callback for RetryConfig; creates simple log message part; thread-safe."""
     second = "∞" if INFINITY_MAX_RETRIES == second else second  # noqa: SIM300
     return f"[{first}/{second}]"
 
@@ -626,7 +631,7 @@ _DEFAULT_RETRY_CONFIG: Final[RetryConfig] = RetryConfig()  # constant
 
 #############################################################################
 def _fn_not_implemented(_retry: Retry) -> NoReturn:
-    """Default implementation always raises."""
+    """Default implementation of ``fn`` callback for RetryOptions; always raises."""
     raise NotImplementedError("Provide fn when calling RetryOptions")
 
 
