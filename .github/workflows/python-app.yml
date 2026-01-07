@@ -577,7 +577,7 @@ jobs:
         persist-credentials: false
     - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
-      uses: vmactions/freebsd-vm@v1.3.5  # see https://github.com/vmactions/freebsd-vm
+      uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "14.3"
         envs: "bzfs_test_mode bzfs_test_no_run_quietly"
