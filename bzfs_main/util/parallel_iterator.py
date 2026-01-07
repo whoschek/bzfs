@@ -99,9 +99,11 @@ def parallel_iterator(
     Parameters:
     -----------
     iterator_builder : Callable[[ThreadPoolExecutor], Iterable[Iterable[Future[T]]]]
-        Factory function that receives a ThreadPoolExecutor and returns a series of iterators. Each iterator must yield
-        Future[T] objects representing tasks that have already been submitted to the executor. The builder is called once
-        with the managed thread pool.
+        Factory function that is called once (and only once) with the ThreadPoolExecutor as parameter, returning a
+        corresponding series of iterators. Typically, each iterator is a lazy on-demand Python Generator of (a potentially
+        infinite number of) Future[T] objects representing the (future and eventually actual) result of tasks that have been
+        incrementally submitted to the thread pool, avoiding submitting all tasks at once. Typically, advancing the iterator
+        submits the next task to the executor and yields the corresponding Future.
 
     max_workers : int, default=os.cpu_count() or 1
         Maximum number of worker threads in the thread pool. Also determines the buffer size for the bounded-concurrency

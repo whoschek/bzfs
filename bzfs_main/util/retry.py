@@ -147,7 +147,7 @@ from bzfs_main.util.utils import (
 )
 
 # constants:
-INFINITY_MAX_RETRIES: Final[int] = 2**63 - 1  # a number that's essentially infinity for all practical retry purposes
+INFINITY_MAX_RETRIES: Final[int] = 2**90 - 1  # a number that's essentially infinity for all practical retry purposes
 
 
 #############################################################################
@@ -534,7 +534,7 @@ class RetryPolicy:
 
     max_elapsed_secs: float = 60
     """``fn`` will not be retried (or not retried anymore) once this much time has elapsed since the initial start of
-    call_with_retries()."""
+    call_with_retries(); set this to 365 * 86400 seconds or similar to effectively disable the time limit."""
 
     exponential_base: float = 2
     """Growth factor (aka multiplier) for backoff algorithm to calculate sleep duration; must be >= 1."""
