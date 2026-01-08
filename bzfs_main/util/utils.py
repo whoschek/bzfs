@@ -748,8 +748,8 @@ class Subprocesses:
     """Provides per-job tracking of child PIDs so a job can safely terminate only the subprocesses it spawned itself; used
     when multiple jobs run concurrently within the same Python process.
 
-    Optionally binds to a termination_event to enforce asynchronous cancellation by forcing immediate timeouts for newly
-    spawned subprocesses once cancellation is requested.
+    Optionally binds to a termination_event to enforce async cancellation by forcing immediate timeouts for newly spawned
+    subprocesses once cancellation is requested.
     """
 
     def __init__(self, termination_event: threading.Event | None = None) -> None:

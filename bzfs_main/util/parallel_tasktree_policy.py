@@ -17,8 +17,8 @@
 Purpose: Provide bzfs-specific behavior on top of the policy-free generic ``parallel_tasktree`` scheduling algorithm:
 retries, skip-on-error modes (fail/dataset/tree), and logging.
 
-Assumptions: Callers provide a thread-safe ``process_dataset(dataset, tid, Retry) -> bool``. Dataset list is sorted and
-unique (enforced by tests).
+Assumptions: Callers provide a thread-safe ``process_dataset(dataset, tid, Retry) -> bool`` callback. Dataset list is sorted
+and contains no duplicate entries (enforced by tests).
 
 Design rationale: Keep scheduling generic and reusable while concentrating error handling and side-effects here. This module
 exposes a stable API for callers like ``bzfs`` and ``bzfs_jobrunner``.

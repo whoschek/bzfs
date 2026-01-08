@@ -708,10 +708,10 @@ class Job:
                 subjobs[subjob_name] = bzfs_prog_header + opts
 
             if args.prune_src_snapshots:
-                prune_src(["--delete-dst-snapshots"], src_snapshot_plan, "prune-src-snapshots")
+                prune_src(["--delete-dst-snapshots"], src_snapshot_plan, tag="prune-src-snapshots")
 
             if args.prune_src_bookmarks:
-                prune_src(["--delete-dst-snapshots=bookmarks"], src_bookmark_plan, "prune-src-bookmarks")
+                prune_src(["--delete-dst-snapshots=bookmarks"], src_bookmark_plan, tag="prune-src-bookmarks")
 
             if args.prune_dst_snapshots:
                 self.validate_true(
