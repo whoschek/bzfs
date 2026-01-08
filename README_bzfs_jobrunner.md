@@ -254,9 +254,15 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
 **--dst-hosts** *DICT_STRING*
 
 *  Dictionary that maps each destination hostname to a list of zero or more logical replication
-    target names (the infix portion of snapshot name). Example: `"{'nas': ['onsite'],
-    'bak-us-west-1': ['us-west-1'], 'bak-eu-west-1': ['eu-west-1'], 'archive':
-    ['offsite']}"`.
+    target names (the infix portion of snapshot name). As hostname use the real output of the
+    `hostname` CLI. The target is an arbitrary user-defined name that serves as an abstraction
+    of the destination hostnames for a group of snapshots, like target 'onsite', 'offsite',
+    'hotspare', a geographically independent datacenter like 'us-west', or similar. Rather
+    than the snapshot name embedding (i.e. hardcoding) a list of destination hostnames where it
+    should be sent to, the snapshot name embeds the user-defined target name, which is later
+    mapped by this jobconfig to a list of destination hostnames. Example: `"{'nas':
+    ['onsite'], 'bak-us-west-1': ['us-west-1'], 'bak-eu-west-1': ['eu-west-1'],
+    'archive': ['offsite']}"`.
 
     With this, given a snapshot name, we can find the destination hostnames to which the snapshot
     shall be replicated. Also, given a snapshot name and its own name, a destination host can

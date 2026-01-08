@@ -69,6 +69,7 @@ recursive = True
 
 
 # List of one or more source hostnames. Each of the M destination hosts receives replicas from (the same set of) N src hosts:
+# As hostname use the real output of the `hostname` CLI.
 # src_hosts = ["prod001", "prod002", "prod999"]
 src_hosts = ["nas"]
 
@@ -77,6 +78,11 @@ src_hosts = ["nas"]
 # portion of a snapshot name).
 # A destination host will receive replicas of snapshots for all targets that map to that destination host. Removing a mapping
 # can be used to temporarily suspend replication to a given destination host.
+# As hostname use the real output of the `hostname` CLI.
+# The "target" is an arbitrary user-defined name that serves as an abstraction of the destination hostnames for a group of
+# snapshots, like target "onsite", "offsite", "hotspare", a geographically independent datacenter like "us-west", or similar.
+# Rather than the snapshot name embedding (i.e. hardcoding) a list of destination hostnames where it should be sent to, the
+# snapshot name embeds the user-defined target name, which is later mapped by this jobconfig to a list of destination hostnames.
 # dst_hosts = {
 #     "nas": ["onsite"],
 #     "bak-us-west-1": ["us-west-1"],
@@ -95,6 +101,7 @@ dst_hosts = {"nas": ["", "onsite"]}
 # to that destination host in this dictionary.
 # Do not remove a mapping here unless you are sure it's ok to delete all those snapshots on that destination host! If in
 # doubt, use --dryrun mode first.
+# As hostname use the real output of the `hostname` CLI.
 # retain_dst_targets = dst_hosts
 retain_dst_targets = {"nas": ["", "onsite"]}
 
