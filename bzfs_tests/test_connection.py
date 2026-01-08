@@ -440,6 +440,7 @@ class TestSimpleMiniRemote(AbstractTestCase):
                 ssh_verbose=True,
                 ssh_config_file=cfg_path,
                 ssh_cipher="aes128-gcm@openssh.com",
+                ssh_connect_timeout_secs=60,
                 reuse_ssh_connection=True,
             )
             # Verify options order and presence
@@ -455,6 +456,7 @@ class TestSimpleMiniRemote(AbstractTestCase):
                 "aes128-gcm@openssh.com",
                 "-p",
                 "2222",
+                "-oConnectTimeout=60s",
             ]
             self.assertEqual(expected_prefix, list(r.ssh_extra_opts))
             # cache namespace includes user@host, port and cfg hash

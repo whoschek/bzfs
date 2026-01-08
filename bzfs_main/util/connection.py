@@ -158,11 +158,12 @@ def create_simple_miniremote(
     *,
     log: logging.Logger,
     ssh_user_host: str = "",  # option passed to `ssh` CLI; empty string indicates local mode
-    ssh_port: int | None = None,  # option passed to `ssh` CLI
+    ssh_port: int | None = None,  # option passed to `ssh -p` CLI
     ssh_extra_opts: list[str] | None = None,  # optional args passed to `ssh` CLI
-    ssh_verbose: bool = False,  # option passed to `ssh` CLI
-    ssh_config_file: str = "",  # option passed to `ssh` CLI; example: /path/to/homedir/.ssh/config
-    ssh_cipher: str = "^aes256-gcm@openssh.com",  # option passed to `ssh` CLI
+    ssh_verbose: bool = False,  # option passed to `ssh -v` CLI
+    ssh_config_file: str = "",  # option passed to `ssh -F` CLI; example: /path/to/homedir/.ssh/config
+    ssh_cipher: str = "^aes256-gcm@openssh.com",  # option passed to `ssh -c` CLI
+    ssh_connect_timeout_secs: int | None = None,  # option passed to `ssh -oConnectTimeout=N`; default is system TCP timeout
     ssh_program: str = "ssh",  # name or path of CLI executable; "hpnssh" is also valid
     reuse_ssh_connection: bool = True,
     ssh_control_persist_secs: int = 90,
@@ -230,6 +231,7 @@ def create_simple_miniremote(
     ssh_extra_opts += ["-F", ssh_config_file] if ssh_config_file else []
     ssh_extra_opts += ["-c", ssh_cipher] if ssh_cipher else []
     ssh_extra_opts += ["-p", str(ssh_port)] if ssh_port is not None else []
+    ssh_extra_opts += [] if ssh_connect_timeout_secs is None else [f"-oConnectTimeout={max(0, ssh_connect_timeout_secs)}s"]
     ssh_config_file_hash = sha256_urlsafe_base64(os.path.abspath(ssh_config_file), padding=False) if ssh_config_file else ""
     return SimpleMiniRemote(
         params=params,
