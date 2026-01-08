@@ -502,7 +502,7 @@ class Remote(MiniRemote):
         self.basis_ssh_host: Final[str] = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: Final[int | None] = getattr(args, f"ssh_{loc}_port")
         self.ssh_config_file: Final[str | None] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
-        if self.ssh_config_file:
+        if self.ssh_config_file and self.ssh_config_file != "none":
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
         self.ssh_config_file_hash: Final[str] = (
