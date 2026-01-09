@@ -720,9 +720,6 @@ class SmokeTestCase(IntegrationTestCase):
     def test_delete_dst_snapshots_except_plan(self) -> None:
         LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
 
-    def test_delete_dst_snapshots_skips_held_snapshots(self) -> None:
-        LocalTestCase(param=self.param).test_delete_dst_snapshots_skips_held_snapshots()
-
     def test_basic_snapshotting_flat_simple(self) -> None:
         LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
 

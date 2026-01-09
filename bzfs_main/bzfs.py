@@ -821,7 +821,7 @@ class Job(MiniJob):
     ) -> bool:
         """Deletes existing destination snapshots that do not exist within the source dataset if they are included by the
         --{include|exclude}-snapshot-* policy, and the destination dataset is included via --{include|exclude}-dataset*
-        policy; implements --delete-dst-snapshots."""
+        policy; implements --delete-dst-snapshots. Does not attempt to delete snapshots that carry a `zfs hold`."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         kind: str = "bookmark" if p.delete_dst_bookmarks else "snapshot"

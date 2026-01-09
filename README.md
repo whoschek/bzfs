@@ -1462,6 +1462,8 @@ usage: bzfs [-h] [--recursive]
     which case no snapshots are selected and the --{include|exclude}-snapshot-* filter options
     treat bookmarks as snapshots wrt. selecting.
 
+    *Note:* Does not attempt to delete snapshots that carry a `zfs hold`.
+
     *Performance Note:* --delete-dst-snapshots operates on multiple datasets in parallel (and
     serially within a dataset), using the same dataset order as bzfs replication. The degree of
     parallelism is configurable with the --threads option (see below).
@@ -1806,7 +1808,7 @@ usage: bzfs [-h] [--recursive]
 **--create-bookmarks** *{all,hourly,minutely,secondly,none}*
 
 *  For increased safety, bzfs replication behaves as follows wrt. ZFS bookmark creation, if it is
-    autodetected that the source ZFS pool support bookmarks:
+    autodetected that the source ZFS pool supports bookmarks:
 
     * `all` (default): Whenever it has successfully completed a 'zfs send' operation, bzfs
     creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send'
