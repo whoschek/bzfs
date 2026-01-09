@@ -357,8 +357,7 @@ class RetryableError(Exception):
 
     def __init__(
         self,
-        message: str,
-        *,
+        *exc_args: object,
         display_msg: object = None,  # for logging
         retry_immediately_once: bool = False,  # retry once immediately without backoff?
         attachment: object = None,  # optional domain specific info passed to next attempt via Retry.previous_outcomes if
@@ -368,7 +367,7 @@ class RetryableError(Exception):
         # with a token/offset, maintaining failure history for this invocation of call_with_retries().
         # Example: 'cap retries to 3 for ECONNREFUSED but 12 for ETIMEDOUT' via attachment=collections.Counter
     ) -> None:
-        super().__init__(message)
+        super().__init__(*exc_args)
         self.display_msg: object = display_msg
         self.retry_immediately_once: bool = retry_immediately_once
         self.attachment: object = attachment
