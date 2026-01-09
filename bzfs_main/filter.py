@@ -293,6 +293,7 @@ def _filter_snapshots_by_creation_time_and_rank(
         hi: int = get_idx(hi_rank, n)
         lo, hi = (lo, hi) if lo <= hi else (hi, lo)
         i: int = 0
+        k: int = 0
         results: list[str] = []
         for snapshot in snapshots:
             is_snapshot = "@" in snapshot
@@ -306,13 +307,14 @@ def _filter_snapshots_by_creation_time_and_rank(
                     msg = "Including b/c creation time: %s"
                 if msg:
                     results.append(snapshot)
+                    k += 1 if is_snapshot else 0
                 else:
                     msg = "Excluding b/c snapshot rank: %s"
                 if is_debug:
                     log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
                 i += 1 if is_snapshot else 0
         snapshots = results
-        n = hi - lo
+        n = k
     return snapshots
 
 
