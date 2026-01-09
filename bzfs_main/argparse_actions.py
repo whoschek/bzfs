@@ -97,8 +97,7 @@ def has_timerange_filter(snapshot_filters: list[list[SnapshotFilter]]) -> bool:
 
 
 def optimize_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> list[SnapshotFilter]:
-    """Basic optimizations for the snapshot filter execution plan."""
-
+    """Applies basic optimizations to the snapshot filter execution plan."""
     _merge_adjacent_snapshot_filters(snapshot_filters)
     _merge_adjacent_snapshot_regexes(snapshot_filters)
     snapshot_filters = [f for f in snapshot_filters if f.timerange or f.options]
@@ -107,8 +106,14 @@ def optimize_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> list[Sn
 
 
 def _merge_adjacent_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> None:
-    """Merge adjacent filters of the same type if possible."""
+    """Merge adjacent filters of the same type if possible.
 
+    Merge filter operators of the same kind if they are next to each other and carry an option list, for example
+    --include-snapshot-times-and-ranks and --include-snapshot-regex and --exclude-snapshot-regex. This improves execution
+    perf and makes handling easier in later stages.
+    Example: merges --include-snapshot-times-and-ranks notime oldest10% --include-snapshot-times-and-ranks notime latest20%
+    into --include-snapshot-times-and-ranks notime oldest10% latest20%
+    """
     i = len(snapshot_filters) - 1
     while i >= 0:
         filter_i: SnapshotFilter = snapshot_filters[i]
@@ -123,8 +128,13 @@ def _merge_adjacent_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> 
 
 
 def _merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> None:
-    """Combine consecutive regex filters of the same kind for efficiency."""
+    """Combine consecutive regex filters of the same type for efficiency."""
 
+    # Merge regex filter operators of the same kind as long as they are within the same group, aka as long as they are not
+    # separated by a non-regex filter. This improves execution perf and makes handling easier in later stages.
+    # Example: --include-snapshot-regex .*daily --exclude-snapshot-regex .*weekly --include-snapshot-regex .*hourly
+    # --exclude-snapshot-regex .*monthly
+    # gets merged into the following: --include-snapshot-regex .*daily .*hourly --exclude-snapshot-regex .*weekly .*monthly
     i = len(snapshot_filters) - 1
     while i >= 0:
         filter_i: SnapshotFilter = snapshot_filters[i]
@@ -141,6 +151,11 @@ def _merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> 
                 j -= 1
         i -= 1
 
+    # Merge --include-snapshot-regex and --exclude-snapshot-regex filters that are part of the same group (i.e. next to each
+    # other) into a single combined filter operator that contains the info of both, and hence all info for the group, which
+    # makes handling easier in later stages.
+    # Example: --include-snapshot-regex .*daily .*hourly --exclude-snapshot-regex .*weekly .*monthly
+    # gets merged into the following: snapshot-regex(excludes=[.*weekly, .*monthly], includes=[.*daily, .*hourly])
     i = len(snapshot_filters) - 1
     while i >= 0:
         filter_i = snapshot_filters[i]
@@ -162,7 +177,20 @@ def _merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> 
 
 
 def _reorder_snapshot_time_filters(snapshot_filters: list[SnapshotFilter]) -> None:
-    """Reorder time filters before regex filters within execution plan sections."""
+    """Reorder time filters before regex filters within execution plan sections.
+
+    In an execution plan that contains filter operators based on sort order (the --include-snapshot-times-and-ranks operator
+    with non-empty ranks), filters cannot freely be reordered without violating correctness, but they can still be partially
+    reordered for better execution performance.
+
+    The filter list is partitioned into sections such that sections are separated by --include-snapshot-times-and-ranks
+    operators with non-empty ranks. Within each section, we move include_snapshot_times operators aka
+    --include-snapshot-times-and-ranks operators with empty ranks before --include/exclude-snapshot-regex operators because
+    the former involves fast integer comparisons and the latter involves more expensive regex matching.
+
+    Example: reorders --include-snapshot-regex .*daily --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 into
+    --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 --include-snapshot-regex .*daily
+    """
 
     def reorder_time_filters_within_section(i: int, j: int) -> None:
         while j > i:
