@@ -702,6 +702,46 @@ class RetryOptions(Generic[_T]):
 
 
 #############################################################################
+def call_with_exception_handlers(
+    fn: Callable[[], _T],  # typically a lambda
+    *,
+    handlers: Mapping[type[BaseException], Callable[[BaseException], _T]],
+) -> _T:
+    """Convenience function that calls ``fn`` and returns its result; if necessary invokes a matching exception handler.
+
+    If ``fn`` raises an exception whose type matches a key in ``handlers`` (most-specific match wins), calls the
+    corresponding handler with the exception and returns its result. If there is no match, re-raises the original exception.
+    Typically, the handler is ``raise_retryable_error_from`` or similar.
+
+    Example Usage (with call_with_retries):
+
+        def fn(retry: Retry) -> str:
+            return call_with_exception_handlers(
+                lambda: unreliable_operation(retry),
+                handlers={
+                    TimeoutError: raise_retryable_error_from,
+                    ConnectionResetError: raise_retryable_error_from,
+                },
+            )
+
+        result: str = call_with_retries(fn=fn, policy=RetryPolicy(max_retries=3))
+    """
+    try:
+        return fn()
+    except BaseException as exc:
+        for cls in type(exc).__mro__:
+            handler = handlers.get(cls)
+            if handler is not None:
+                return handler(exc)
+        raise
+
+
+def raise_retryable_error_from(exc: BaseException) -> NoReturn:
+    """Convenience function that raises a generic RetryableError that wraps the given underlying exception."""
+    raise RetryableError(display_msg=type(exc).__name__) from exc
+
+
+#############################################################################
 @final
 class _ThreadLocalRNG(threading.local):
     """Caches a per-thread random number generator."""

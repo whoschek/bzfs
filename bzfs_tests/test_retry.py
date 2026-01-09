@@ -52,10 +52,12 @@ from bzfs_main.util.retry import (
     after_attempt_log_failure,
     all_giveup,
     any_giveup,
+    call_with_exception_handlers,
     call_with_retries,
     full_jitter_backoff_strategy,
     multi_after_attempt,
     no_giveup,
+    raise_retryable_error_from,
 )
 
 
@@ -70,6 +72,7 @@ def suite() -> unittest.TestSuite:
         TestRetryOptionsCopy,
         TestRetryOptionsCall,
         TestAttemptOutcomeCopy,
+        TestCallWithExceptionHandlers,
         TestCallWithRetriesBenchmark,
         TestTenacityBenchmark,
     ]
@@ -1797,6 +1800,79 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             result=object(),
         )
         self.assertEqual(150, outcome.attempt_elapsed_nanos())
+
+
+#############################################################################
+class TestCallWithExceptionHandlers(unittest.TestCase):
+
+    def test_call_with_exception_handlers_success_returns_value(self) -> None:
+        self.assertEqual("ok", call_with_exception_handlers(lambda: "ok", handlers={}))
+
+    def test_call_with_exception_handlers_no_match_reraises_original_exception(self) -> None:
+        err = ValueError("x")
+
+        def fn() -> None:
+            raise err
+
+        with self.assertRaises(ValueError) as cm:
+            call_with_exception_handlers(fn, handlers={KeyError: raise_retryable_error_from})
+        self.assertIs(err, cm.exception)
+
+    def test_call_with_exception_handlers_uses_base_class_handler_if_needed(self) -> None:
+        calls: list[str] = []
+
+        def fn() -> str:
+            raise KeyError("x")
+
+        def handler(exc: BaseException) -> str:
+            calls.append(type(exc).__name__)
+            return "handled"
+
+        self.assertEqual("handled", call_with_exception_handlers(fn, handlers={Exception: handler}))
+        self.assertEqual(["KeyError"], calls)
+
+    def test_call_with_exception_handlers_uses_most_specific_handler(self) -> None:
+        calls: list[str] = []
+
+        def fn() -> str:
+            raise KeyError("x")
+
+        def base_handler(_exc: BaseException) -> str:
+            calls.append("base")
+            return "base"
+
+        def key_handler(_exc: BaseException) -> str:
+            calls.append("key")
+            return "key"
+
+        self.assertEqual("key", call_with_exception_handlers(fn, handlers={Exception: base_handler, KeyError: key_handler}))
+        self.assertEqual(["key"], calls)
+
+    def test_call_with_exception_handlers_raise_retryable_error_from(self) -> None:
+        err = KeyError("x")
+
+        def fn() -> None:
+            raise err
+
+        with self.assertRaises(RetryableError) as cm:
+            call_with_exception_handlers(fn, handlers={KeyError: raise_retryable_error_from})
+        self.assertIs(err, cm.exception.__cause__)
+        self.assertEqual((), cm.exception.args)
+        self.assertEqual("KeyError", cm.exception.display_msg_str())
+
+    def test_call_with_exception_handlers_propagates_handler_exception(self) -> None:
+        err = KeyError("x")
+
+        def fn() -> None:
+            raise err
+
+        def handler(exc: BaseException) -> None:
+            self.assertIs(err, exc)
+            raise RetryableError("boom") from exc
+
+        with self.assertRaises(RetryableError) as cm:
+            call_with_exception_handlers(fn, handlers={KeyError: handler})
+        self.assertIs(err, cm.exception.__cause__)
 
 
 #############################################################################
