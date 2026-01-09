@@ -12,7 +12,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   without failing.
 - [bzfs] `--ssh-{src|dst}-config-file`: Make it possible to specify that no ssh configuration files shall be read.
 - [bzfs] Make `call_with_retries()` more widely applicable.
-- [bzfs] [security] Make `os_utime()` not follow symlinks for additional safety.
+- [bzfs] [security] Make `os.utime()` not follow symlinks for additional safety.
 
 ## [1.16.0] - December 20, 2025
 

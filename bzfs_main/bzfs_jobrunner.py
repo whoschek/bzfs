@@ -29,7 +29,7 @@
 * It executes the subjobs, serially or in parallel, via run_subjobs(), which in turn delegates parallel job coordination to
   bzfs.process_datasets_in_parallel_and_fault_tolerant().
 * README_bzfs_jobrunner.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via
-update_readme.sh. Simply run that script whenever you change or add ArgumentParser help text.
+  update_readme.sh. Simply run that script whenever you change or add ArgumentParser help text.
 """
 
 from __future__ import (
@@ -792,7 +792,7 @@ class Job:
                 j = 0
                 marker = "monitor-dst-snapshots"
                 for dst_hostname, targets in dst_hosts.items():
-                    monitor_targets = set(targets).intersection(set(retain_dst_targets[dst_hostname]))
+                    monitor_targets: set[str] = set(targets).intersection(set(retain_dst_targets[dst_hostname]))
                     monitor_plan = {  # only retain targets that belong to the host
                         org: {target: periods for target, periods in target_periods.items() if target in monitor_targets}
                         for org, target_periods in monitor_snapshot_plan.items()

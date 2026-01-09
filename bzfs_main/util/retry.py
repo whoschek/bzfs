@@ -201,7 +201,7 @@ def on_exhaustion_raise(outcome: AttemptOutcome) -> NoReturn:
     cause: BaseException | None = retryable_error.__cause__
     if policy.reraise and cause is not None:
         raise cause.with_traceback(cause.__traceback__)
-    raise RetryError(outcome) from retryable_error
+    raise RetryError(outcome=outcome) from retryable_error
 
 
 #############################################################################
@@ -497,7 +497,7 @@ def full_jitter_backoff_strategy(
     """Default implementation of ``backoff_strategy`` callback for RetryPolicy.
 
     Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
-    exponential backoff with cap to the next attempt; thread-safe.
+    exponential backoff with cap to the next attempt; thread-safe. min_sleep_nanos is typically 0.
     """
     policy: RetryPolicy = retry.policy
     if policy.min_sleep_nanos == curr_max_sleep_nanos:
@@ -514,10 +514,10 @@ def full_jitter_backoff_strategy(
 class RetryPolicy:
     """Configuration controlling max retry counts and backoff delays for call_with_retries(); immutable.
 
-    By default works as follows: The maximum duration to sleep between retries initially starts with
+    By default uses full jitter which works as follows: The maximum duration to sleep between retries initially starts with
     ``initial_max_sleep_secs`` and doubles on each retry, up to the final maximum of ``max_sleep_secs``.
     On each retry a random sleep duration in the range ``[min_sleep_secs, current max]`` is picked.
-    In a nutshell: ``0 <= min_sleep_secs <= initial_max_sleep_secs <= max_sleep_secs``
+    In a nutshell: ``0 <= min_sleep_secs <= initial_max_sleep_secs <= max_sleep_secs``. Typically, min_sleep_secs=0.
     """
 
     max_retries: int = INFINITY_MAX_RETRIES
@@ -547,7 +547,8 @@ class RetryPolicy:
     backoff_strategy: Callable[[Retry, int, random.Random, int, RetryableError], tuple[int, int]] = dataclasses.field(
         default=full_jitter_backoff_strategy, repr=False  # retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
     )
-    """Strategy that implements a backoff algorithm to reduce resource contention."""
+    """Strategy that implements a backoff algorithm to reduce resource contention; default is full jitter; various other
+    example backoff strategies can be found in test_retry.py:TestMiscBackoffStrategies."""
 
     reraise: bool = True
     """On exhaustion, the default (``True``) is to re-raise the underlying exception when present."""
@@ -686,7 +687,10 @@ class RetryOptions(Generic[_T]):
         return dataclasses.replace(self, **override_kwargs)
 
     def __call__(self) -> _T:
-        """Executes ``self.fn`` via the call_with_retries() retry loop using the stored parameters; thread-safe."""
+        """Executes ``self.fn`` via the call_with_retries() retry loop using the stored parameters; thread-safe.
+
+        Example Usage: result: str = retry_options.copy(fn=...)()
+        """
         return call_with_retries(
             fn=self.fn,
             policy=self.policy,
