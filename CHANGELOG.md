@@ -2,6 +2,18 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - Not yet released
+
+- [bzfs_jobrunner] docs: Improve Getting Started.
+- [bzfs_jobrunner,bzfs] Make `--monitor-snapshots` report exit code for worst encountered alert instead of first
+  encountered alert.
+- [bzfs] Fix snapshot schedule for multi-minute periods.
+- [bzfs] `--delete-dst-snapshots`: don't attempt to delete snapshots that carry a `zfs hold`, instead auto-skip them
+  without failing.
+- [bzfs] `--ssh-{src|dst}-config-file`: Make it possible to specify that no ssh configuration files shall be read.
+- [bzfs] Make `call_with_retries()` more widely applicable.
+- [bzfs] [security] Make `os_utime()` not follow symlinks for additional safety.
+
 ## [1.16.0] - December 20, 2025
 
 - [bzfs] Include `--zfs-send-program-opts` also when resuming a previously interrupted `zfs receive -s`.
