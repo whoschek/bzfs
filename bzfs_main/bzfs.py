@@ -826,7 +826,8 @@ class Job(MiniJob):
         src, dst = p.src, p.dst
         kind: str = "bookmark" if p.delete_dst_bookmarks else "snapshot"
         filter_needs_creation_time: bool = has_timerange_filter(p.snapshot_filters)
-        props: str = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
+        props: str = "guid,name,userrefs"
+        props = self.creation_prefix + "creation," + props if filter_needs_creation_time else props
         basis_src_datasets_set: set[str] = set(basis_src_datasets)
         num_snapshots_found, num_snapshots_deleted = 0, 0
 
@@ -848,7 +849,14 @@ class Job(MiniJob):
             if dst_snaps_with_guids_str is None:
                 log.warning("Third party deleted destination: %s", dst_dataset)
                 return False
-            dst_snaps_with_guids: list[str] = dst_snaps_with_guids_str.splitlines()
+            held_dst_snapshots: set[str] = set()
+            dst_snaps_with_guids: list[str] = []
+            for line in dst_snaps_with_guids_str.splitlines():
+                _, name, userrefs = line.rsplit("\t", 2)
+                if userrefs and userrefs != "-" and userrefs != "0":  # userrefs > 0 indicates a zfs hold
+                    tag: str = name[name.index("@") + 1 :]
+                    held_dst_snapshots.add(tag)  # don't attempt to delete snapshots that carry a `zfs hold`
+                dst_snaps_with_guids.append(line[0 : line.rindex("\t")])  # strip off trailing userrefs column
             num_dst_snaps_with_guids = len(dst_snaps_with_guids)
             basis_dst_snaps_with_guids: list[str] = dst_snaps_with_guids.copy()
             if p.delete_dst_bookmarks:
@@ -893,6 +901,7 @@ class Job(MiniJob):
             if p.delete_dst_bookmarks:
                 delete_bookmarks(self, dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
             else:
+                dst_tags_to_delete = [tag for tag in dst_tags_to_delete if tag not in held_dst_snapshots]
                 delete_snapshots(self, dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
             with self.stats_lock:
                 nonlocal num_snapshots_found

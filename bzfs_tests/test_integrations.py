@@ -720,6 +720,9 @@ class SmokeTestCase(IntegrationTestCase):
     def test_delete_dst_snapshots_except_plan(self) -> None:
         LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
 
+    def test_delete_dst_snapshots_skips_held_snapshots(self) -> None:
+        LocalTestCase(param=self.param).test_delete_dst_snapshots_skips_held_snapshots()
+
     def test_basic_snapshotting_flat_simple(self) -> None:
         LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
 
@@ -4594,6 +4597,37 @@ class LocalTestCase(IntegrationTestCase):
             "--recursive",
         )
         self.assertFalse(dataset_exists(dst_root_dataset))
+
+    def test_delete_dst_snapshots_skips_held_snapshots(self) -> None:
+        """Ensures destination snapshots that carry a `zfs hold` are skipped by --delete-dst-snapshots."""
+        unaffected_snapshot = take_snapshot(src_root_dataset, "s2")
+        held_snapshot = take_snapshot(src_root_dataset, "dstonly_hold")
+        nonheld_snapshot = take_snapshot(src_root_dataset, "dstonly_nohold")
+        self.assertIn(unaffected_snapshot, snapshots(src_root_dataset))
+        self.assertIn(held_snapshot, snapshots(src_root_dataset))
+        self.assertIn(nonheld_snapshot, snapshots(src_root_dataset))
+
+        hold_tag = "myhold"
+        self.assertEqual("0", snapshot_property(held_snapshot, "userrefs"))
+        run_cmd(sudo_cmd + ["zfs", "hold", hold_tag, held_snapshot])
+        self.assertEqual("1", snapshot_property(held_snapshot, "userrefs"))
+
+        try:
+            self.run_bzfs(
+                DUMMY_DATASET,
+                src_root_dataset,
+                "--skip-replication",
+                "--delete-dst-snapshots",
+                "--include-snapshot-regex=dstonly_.*",
+                delete_injection_triggers={},
+            )
+            self.assertIn(unaffected_snapshot, snapshots(src_root_dataset))
+            self.assertIn(held_snapshot, snapshots(src_root_dataset))
+            self.assertNotIn(nonheld_snapshot, snapshots(src_root_dataset))
+        finally:
+            if held_snapshot in snapshots(src_root_dataset):
+                run_cmd(sudo_cmd + ["zfs", "release", hold_tag, held_snapshot])
+                self.assertEqual("0", snapshot_property(held_snapshot, "userrefs"))
 
     def test_delete_dst_bookmarks_flat(self) -> None:
         if not are_bookmarks_enabled("src"):
