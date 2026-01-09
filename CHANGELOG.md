@@ -7,7 +7,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs_jobrunner] docs: Improve Getting Started.
 - [bzfs_jobrunner,bzfs] Make `--monitor-snapshots` report exit code for worst encountered alert instead of first
   encountered alert.
-- [bzfs] Fix snapshot schedule for multi-minute periods.
+- [bzfs] Fix snapshot schedule for N-minutely periods where N > 1.
 - [bzfs] `--delete-dst-snapshots`: don't attempt to delete snapshots that carry a `zfs hold`, instead auto-skip them
   without failing.
 - [bzfs] `--ssh-{src|dst}-config-file`: Make it possible to specify that no ssh configuration files shall be read.
