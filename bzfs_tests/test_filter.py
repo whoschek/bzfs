@@ -588,8 +588,11 @@ class TestRankRangeAction(CommonTest):
 
     def test_filter_snapshots_by_rank_with_chain(self) -> None:
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
-        with self.assertRaises(SystemExit), suppress_output():
-            self.filter_snapshots_by_rank(lst1, ["latest1..latest100%", "latest1..latest100%"])
+        results = self.filter_snapshots_by_rank(lst1, ["latest1..latest100%", "latest1..latest100%"])
+        self.assertListEqual(["\td@0", "\td#1"], results)
+
+        results = self.filter_snapshots_by_rank(lst1, ["latest1..latest100%", "oldest1..oldest100%"])
+        self.assertListEqual(["\td#1", "\td@2"], results)
 
     def test_filter_snapshots_by_rank_with_times(self) -> None:
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
@@ -599,12 +602,12 @@ class TestRankRangeAction(CommonTest):
         results = self.filter_snapshots_by_rank(lst1, ["oldest 1"], timerange="3..11")
         self.assertListEqual(["\td@0", "\td#1", "\td@3"], results)
         self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest 1"], timerange="2..11"))
-        with self.assertRaises(SystemExit), suppress_output():
-            self.filter_snapshots_by_rank(lst1, ["oldest1..oldest2", "latest 1"], timerange="3..11")
+        results = self.filter_snapshots_by_rank(lst1, ["oldest1..oldest2", "latest 1"], timerange="3..11")
+        self.assertListEqual(["\td#1", "\td@2", "\td@3"], results)
 
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3", "d@4"]]
-        with self.assertRaises(SystemExit), suppress_output():
-            self.filter_snapshots_by_rank(lst1, ["oldest1..oldest2", "latest 1"], timerange="4..11")
+        results = self.filter_snapshots_by_rank(lst1, ["oldest1..oldest2", "latest 1"], timerange="4..11")
+        self.assertListEqual(["\td#1", "\td@2", "\td@4"], results)
 
     def get_snapshot_filters(self, cli: list[str]) -> Any:
         args = self.argparser_parse_args(args=["src", "dst", *cli])
