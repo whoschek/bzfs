@@ -139,6 +139,7 @@ from typing import (
     NamedTuple,
     NoReturn,
     TypeVar,
+    Union,
     final,
 )
 
@@ -753,6 +754,73 @@ def call_with_exception_handlers(
             handler = handlers.get(cls)
             if handler is not None:
                 return handler(exc)
+        raise
+
+
+Predicate = Union[bool, Callable[[BaseException], bool]]  # Type alias
+
+
+def call_with_exception_handler_chain(
+    fn: Callable[[], _T],  # typically a lambda
+    *,
+    continue_if_no_predicate_matches: bool = False,
+    handlers: Mapping[type[BaseException], Sequence[tuple[Predicate, Callable[[BaseException], _T]]]],
+) -> _T:
+    """Convenience function that calls ``fn`` and returns its result; on exception runs the first matching handler in a per-
+    exception handler chain.
+
+    Lookup uses the exception type's Method Resolution Order (most-specific class wins). For the first class that exists as
+    key in ``handlers``, its chain is scanned in order. Each chain element is ``(predicate, handler)`` where ``predicate``
+    is either ``True`` (always matches), ``False`` (disabled), or ``predicate(exc) -> bool``. The first matching handler is
+    called with the exception and its return value is returned. If no predicate matches then, by default, the original
+    exception is re-raised and no less-specific handler chains are consulted. Set ``continue_if_no_predicate_matches=True``
+    to continue scanning base classes instead.
+
+    Example: turn transient ssh/zfs command failures into RetryableError for call_with_retries(), including feature flags:
+
+        def run_remote() -> str:
+            p = subprocess.run(["ssh", "foo.example.com", "zfs", "list", "-H"], text=True, capture_output=True, check=True)
+            return p.stdout
+
+        def fn(retry: Retry) -> str:
+            return call_with_exception_handler_chain(
+                fn=run_remote,
+                handlers={
+                    TimeoutError: [(True, raise_retryable_error_from)],
+                    ConnectionResetError: [(True, lambda exc: raise_retryable_error_from(exc, display_msg="ssh reset"))],
+                    subprocess.CalledProcessError: [
+                        (lambda exc: exc.returncode == 255, lambda exc: raise_retryable_error_from(exc, display_msg="ssh error")),
+                        (lambda exc: "cannot receive" in (exc.stderr or ""), lambda exc: raise_retryable_error_from(exc, display_msg="zfs recv")),
+                    ],
+                    OSError: [
+                        (lambda exc: getattr(exc, "errno", None) in {errno.ETIMEDOUT, errno.EHOSTUNREACH},
+                         lambda exc: raise_retryable_error_from(exc, display_msg=f"network: {exc}")),
+                        (False, lambda exc: raise_retryable_error_from(exc, display_msg="disabled handler example")),
+                    ],
+                },
+            )
+
+        stdout: str = call_with_retries(fn=fn, policy=RetryPolicy(max_retries=3))
+
+    Example: return a fallback value (no retry loop required):
+
+        def read_optional_file(path: str) -> str:
+            return call_with_exception_handler_chain(
+                fn=lambda: open(path, encoding="utf-8").read(),
+                handlers={FileNotFoundError: [(True, lambda _exc: "")]},
+            )
+    """
+    try:
+        return fn()
+    except BaseException as exc:
+        for cls in type(exc).__mro__:
+            handler_chain = handlers.get(cls)
+            if handler_chain is not None:
+                for predicate, handler in handler_chain:
+                    if predicate is True or (predicate is not False and predicate(exc)):
+                        return handler(exc)
+                if not continue_if_no_predicate_matches:
+                    raise
         raise
 
 
