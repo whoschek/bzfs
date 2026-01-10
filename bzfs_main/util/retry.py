@@ -702,6 +702,21 @@ class RetryOptions(Generic[_T]):
 
 
 #############################################################################
+def raise_retryable_error_from(
+    exc: BaseException,
+    *,
+    display_msg: object = None,
+    retry_immediately_once: bool = False,
+    attachment: object = None,
+) -> NoReturn:
+    """Convenience function that raises a generic RetryableError that wraps the given underlying exception."""
+    raise RetryableError(
+        display_msg=type(exc).__name__ if display_msg is None else display_msg,
+        retry_immediately_once=retry_immediately_once,
+        attachment=attachment,
+    ) from exc
+
+
 def call_with_exception_handlers(
     fn: Callable[[], _T],  # typically a lambda
     *,
@@ -709,18 +724,23 @@ def call_with_exception_handlers(
 ) -> _T:
     """Convenience function that calls ``fn`` and returns its result; if necessary invokes a matching exception handler.
 
-    If ``fn`` raises an exception whose type matches a key in ``handlers`` (most-specific match wins), calls the
+    If ``fn`` raises an exception whose type matches a key in ``handlers`` (most-specific match wins), then calls the
     corresponding handler with the exception and returns its result. If there is no match, re-raises the original exception.
-    Typically, the handler is ``raise_retryable_error_from`` or similar.
+    Typically (but not necessarily) the handler raises a ``RetryableError``, via ``raise_retryable_error_from`` or similar.
+    Or it may raise another exception type (which will not be retried), or even return a fallback value instead of raising.
+
+    Chooses the most-specific matching handler via the exception type's Method Resolution Order (MRO) so you can, for
+    example, handle a TimeoutError differently than a generic OSError, etc.
 
     Example Usage (with call_with_retries):
 
         def fn(retry: Retry) -> str:
             return call_with_exception_handlers(
-                lambda: unreliable_operation(retry),
+                fn=lambda: unreliable_operation(retry),
                 handlers={
                     TimeoutError: raise_retryable_error_from,
                     ConnectionResetError: raise_retryable_error_from,
+                    OSError: lambda exc: raise_retryable_error_from(exc, display_msg=f"OSError: {exc}"),
                 },
             )
 
@@ -734,11 +754,6 @@ def call_with_exception_handlers(
             if handler is not None:
                 return handler(exc)
         raise
-
-
-def raise_retryable_error_from(exc: BaseException) -> NoReturn:
-    """Convenience function that raises a generic RetryableError that wraps the given underlying exception."""
-    raise RetryableError(display_msg=type(exc).__name__) from exc
 
 
 #############################################################################

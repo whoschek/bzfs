@@ -1828,7 +1828,16 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
             calls.append(type(exc).__name__)
             return "handled"
 
-        self.assertEqual("handled", call_with_exception_handlers(fn, handlers={Exception: handler}))
+        self.assertEqual(
+            "handled",
+            call_with_exception_handlers(
+                fn,
+                handlers={
+                    Exception: lambda exc: handler(exc),
+                    OSError: lambda exc: raise_retryable_error_from(exc, display_msg=f"OSError: {exc}"),
+                },
+            ),
+        )
         self.assertEqual(["KeyError"], calls)
 
     def test_call_with_exception_handlers_uses_most_specific_handler(self) -> None:

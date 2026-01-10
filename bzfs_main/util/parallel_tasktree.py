@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Fault-tolerant, dependency-aware scheduling and execution of parallel operations, ensuring that ancestor datasets finish
-before descendants start; The design maximizes throughput while preventing inconsistent dataset states during replication or
-snapshot deletion.
+"""Fault-tolerant, dependency-aware workflow scheduling and execution of parallel operations, ensuring that ancestor datasets
+finish before descendants start; The design maximizes throughput while preventing inconsistent dataset states during
+replication or snapshot deletion.
 
 This module contains only generic scheduling and coordination (the "algorithm"). Error handling, retries, and skip policies
 are customizable and implemented by callers via the CompletionCallback API or wrappers such as ``parallel_tasktree_policy``.
@@ -90,7 +90,7 @@ until they exit or time out.
 #############################################################################
 @final
 class ParallelTaskTree:
-    """Main class for dependency-aware scheduling of dataset jobs with optional barriers and priority ordering."""
+    """Main class for dependency-aware workflow scheduling of dataset jobs with optional barriers and priority ordering."""
 
     def __init__(
         self,
@@ -109,7 +109,7 @@ class ParallelTaskTree:
         barrier_name: str = BARRIER_CHAR,
         is_test_mode: bool = False,
     ) -> None:
-        """Prepares to process datasets in parallel with dependency-aware scheduling and fault tolerance.
+        """Prepares to process datasets in parallel with dependency-aware workflow scheduling and fault tolerance.
 
         This class orchestrates parallel execution of dataset operations while maintaining strict hierarchical dependencies.
         Processing of a dataset only starts after processing of all its ancestor datasets has completed, ensuring data
@@ -118,7 +118,7 @@ class ParallelTaskTree:
         Purpose:
         --------
         - Process hierarchical datasets in parallel while respecting parent-child dependencies
-        - Provide dependency-aware scheduling; error handling and retries are implemented by callers via
+        - Provide dependency-aware workflow scheduling; error handling and retries are implemented by callers via
         ``CompletionCallback`` or thin wrappers
         - Maximize throughput by processing independent dataset subtrees in parallel
         - Support complex job scheduling patterns via optional barrier synchronization
