@@ -718,73 +718,37 @@ def raise_retryable_error_from(
     ) from exc
 
 
-def call_with_exception_handlers(
-    fn: Callable[[], _T],  # typically a lambda
-    *,
-    handlers: Mapping[type[BaseException], Callable[[BaseException], _T]],
-) -> _T:
-    """Convenience function that calls ``fn`` and returns its result; if necessary invokes a matching exception handler.
-
-    If ``fn`` raises an exception whose type matches a key in ``handlers`` (most-specific match wins), then calls the
-    corresponding handler with the exception and returns its result. If there is no match, re-raises the original exception.
-    Typically (but not necessarily) the handler raises a ``RetryableError``, via ``raise_retryable_error_from`` or similar.
-    Or it may raise another exception type (which will not be retried), or even return a fallback value instead of raising.
-
-    Chooses the most-specific matching handler via the exception type's Method Resolution Order (MRO) so you can, for
-    example, handle a TimeoutError differently than a generic OSError, etc.
-
-    Example Usage (with call_with_retries):
-
-        def fn(retry: Retry) -> str:
-            return call_with_exception_handlers(
-                fn=lambda: unreliable_operation(retry),
-                handlers={
-                    TimeoutError: raise_retryable_error_from,
-                    ConnectionResetError: raise_retryable_error_from,
-                    OSError: lambda exc: raise_retryable_error_from(exc, display_msg=f"OSError: {exc}"),
-                },
-            )
-
-        result: str = call_with_retries(fn=fn, policy=RetryPolicy(max_retries=3))
-    """
-    try:
-        return fn()
-    except BaseException as exc:
-        for cls in type(exc).__mro__:
-            handler = handlers.get(cls)
-            if handler is not None:
-                return handler(exc)
-        raise
-
-
 ExceptionPredicate = Union[bool, Callable[[BaseException], bool]]  # Type alias
 
 
-def call_with_exception_handler_chain(
+def call_with_exception_handlers(
     fn: Callable[[], _T],  # typically a lambda
     *,
     continue_if_no_predicate_matches: bool = False,
     handlers: Mapping[type[BaseException], Sequence[tuple[ExceptionPredicate, Callable[[BaseException], _T]]]],
 ) -> _T:
     """Convenience function that calls ``fn`` and returns its result; on exception runs the first matching handler in a per-
-    exception handler chain.
+    exception handler chain; composes independent handlers via predicates into one function.
 
-    Lookup uses the exception type's Method Resolution Order (most-specific class wins). For the first class that exists as
-    key in ``handlers``, its chain is scanned in order. Each chain element is ``(predicate, handler)`` where ``predicate``
-    is either ``True`` (always matches), ``False`` (disabled), or ``predicate(exc) -> bool``. The first matching handler is
-    called with the exception and its return value is returned. If no predicate matches then, by default, the original
-    exception is re-raised and no less-specific handler chains are consulted. Set ``continue_if_no_predicate_matches=True``
-    to continue scanning base classes instead.
+    Lookup uses the exception type's Method Resolution Order (most-specific class in the exception class hierarchy wins). For
+    the first class that exists as a key in ``handlers``, its chain is scanned in order. Each chain element is
+    ``(predicate, handler)`` where ``predicate`` is either ``True`` (always matches), ``False`` (disabled), or
+    ``predicate(exc) -> bool``. The first matching handler is called with the exception and its return value is returned. If
+    no predicate matches then, by default, the original exception is re-raised and no less-specific handler chains are
+    consulted. Set ``continue_if_no_predicate_matches=True`` to continue scanning exception base classes instead.
+
+    Typically (but not necessarily) the handler raises a ``RetryableError``, via ``raise_retryable_error_from`` or similar.
+    Or it may raise another exception type (which will not be retried), or even return a fallback value instead of raising.
 
     Example: turn transient ssh/zfs command failures into RetryableError for call_with_retries(), including feature flags:
 
-        def run_remote() -> str:
+        def run_remote(retry: Retry) -> str:
             p = subprocess.run(["ssh", "foo.example.com", "zfs", "list", "-H"], text=True, capture_output=True, check=True)
             return p.stdout
 
         def fn(retry: Retry) -> str:
-            return call_with_exception_handler_chain(
-                fn=run_remote,
+            return call_with_exception_handlers(
+                fn=lambda: run_remote(retry),
                 handlers={
                     TimeoutError: [(True, raise_retryable_error_from)],
                     ConnectionResetError: [(True, lambda exc: raise_retryable_error_from(exc, display_msg="ssh reset"))],
@@ -805,7 +769,7 @@ def call_with_exception_handler_chain(
     Example: return a fallback value (no retry loop required):
 
         def read_optional_file(path: str) -> str:
-            return call_with_exception_handler_chain(
+            return call_with_exception_handlers(
                 fn=lambda: open(path, encoding="utf-8").read(),
                 handlers={FileNotFoundError: [(True, lambda _exc: "")]},
             )

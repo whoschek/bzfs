@@ -52,7 +52,6 @@ from bzfs_main.util.retry import (
     after_attempt_log_failure,
     all_giveup,
     any_giveup,
-    call_with_exception_handler_chain,
     call_with_exception_handlers,
     call_with_retries,
     full_jitter_backoff_strategy,
@@ -1809,9 +1808,6 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
     def test_call_with_exception_handlers_success_returns_value(self) -> None:
         self.assertEqual("ok", call_with_exception_handlers(lambda: "ok", handlers={}))
 
-    def test_call_with_exception_handler_chain_success_returns_value(self) -> None:
-        self.assertEqual("ok", call_with_exception_handler_chain(lambda: "ok", handlers={}))
-
     def test_call_with_exception_handlers_no_match_reraises_original_exception(self) -> None:
         err = ValueError("x")
 
@@ -1819,11 +1815,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
             raise err
 
         with self.assertRaises(ValueError) as cm:
-            call_with_exception_handlers(fn, handlers={KeyError: raise_retryable_error_from})
-        self.assertIs(err, cm.exception)
-
-        with self.assertRaises(ValueError) as cm:
-            call_with_exception_handler_chain(fn, handlers={KeyError: [(True, raise_retryable_error_from)]})
+            call_with_exception_handlers(fn, handlers={KeyError: [(True, raise_retryable_error_from)]})
         self.assertIs(err, cm.exception)
 
     def test_call_with_exception_handlers_uses_base_class_handler_if_needed(self) -> None:
@@ -1839,19 +1831,6 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
         self.assertEqual(
             "handled",
             call_with_exception_handlers(
-                fn,
-                handlers={
-                    Exception: lambda exc: handler(exc),
-                    OSError: lambda exc: raise_retryable_error_from(exc, display_msg=f"OSError: {exc}"),
-                },
-            ),
-        )
-        self.assertEqual(["KeyError"], calls)
-
-        calls = []
-        self.assertEqual(
-            "handled",
-            call_with_exception_handler_chain(
                 fn,
                 handlers={
                     Exception: [(True, lambda exc: handler(exc))],
@@ -1875,13 +1854,9 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
             calls.append("key")
             return "key"
 
-        self.assertEqual("key", call_with_exception_handlers(fn, handlers={Exception: base_handler, KeyError: key_handler}))
-        self.assertEqual(["key"], calls)
-
-        calls = []
         self.assertEqual(
             "key",
-            call_with_exception_handler_chain(
+            call_with_exception_handlers(
                 fn,
                 handlers={
                     Exception: [(True, base_handler)],
@@ -1898,13 +1873,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
             raise err
 
         with self.assertRaises(RetryableError) as cm:
-            call_with_exception_handlers(fn, handlers={KeyError: raise_retryable_error_from})
-        self.assertIs(err, cm.exception.__cause__)
-        self.assertEqual((), cm.exception.args)
-        self.assertEqual("KeyError", cm.exception.display_msg_str())
-
-        with self.assertRaises(RetryableError) as cm:
-            call_with_exception_handler_chain(fn, handlers={KeyError: [(True, raise_retryable_error_from)]})
+            call_with_exception_handlers(fn, handlers={KeyError: [(True, raise_retryable_error_from)]})
         self.assertIs(err, cm.exception.__cause__)
         self.assertEqual((), cm.exception.args)
         self.assertEqual("KeyError", cm.exception.display_msg_str())
@@ -1920,14 +1889,10 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
             raise RetryableError("boom") from exc
 
         with self.assertRaises(RetryableError) as cm:
-            call_with_exception_handlers(fn, handlers={KeyError: handler})
+            call_with_exception_handlers(fn, handlers={KeyError: [(True, handler)]})
         self.assertIs(err, cm.exception.__cause__)
 
-        with self.assertRaises(RetryableError) as cm:
-            call_with_exception_handler_chain(fn, handlers={KeyError: [(True, handler)]})
-        self.assertIs(err, cm.exception.__cause__)
-
-    def test_call_with_exception_handler_chain_predicate_types_and_order(self) -> None:
+    def test_call_with_exception_handlers_predicate_types_and_order(self) -> None:
         calls: list[str] = []
         err = OSError("network glitch")
 
@@ -1948,7 +1913,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
 
         self.assertEqual(
             "handled",
-            call_with_exception_handler_chain(
+            call_with_exception_handlers(
                 fn,
                 handlers={
                     OSError: [
@@ -1961,7 +1926,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
         )
         self.assertEqual(["pred_false", "handler"], calls)
 
-    def test_call_with_exception_handler_chain_callable_predicate_true_runs_handler(self) -> None:
+    def test_call_with_exception_handlers_callable_predicate_true_runs_handler(self) -> None:
         calls: list[str] = []
         err = OSError("network glitch")
 
@@ -1982,7 +1947,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
 
         self.assertEqual(
             "handled",
-            call_with_exception_handler_chain(
+            call_with_exception_handlers(
                 fn,
                 handlers={
                     OSError: [
@@ -1994,7 +1959,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
         )
         self.assertEqual(["pred_true", "handler"], calls)
 
-    def test_call_with_exception_handler_chain_chain_present_but_no_predicate_matches_reraises(self) -> None:
+    def test_call_with_exception_handlers_chain_present_but_no_predicate_matches_reraises(self) -> None:
         calls: list[str] = []
         err = KeyError("x")
 
@@ -2014,7 +1979,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
             return "nope"
 
         with self.assertRaises(KeyError) as cm:
-            call_with_exception_handler_chain(
+            call_with_exception_handlers(
                 fn,
                 handlers={
                     KeyError: [
@@ -2027,7 +1992,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
         self.assertIs(err, cm.exception)
         self.assertEqual(["pred_false"], calls)
 
-    def test_call_with_exception_handler_chain_empty_chain_reraises_and_shadows_base_chain(self) -> None:
+    def test_call_with_exception_handlers_empty_chain_reraises_and_shadows_base_chain(self) -> None:
         calls: list[str] = []
         err = KeyError("x")
 
@@ -2039,7 +2004,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
             return "base"
 
         with self.assertRaises(KeyError) as cm:
-            call_with_exception_handler_chain(
+            call_with_exception_handlers(
                 fn,
                 handlers={
                     KeyError: [],
@@ -2049,7 +2014,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
         self.assertIs(err, cm.exception)
         self.assertEqual([], calls)
 
-    def test_call_with_exception_handler_chain_fall_through_to_base_class_chain_if_enabled(self) -> None:
+    def test_call_with_exception_handlers_fall_through_to_base_class_chain_if_enabled(self) -> None:
         calls: list[str] = []
         err = KeyError("x")
 
@@ -2066,7 +2031,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
 
         self.assertEqual(
             "base",
-            call_with_exception_handler_chain(
+            call_with_exception_handlers(
                 fn,
                 continue_if_no_predicate_matches=True,
                 handlers={
@@ -2083,7 +2048,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
         calls = []
         self.assertEqual(
             "base",
-            call_with_exception_handler_chain(
+            call_with_exception_handlers(
                 fn,
                 continue_if_no_predicate_matches=True,
                 handlers={
