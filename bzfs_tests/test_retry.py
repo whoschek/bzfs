@@ -2101,13 +2101,13 @@ class TestCallWithRetriesBenchmark(unittest.TestCase):
     def test_benchmark_r1k_n0_p0_s0(self) -> None:
         self.benchmark(runs=1000, max_retries=0, max_previous_outcomes=0, success_on=0)
 
-    def test_xbenchmark_r1k_n1_p0_s1(self) -> None:
+    def test_benchmark_r1k_n1_p0_s1(self) -> None:
         self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=0, success_on=1)
 
-    def test_xbenchmark_r1k_n2_p0_s2(self) -> None:
+    def test_benchmark_r1k_n2_p0_s2(self) -> None:
         self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=0, success_on=2)
 
-    def test_xbenchmark_r1k_n1_p1_s1(self) -> None:
+    def test_benchmark_r1k_n1_p1_s1(self) -> None:
         self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=1, success_on=1)
 
     def test_benchmark_r1k_n0_p0_sinf(self) -> None:
@@ -2199,13 +2199,13 @@ class TestTenacityBenchmark(unittest.TestCase):
     def test_benchmark_r1k_n0_p0_s0(self) -> None:
         self.benchmark(runs=1000, max_retries=0, max_previous_outcomes=0, success_on=0)
 
-    def test_xbenchmark_r1k_n1_p0_s1(self) -> None:
+    def test_benchmark_r1k_n1_p0_s1(self) -> None:
         self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=0, success_on=1)
 
-    def test_xbenchmark_r1k_n2_p0_s2(self) -> None:
+    def test_benchmark_r1k_n2_p0_s2(self) -> None:
         self.benchmark(runs=1000, max_retries=2, max_previous_outcomes=0, success_on=2)
 
-    def test_xbenchmark_r1k_n1_p1_s1(self) -> None:
+    def test_benchmark_r1k_n1_p1_s1(self) -> None:
         self.benchmark(runs=1000, max_retries=1, max_previous_outcomes=1, success_on=1)
 
     def test_benchmark_r1k_n0_p0_sinf(self) -> None:

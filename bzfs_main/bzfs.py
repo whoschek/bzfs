@@ -852,11 +852,11 @@ class Job(MiniJob):
             held_dst_snapshots: set[str] = set()
             dst_snaps_with_guids: list[str] = []
             for line in dst_snaps_with_guids_str.splitlines():
+                dst_snaps_with_guids.append(line[0 : line.rindex("\t")])  # strip off trailing userrefs column
                 _, name, userrefs = line.rsplit("\t", 2)
                 if userrefs and userrefs != "-" and userrefs != "0":  # userrefs > 0 indicates a zfs hold
                     tag: str = name[name.index("@") + 1 :]
                     held_dst_snapshots.add(tag)  # don't attempt to delete snapshots that carry a `zfs hold`
-                dst_snaps_with_guids.append(line[0 : line.rindex("\t")])  # strip off trailing userrefs column
             num_dst_snaps_with_guids = len(dst_snaps_with_guids)
             basis_dst_snaps_with_guids: list[str] = dst_snaps_with_guids.copy()
             if p.delete_dst_bookmarks:

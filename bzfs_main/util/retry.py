@@ -757,14 +757,14 @@ def call_with_exception_handlers(
         raise
 
 
-Predicate = Union[bool, Callable[[BaseException], bool]]  # Type alias
+ExceptionPredicate = Union[bool, Callable[[BaseException], bool]]  # Type alias
 
 
 def call_with_exception_handler_chain(
     fn: Callable[[], _T],  # typically a lambda
     *,
     continue_if_no_predicate_matches: bool = False,
-    handlers: Mapping[type[BaseException], Sequence[tuple[Predicate, Callable[[BaseException], _T]]]],
+    handlers: Mapping[type[BaseException], Sequence[tuple[ExceptionPredicate, Callable[[BaseException], _T]]]],
 ) -> _T:
     """Convenience function that calls ``fn`` and returns its result; on exception runs the first matching handler in a per-
     exception handler chain.

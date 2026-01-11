@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Quickstart for local replication: Edit this script. Replace all occurrences of the word "nas" with the hostname of your
-local machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets. Make sure `bzfs` and `bzfs_jobrunner` CLIs
-are on the PATH. Run the final script like so:
+"""Quickstart for local replication: Edit this script. Replace all occurrences of the word "nas" with the real output of the
+`hostname` CLI on your machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets. Make sure `bzfs` and
+`bzfs_jobrunner` CLIs are on the PATH. Run the final script like so:
 
 /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks --prune-dst-
 snapshots --monitor-src-snapshots --monitor-dst-snapshots
@@ -40,7 +40,7 @@ jobconfig script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service, or low latency replication
 from a primary to a secondary or to M read replicas, or backup to removable drives, etc.
 Typically, this script should be periodically executed on each source host and each destination host, e.g. by a cron job
-(or similar). However, you can also run it on a single third-party host and have that talk to all source hosts and
+(or similar). However, you can also run it on a single third-party host, in which case it will talk to all source hosts and
 destination hosts, which is convenient for basic use cases and for testing.
 This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the
 actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach. A plain Python script offers flexible, readable
