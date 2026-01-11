@@ -383,14 +383,14 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
     {'warning': '2 days', 'critical': '8 days'}, 'yearly': {'warning': '5 days',
     'critical': '14 days'}, '10minutely': {'warning': '0 minutes', 'critical': '0
     minutes'}}, '': {'daily': {'warning': '4 hours', 'critical': '8 hours'}}}}"`.
-    This example alerts the user if the latest src or dst snapshot named
+    This example alerts the user if the *latest* src or dst snapshot named
     `prod_onsite_<timestamp>_hourly` is more than 30 minutes late (i.e. more than 30+60=90
     minutes old) [warning] or more than 300 minutes late (i.e. more than 300+60=360 minutes old)
-    [critical]. In addition, the example alerts the user if the oldest src or dst snapshot named
-    `prod_onsite_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning] or more
-    than 300 + 60x36 minutes old [critical], where 36 is the number of period cycles specified
-    in `src_snapshot_plan` or `dst_snapshot_plan`, respectively. Analog for the latest
-    snapshot named `prod_<timestamp>_daily`, and so on.
+    [critical]. In addition, the example alerts the user if the *oldest* src or dst snapshot
+    named `prod_onsite_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning]
+    or more than 300 + 60x36 minutes old [critical], where 36 is the number of period cycles
+    specified in `src_snapshot_plan` or `dst_snapshot_plan`, respectively. Analog for the
+    latest snapshot named `prod_<timestamp>_daily`, and so on.
 
     Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots
     shall be checked for the given snapshot name pattern.

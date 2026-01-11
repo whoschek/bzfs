@@ -92,7 +92,7 @@ src_hosts = ["nas"]
 # }
 # dst_hosts = {"nas": ["onsite"]}
 # dst_hosts = {"nas": [""]}  # empty string as target name is ok
-dst_hosts = {"nas": ["", "onsite"]}
+dst_hosts = {"nas": ["", "onsite"]}  # host named "nas" will receive replicas for snapshots with target="" or target="onsite"
 
 
 # Dictionary that maps each destination hostname to a list of zero or more logical replication target names (the infix
@@ -103,7 +103,7 @@ dst_hosts = {"nas": ["", "onsite"]}
 # doubt, use --dryrun mode first.
 # As hostname use the real output of the `hostname` CLI.
 # retain_dst_targets = dst_hosts
-retain_dst_targets = {"nas": ["", "onsite"]}
+retain_dst_targets = {"nas": ["", "onsite"]}  # host named "nas" retains replicas for snapshots with target="" or "onsite"
 
 
 # Dictionary that maps each destination hostname to a root dataset located on that destination host. Typically, this
@@ -132,7 +132,7 @@ dst_root_datasets = {
 }
 
 
-# Organization (the prefix portion of a snapshot name):
+# Organization, which is an arbitrary user-defined name (the prefix portion of a snapshot name):
 # org = "autosnap"
 # org = "zrepl"
 # org = "bzfs"
@@ -190,10 +190,10 @@ src_bookmark_plan = dst_snapshot_plan
 # pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to check if snapshots
 # are successfully taken on schedule, successfully replicated on schedule, and successfully pruned on schedule.
 # Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
-# The example below alerts the user if the latest src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more than 30
-# minutes late (i.e. more than 30+60=90 minutes old) [warning], or more than 300 minutes late (i.e. more than 300+60=360
+# The example below alerts the user if the *latest* src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more than
+# 30 minutes late (i.e. more than 30+60=90 minutes old) [warning], or more than 300 minutes late (i.e. more than 300+60=360
 # minutes old) [critical].
-# In addition, the example alerts the user if the oldest src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more
+# In addition, the example alerts the user if the *oldest* src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more
 # than 30 + 60x36 minutes old [warning] or more than 300 + 60x36 minutes old [critical], where 36 is the number of period
 # cycles specified in `src_snapshot_plan` or `dst_snapshot_plan`, respectively.
 # Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.

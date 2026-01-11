@@ -1463,7 +1463,8 @@ usage: bzfs [-h] [--recursive]
     which case no snapshots are selected and the --{include|exclude}-snapshot-* filter options
     treat bookmarks as snapshots wrt. selecting.
 
-    *Note:* Does not attempt to delete snapshots that carry a `zfs hold`.
+    *Note:* Does not attempt to delete snapshots that carry a `zfs hold`; instead auto-skips
+    them without failing.
 
     *Performance Note:* --delete-dst-snapshots operates on multiple datasets in parallel (and
     serially within a dataset), using the same dataset order as bzfs replication. The degree of

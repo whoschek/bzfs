@@ -873,7 +873,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "*Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
              "case no snapshots are selected and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
              "snapshots wrt. selecting.\n\n"
-             "*Note:* Does not attempt to delete snapshots that carry a `zfs hold`.\n\n"
+             "*Note:* Does not attempt to delete snapshots that carry a `zfs hold`; instead auto-skips them without "
+             "failing.\n\n"
              "*Performance Note:* --delete-dst-snapshots operates on multiple datasets in parallel (and serially "
              f"within a dataset), using the same dataset order as {PROG_NAME} replication. "
              "The degree of parallelism is configurable with the --threads option (see below).\n\n")
