@@ -302,7 +302,10 @@ def open_nofollow(
     """Behaves exactly like built-in open(), except that it refuses to follow symlinks, i.e. raises OSError with
     errno.ELOOP/EMLINK if basename of path is a symlink.
 
-    Also, can specify permissions on O_CREAT, and verify ownership.
+    Also, can specify custom permissions on O_CREAT, and verify ownership.
+
+    If check_owner=True, write-capable opens require ownership by the effective UID; read-only opens also allow ownership by
+    uid 0 (root). This allows safe reads of root-owned system files while preventing writes to files not owned by the caller.
     """
     if not mode:
         raise ValueError("Must have exactly one of create/read/write/append mode and at most one plus")
@@ -322,7 +325,10 @@ def open_nofollow(
         if check_owner:
             st_uid: int = os.fstat(fd).st_uid
             if st_uid != os.geteuid():  # verify ownership is current effective UID
-                raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
+                if (flags & (os.O_WRONLY | os.O_RDWR)) != 0:  # require that writer owns the file
+                    raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
+                elif st_uid != 0:  # it's ok for root to own a file that we'll merely read
+                    raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()} or 0", path)
         return os.fdopen(fd, mode, buffering=buffering, encoding=encoding, errors=errors, newline=newline, **kwargs)
     except Exception:
         try:

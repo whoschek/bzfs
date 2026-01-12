@@ -850,6 +850,29 @@ class TestOpenNoFollow(unittest.TestCase):
                 self.assertEqual("hello", f.read())
         m_fstat.assert_not_called()
 
+    def test_read_allows_root_owner(self) -> None:
+        class Stat:
+            st_uid = 0
+
+        with patch("os.fstat", return_value=Stat()), patch("os.geteuid", return_value=1234):
+            with open_nofollow(self.real_path, "r", encoding="utf-8") as f:
+                self.assertEqual("hello", f.read())
+
+    def test_write_requires_ownership_and_closes_fd(self) -> None:
+        class Stat:
+            st_uid = 0
+
+        orig_close = os.close
+        with (
+            patch("os.fstat", return_value=Stat()),
+            patch("os.geteuid", return_value=1234),
+            patch("os.close", side_effect=orig_close) as m_close,
+        ):
+            with self.assertRaises(PermissionError) as cm:
+                open_nofollow(self.real_path, "a", encoding="utf-8")
+        self.assertEqual(errno.EPERM, cm.exception.errno)
+        m_close.assert_called_once()
+
     def test_owner_mismatch_raises_and_closes_fd(self) -> None:
         class Stat:
             st_uid = os.geteuid() + 1
