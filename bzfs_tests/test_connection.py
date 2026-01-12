@@ -506,6 +506,8 @@ class TestSimpleMiniRemote(AbstractTestCase):
         # location must be 'src' or 'dst'
         with self.assertRaises(ValueError):
             connection.create_simple_miniremote(log=self.log, location="invalid")
+        with self.assertRaises(ValueError):
+            connection.create_simple_miniremote(log=self.log, ssh_user_host="-oProxyCommand=evil")
 
     def test_invalid_ssh_program_raises_valueerror(self) -> None:
         with self.assertRaises(ValueError):

@@ -1802,7 +1802,7 @@ def parse_dataset_locator(
 def validate_user_name(user: str, input_text: str) -> None:
     """Checks that the username is safe for ssh or local usage."""
     invalid_chars: str = SHELL_CHARS + "/"
-    if user and (".." in user or any(c.isspace() or c in invalid_chars for c in user)):
+    if user and (user.startswith("-") or ".." in user or any(c.isspace() or c in invalid_chars for c in user)):
         die(f"Invalid user name: '{user}' for: '{input_text}'")
 
 

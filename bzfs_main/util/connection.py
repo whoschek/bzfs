@@ -220,6 +220,8 @@ def create_simple_miniremote(
         raise ValueError("ssh_program must be a non-empty string")
     if location not in ("src", "dst"):
         raise ValueError("location must be 'src' or 'dst'")
+    if ssh_user_host.startswith("-"):
+        raise ValueError("ssh_user_host must not start with '-'")
     if ssh_control_persist_secs < 1:
         raise ValueError("ssh_control_persist_secs must be >= 1")
     params: MiniParams = SimpleMiniParams(log=log, ssh_program=ssh_program)
