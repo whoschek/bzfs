@@ -942,7 +942,7 @@ def _delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
         stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
         retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
-        # op isn't idempotent so retries regather current state from the start
+        # op isn't idempotent so retries regather current state from the start of delete_destination_snapshots() or similar
         raise RetryableError(
             "Subprocess failed", display_msg="zfs destroy snapshot", retry_immediately_once=retry_immediately_once
         ) from e

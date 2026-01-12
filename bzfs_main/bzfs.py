@@ -1560,6 +1560,7 @@ class Job(MiniJob):
         remote: Remote,
         sorted_datasets: list[str],
         labels: list[SnapshotLabel],
+        *,
         fn_latest: Callable[[int, int, str, str], None],  # callback function for latest snapshot
         fn_oldest: Callable[[int, int, str, str], None] | None = None,  # callback function for oldest snapshot
         fn_oldest_skip_holds: Sequence[bool] = (),

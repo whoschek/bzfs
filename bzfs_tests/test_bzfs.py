@@ -1672,7 +1672,14 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
             oldest_calls.append((i, t, dataset, snap))
 
         with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", new=fake_zfs_list):
-            missing = job.handle_minmax_snapshots(remote, datasets, [label1, label2], latest_cb, oldest_cb, [False, False])
+            missing = job.handle_minmax_snapshots(
+                remote,
+                datasets,
+                [label1, label2],
+                fn_latest=latest_cb,
+                fn_oldest=oldest_cb,
+                fn_oldest_skip_holds=[False, False],
+            )
 
         self.assertListEqual(["tank/ds3"], missing)
 
@@ -1735,7 +1742,12 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
 
         with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", new=fake_zfs_list):
             missing = job.handle_minmax_snapshots(
-                remote, datasets, [label], latest_cb, oldest_cb, fn_oldest_skip_holds=[True]
+                remote,
+                datasets,
+                [label],
+                fn_latest=latest_cb,
+                fn_oldest=oldest_cb,
+                fn_oldest_skip_holds=[True],
             )
 
         self.assertListEqual([], missing)
@@ -1776,7 +1788,7 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
             latest_calls.append((i, t, dataset, snap))
 
         with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", new=fake_zfs_list):
-            missing = job.handle_minmax_snapshots(remote, datasets, [label], latest_cb)
+            missing = job.handle_minmax_snapshots(remote, datasets, [label], fn_latest=latest_cb)
 
         self.assertListEqual(["tank/ds2"], missing)
         self.assertListEqual(

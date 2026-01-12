@@ -851,7 +851,7 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
 
 
 def validate_property_name(propname: str, input_text: str) -> str:
-    """Checks that the ZFS property name contains no spaces or shell chars."""
+    """Checks that the ZFS property name contains no spaces or shell chars, etc."""
     invalid_chars: str = SHELL_CHARS
     if (not propname) or propname.startswith("-") or any(char.isspace() or char in invalid_chars for char in propname):
         die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
