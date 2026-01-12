@@ -726,6 +726,10 @@ class SmokeTestCase(IntegrationTestCase):
     def test_jobrunner_flat_simple(self) -> None:
         LocalTestCase(param=self.param).test_jobrunner_flat_simple()
 
+    def test_jobrunner_monitor_oldest_skip_holds(self) -> None:
+        """Ensures smoke coverage for jobrunner oldest hold skipping."""
+        LocalTestCase(param=self.param).test_jobrunner_monitor_oldest_skip_holds()
+
     def test_xbasic_replication_flat_with_bookmarks1(self) -> None:
         LocalTestCase(param=self.param).test_xbasic_replication_flat_with_bookmarks1()
 
@@ -5608,6 +5612,90 @@ class LocalTestCase(IntegrationTestCase):
                 pull_args_empty += [f"--src-snapshot-plan={src_snapshot_plan_empty}"]
                 run_jobrunner("--prune-src-snapshots", *pull_args_empty)
                 self.assertEqual(0, len(snapshots(src_root_dataset)))
+
+    def test_jobrunner_monitor_oldest_skip_holds(self) -> None:
+        """Integration coverage for `oldest_skip_holds` configuration option in bzfs_jobrunner monitoring.
+
+        Creates two snapshots for the same monitored label: an older snapshot that is held (`zfs hold` implies `userrefs>0`)
+        and a newer snapshot without holds. The test asserts that `oldest_skip_holds=True` reports OK (the held snapshot is
+        ignored when choosing the oldest), and that `oldest_skip_holds=False` reports CRITICAL (the held snapshot becomes the
+        oldest and is therefore too old).
+        The test intentionally uses a short sleep to ensure the held snapshot becomes stale while the non-held snapshot
+        remains fresh.
+        """
+
+        def run_jobrunner(*args: str, **kwargs: Any) -> bzfs_jobrunner.Job:
+            return self.run_bzfs_jobrunner(*args, **kwargs)
+
+        self.tearDownAndSetup()
+        self.assert_snapshots(src_root_dataset, 0)
+
+        localhostname = socket.gethostname()
+        src_hosts = [localhostname]  # for local mode (no ssh, no network)
+        dst_hosts = {localhostname: ["onsite"]}
+        retain_dst_targets = dst_hosts.copy()
+        dst_root_datasets = {localhostname: ""}
+        src_snapshot_plan = {"z": {"onsite": {"millisecondly": 1}}}
+        dst_snapshot_plan = {"z": {"onsite": {"millisecondly": 1}}}
+        src_bookmark_plan = dst_snapshot_plan
+
+        jobrunner_args = [
+            "--root-dataset-pairs",
+            src_root_dataset,
+            dst_root_dataset,
+            f"--src-hosts={src_hosts}",
+            f"--localhost={localhostname}",
+            f"--dst-hosts={dst_hosts}",
+            f"--retain-dst-targets={retain_dst_targets}",
+            f"--dst-root-datasets={dst_root_datasets}",
+            f"--src-snapshot-plan={src_snapshot_plan}",
+            f"--src-bookmark-plan={src_bookmark_plan}",
+            f"--dst-snapshot-plan={dst_snapshot_plan}",
+            "--job-id=myjobid",
+            f"--ssh-src-port={getenv_any('test_ssh_port', '22')}",
+            f"--ssh-dst-port={getenv_any('test_ssh_port', '22')}",
+        ]
+
+        held_snapshot = take_snapshot(src_root_dataset, "z_onsite_20000101_000000_millisecondly")
+        hold_tag = "bzfs_test_hold"
+        self.assertEqual("0", snapshot_property(held_snapshot, "userrefs"))
+        run_cmd(sudo_cmd + ["zfs", "hold", hold_tag, held_snapshot])
+        self.assertEqual("1", snapshot_property(held_snapshot, "userrefs"))
+        try:
+            time.sleep(3.0)  # ensure the held snapshot becomes older than the critical threshold
+            nonheld_snapshot = take_snapshot(src_root_dataset, "z_onsite_20000101_000001_millisecondly")
+            self.assertEqual("0", snapshot_property(nonheld_snapshot, "userrefs"))
+
+            def monitor_plan(oldest_skip_holds: bool) -> dict[str, dict[str, dict[str, dict[str, Any]]]]:
+                return {
+                    "z": {
+                        "onsite": {
+                            "millisecondly": {
+                                "critical": "2 seconds",
+                                "src_snapshot_cycles": 0,  # do not extend threshold by period duration
+                                "oldest_skip_holds": oldest_skip_holds,
+                            }
+                        }
+                    }
+                }
+
+            run_jobrunner(
+                "--monitor-snapshots-no-latest-check",
+                "--monitor-src-snapshots",
+                f"--monitor-snapshot-plan={monitor_plan(True)}",
+                *jobrunner_args,
+            )
+            run_jobrunner(
+                "--monitor-snapshots-no-latest-check",
+                "--monitor-src-snapshots",
+                f"--monitor-snapshot-plan={monitor_plan(False)}",
+                *jobrunner_args,
+                expected_status=bzfs.CRITICAL_STATUS,
+            )
+        finally:
+            if held_snapshot in snapshots(src_root_dataset):
+                run_cmd(sudo_cmd + ["zfs", "release", hold_tag, held_snapshot])
+                self.assertEqual("0", snapshot_property(held_snapshot, "userrefs"))
 
 
 #############################################################################

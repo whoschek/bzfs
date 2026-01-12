@@ -774,6 +774,7 @@ class MonitorSnapshotAlert:
     label: SnapshotLabel
     latest: AlertConfig | None
     oldest: AlertConfig | None
+    oldest_skip_holds: bool
 
 
 #############################################################################
@@ -797,6 +798,7 @@ class MonitorSnapshotsConfig:
                 for period_unit, alert_dicts in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     label = SnapshotLabel(prefix=prefix, infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
                     alert_latest, alert_oldest = None, None
+                    oldest_skip_holds: bool = False
                     for alert_type, alert_dict in alert_dicts.items():
                         m = "--monitor-snapshots: "
                         if alert_type not in ["latest", "oldest"]:
@@ -812,6 +814,10 @@ class MonitorSnapshotsConfig:
                                 critical_millis = max(0, parse_duration_to_milliseconds(str(value), context=context))
                             elif kind == "cycles":
                                 cycles = max(0, int(value))
+                            elif kind == "oldest_skip_holds" and alert_type == "oldest":
+                                if not isinstance(value, bool):
+                                    die(f"{m}'{kind}' must be a bool within {context}")
+                                oldest_skip_holds = value
                             else:
                                 die(f"{m}'{kind}' must be 'warning', 'critical' or 'cycles' within {context}")
                         if warning_millis > 0 or critical_millis > 0:
@@ -831,7 +837,7 @@ class MonitorSnapshotsConfig:
                                 if not self.no_oldest_check:
                                     alert_oldest = alert_config
                     if alert_latest is not None or alert_oldest is not None:
-                        alerts.append(MonitorSnapshotAlert(label, alert_latest, alert_oldest))
+                        alerts.append(MonitorSnapshotAlert(label, alert_latest, alert_oldest, oldest_skip_holds))
 
         def alert_sort_key(alert: MonitorSnapshotAlert) -> tuple[int, SnapshotLabel]:
             duration_amount, duration_unit = xperiods.suffix_to_duration1(alert.label.suffix)

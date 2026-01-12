@@ -637,9 +637,37 @@ class TestHelperFunctions(AbstractTestCase):
             [(alert.oldest.warning_millis, alert.oldest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
+        self.assertListEqual([False], [alert.oldest_skip_holds for alert in config.alerts])
         self.assertTrue(config.enable_monitor_snapshots)
         self.assertFalse(config.dont_warn)
         self.assertFalse(config.dont_crit)
+
+        args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--monitor-snapshots=" + plan({"oldest": {"warning": "1 millis", "oldest_skip_holds": True, "cycles": 1}}),
+            ]
+        )
+        config = configuration.MonitorSnapshotsConfig(args, params)
+        self.assertTrue(str(config))
+        self.assertListEqual([None], [alert.latest for alert in config.alerts])
+        self.assertListEqual(
+            [(100 + 1, UNIX_TIME_INFINITY_SECS)],
+            [(alert.oldest.warning_millis, alert.oldest.critical_millis) for alert in config.alerts],  # type: ignore
+        )
+        self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
+        self.assertListEqual([True], [alert.oldest_skip_holds for alert in config.alerts])
+
+        args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--monitor-snapshots=" + plan({"oldest": {"warning": "1 millis", "oldest_skip_holds": "true", "cycles": 1}}),
+            ]
+        )
+        with self.assertRaises(SystemExit):
+            configuration.MonitorSnapshotsConfig(args, params)
 
         args = bzfs.argument_parser().parse_args(
             ["src", "dst", "--monitor-snapshots=" + plan({"latest": {"warning": "2 millis"}})]

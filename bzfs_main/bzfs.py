@@ -60,6 +60,7 @@ from collections import (
 )
 from collections.abc import (
     Collection,
+    Sequence,
 )
 from datetime import (
     datetime,
@@ -1061,6 +1062,7 @@ class Job(MiniJob):
         p, log = self.params, self.params.log
         alerts: list[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
         labels: list[SnapshotLabel] = [alert.label for alert in alerts]
+        oldest_skip_holds: list[bool] = [alert.oldest_skip_holds for alert in alerts]
         current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
         is_debug: bool = log.isEnabledFor(LOG_DEBUG)
         if is_caching_snapshots(p, remote):
@@ -1179,7 +1181,12 @@ class Job(MiniJob):
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
         is_caching = is_caching_snapshots(p, remote)
         datasets_without_snapshots: list[str] = self.handle_minmax_snapshots(
-            remote, stale_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
+            remote,
+            stale_datasets,
+            labels,
+            fn_latest=alert_latest_snapshot,
+            fn_oldest=alert_oldest_snapshot,
+            fn_oldest_skip_holds=oldest_skip_holds,
         )
         for dataset in datasets_without_snapshots:
             for i in range(len(alerts)):
@@ -1555,26 +1562,52 @@ class Job(MiniJob):
         labels: list[SnapshotLabel],
         fn_latest: Callable[[int, int, str, str], None],  # callback function for latest snapshot
         fn_oldest: Callable[[int, int, str, str], None] | None = None,  # callback function for oldest snapshot
+        fn_oldest_skip_holds: Sequence[bool] = (),
         fn_on_finish_dataset: Callable[[str], None] = lambda dataset: None,
     ) -> list[str]:  # thread-safe
         """For each dataset in `sorted_datasets`, for each label in `labels`, finds the latest and oldest snapshot, and runs
-        the callback functions on them; Ignores the timestamp of the input labels and the timestamp of the snapshot names."""
+        the callback functions on them; Ignores the timestamp of the input labels and the timestamp of the snapshot names.
+
+        If the (optional) fn_oldest_skip_holds=True for a given label, then snapshots for that label that carry a 'zfs hold'
+        are skipped (ignored) when finding the oldest snapshot for fn_oldest. This can be useful for monitor_snapshots(),
+        given that users often intentionally retain holds for longer than the "normal" snapshot retention period, and this
+        shouldn't necessarily cause monitoring to emit alerts.
+        """
+        if fn_oldest is not None:
+            assert len(labels) == len(fn_oldest_skip_holds)
         assert (not self.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
+        no_userrefs: tuple[str, ...] = ("", "-", "0")  # ZFS snapshot property userrefs > 0 indicates a zfs hold
+
+        def extract_fields(line: str) -> tuple[int, int, str, bool]:
+            fields: list[str] = line.split("\t")
+            if len(fields) == 3:
+                name, createtxg, creation_unixtime_secs = fields
+                userrefs = ""
+            else:
+                name, createtxg, creation_unixtime_secs, userrefs = fields
+            return (
+                int(createtxg),
+                int(creation_unixtime_secs),
+                name.split("@", 1)[1],
+                userrefs in no_userrefs,
+            )
+
         p = self.params
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
+        props: str = "name,createtxg,creation"
+        props = props if fn_oldest is None or not any(fn_oldest_skip_holds) else props + ",userrefs"
+        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")  # sorts by dataset,creation
         datasets_with_snapshots: set[str] = set()
         interner: SortedInterner[str] = SortedInterner(sorted_datasets)  # reduces memory footprint
         for lines in zfs_list_snapshots_in_parallel(self, remote, cmd, sorted_datasets, ordered=False):
             # streaming group by dataset name (consumes constant memory only)
-            for dataset, group in itertools.groupby(lines, key=lambda line: line.rsplit("\t", 1)[1].split("@", 1)[0]):
+            for dataset, group in itertools.groupby(lines, key=lambda line: line.split("\t", 1)[0].split("@", 1)[0]):
                 dataset = interner.interned(dataset)
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
-                    (int(createtxg), int(creation_unixtime_secs), name.split("@", 1)[1])
-                    for createtxg, creation_unixtime_secs, name in (line.split("\t", 2) for line in group)
+                    extract_fields(line) for line in group
                 )  # perf: sorted() is fast because Timsort is close to O(N) for nearly sorted input, which is our case
                 assert len(snapshots) > 0
                 datasets_with_snapshots.add(dataset)
-                snapshot_names: tuple[str, ...] = tuple(snapshot[-1] for snapshot in snapshots)
+                snapshot_names: tuple[str, ...] = tuple(snapshot[2] for snapshot in snapshots)
                 year_with_4_digits_regex: re.Pattern[str] = YEAR_WITH_FOUR_DIGITS_REGEX
                 year_with_4_digits_regex_fullmatch = year_with_4_digits_regex.fullmatch
                 startswith = str.startswith
@@ -1592,6 +1625,7 @@ class Job(MiniJob):
                     for fn, is_reverse in fns:
                         creation_unixtime_secs: int = 0  # find creation time of latest or oldest snapshot matching the label
                         minmax_snapshot: str = ""
+                        no_skip_holds: bool = is_reverse or not fn_oldest_skip_holds[i]
                         for j in range(len(snapshot_names) - 1, -1, -1) if is_reverse else range(len(snapshot_names)):
                             snapshot_name: str = snapshot_names[j]
                             if (
@@ -1599,6 +1633,7 @@ class Job(MiniJob):
                                 and startswith(snapshot_name, start)  # aka snapshot_name.startswith(start)
                                 and len(snapshot_name) >= minlen
                                 and (has_infix or year_with_4_digits_regex_fullmatch(snapshot_name, startlen, startlen_4))
+                                and (no_skip_holds or snapshots[j][3])
                             ):
                                 creation_unixtime_secs = snapshots[j][1]
                                 minmax_snapshot = snapshot_name

@@ -217,6 +217,7 @@ src_bookmark_plan = dst_snapshot_plan
 #                 "critical": "8 hours",
 #                 "src_snapshot_cycles": 40,  # overrides plan period number (optional)
 #                 "dst_snapshot_cycles": 80,  # overrides plan period number (optional)
+#                 "oldest_skip_holds": True,  # snapshots that carry a 'zfs hold' are skipped when monitoring the oldest snap
 #             },
 #         },
 #     },

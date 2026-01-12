@@ -763,6 +763,7 @@ class Job:
                         latest_dict.pop(f"{prefix}cycles", None)
                     oldest_dict = latest_dict.copy()
                     oldest_dict["cycles"] = int(alertdict.get(f"{cycles_prefix}cycles", cycles))
+                    latest_dict.pop("oldest_skip_holds", None)
                     return {"latest": latest_dict, "oldest": oldest_dict}
 
                 return {

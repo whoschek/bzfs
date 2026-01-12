@@ -1644,11 +1644,11 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
         datasets = ["tank/ds1", "tank/ds2", "tank/ds3", "tank/ds4"]
 
         lines = [
-            "1\t100\ttank/ds1@bzfs_2023-01-01_00:00:00_hourly",
-            "2\t200\ttank/ds1@bzfs_2024-01-01_00:00:00_hourly",
-            "1\t150\ttank/ds2@unrelated_snap",
-            "1\t100\ttank/ds4@bzfs_us-west-1_2023-01-01_00:00:00_hourly",
-            "2\t200\ttank/ds4@bzfs_us-west-1_2024-01-01_00:00:00_hourly",
+            "tank/ds1@bzfs_2023-01-01_00:00:00_hourly\t1\t100",
+            "tank/ds1@bzfs_2024-01-01_00:00:00_hourly\t2\t200",
+            "tank/ds2@unrelated_snap\t1\t150",
+            "tank/ds4@bzfs_us-west-1_2023-01-01_00:00:00_hourly\t1\t100",
+            "tank/ds4@bzfs_us-west-1_2024-01-01_00:00:00_hourly\t2\t200",
         ]
 
         def fake_zfs_list(
@@ -1658,6 +1658,8 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
             datasets_arg: list[str],
             ordered: bool = False,
         ) -> Iterator[list[str]]:
+            o_index = cmd.index("-o")
+            self.assertNotIn("userrefs", cmd[o_index + 1].split(","))
             yield lines
 
         latest_calls: list[tuple[int, int, str, str]] = []
@@ -1670,7 +1672,7 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
             oldest_calls.append((i, t, dataset, snap))
 
         with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", new=fake_zfs_list):
-            missing = job.handle_minmax_snapshots(remote, datasets, [label1, label2], latest_cb, oldest_cb)
+            missing = job.handle_minmax_snapshots(remote, datasets, [label1, label2], latest_cb, oldest_cb, [False, False])
 
         self.assertListEqual(["tank/ds3"], missing)
 
@@ -1694,6 +1696,52 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
         ]
         self.assertListEqual(expected_oldest, oldest_calls)
 
+    def test_oldest_skip_holds_ignores_held_snapshots(self) -> None:
+        """Ensures oldest selection ignores snapshots with user holds when requested."""
+
+        args = self.argparser_parse_args(args=["src", "dst"])
+        job = bzfs.Job()
+        job.params = self.make_params(args=args)
+        job.is_test_mode = True
+        remote = MagicMock(spec=Remote)
+        label = SnapshotLabel("bzfs_", "", "", "_hourly")
+        datasets = ["tank/ds1"]
+
+        lines = [
+            "tank/ds1@bzfs_2023-01-01_00:00:00_hourly\t1\t100\t1",
+            "tank/ds1@bzfs_2023-02-01_00:00:00_hourly\t2\t150\t0",
+            "tank/ds1@bzfs_2023-03-01_00:00:00_hourly\t3\t200\t0",
+        ]
+
+        def fake_zfs_list(
+            job_obj: bzfs.Job,
+            remote_obj: Remote,
+            cmd: list[str],
+            datasets_arg: list[str],
+            ordered: bool = False,
+        ) -> Iterator[list[str]]:
+            o_index = cmd.index("-o")
+            self.assertIn("userrefs", cmd[o_index + 1].split(","))
+            yield lines
+
+        latest_calls: list[tuple[int, int, str, str]] = []
+        oldest_calls: list[tuple[int, int, str, str]] = []
+
+        def latest_cb(i: int, t: int, dataset: str, snap: str) -> None:
+            latest_calls.append((i, t, dataset, snap))
+
+        def oldest_cb(i: int, t: int, dataset: str, snap: str) -> None:
+            oldest_calls.append((i, t, dataset, snap))
+
+        with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", new=fake_zfs_list):
+            missing = job.handle_minmax_snapshots(
+                remote, datasets, [label], latest_cb, oldest_cb, fn_oldest_skip_holds=[True]
+            )
+
+        self.assertListEqual([], missing)
+        self.assertListEqual([(0, 200, "tank/ds1", "bzfs_2023-03-01_00:00:00_hourly")], latest_calls)
+        self.assertListEqual([(0, 150, "tank/ds1", "bzfs_2023-02-01_00:00:00_hourly")], oldest_calls)
+
     def test_latest_only(self) -> None:
         """Ensures latest callback runs when oldest is omitted and reports missing datasets."""
 
@@ -1707,8 +1755,8 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
         datasets = ["tank/ds1", "tank/ds2"]
 
         lines = [
-            "1\t100\ttank/ds1@bzfs_2023-01-01_00:00:00_hourly",
-            "2\t200\ttank/ds1@bzfs_2024-01-01_00:00:00_hourly",
+            "tank/ds1@bzfs_2023-01-01_00:00:00_hourly\t1\t100",
+            "tank/ds1@bzfs_2024-01-01_00:00:00_hourly\t2\t200",
         ]
 
         def fake_zfs_list(
@@ -1718,6 +1766,8 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
             datasets_arg: list[str],
             ordered: bool = False,
         ) -> Iterator[list[str]]:
+            o_index = cmd.index("-o")
+            self.assertNotIn("userrefs", cmd[o_index + 1].split(","))
             yield lines
 
         latest_calls: list[tuple[int, int, str, str]] = []
