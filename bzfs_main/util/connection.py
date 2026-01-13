@@ -93,6 +93,7 @@ from bzfs_main.util.retry import (
 )
 from bzfs_main.util.utils import (
     LOG_TRACE,
+    SHELL_CHARS,
     SmallPriorityQueue,
     Subprocesses,
     die,
@@ -215,14 +216,20 @@ def create_simple_miniremote(
                 return "-"  # local mode
             return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"
 
+    def validate_userhost(userhost: str) -> None:
+        invalid_chars: str = SHELL_CHARS + "/"
+        uh: str = userhost.replace("@", "", 1)
+        if (not uh) or userhost.startswith("-") or ".." in userhost or any(c.isspace() or c in invalid_chars for c in uh):
+            raise ValueError(f"Invalid ssh [user@]host: '{userhost}'")
+
     if log is None:
         raise ValueError("log must not be None")
     if not ssh_program:
         raise ValueError("ssh_program must be a non-empty string")
     if location not in ("src", "dst"):
         raise ValueError("location must be 'src' or 'dst'")
-    if ssh_user_host.startswith("-"):
-        raise ValueError("ssh_user_host must not start with '-'")
+    if ssh_user_host:
+        validate_userhost(ssh_user_host)
     if ssh_control_persist_secs < 1:
         raise ValueError("ssh_control_persist_secs must be >= 1")
     params: MiniParams = SimpleMiniParams(log=log, ssh_program=ssh_program)
