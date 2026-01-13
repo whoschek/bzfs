@@ -726,10 +726,6 @@ class SmokeTestCase(IntegrationTestCase):
     def test_jobrunner_flat_simple(self) -> None:
         LocalTestCase(param=self.param).test_jobrunner_flat_simple()
 
-    def test_jobrunner_monitor_oldest_skip_holds(self) -> None:
-        """Ensures smoke coverage for jobrunner oldest hold skipping."""
-        LocalTestCase(param=self.param).test_jobrunner_monitor_oldest_skip_holds()
-
     def test_xbasic_replication_flat_with_bookmarks1(self) -> None:
         LocalTestCase(param=self.param).test_xbasic_replication_flat_with_bookmarks1()
 
