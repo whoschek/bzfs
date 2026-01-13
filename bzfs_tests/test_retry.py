@@ -1328,7 +1328,7 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         def _strategy(
             retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
         ) -> tuple[int, int]:
-            strategy = strategies[min(max(retry.count, 0), len(strategies) - 1)]
+            strategy = strategies[min(retry.count, len(strategies) - 1)]
             return strategy(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)
 
         return _strategy

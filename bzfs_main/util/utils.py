@@ -96,7 +96,8 @@ LOG_TRACE: Final[int] = logging.DEBUG // 2  # custom log level is halfway in bet
 YEAR_WITH_FOUR_DIGITS_REGEX: Final[re.Pattern] = re.compile(r"[1-9][0-9][0-9][0-9]")  # empty shall not match nonempty target
 UNIX_TIME_INFINITY_SECS: Final[int] = 2**64  # billions of years and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET: Final[str] = ""
-SHELL_CHARS: Final[str] = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
+SHELL_CHARS: Final[str] = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"  # intentionally not included: -_.:/
+SHELL_CHARS_AND_SLASH: Final[str] = SHELL_CHARS + "/"
 FILE_PERMISSIONS: Final[int] = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
 DIR_PERMISSIONS: Final[int] = stat.S_IRWXU  # rwx------ (user read + write + execute)
 UMASK: Final[int] = (~DIR_PERMISSIONS) & 0o777  # so intermediate dirs created by os.makedirs() have stricter permissions

@@ -214,7 +214,7 @@ class Params(MiniParams):
         sys_argv: list[str],
         log_params: LogParams,
         log: Logger,
-        inject_params: dict[str, bool] | None = None,
+        inject_params: dict[str, bool] | None = None,  # for testing only
     ) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
@@ -530,7 +530,7 @@ class Remote(MiniRemote):
             self.ssh_exit_on_shutdown_socket_dir: Final[str] = os.path.join(self.ssh_socket_dir, "x")
             os.makedirs(self.ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             validate_file_permissions(self.ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS)
-            _delete_stale_files(self.ssh_exit_on_shutdown_socket_dir, self.socket_prefix, ssh=True)
+            _delete_stale_files(self.ssh_exit_on_shutdown_socket_dir, prefix=self.socket_prefix, ssh=True)
         self.sanitize1_regex: Final[re.Pattern[str]] = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with ~ char
         self.sanitize2_regex: Final[re.Pattern[str]] = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # remove bad chars
 
@@ -855,6 +855,7 @@ class MonitorSnapshotsConfig:
 #############################################################################
 def _fix_send_recv_opts(
     opts: list[str],
+    *,
     exclude_long_opts: set[str],
     exclude_short_opts: str,
     include_arg_opts: set[str],
@@ -897,6 +898,7 @@ _SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: Final[re.Pattern[str]] = re.compile(r"
 
 def _delete_stale_files(
     root_dir: str,
+    *,
     prefix: str,
     millis: int = 60 * 60 * 1000,
     dirs: bool = False,

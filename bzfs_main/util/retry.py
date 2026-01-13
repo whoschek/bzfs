@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Customizable generic retry support using jittered exponential backoff with cap.
+"""Customizable generic retry framework using jittered exponential backoff with cap.
 
 Purpose:
 --------
@@ -40,7 +40,7 @@ Usage:
 Advanced Configuration:
 -----------------------
 - Tune ``RetryPolicy`` parameters to control maximum retries, sleep bounds, and elapsed-time budget.
-- Use ``RetryConfig`` to control logging settings and termination events.
+- Use ``RetryConfig`` to control logging settings and async termination events.
 - Set ``log=None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
 - Pass ``termination_event`` via ``RetryConfig`` to support async cancellation between attempts.
 - Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, error/status
@@ -89,7 +89,7 @@ Example Usage:
             return "ok"
         except ValueError as exc:
             # Preserve the underlying cause for correct error propagation and logging
-            raise RetryableError("temporary failure", display_msg="connect") from exc
+            raise RetryableError(display_msg="connect") from exc
 
     retry_policy = RetryPolicy(
         max_retries=10,
@@ -358,7 +358,7 @@ class RetryableError(Exception):
 
     def __init__(
         self,
-        *exc_args: object,
+        *exc_args: object,  # optional args passed into super().__init__()
         display_msg: object = None,  # for logging
         retry_immediately_once: bool = False,  # retry once immediately without backoff?
         attachment: object = None,  # optional domain specific info passed to next attempt via Retry.previous_outcomes if

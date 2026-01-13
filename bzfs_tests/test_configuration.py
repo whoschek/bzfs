@@ -258,7 +258,7 @@ class TestHelperFunctions(AbstractTestCase):
             non_socket_file = os.path.join(tmpdir, "f")
             Path(non_socket_file).touch()
 
-            configuration._delete_stale_files(tmpdir, "s", millis=31 * 24 * 60 * 60 * 1000)
+            configuration._delete_stale_files(tmpdir, prefix="s", millis=31 * 24 * 60 * 60 * 1000)
 
             self.assertTrue(os.path.exists(new_socket_file))
             self.assertFalse(os.path.exists(stale_socket_file))
@@ -275,7 +275,7 @@ class TestHelperFunctions(AbstractTestCase):
                 sock.bind(socket_path)
                 time.sleep(0.001)  # sleep to ensure the file's mtime is in the past
                 # Call delete_stale_files with millis=0 to mark all files as stale.
-                configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+                configuration._delete_stale_files(tmpdir, prefix="s", millis=0, ssh=True)
                 # The file should still exist because the current process is alive.
                 self.assertTrue(os.path.exists(socket_path))
             finally:
@@ -296,7 +296,7 @@ class TestHelperFunctions(AbstractTestCase):
             try:
                 sock.bind(socket_path)
                 time.sleep(0.001)  # sleep to ensure the file's mtime is in the past
-                configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+                configuration._delete_stale_files(tmpdir, prefix="s", millis=0, ssh=True)
                 # The file should be removed because the fake pid is not alive.
                 self.assertFalse(os.path.exists(socket_path))
             finally:
@@ -309,7 +309,7 @@ class TestHelperFunctions(AbstractTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             regular_file = os.path.join(tmpdir, "s_regular_file")
             Path(regular_file).touch()
-            configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+            configuration._delete_stale_files(tmpdir, prefix="s", millis=0, ssh=True)
             self.assertFalse(os.path.exists(regular_file))
 
     def test_unset_matching_env_vars_include_overrides_exclude(self) -> None:

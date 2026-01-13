@@ -15,7 +15,7 @@
 """The core replication algorithm is in replicate_dataset(), which performs reliable full and/or incremental 'zfs send' and
 'zfs receive' operations on snapshots, using resumable ZFS sends when possible.
 
-For replication of multiple datasets, including recursive replication, see bzfs.py/replicate_datasets().
+For replication of multiple datasets, including recursive replication, see bzfs.py:replicate_datasets().
 """
 
 from __future__ import (
@@ -120,7 +120,7 @@ _RIGHT_JUST: Final[int] = 7
 
 def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
     """Replicates src_dataset to dst_dataset (thread-safe); For replication of multiple datasets, including recursive
-    replication, see bzfs.py/replicate_datasets()."""
+    replication, see bzfs.py:replicate_datasets()."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
     retry_count: int = retry.count
@@ -287,7 +287,7 @@ def _rollback_dst_dataset_if_necessary(
     done_checking: bool,
     tid: str,
 ) -> bool | tuple[str, str, bool]:
-    """On replication, rollback dst if necessary."""
+    """On replication, rollback dst if necessary; error out if not permitted."""
     p, log = job.params, job.params.log
     dst = p.dst
     latest_dst_snapshot: str = ""
@@ -371,7 +371,7 @@ def _replicate_dataset_fully(
     tid: str,
 ) -> tuple[str, bool, bool, int]:
     """On replication, deletes all dst snapshots and performs a full send of the oldest selected src snapshot, which in turn
-    creates a common snapshot."""
+    creates a common snapshot; error out if not permitted."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
     latest_common_src_snapshot: str = ""
@@ -1228,17 +1228,17 @@ def _add_recv_property_options(
 
 
 def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:
-    """Decline to start a state changing ZFS operation that is, although harmless, likely to collide with other currently
-    running processes. Instead, retry the operation later, after some delay. For example, decline to start a 'zfs receive'
-    into a destination dataset if another process is already running another 'zfs receive' into the same destination dataset,
-    as ZFS would reject any such attempt. However, it's actually fine to run an incremental 'zfs receive' into a dataset in
+    """Decline to start a state changing ZFS operation that is, although harmless, likely to collide with another currently
+    running process. Instead, retry the operation later, after some delay. For example, decline to start a 'zfs receive' into
+    a destination dataset if another process is already running another 'zfs receive' into the same destination dataset, as
+    ZFS would reject any such attempt. However, it's actually fine to run an incremental 'zfs receive' into a dataset in
     parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use cases where A replicates to B,
     and B replicates to C.
 
     _check_zfs_dataset_busy() offers no guarantees, it merely proactively avoids likely collisions. In other words, even if
     the process check below passes there is no guarantee that the destination dataset won't be busy by the time we actually
     execute the 'zfs send' operation. In such an event ZFS will reject the operation, we'll detect that, and we'll simply
-    retry, after some delay. _check_zfs_dataset_busy() can be disabled via --ps-program=-.
+    auto-retry, after some delay. _check_zfs_dataset_busy() can be disabled via --ps-program=-.
 
     TLDR: As is common for long-running operations in distributed systems, we use coordination-free optimistic concurrency
     control where the parties simply retry on collision detection (rather than coordinate concurrency via a remote lock
