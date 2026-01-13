@@ -126,7 +126,7 @@ def cut(field: int, separator: str = "\t", *, lines: list[str]) -> list[str]:
     assert isinstance(lines, list)
     assert len(separator) == 1
     if field == 1:
-        return [line[0 : line.index(separator)] for line in lines]
+        return [line[: line.index(separator)] for line in lines]
     elif field == 2:
         return [line[line.index(separator) + 1 :] for line in lines]
     else:

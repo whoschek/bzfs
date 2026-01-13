@@ -138,10 +138,10 @@ def itr_ssh_cmd_parallel(
     """
     return parallel_iterator(
         iterator_builder=lambda executr: (
-            itr_ssh_cmd_batched(
+            itr_ssh_cmd_batched(  # advancing the Generator submits the next task and yields the corresponding Future
                 job, r, cmd, cmd_args, lambda batch, cmd=cmd: executr.submit(fn, cmd, batch), max_batch_items=max_batch_items  # type: ignore[misc]
             )
-            for cmd, cmd_args in cmd_args_list
+            for cmd, cmd_args in cmd_args_list  # lazy on-demand Python Generator
         ),
         max_workers=job.max_workers[r.location],
         ordered=ordered,

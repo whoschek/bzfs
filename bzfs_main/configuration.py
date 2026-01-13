@@ -151,7 +151,7 @@ class LogParams:
             die(f"Basename of --log-dir must contain the substring '{LOG_DIR_DEFAULT}', but got: {log_parent_dir}")
         sep: str = "_" if args.log_subdir == "daily" else ":"
         timestamp: str = self.timestamp
-        subdir: str = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
+        subdir: str = timestamp[: timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
         self.log_dir: Final[str] = os.path.join(log_parent_dir, subdir)
         os.makedirs(log_parent_dir, mode=DIR_PERMISSIONS, exist_ok=True)
@@ -170,8 +170,8 @@ class LogParams:
         )
         os.fchmod(fd, FILE_PERMISSIONS)
         os.close(fd)
-        self.pv_log_file: Final[str] = self.log_file[0 : -len(".log")] + ".pv"
-        log_file_stem: str = os.path.basename(self.log_file)[0 : -len(".log")]
+        self.pv_log_file: Final[str] = self.log_file[: -len(".log")] + ".pv"
+        log_file_stem: str = os.path.basename(self.log_file)[: -len(".log")]
         # Python's standard logger naming API interprets chars such as '.', '-', ':', spaces, etc in special ways, e.g.
         # logging.getLogger("foo.bar") vs logging.getLogger("foo-bar"). Thus, we sanitize the Python logger name via a regex:
         self.logger_name_suffix: Final[str] = re.sub(r"[^A-Za-z0-9_]", repl="_", string=log_file_stem)
@@ -579,7 +579,7 @@ class Remote(MiniRemote):
                 optional: str = f"@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
                 socket_name: str = f"{self.socket_prefix}{unique}{optional}"
                 socket_file = os.path.join(self.ssh_exit_on_shutdown_socket_dir, socket_name)
-                socket_file = socket_file[0 : max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(socket_file) - len(optional))]
+                socket_file = socket_file[: max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(socket_file) - len(optional))]
                 # `ssh` will error out later if the max OS Unix domain socket path limit cannot be met reasonably as the
                 # home directory path is too long, typically because the Unix user name is unreasonably long.
             ssh_cmd += ["-S", socket_file]
@@ -746,7 +746,7 @@ class CreateSrcSnapshotConfig:
             timeformat = timeformat[0:-1] + "f"  # replace %F with %f (append microseconds)
         timestamp: str = self.current_datetime.strftime(timeformat)
         if is_millis:
-            timestamp = timestamp[0 : -len("000")]  # replace microseconds with milliseconds
+            timestamp = timestamp[: -len("000")]  # replace microseconds with milliseconds
         timestamp = timestamp.replace("+", "z")  # zfs CLI does not accept the '+' character in snapshot names
         return [SnapshotLabel(label.prefix, label.infix, timestamp, label.suffix) for label in self._snapshot_labels]
 

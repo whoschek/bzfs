@@ -854,7 +854,7 @@ class Job(MiniJob):
             dst_snaps_with_guids: list[str] = []
             no_userrefs: tuple[str, ...] = ("", "-", "0")  # ZFS snapshot property userrefs > 0 indicates a zfs hold
             for line in dst_snaps_with_guids_str.splitlines():
-                dst_snaps_with_guids.append(line[0 : line.rindex("\t")])  # strip off trailing userrefs column
+                dst_snaps_with_guids.append(line[: line.rindex("\t")])  # strip off trailing userrefs column
                 _, name, userrefs = line.rsplit("\t", 2)
                 if userrefs not in no_userrefs:
                     tag: str = name[name.index("@") + 1 :]
@@ -1013,7 +1013,7 @@ class Job(MiniJob):
         for snapshots in zfs_list_snapshots_in_parallel(self, dst, cmd, sorted(candidate_orphans), ordered=False):
             if with_bookmarks:
                 replace_in_lines(snapshots, old="#", new="@", count=1)  # treat bookmarks as snapshots
-            dst_datasets_having_snapshots.update(snap[0 : snap.index("@")] for snap in snapshots)  # union
+            dst_datasets_having_snapshots.update(snap[: snap.index("@")] for snap in snapshots)  # union
 
         orphans = compute_orphans(dst_datasets_having_snapshots)  # compute the real orphans
         delete_datasets(self, dst, orphans)  # finally, delete the orphan datasets in an efficient way
