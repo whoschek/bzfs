@@ -837,6 +837,19 @@ class TestCallWithRetries(unittest.TestCase):
             RetryPolicy(backoff_strategy=123)  # type: ignore[arg-type]
         self.assertIn("backoff_strategy", str(cm.exception))
 
+    def test_retry_policy_invalid_max_retries_raises_value_error(self) -> None:
+        """Ensures RetryPolicy rejects invalid values via _validate()."""
+        with self.assertRaises(ValueError) as cm:
+            RetryPolicy(max_retries=-1)
+        self.assertIn("Invalid RetryPolicy.max_retries", str(cm.exception))
+
+    def test_retry_policy_rejects_non_finite_durations(self) -> None:
+        """Ensures RetryPolicy rejects NaN/inf values for duration fields."""
+        with self.assertRaises(OverflowError):
+            RetryPolicy(max_elapsed_secs=float("inf"))
+        with self.assertRaises(ValueError):
+            RetryPolicy(max_sleep_secs=float("nan"))
+
     def test_retry_policy_invalid_reraise_raises_type_error(self) -> None:
         """Ensures RetryPolicy rejects a non-bool reraise value."""
         with self.assertRaises(TypeError) as cm:

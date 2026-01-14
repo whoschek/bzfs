@@ -586,28 +586,33 @@ class RetryPolicy:
             max_elapsed_secs=0,
         )
 
-    def __post_init__(self) -> None:  # compute derived values
-        object.__setattr__(self, "max_retries", max(0, self.max_retries))
-        object.__setattr__(self, "exponential_base", max(1, self.exponential_base))
-        object.__setattr__(self, "min_sleep_secs", max(0, self.min_sleep_secs))
-        object.__setattr__(self, "initial_max_sleep_secs", max(0, self.initial_max_sleep_secs))
-        object.__setattr__(self, "max_sleep_secs", max(0, self.max_sleep_secs))
-        object.__setattr__(self, "max_elapsed_secs", max(0, self.max_elapsed_secs))
-        object.__setattr__(self, "max_elapsed_nanos", int(self.max_elapsed_secs * 1_000_000_000))
+    def __post_init__(self) -> None:  # validate and compute derived values
+        self._validate("max_retries", self.max_retries, minimum=0)
+        self._validate("exponential_base", self.exponential_base, minimum=1)
+        self._validate("min_sleep_secs", self.min_sleep_secs, minimum=0)
+        self._validate("initial_max_sleep_secs", self.initial_max_sleep_secs, minimum=0)
+        self._validate("max_sleep_secs", self.max_sleep_secs, minimum=0)
+        self._validate("max_elapsed_secs", self.max_elapsed_secs, minimum=0)
+        object.__setattr__(self, "max_elapsed_nanos", int(self.max_elapsed_secs * 1_000_000_000))  # derived value
         min_sleep_nanos: int = int(self.min_sleep_secs * 1_000_000_000)
         initial_max_sleep_nanos: int = int(self.initial_max_sleep_secs * 1_000_000_000)
         max_sleep_nanos: int = int(self.max_sleep_secs * 1_000_000_000)
         max_sleep_nanos = max(min_sleep_nanos, max_sleep_nanos)
         initial_max_sleep_nanos = min(max_sleep_nanos, max(min_sleep_nanos, initial_max_sleep_nanos))
-        object.__setattr__(self, "min_sleep_nanos", min_sleep_nanos)
-        object.__setattr__(self, "initial_max_sleep_nanos", initial_max_sleep_nanos)
-        object.__setattr__(self, "max_sleep_nanos", max_sleep_nanos)
-        object.__setattr__(self, "max_previous_outcomes", max(0, self.max_previous_outcomes))
+        object.__setattr__(self, "min_sleep_nanos", min_sleep_nanos)  # derived value
+        object.__setattr__(self, "initial_max_sleep_nanos", initial_max_sleep_nanos)  # derived value
+        object.__setattr__(self, "max_sleep_nanos", max_sleep_nanos)  # derived value
+        self._validate("max_previous_outcomes", self.max_previous_outcomes, minimum=0)
         assert 0 <= self.min_sleep_nanos <= self.initial_max_sleep_nanos <= self.max_sleep_nanos
         if not callable(self.backoff_strategy):
             raise TypeError("RetryPolicy.backoff_strategy must be callable")
         if not isinstance(self.reraise, bool):
             raise TypeError("RetryPolicy.reraise must be bool")
+
+    @staticmethod
+    def _validate(name: str, value: float, minimum: float) -> None:
+        if minimum > value:
+            raise ValueError(f"Invalid RetryPolicy.{name}: must be >= {minimum} but got {value}")
 
     def copy(self, **override_kwargs: Any) -> RetryPolicy:
         """Creates a new policy copying an existing one with the specified fields overridden for customization; thread-safe.
