@@ -1,5 +1,5 @@
 # Copyright 2025 Wolfgang Hoschek AT mac DOT com
-# Written in 2025 by Orsiris de Jong - ozy AT netpower DOT fr
+# Written in 2025-2026 by Orsiris de Jong - ozy AT netpower DOT fr
 #
 # Licensed under the Apache License, Version 2.0 (the \"License\");
 # you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ from bzfs_main.prometheus_exporter import (
     _escape_label,
     _generate_job_id,
     write_prometheus_metrics,
+    _sanitize_filename
 )
 
 
@@ -186,16 +187,23 @@ class TestPrometheusExporter(unittest.TestCase):
 
             # Verify metrics file was created
             job_id = _generate_job_id(job)
-            prom_file = os.path.join(tmpdir, f"bzfs_{job_id}.prom")
-            self.assertTrue(os.path.exists(prom_file), f"Metrics file not found: {prom_file}")
+            action = "replicate"
+            src_root: str = job.src.basis_root_dataset.split(":")[1] if ":" in job.src.basis_root_dataset else job.src.basis_root_dataset
+            dst_root: str = job.dst.basis_root_dataset.split(":")[1] if ":" in job.dst.basis_root_dataset else job.dst.basis_root_dataset
+            # Prefer using basis_ssh_host (the given by cli args) in order to preserve proper metric labels instead of resvoled hostnames
+            src_host: str = job.src.ssh_host or job.src.basis_ssh_host or "localhost"
+            dst_host: str = job.dst.ssh_host or job.dst.basis_ssh_host or "localhost"
+            prom_file_prefix = f"bzfs_{job_id}_{action}_{_sanitize_filename(src_host)}_{_sanitize_filename(dst_host)}_{_sanitize_filename(src_root)}_{_sanitize_filename(dst_root)}"
+            prom_filename: str = f"{prom_file_prefix}.prom"
+            prom_filepath: str = os.path.join(tmpdir, prom_filename)
+            self.assertTrue(os.path.exists(prom_filepath), f"Metrics file not found: {prom_filepath}")
 
             # Read and verify contents
-            with open(prom_file, encoding="utf-8") as f:
+            with open(prom_filepath, encoding="utf-8") as f:
                 content = f.read()
 
             # Verify key metrics are present
             self.assertIn("bzfs_job_status", content)
-            self.assertIn("bzfs_job_exit_code", content)
             self.assertIn("bzfs_job_duration_seconds", content)
             self.assertIn("bzfs_snapshots_found_total", content)
             self.assertIn("bzfs_snapshots_replicated_total", content)
@@ -245,16 +253,25 @@ class TestPrometheusExporter(unittest.TestCase):
             )
 
             # Verify metrics file was created
+            # Verify metrics file was created
             job_id = _generate_job_id(job)
-            prom_file = os.path.join(tmpdir, f"bzfs_{job_id}.prom")
-            self.assertTrue(os.path.exists(prom_file))
+            action = "replicate"
+            src_root: str = job.src.basis_root_dataset.split(":")[1] if ":" in job.src.basis_root_dataset else job.src.basis_root_dataset
+            dst_root: str = job.dst.basis_root_dataset.split(":")[1] if ":" in job.dst.basis_root_dataset else job.dst.basis_root_dataset
+            # Prefer using basis_ssh_host (the given by cli args) in order to preserve proper metric labels instead of resvoled hostnames
+            src_host: str = job.src.ssh_host or job.src.basis_ssh_host or "localhost"
+            dst_host: str = job.dst.ssh_host or job.dst.basis_ssh_host or "localhost"
+            prom_file_prefix = f"bzfs_{job_id}_{action}_{_sanitize_filename(src_host)}_{_sanitize_filename(dst_host)}_{_sanitize_filename(src_root)}_{_sanitize_filename(dst_root)}"
+            prom_filename: str = f"{prom_file_prefix}.prom"
+            prom_filepath: str = os.path.join(tmpdir, prom_filename)
+            self.assertTrue(os.path.exists(prom_filepath))
 
-            with open(prom_file, encoding="utf-8") as f:
+            with open(prom_filepath, encoding="utf-8") as f:
                 content = f.read()
 
             # Verify exit code is 1 (failure)
-            self.assertIn("bzfs_job_exit_code", content)
-            lines = [line for line in content.split("\n") if "bzfs_job_exit_code{" in line]
+            self.assertIn("bzfs_job_status", content)
+            lines = [line for line in content.split("\n") if "bzfs_job_status{" in line]
             self.assertTrue(any(" 1 " in line for line in lines))
 
 
