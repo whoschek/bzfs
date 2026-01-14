@@ -16,7 +16,7 @@
 
 <!-- For example: "Fixes #1234" or "Closes #1234" -->
 
-### Checks
+### Checks (details are in AGENTS.md)
 
 - [ ] All *Change Validation Workflow* checks passed
 - [ ] All *Commit Workflow* checks passed
