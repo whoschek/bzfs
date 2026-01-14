@@ -1367,6 +1367,16 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         default="ERROR",
         help="Only send messages with equal or higher priority than this log level to syslog. Default is '%(default)s'.\n\n")
     parser.add_argument(
+        "--prometheus-textfile-dir", type=str, default=None, action=SafeDirectoryNameAction, metavar="DIR",
+        help="Path to directory where Prometheus metrics will be written in text format for node_exporter textfile "
+             "collector (optional). If specified, bzfs will write a .prom file containing job metrics on completion. "
+             "The metrics include job success/failure status, exit code, duration, snapshots replicated, bytes sent, "
+             "throughput, cache statistics, and more. Each job is identified by a unique job_id derived from the job "
+             "configuration (source/destination datasets and hosts). Metrics are written atomically to ensure "
+             "node_exporter only reads complete files. Example directory: /var/lib/node_exporter/textfile_collector. "
+             "See https://github.com/prometheus/node_exporter#textfile-collector for details on configuring "
+             "node_exporter to collect these metrics.\n\n")
+    parser.add_argument(
         "--include-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="On program startup, unset all Unix environment variables for which the full environment variable "
              "name matches at least one of the excludes but none of the includes. If an environment variable is "

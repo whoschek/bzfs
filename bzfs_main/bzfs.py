@@ -147,6 +147,10 @@ from bzfs_main.snapshot_cache import (
     SnapshotCache,
     set_last_modification_time_safe,
 )
+from bzfs_main.prometheus_exporter import (
+    write_prometheus_metrics,
+    write_prometheus_metrics_on_error,
+)
 from bzfs_main.util.connection import (
     SHARED,
     ConnectionPool,
@@ -382,19 +386,35 @@ class Job(MiniJob):
                             sys.stdout.flush()
             except subprocess.CalledProcessError as e:
                 log_error_on_exit(e, e.returncode)
+                write_prometheus_metrics_on_error(self, e.returncode, log)
                 raise
             except SystemExit as e:
                 log_error_on_exit(e, e.code)
+                write_prometheus_metrics_on_error(self, e.code if isinstance(e.code, int) else DIE_STATUS, log)
                 raise
             except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 log_error_on_exit(e, DIE_STATUS)
+                write_prometheus_metrics_on_error(self, DIE_STATUS, log)
                 raise SystemExit(DIE_STATUS) from e
             except re.error as e:
                 log_error_on_exit(f"{e} within regex {e.pattern!r}", DIE_STATUS)
+                write_prometheus_metrics_on_error(self, DIE_STATUS, log)
                 raise SystemExit(DIE_STATUS) from e
             except BaseException as e:
                 log_error_on_exit(e, DIE_STATUS, exc_info=True)
+                write_prometheus_metrics_on_error(self, DIE_STATUS, log)
                 raise SystemExit(DIE_STATUS) from e
+            else:
+                # Write Prometheus metrics on successful completion only
+                try:
+                    elapsed_nanos = time.monotonic_ns() - self.replication_start_time_nanos
+                    sent_bytes = 0
+                    if p.is_program_available("pv", "local"):
+                        sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
+                    # We consider that exit code is 0 since there were no errors reported
+                    write_prometheus_metrics(self, exit_code=0, elapsed_nanos=elapsed_nanos, sent_bytes=sent_bytes)
+                except Exception as prom_err:
+                    log.warning("Failed to write Prometheus metrics: %s", prom_err)
             finally:
                 log.info("%s", f"Log file was: {log_params.log_file}")
             log.info("Success. Goodbye!")
