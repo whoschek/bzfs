@@ -159,7 +159,7 @@ def sorted_dict(
     return dict(sorted(dictionary.items(), key=key, reverse=reverse))
 
 
-def tail(file: str, n: int, errors: str | None = None) -> Sequence[str]:
+def tail(file: str, *, n: int, errors: str | None = None) -> Sequence[str]:
     """Return the last ``n`` lines of ``file`` without following symlinks."""
     if not os.path.isfile(file):
         return []

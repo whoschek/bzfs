@@ -5033,7 +5033,7 @@ class LocalTestCase(IntegrationTestCase):
                     "--log-syslog-prefix=" + syslog_prefix,
                     "--skip-replication",
                 )
-                lines = list(utils.tail(syslog_path, 100, errors="surrogateescape"))
+                lines = list(utils.tail(syslog_path, n=100, errors="surrogateescape"))
                 k = -1
                 for kk, line in enumerate(lines):
                     if syslog_prefix in line and "Log file is:" in line:

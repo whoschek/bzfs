@@ -217,7 +217,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
             )
         )
         nonlocal now
-        now = now or round(time.time())  # uses the same timestamp across the entire dataset tree
+        now = now or int(time.time())  # ZFS truncates fractional secs in 'creation' so here we do, too. And keep now stable
         latcom = "latest common snapshot"
         for loc in all_src_dst:
             s = stats[loc]

@@ -126,7 +126,7 @@ class TestHelperFunctions(unittest.TestCase):
             subprocess.run(cmd, shell=True, check=True)
             num_bytes = count_num_bytes_transferred_by_zfs_send(pv_file)
             # print("pv_log_file: " + "\n".join(tail(pv_file, 10)))
-            self.assertTrue(tail(pv_file, 10)[-1].lstrip().startswith("275GiB: 16.0KiB"))
+            self.assertTrue(tail(pv_file, n=10)[-1].lstrip().startswith("275GiB: 16.0KiB"))
             self.assertEqual(16 * 1024, num_bytes)
         finally:
             Path(pv_file).unlink(missing_ok=True)
