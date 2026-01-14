@@ -1,5 +1,5 @@
 # Copyright 2025 Wolfgang Hoschek AT mac DOT com
-# Written in 2025 by Orsiris de Jong - ozy AT netpower DOT fr
+# Written in 2025-2026 by Orsiris de Jong - ozy AT netpower DOT com
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ import time
 from pathlib import (
     Path,
 )
+import re
+import unicodedata
 from typing import (
     TYPE_CHECKING,
     Final,
@@ -75,12 +77,12 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
     throughput_bytes_per_sec: float = sent_bytes / elapsed_secs if elapsed_secs > 0 and sent_bytes > 0 else 0
 
     # Extract source and destination info
-    src_root: str = p.src.basis_root_dataset
-    dst_root: str = p.dst.basis_root_dataset
+    # The following variables are formatted as host:dataset, so we need to extract the dataset name only
+    src_root: str = p.src.basis_root_dataset.split(":")[1] if ":" in p.src.basis_root_dataset else p.src.basis_root_dataset
+    dst_root: str = p.dst.basis_root_dataset.split(":")[1] if ":" in p.dst.basis_root_dataset else p.dst.basis_root_dataset
     # Prefer using basis_ssh_host (the given by cli args) in order to preserve proper metric labels instead of resvoled hostnames
-    src_host: str = p.src.basis_ssh_host or p.src.ssh_host or "localhost"
-    dst_host: str = p.dst.basis_ssh_host or p.src.ssh_host or "localhost"
-
+    src_host: str = p.src.ssh_host or p.src.basis_ssh_host or "localhost"
+    dst_host: str = p.dst.ssh_host or p.dst.basis_ssh_host or "localhost"
     # Determine the primary action(s) being performed
     action: str = _determine_action(p)
 
@@ -99,7 +101,9 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
     )
 
     # Add metrics with HELP and TYPE declarations
-    metrics.append("# HELP bzfs_job_status Indicates if the bzfs job completed successfully (0=success, anything else is the exit code)")
+    metrics.append(
+        "# HELP bzfs_job_status Indicates if the bzfs job completed successfully (0=success, anything else is the exit code)"
+    )
     metrics.append("# TYPE bzfs_job_status gauge")
     metrics.append(f"bzfs_job_status{{{labels}}} {exit_code}")
     metrics.append("")
@@ -119,12 +123,12 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
     metrics.append(f"bzfs_snapshots_found_total{{{labels}}} {job.num_snapshots_found}")
     metrics.append("")
 
-    metrics.append("# HELP bzfs_snapshots_replicated_total Total number of snapshots replicated during the job")
-    metrics.append("# TYPE bzfs_snapshots_replicated_total counter")
-    metrics.append(f"bzfs_snapshots_replicated_total{{{labels}}} {job.num_snapshots_replicated}")
-    metrics.append("")
+    if action == "replicate":
+        metrics.append("# HELP bzfs_snapshots_replicated_total Total number of snapshots replicated during the job")
+        metrics.append("# TYPE bzfs_snapshots_replicated_total counter")
+        metrics.append(f"bzfs_snapshots_replicated_total{{{labels}}} {job.num_snapshots_replicated}")
+        metrics.append("")
 
-    if sent_bytes > 0:
         metrics.append("# HELP bzfs_bytes_sent_total Total bytes sent via zfs send")
         metrics.append("# TYPE bzfs_bytes_sent_total counter")
         metrics.append(f"bzfs_bytes_sent_total{{{labels}}} {sent_bytes}")
@@ -146,15 +150,15 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
         metrics.append(f"bzfs_cache_misses_total{{{labels}}} {job.num_cache_misses}")
         metrics.append("")
 
-    # Write metrics atomically to a .prom file
-    prom_filename: str = f"bzfs_{job_id}.prom"
+    # Write metrics atomically to a .prom file per action so we don't overwrite other actions from same job when run from jobrunner
+    # Our file needs to hold all the labels so we don't overwrite create/delete snapshot actions between src and dst
+    prom_file_prefix = f"bzfs_{job_id}_{action}_{_sanitize_filename(src_host)}_{_sanitize_filename(dst_host)}_{_sanitize_filename(src_root)}_{_sanitize_filename(dst_root)}"
+    prom_filename: str = f"{prom_file_prefix}.prom"
     prom_filepath: str = os.path.join(textfile_dir, prom_filename)
 
     try:
         # Write to a temporary file in the same directory
-        fd, temp_path = tempfile.mkstemp(
-            suffix=".prom.tmp", prefix=f"bzfs_{job_id}_", dir=textfile_dir, text=True
-        )
+        fd, temp_path = tempfile.mkstemp(suffix=".prom.tmp", prefix=f"{prom_file_prefix}", dir=textfile_dir, text=True)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write("\n".join(metrics))
@@ -185,7 +189,10 @@ def write_prometheus_metrics_on_error(job: Job, exit_code: int, log: Logger) -> 
                 sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
             write_prometheus_metrics(job, exit_code=exit_code, elapsed_nanos=elapsed_nanos, sent_bytes=sent_bytes)
     except Exception as exc:
-        log.error(f"Could not write prometheus metrics while an error occured in replication process. exit_code={exit_code}, error={exc}", exc_info=True)
+        log.error(
+            f"Could not write prometheus metrics while an error occured in replication process. exit_code={exit_code}, error={exc}",
+            exc_info=True,
+        )
 
 
 def _generate_job_id(job: Job) -> str:
@@ -204,7 +211,7 @@ def _generate_job_id(job: Job) -> str:
         A short hash string suitable for use as a job identifier.
     """
     p = job.params
-    
+
     # Check if log_file_infix contains a job_id from bzfs_jobrunner
     # bzfs_jobrunner sets log_file_infix to something like "_jobid_" or "_myjobname_"
     log_infix = p.args.log_file_infix or ""
@@ -217,7 +224,7 @@ def _generate_job_id(job: Job) -> str:
             safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in extracted_id)
             if safe_id:
                 return safe_id[:64]  # Limit length to avoid overly long filenames
-    
+
     # Fallback: Generate hash-based job_id from configuration
     key_parts: list[str] = [
         p.src.basis_root_dataset,
@@ -237,6 +244,8 @@ def _determine_action(p) -> str:
 
     This analyzes CLI parameters to identify what operation is being executed.
     Multiple actions may be combined with '+' if they occur together.
+    Note that there is no delete_src_snapshots since it's just delete_dst_snapshots with src and dst reversed
+    The same applies to create snapshots
 
     Args:
         p: The Params instance containing CLI arguments.
@@ -291,3 +300,17 @@ def _escape_label(value: str) -> str:
         The escaped label value.
     """
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+def _sanitize_filename(value: str) -> str:
+    """Make sure a string can be used as filename
+
+    Args:
+        value: string.
+
+    Returns:
+        usable string for filename.
+    """
+    value = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode("ascii")
+    value = re.sub("[^\w\s-]", "", value).strip()
+    return re.sub("[-\s]+", "-", value)
