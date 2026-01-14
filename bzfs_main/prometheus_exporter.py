@@ -22,14 +22,10 @@ from logging import Logger
 import os
 import tempfile
 import time
-from pathlib import (
-    Path,
-)
 import re
 import unicodedata
 from typing import (
     TYPE_CHECKING,
-    Final,
 )
 
 from bzfs_main.util.utils import (
@@ -127,7 +123,7 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
     metrics.append(f"bzfs_snapshots_found_total{{{labels}}} {job.num_snapshots_found}")
     metrics.append("")
 
-    if action == "replicate":
+    if "replicate" in action:
         metrics.append("# HELP bzfs_snapshots_replicated_total Total number of snapshots replicated during the job")
         metrics.append("# TYPE bzfs_snapshots_replicated_total counter")
         metrics.append(f"bzfs_snapshots_replicated_total{{{labels}}} {job.num_snapshots_replicated}")
