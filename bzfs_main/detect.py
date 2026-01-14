@@ -33,6 +33,7 @@ from subprocess import (
 from typing import (
     TYPE_CHECKING,
     Final,
+    final,
 )
 
 from bzfs_main.util.connection import (
@@ -69,6 +70,7 @@ ZFS_VERSION_IS_AT_LEAST_2_2_0: Final[str] = "zfs>=2.2.0"
 
 #############################################################################
 @dataclass(frozen=True)
+@final
 class RemoteConfCacheItem:
     """Caches detected programs, zpool features and connection pools, per remote."""
 
@@ -113,7 +115,7 @@ def detect_available_programs(job: Job) -> None:
                 p.zpool_features[loc] = {}  # cache miss, invalidate features of zpools before refetching from remote
         else:
             p.connection_pools[loc] = ConnectionPools(
-                r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
+                remote=r, capacities={SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
             )
         todo.append(r)
 

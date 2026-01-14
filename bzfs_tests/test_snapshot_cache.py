@@ -71,7 +71,6 @@ from datetime import (
     timezone,
 )
 from typing import (
-    TYPE_CHECKING,
     Callable,
 )
 from unittest.mock import (
@@ -83,6 +82,7 @@ from bzfs_main import (
     snapshot_cache,
 )
 from bzfs_main.bzfs import (
+    CRITICAL_STATUS,
     DatasetProperties,
     Job,
 )
@@ -102,6 +102,8 @@ from bzfs_main.snapshot_cache import (
 )
 from bzfs_main.util.retry import (
     Retry,
+    RetryConfig,
+    RetryPolicy,
 )
 from bzfs_main.util.utils import (
     sha256_85_urlsafe_base64,
@@ -110,11 +112,6 @@ from bzfs_main.util.utils import (
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
-
-if TYPE_CHECKING:  # type-only imports for annotations
-    from bzfs_main.util.retry import (
-        RetryPolicy,
-    )
 
 
 #############################################################################
@@ -385,8 +382,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 fn_latest(0, creation, SRC_DATASET, "s")
@@ -402,6 +401,57 @@ class TestSnapshotCache(AbstractTestCase):
             at, mt = SnapshotCache(job).get_snapshots_changed2(cache_file)
             self.assertEqual(creation, at)
             self.assertEqual(changed, mt)
+
+    def test_monitor_snapshots_exits_with_worst_severity(self) -> None:
+        """Monitor checks all datasets and exits with the worst severity.
+
+        Tie-break: At equal severity, "Latest" takes precedence over "Oldest".
+        """
+        plan = {
+            "org": {
+                "tgt": {
+                    "secondly": {
+                        "latest": {"warning": "1 seconds", "critical": "100 seconds"},
+                        "oldest": {"warning": "1 seconds", "critical": "100 seconds"},
+                    }
+                }
+            }
+        }
+        with self.job_context(["--monitor-snapshots", str(plan), SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
+            now_secs = 1_000
+            job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(now_secs, tz=timezone.utc)
+            job.params.src.root_dataset = SRC_DATASET
+
+            ds_warn = f"{SRC_DATASET}/a"
+            ds_crit = f"{SRC_DATASET}/b"
+
+            def fake_handle_minmax_snapshots(
+                self: Job,
+                remote: Remote,
+                datasets: list[str],
+                labels: list[SnapshotLabel],
+                *,
+                fn_latest: Callable[[int, int, str, str], None],
+                fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
+                fn_on_finish_dataset: Callable[[str], None] | None = None,
+            ) -> list[str]:
+                fn_latest(0, now_secs - 10, ds_warn, "s")  # warning only
+                fn_latest(0, now_secs - 200, ds_crit, "s")  # critical
+                assert fn_oldest is not None
+                fn_oldest(0, now_secs - 200, ds_crit, "s")  # critical (tie-break with latest)
+                return []
+
+            with (
+                patch("bzfs_main.bzfs.is_caching_snapshots", return_value=False),
+                patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
+            ):
+                exit_code, exit_kind, exit_msg = job.monitor_snapshots(job.params.src, [ds_warn, ds_crit])
+            self.assertEqual(-CRITICAL_STATUS, exit_code)
+            self.assertIn("Latest", exit_kind)
+            self.assertIn("Latest snapshot", exit_msg)
+            self.assertIn(ds_crit, exit_msg)
+            self.assertNotIn("Oldest snapshot", exit_msg)
 
     def test_last_replicated_cache_must_be_monotonic(self) -> None:
         """Purpose: Prove the src-->dst "last replicated" cache (the src-side "==" marker keyed by user/host+dst+filters)
@@ -665,8 +715,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 fn_latest(0, latest_times.pop(0), SRC_DATASET, "")
@@ -750,8 +802,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 received.extend(datasets)
@@ -1049,8 +1103,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 fn_latest(0, mon_creation, SRC_DATASET, "")
@@ -1185,8 +1241,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels_list: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 fn_latest(0, snap_creation, SRC_DATASET, "")
@@ -1362,8 +1420,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 fn_latest(0, m_cre, SRC_DATASET, "")
@@ -1373,8 +1433,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 fn_latest(0, s_cre, SRC_DATASET, "")
@@ -1442,8 +1504,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 fn_latest(0, m_cre_old, SRC_DATASET, "")
@@ -1453,8 +1517,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 if fn_on_finish_dataset:
@@ -1580,8 +1646,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels_list: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 return []
@@ -1613,8 +1681,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels_list: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 fn_latest(0, 2_000_000_100, SRC_DATASET, "")
@@ -1638,8 +1708,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels_list: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 fn_latest(0, 2_000_000_090, SRC_DATASET, "")
@@ -1738,8 +1810,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 called.extend(datasets)
@@ -1799,6 +1873,7 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
@@ -1846,6 +1921,7 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
@@ -1873,6 +1949,7 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
@@ -1949,8 +2026,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 fn_latest(0, creation, dataset, "s")
@@ -2030,8 +2109,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 received.extend(datasets)
@@ -2125,8 +2206,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 received.extend(datasets)
@@ -2207,8 +2290,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 received.extend(datasets)
@@ -2270,7 +2355,19 @@ class TestSnapshotCache(AbstractTestCase):
                 any_failed = False
                 for idx, dataset in enumerate(datasets):
                     try:
-                        process_dataset(dataset, "tid", Retry(idx))
+                        process_dataset(
+                            dataset,
+                            "tid",
+                            Retry(
+                                count=idx,
+                                start_time_nanos=0,
+                                attempt_start_time_nanos=0,
+                                policy=RetryPolicy(),
+                                config=RetryConfig(),
+                                log=None,
+                                previous_outcomes=(),
+                            ),
+                        )
                     except Exception:
                         any_failed = True
                 return any_failed
@@ -2545,8 +2642,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 for ds in datasets:
@@ -2583,8 +2682,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 received_count["n"] += len(datasets)
@@ -2669,8 +2770,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels_: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 received_count["n"] += len(datasets)
@@ -2758,8 +2861,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 received.extend(datasets)
@@ -2968,8 +3073,10 @@ class TestSnapshotCache(AbstractTestCase):
                 remote: Remote,
                 datasets: list[str],
                 labels: list[SnapshotLabel],
+                *,
                 fn_latest: Callable[[int, int, str, str], None],
                 fn_oldest: Callable[[int, int, str, str], None] | None = None,
+                fn_oldest_skip_holds: bool = False,
                 fn_on_finish_dataset: Callable[[str], None] | None = None,
             ) -> list[str]:
                 # Do not probe anything; just return empty list (no datasets without snapshots)
@@ -3095,6 +3202,7 @@ class TestSnapshotCache(AbstractTestCase):
                 label=lbl,
                 latest=AlertConfig("Latest", warning_millis=3600_000, critical_millis=7200_000),
                 oldest=None,
+                oldest_skip_holds=False,
             )
         ]
         alerts_b = [
@@ -3102,6 +3210,7 @@ class TestSnapshotCache(AbstractTestCase):
                 label=lbl,
                 latest=AlertConfig("Latest", warning_millis=2 * 3600_000, critical_millis=3 * 3600_000),
                 oldest=None,
+                oldest_skip_holds=False,
             )
         ]
         cache_label_a = self.monitor_cache_label("Latest", lbl, alerts_a)

@@ -29,7 +29,7 @@
 * The core replication algorithm is in run_task() and especially in replicate_datasets() and replicate_dataset().
 * The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
 * The --create-src-snapshots-* and --delete-* and --compare-* and --monitor-* algorithms also start in run_task().
-* The main retry logic is in run_with_retries() and clear_resumable_recv_state_if_necessary().
+* The main retry logic is in call_with_retries() and clear_resumable_recv_state_if_necessary().
 * Progress reporting for use during `zfs send/recv` data transfers is in class ProgressReporter.
 * Executing a CLI command on a local or remote host is in run_ssh_command().
 * Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool.
@@ -60,6 +60,7 @@ from collections import (
 )
 from collections.abc import (
     Collection,
+    Sequence,
 )
 from datetime import (
     datetime,
@@ -81,6 +82,7 @@ from typing import (
     Callable,
     Final,
     cast,
+    final,
 )
 
 import bzfs_main.loggers
@@ -154,7 +156,6 @@ from bzfs_main.util.connection import (
     ConnectionPool,
     MiniJob,
     MiniRemote,
-    run_ssh_command,
     timeout,
 )
 from bzfs_main.util.parallel_iterator import (
@@ -166,7 +167,10 @@ from bzfs_main.util.parallel_tasktree_policy import (
 from bzfs_main.util.retry import (
     Retry,
     RetryableError,
-    run_with_retries,
+    RetryConfig,
+    RetryOptions,
+    call_with_retries,
+    on_exhaustion_raise,
 )
 from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
@@ -176,7 +180,7 @@ from bzfs_main.util.utils import (
     LOG_DEBUG,
     LOG_TRACE,
     PROG_NAME,
-    SHELL_CHARS,
+    SHELL_CHARS_AND_SLASH,
     UMASK,
     YEAR_WITH_FOUR_DIGITS_REGEX,
     HashedInterner,
@@ -231,12 +235,10 @@ def main() -> None:
         set_logging_runtime_defaults()
         # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
         termination_event: threading.Event = threading.Event()
-        with termination_signal_handler(termination_event=termination_event):
+        with termination_signal_handler(termination_events=[termination_event]):
             run_main(argument_parser().parse_args(), sys.argv, termination_event=termination_event)
     except subprocess.CalledProcessError as e:
-        ret: int = e.returncode
-        ret = DIE_STATUS if isinstance(ret, int) and 1 <= ret <= STILL_RUNNING_STATUS else ret
-        sys.exit(ret)
+        sys.exit(normalize_called_process_error(e))
     finally:
         os.umask(prev_umask)  # restore prior global state
 
@@ -252,13 +254,15 @@ def run_main(
 
 
 #############################################################################
+@final
 class Job(MiniJob):
     """Executes one bzfs run, coordinating snapshot replication tasks."""
 
     def __init__(self, termination_event: threading.Event | None = None) -> None:
         self.params: Params
         self.termination_event: Final[threading.Event] = termination_event or threading.Event()
-        self.subprocesses: Subprocesses = Subprocesses()
+        self.subprocesses: Subprocesses = Subprocesses(termination_event=self.termination_event)
+        self.retry_options: Final[RetryOptions] = RetryOptions(config=RetryConfig(termination_event=self.termination_event))
         self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: dict[str, DatasetProperties] = {}
@@ -515,7 +519,7 @@ class Job(MiniJob):
     def print_replication_stats(self, start_time_nanos: int) -> None:
         """Logs overall replication statistics after a job cycle completes."""
         p, log = self.params, self.params.log
-        elapsed_nanos = time.monotonic_ns() - start_time_nanos
+        elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
         msg = p.dry(f"zfs sent {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if p.is_program_available("pv", "local"):
             sent_bytes: int = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
@@ -595,7 +599,7 @@ class Job(MiniJob):
             ):
                 die(f"Source and destination dataset trees must not overlap! {msg}")
 
-        suffx = DESCENDANTS_RE_SUFFIX  # also match descendants of a matching dataset
+        suffx: str = DESCENDANTS_RE_SUFFIX  # also match descendants of a matching dataset
         p.exclude_dataset_regexes, p.include_dataset_regexes = (
             p.tmp_exclude_dataset_regexes + compile_regexes(dataset_regexes(src, dst, p.abs_exclude_datasets), suffix=suffx),
             p.tmp_include_dataset_regexes + compile_regexes(dataset_regexes(src, dst, p.abs_include_datasets), suffix=suffx),
@@ -611,12 +615,12 @@ class Job(MiniJob):
         self.max_workers = {}
         self.max_datasets_per_minibatch_on_list_snaps = {}
         for r in [src, dst]:
-            cpus = int(p.available_programs[r.location].get("getconf_cpu_count", 8))
+            cpus: int = int(p.available_programs[r.location].get("getconf_cpu_count", 8))
             threads, is_percent = p.threads
             cpus = max(1, round(cpus * threads / 100.0) if is_percent else round(threads))
             self.max_workers[r.location] = cpus
-            bs = max(1, p.max_datasets_per_batch_on_list_snaps)  # 1024 by default
-            max_datasets_per_minibatch = p.max_datasets_per_minibatch_on_list_snaps
+            bs: int = max(1, p.max_datasets_per_batch_on_list_snaps)  # 1024 by default
+            max_datasets_per_minibatch: int = p.max_datasets_per_minibatch_on_list_snaps
             if max_datasets_per_minibatch <= 0:
                 max_datasets_per_minibatch = max(1, bs // cpus)
             max_datasets_per_minibatch = min(bs, max_datasets_per_minibatch)
@@ -838,12 +842,13 @@ class Job(MiniJob):
     ) -> bool:
         """Deletes existing destination snapshots that do not exist within the source dataset if they are included by the
         --{include|exclude}-snapshot-* policy, and the destination dataset is included via --{include|exclude}-dataset*
-        policy; implements --delete-dst-snapshots."""
+        policy; implements --delete-dst-snapshots. Does not attempt to delete snapshots that carry a `zfs hold`."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         kind: str = "bookmark" if p.delete_dst_bookmarks else "snapshot"
         filter_needs_creation_time: bool = has_timerange_filter(p.snapshot_filters)
-        props: str = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
+        props: str = "guid,name,userrefs"
+        props = self.creation_prefix + "creation," + props if filter_needs_creation_time else props
         basis_src_datasets_set: set[str] = set(basis_src_datasets)
         num_snapshots_found, num_snapshots_deleted = 0, 0
 
@@ -865,7 +870,15 @@ class Job(MiniJob):
             if dst_snaps_with_guids_str is None:
                 log.warning("Third party deleted destination: %s", dst_dataset)
                 return False
-            dst_snaps_with_guids: list[str] = dst_snaps_with_guids_str.splitlines()
+            held_dst_snapshots: set[str] = set()
+            dst_snaps_with_guids: list[str] = []
+            no_userrefs: tuple[str, ...] = ("", "-", "0")  # ZFS snapshot property userrefs > 0 indicates a zfs hold
+            for line in dst_snaps_with_guids_str.splitlines():
+                dst_snaps_with_guids.append(line[: line.rindex("\t")])  # strip off trailing userrefs column
+                _, name, userrefs = line.rsplit("\t", 2)
+                if userrefs not in no_userrefs:
+                    tag: str = name[name.index("@") + 1 :]
+                    held_dst_snapshots.add(tag)  # don't attempt to delete snapshots that carry a `zfs hold`
             num_dst_snaps_with_guids = len(dst_snaps_with_guids)
             basis_dst_snaps_with_guids: list[str] = dst_snaps_with_guids.copy()
             if p.delete_dst_bookmarks:
@@ -910,6 +923,7 @@ class Job(MiniJob):
             if p.delete_dst_bookmarks:
                 delete_bookmarks(self, dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
             else:
+                dst_tags_to_delete = [tag for tag in dst_tags_to_delete if tag not in held_dst_snapshots]
                 delete_snapshots(self, dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
             with self.stats_lock:
                 nonlocal num_snapshots_found
@@ -936,7 +950,7 @@ class Job(MiniJob):
                 enable_barriers=False,
                 task_name="--delete-dst-snapshots",
                 append_exception=self.append_exception,
-                retry_policy=p.retry_policy,
+                retry_options=self.retry_options.copy(policy=p.retry_policy),
                 dry_run=p.dry_run,
                 is_test_mode=self.is_test_mode,
             )
@@ -1019,7 +1033,7 @@ class Job(MiniJob):
         for snapshots in zfs_list_snapshots_in_parallel(self, dst, cmd, sorted(candidate_orphans), ordered=False):
             if with_bookmarks:
                 replace_in_lines(snapshots, old="#", new="@", count=1)  # treat bookmarks as snapshots
-            dst_datasets_having_snapshots.update(snap[0 : snap.index("@")] for snap in snapshots)  # union
+            dst_datasets_having_snapshots.update(snap[: snap.index("@")] for snap in snapshots)  # union
 
         orphans = compute_orphans(dst_datasets_having_snapshots)  # compute the real orphans
         delete_datasets(self, dst, orphans)  # finally, delete the orphan datasets in an efficient way
@@ -1036,10 +1050,13 @@ class Job(MiniJob):
         num_cache_hits: int = self.num_cache_hits
         num_cache_misses: int = self.num_cache_misses
         start_time_nanos: int = time.monotonic_ns()
-        run_in_parallel(
+        dst_alert, src_alert = run_in_parallel(
             lambda: self.monitor_snapshots(dst, sorted_dst_datasets),
             lambda: self.monitor_snapshots(src, sorted_src_datasets),
         )
+        exit_code, _exit_kind, exit_msg = min(dst_alert, src_alert)
+        if exit_code != 0:
+            die(exit_msg, -exit_code)
         elapsed: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
         num_cache_hits = self.num_cache_hits - num_cache_hits
         num_cache_misses = self.num_cache_misses - num_cache_misses
@@ -1052,7 +1069,7 @@ class Job(MiniJob):
             f"{task_description} [{len(sorted_src_datasets) + len(sorted_dst_datasets)} datasets; took {elapsed}{msg}]",
         )
 
-    def monitor_snapshots(self, remote: Remote, sorted_datasets: list[str]) -> None:
+    def monitor_snapshots(self, remote: Remote, sorted_datasets: list[str]) -> tuple[int, str, str]:
         """Checks snapshot freshness and warns or errors out when limits are exceeded.
 
         Alerts the user if the ZFS 'creation' time property of the latest or oldest snapshot for any specified snapshot name
@@ -1066,6 +1083,7 @@ class Job(MiniJob):
         p, log = self.params, self.params.log
         alerts: list[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
         labels: list[SnapshotLabel] = [alert.label for alert in alerts]
+        oldest_skip_holds: list[bool] = [alert.oldest_skip_holds for alert in alerts]
         current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
         is_debug: bool = log.isEnabledFor(LOG_DEBUG)
         if is_caching_snapshots(p, remote):
@@ -1076,6 +1094,11 @@ class Job(MiniJob):
                 label: sha256_128_urlsafe_base64(label.notimestamp_str()) for label in labels
             }
         is_caching: bool = False
+        worst_alert: tuple[int, str, str] = (0, "", "")  # -exit_code, exit_kind, exit_msg
+
+        def record_alert(exit_code: int, exit_kind: str, exit_msg: str) -> None:
+            nonlocal worst_alert
+            worst_alert = min(worst_alert, (-exit_code, exit_kind, exit_msg))  # min() sorts "Latest" before "Oldest" on tie
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
             cache_label: str = os.path.join(MONITOR_CACHE_FILE_PREFIX, alert_cfg.kind[0], label_hashes[label], alerts_hash)
@@ -1114,12 +1137,12 @@ class Job(MiniJob):
                 msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, critical_millis)
                 log.critical("%s", msg)
                 if not p.monitor_snapshots_config.dont_crit:
-                    die(msg, exit_code=CRITICAL_STATUS)
+                    record_alert(CRITICAL_STATUS, alert_kind, msg)
             elif snapshot_age_millis > warning_millis:
                 msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, warning_millis)
                 log.warning("%s", msg)
                 if not p.monitor_snapshots_config.dont_warn:
-                    die(msg, exit_code=WARNING_STATUS)
+                    record_alert(WARNING_STATUS, alert_kind, msg)
             elif is_debug:
                 msg = m + "OK. " + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, delta_millis=-1)
                 log.debug("%s", msg)
@@ -1179,12 +1202,18 @@ class Job(MiniJob):
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
         is_caching = is_caching_snapshots(p, remote)
         datasets_without_snapshots: list[str] = self.handle_minmax_snapshots(
-            remote, stale_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
+            remote,
+            stale_datasets,
+            labels,
+            fn_latest=alert_latest_snapshot,
+            fn_oldest=alert_oldest_snapshot,
+            fn_oldest_skip_holds=oldest_skip_holds,
         )
         for dataset in datasets_without_snapshots:
             for i in range(len(alerts)):
                 alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot="")
                 alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot="")
+        return worst_alert
 
     def replicate_datasets(self, src_datasets: list[str], task_description: str, max_workers: int) -> bool:
         """Replicates a list of datasets."""
@@ -1288,7 +1317,7 @@ class Job(MiniJob):
             enable_barriers=False,
             task_name="Replication",
             append_exception=self.append_exception,
-            retry_policy=p.retry_policy,
+            retry_options=self.retry_options.copy(policy=p.retry_policy),
             dry_run=p.dry_run,
             is_test_mode=self.is_test_mode,
         )
@@ -1552,29 +1581,55 @@ class Job(MiniJob):
         remote: Remote,
         sorted_datasets: list[str],
         labels: list[SnapshotLabel],
+        *,
         fn_latest: Callable[[int, int, str, str], None],  # callback function for latest snapshot
         fn_oldest: Callable[[int, int, str, str], None] | None = None,  # callback function for oldest snapshot
+        fn_oldest_skip_holds: Sequence[bool] = (),
         fn_on_finish_dataset: Callable[[str], None] = lambda dataset: None,
     ) -> list[str]:  # thread-safe
         """For each dataset in `sorted_datasets`, for each label in `labels`, finds the latest and oldest snapshot, and runs
-        the callback functions on them; Ignores the timestamp of the input labels and the timestamp of the snapshot names."""
+        the callback functions on them; Ignores the timestamp of the input labels and the timestamp of the snapshot names.
+
+        If the (optional) fn_oldest_skip_holds=True for a given label, then snapshots for that label that carry a 'zfs hold'
+        are skipped (ignored) when finding the oldest snapshot for fn_oldest. This can be useful for monitor_snapshots(),
+        given that users often intentionally retain holds for longer than the "normal" snapshot retention period, and this
+        shouldn't necessarily cause monitoring to emit alerts.
+        """
+        if fn_oldest is not None:
+            assert len(labels) == len(fn_oldest_skip_holds)
         assert (not self.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
+        no_userrefs: tuple[str, ...] = ("", "-", "0")  # ZFS snapshot property userrefs > 0 indicates a zfs hold
+
+        def extract_fields(line: str) -> tuple[int, int, str, bool]:
+            fields: list[str] = line.split("\t")
+            if len(fields) == 3:
+                name, createtxg, creation_unixtime_secs = fields
+                userrefs = ""
+            else:
+                name, createtxg, creation_unixtime_secs, userrefs = fields
+            return (
+                int(createtxg),
+                int(creation_unixtime_secs),
+                name.split("@", 1)[1],
+                userrefs in no_userrefs,
+            )
+
         p = self.params
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
+        props: str = "name,createtxg,creation"
+        props = props if fn_oldest is None or not any(fn_oldest_skip_holds) else props + ",userrefs"
+        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")  # sorts by dataset,creation
         datasets_with_snapshots: set[str] = set()
         interner: SortedInterner[str] = SortedInterner(sorted_datasets)  # reduces memory footprint
         for lines in zfs_list_snapshots_in_parallel(self, remote, cmd, sorted_datasets, ordered=False):
             # streaming group by dataset name (consumes constant memory only)
-            for dataset, group in itertools.groupby(lines, key=lambda line: line.rsplit("\t", 1)[1].split("@", 1)[0]):
+            for dataset, group in itertools.groupby(lines, key=lambda line: line.split("\t", 1)[0].split("@", 1)[0]):
                 dataset = interner.interned(dataset)
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
-                    (int(createtxg), int(creation_unixtime_secs), name.split("@", 1)[1])
-                    for createtxg, creation_unixtime_secs, name in (line.split("\t", 2) for line in group)
+                    extract_fields(line) for line in group
                 )  # perf: sorted() is fast because Timsort is close to O(N) for nearly sorted input, which is our case
                 assert len(snapshots) > 0
                 datasets_with_snapshots.add(dataset)
-                snapshot_names: tuple[str, ...] = tuple(snapshot[-1] for snapshot in snapshots)
-                reversed_snapshot_names: tuple[str, ...] = snapshot_names[::-1]
+                snapshot_names: tuple[str, ...] = tuple(snapshot[2] for snapshot in snapshots)
                 year_with_4_digits_regex: re.Pattern[str] = YEAR_WITH_FOUR_DIGITS_REGEX
                 year_with_4_digits_regex_fullmatch = year_with_4_digits_regex.fullmatch
                 startswith = str.startswith
@@ -1592,15 +1647,17 @@ class Job(MiniJob):
                     for fn, is_reverse in fns:
                         creation_unixtime_secs: int = 0  # find creation time of latest or oldest snapshot matching the label
                         minmax_snapshot: str = ""
-                        for j, snapshot_name in enumerate(reversed_snapshot_names if is_reverse else snapshot_names):
+                        no_skip_holds: bool = is_reverse or not fn_oldest_skip_holds[i]
+                        for j in range(len(snapshot_names) - 1, -1, -1) if is_reverse else range(len(snapshot_names)):
+                            snapshot_name: str = snapshot_names[j]
                             if (
                                 endswith(snapshot_name, end)  # aka snapshot_name.endswith(end)
                                 and startswith(snapshot_name, start)  # aka snapshot_name.startswith(start)
                                 and len(snapshot_name) >= minlen
                                 and (has_infix or year_with_4_digits_regex_fullmatch(snapshot_name, startlen, startlen_4))
+                                and (no_skip_holds or snapshots[j][3])
                             ):
-                                k: int = len(snapshots) - j - 1 if is_reverse else j
-                                creation_unixtime_secs = snapshots[k][1]
+                                creation_unixtime_secs = snapshots[j][1]
                                 minmax_snapshot = snapshot_name
                                 break
                         fn(i, creation_unixtime_secs, dataset, minmax_snapshot)
@@ -1628,11 +1685,10 @@ class Job(MiniJob):
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         conn_pool: ConnectionPool = self.params.connection_pools[remote.location].pool(SHARED)
         with conn_pool.connection() as conn:
-            log: logging.Logger = conn.remote.params.log
+            log: logging.Logger = self.params.log
             try:
-                process: subprocess.CompletedProcess[str] = run_ssh_command(
+                process: subprocess.CompletedProcess[str] = conn.run_ssh_command(
                     cmd=cmd,
-                    conn=conn,
                     job=self,
                     loglevel=loglevel,
                     is_dry=is_dry,
@@ -1690,21 +1746,27 @@ class Job(MiniJob):
     def try_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str | None:
         """Convenience method that auto-retries try_ssh_command() on failure."""
         p = self.params
-        return run_with_retries(
+        return call_with_retries(
             fn=lambda retry: self.try_ssh_command(*args, **kwargs),
             policy=p.retry_policy,
+            config=self.retry_options.config,
+            giveup=self.retry_options.giveup,
+            after_attempt=self.retry_options.after_attempt,
+            on_exhaustion=on_exhaustion_raise,
             log=p.log,
-            termination_event=self.termination_event,
         )
 
     def run_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str:
         """Convenience method that auto-retries run_ssh_command() on transport failure (not on remote command failure)."""
         p = self.params
-        return run_with_retries(
+        return call_with_retries(
             fn=lambda retry: self.run_ssh_command(*args, **kwargs),
             policy=p.retry_policy,
+            config=self.retry_options.config,
+            giveup=self.retry_options.giveup,
+            after_attempt=self.retry_options.after_attempt,
+            on_exhaustion=on_exhaustion_raise,
             log=p.log,
-            termination_event=self.termination_event,
         )
 
     def maybe_inject_error(self, cmd: list[str], error_trigger: str | None = None) -> None:
@@ -1730,6 +1792,7 @@ class Job(MiniJob):
 
 
 #############################################################################
+@final
 class DatasetProperties:
     """Properties of a ZFS dataset."""
 
@@ -1795,14 +1858,14 @@ def parse_dataset_locator(
 
 def validate_user_name(user: str, input_text: str) -> None:
     """Checks that the username is safe for ssh or local usage."""
-    invalid_chars: str = SHELL_CHARS + "/"
-    if user and (".." in user or any(c.isspace() or c in invalid_chars for c in user)):
+    invalid_chars: str = SHELL_CHARS_AND_SLASH
+    if user and (user.startswith("-") or ".." in user or any(c.isspace() or c in invalid_chars for c in user)):
         die(f"Invalid user name: '{user}' for: '{input_text}'")
 
 
 def validate_host_name(host: str, input_text: str) -> None:
     """Checks hostname for forbidden characters or patterns."""
-    invalid_chars: str = SHELL_CHARS + "/"
+    invalid_chars: str = SHELL_CHARS_AND_SLASH
     if host and (host.startswith("-") or ".." in host or any(c.isspace() or c in invalid_chars for c in host)):
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
@@ -1813,6 +1876,13 @@ def validate_port(port: str | int | None, message: str) -> None:
         port = str(port)
     if port and not port.isdigit():
         die(message + f"must be empty or a positive integer: '{port}'")
+
+
+def normalize_called_process_error(error: subprocess.CalledProcessError) -> int:
+    """Normalizes `CalledProcessError.returncode` to avoid reserved exit codes so callers don't misclassify them."""
+    ret: int = error.returncode
+    ret = DIE_STATUS if isinstance(ret, int) and 1 <= ret <= STILL_RUNNING_STATUS else ret
+    return ret
 
 
 #############################################################################

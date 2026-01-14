@@ -18,6 +18,6 @@
 
 ### Checks
 
-- [ ] All Change Validation Workflow checks passed
-- [ ] `pre-commit run pylint --all-files --hook-stage manual` passed
+- [ ] All *Change Validation Workflow* checks passed
+- [ ] All *Commit Workflow* checks passed
 - [ ] `bzfs_test_mode='' ./test.sh` integration tests passed

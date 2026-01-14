@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Quickstart for local replication: Edit this script. Replace all occurrences of the word "nas" with the hostname of your
-local machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets. Make sure `bzfs` and `bzfs_jobrunner` CLIs
-are on the PATH. Run the final script like so:
+"""Quickstart for local replication: Edit this script. Replace all occurrences of the word "nas" with the real output of the
+`hostname` CLI on your machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets. Make sure `bzfs` and
+`bzfs_jobrunner` CLIs are on the PATH. Run the final script like so:
 
 /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks --prune-dst-
 snapshots --monitor-src-snapshots --monitor-dst-snapshots
@@ -40,7 +40,7 @@ jobconfig script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service, or low latency replication
 from a primary to a secondary or to M read replicas, or backup to removable drives, etc.
 Typically, this script should be periodically executed on each source host and each destination host, e.g. by a cron job
-(or similar). However, you can also run it on a single third-party host and have that talk to all source hosts and
+(or similar). However, you can also run it on a single third-party host, in which case it will talk to all source hosts and
 destination hosts, which is convenient for basic use cases and for testing.
 This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the
 actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach. A plain Python script offers flexible, readable
@@ -69,6 +69,7 @@ recursive = True
 
 
 # List of one or more source hostnames. Each of the M destination hosts receives replicas from (the same set of) N src hosts:
+# As hostname use the real output of the `hostname` CLI.
 # src_hosts = ["prod001", "prod002", "prod999"]
 src_hosts = ["nas"]
 
@@ -77,6 +78,11 @@ src_hosts = ["nas"]
 # portion of a snapshot name).
 # A destination host will receive replicas of snapshots for all targets that map to that destination host. Removing a mapping
 # can be used to temporarily suspend replication to a given destination host.
+# As hostname use the real output of the `hostname` CLI.
+# The "target" is an arbitrary user-defined name that serves as an abstraction of the destination hostnames for a group of
+# snapshots, like target "onsite", "offsite", "hotspare", a geographically independent datacenter like "us-west", or similar.
+# Rather than the snapshot name embedding (i.e. hardcoding) a list of destination hostnames where it should be sent to, the
+# snapshot name embeds the user-defined target name, which is later mapped by this jobconfig to a list of destination hostnames.
 # dst_hosts = {
 #     "nas": ["onsite"],
 #     "bak-us-west-1": ["us-west-1"],
@@ -86,7 +92,7 @@ src_hosts = ["nas"]
 # }
 # dst_hosts = {"nas": ["onsite"]}
 # dst_hosts = {"nas": [""]}  # empty string as target name is ok
-dst_hosts = {"nas": ["", "onsite"]}
+dst_hosts = {"nas": ["", "onsite"]}  # host named "nas" will receive replicas for snapshots with target="" or target="onsite"
 
 
 # Dictionary that maps each destination hostname to a list of zero or more logical replication target names (the infix
@@ -95,8 +101,9 @@ dst_hosts = {"nas": ["", "onsite"]}
 # to that destination host in this dictionary.
 # Do not remove a mapping here unless you are sure it's ok to delete all those snapshots on that destination host! If in
 # doubt, use --dryrun mode first.
+# As hostname use the real output of the `hostname` CLI.
 # retain_dst_targets = dst_hosts
-retain_dst_targets = {"nas": ["", "onsite"]}
+retain_dst_targets = {"nas": ["", "onsite"]}  # host named "nas" retains replicas for snapshots with target="" or "onsite"
 
 
 # Dictionary that maps each destination hostname to a root dataset located on that destination host. Typically, this
@@ -125,7 +132,7 @@ dst_root_datasets = {
 }
 
 
-# Organization (the prefix portion of a snapshot name):
+# Organization, which is an arbitrary user-defined name (the prefix portion of a snapshot name):
 # org = "autosnap"
 # org = "zrepl"
 # org = "bzfs"
@@ -183,10 +190,10 @@ src_bookmark_plan = dst_snapshot_plan
 # pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to check if snapshots
 # are successfully taken on schedule, successfully replicated on schedule, and successfully pruned on schedule.
 # Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
-# The example below alerts the user if the latest src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more than 30
-# minutes late (i.e. more than 30+60=90 minutes old) [warning], or more than 300 minutes late (i.e. more than 300+60=360
+# The example below alerts the user if the *latest* src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more than
+# 30 minutes late (i.e. more than 30+60=90 minutes old) [warning], or more than 300 minutes late (i.e. more than 300+60=360
 # minutes old) [critical].
-# In addition, the example alerts the user if the oldest src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more
+# In addition, the example alerts the user if the *oldest* src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more
 # than 30 + 60x36 minutes old [warning] or more than 300 + 60x36 minutes old [critical], where 36 is the number of period
 # cycles specified in `src_snapshot_plan` or `dst_snapshot_plan`, respectively.
 # Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.
@@ -210,6 +217,7 @@ src_bookmark_plan = dst_snapshot_plan
 #                 "critical": "8 hours",
 #                 "src_snapshot_cycles": 40,  # overrides plan period number (optional)
 #                 "dst_snapshot_cycles": 80,  # overrides plan period number (optional)
+#                 "oldest_skip_holds": True,  # snapshots that carry a 'zfs hold' are skipped when monitoring the oldest snap
 #             },
 #         },
 #     },
@@ -363,7 +371,8 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 # extra_args += ["--compression-program=-"]  # save CPU by disabling compression-on-the-wire
 # extra_args += ["--compression-program=lz4"]  # use less CPU for compression-on-the-wire
 # extra_args += ["--threads=200%"]  # use more CPU cores when operating on many datasets
-# extra_args += ["--ssh-program=hpnssh"]  # use larger TCP window size over high speed long distance networks
+# extra_args += ["--ssh-program=hpnssh"]  # use larger TCP window size over high speed long distance networks. Example
+# hpnssh perf: https://gist.github.com/rapier1/325de17bbb85f1ce663ccb866ce22639
 # os.environ["bzfs_name_of_a_unix_env_var"] = "true"  # toggle example tuning knob
 
 

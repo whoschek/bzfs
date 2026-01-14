@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------------------------------
 # pre‑commit configuration for this repository; see https://github.com/pre-commit/pre-commit
 # ------------------------------------------------------------------------------------------
-# How to enable the Git hook on your machine (do this once per clone):
+# How to enable the Git hook on your machine (do this once per git clone):
 #   1. Install the helper tool:
 #          pip install pre-commit
 #   2. From the project root directory run:
@@ -13,11 +13,12 @@
 #
 # Optional maintenance commands:
 #   * pre-commit run --all-files        # Run hooks on the whole repo
+#   * pre-commit run --all-files --hook-stage manual  # Also run manual hooks (e.g. pylint)
 #   * pre-commit autoupdate             # Bump pinned revs to latest released tags
 #   * pre-commit uninstall              # Remove the .git/hooks/pre-commit hook script
 #
-# These steps are also mirrored in CI (e.g. `pre-commit run --all-files`) to guarantee that
-# the same checks are enforced everywhere.
+# These steps are also mirrored in CI (`pre-commit run --all-files --hook-stage manual`) to
+# guarantee that the same checks are enforced everywhere.
 # ------------------------------------------------------------------------------------------
 fail_fast: true                         # Abort on first failing hook
 default_install_hook_types:
@@ -57,14 +58,14 @@ repos:
       - id: shellcheck                  # Validate syntax of shell scripts
         exclude: '^\.github-workflow-scripts'
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.35.0
+    rev: 0.36.0
     hooks:
       - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
       #- id: check-compose-spec         # Validate syntax of Docker Compose files
       - id: check-dependabot            # Validate syntax of Dependabot config files
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.9
+    rev: v1.7.10
     hooks:
       - id: actionlint                  # Validate semantics (and some syntax) of GitHub Workflow YAML files
         args: [--shellcheck=venv/bin/shellcheck]
@@ -79,21 +80,23 @@ repos:
       - id: docformatter  # Reformat Python docstrings to follow PEP 257 and wrap them to a specific line length
         additional_dependencies: [tomli]
         # config options like `wrap-summaries` live in pyproject.toml
+  - repo: https://github.com/pycqa/isort
+    rev: 6.1.0
+    hooks:
+      - id: isort                       # Reformat Python imports more precisely than ruff (via force_grid_wrap)
+        stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
+      # config options like `force_grid_wrap` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.7
+    rev: v0.14.11
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
-  # - repo: https://github.com/pycqa/isort
-  #   rev: 6.1.0
-  #   hooks:
-  #     - id: isort                     # Reformat imports more precisely
   - repo: https://github.com/pycqa/pylint
     rev: v4.0.4
     hooks:
       - id: pylint                      # Run `pylint` linter to check if there are problems in the Python source code
         name: pylint (cyclic imports, etc)
-        stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run pylint --all-files --hook-stage manual'
+        stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
         files: '^(?!bzfs_tests/).*\.py$'  # Run on all Python files except bzfs_tests/
         # config options like `enable` live in pyproject.toml
   - repo: local
@@ -103,10 +106,10 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.43.0']
+        additional_dependencies: ['pyrefly==0.47.0']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.0
+    rev: v1.19.1
     hooks:
       - id: mypy                             # Run `mypy` Python type checker
         exclude: '^\.git.*$'
@@ -154,9 +157,10 @@ repos:
     hooks:
       - id: mdformat                       # Auto-format Markdown files - see https://github.com/hukkin/mdformat
         args: [--wrap=120, --number, --compact-tables]
-        exclude: '^(README.*|prd|.*/bug_report|.*/feature_request)\.md$'
+        exclude: '^(README.*|prd)\.md$'
         additional_dependencies:           # see https://mdformat.readthedocs.io/en/stable/users/plugins.html
           - mdformat-gfm                   # GitHub-Flavored Markdown support - see https://github.github.com/gfm
+          - mdformat-front-matters==2.0.0  # YAML frontmatter support via https://github.com/KyleKing/mdformat-front-matters
           - mdformat-toc                   # auto-generate Table-of-Contents via this directive: <!-- mdformat-toc start -->
           - mdformat-shfmt                 # format embedded bash, sh
           - mdformat-black                 # format embedded python

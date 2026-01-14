@@ -29,7 +29,7 @@
 * It executes the subjobs, serially or in parallel, via run_subjobs(), which in turn delegates parallel job coordination to
   bzfs.process_datasets_in_parallel_and_fault_tolerant().
 * README_bzfs_jobrunner.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via
-update_readme.sh. Simply run that script whenever you change or add ArgumentParser help text.
+  update_readme.sh. Simply run that script whenever you change or add ArgumentParser help text.
 """
 
 from __future__ import (
@@ -66,6 +66,7 @@ from typing import (
     NoReturn,
     TypeVar,
     Union,
+    final,
 )
 
 import bzfs_main.argparse_actions
@@ -218,8 +219,8 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--create-src-snapshots", action="store_true",
         help="Take snapshots on the selected source hosts as necessary. Typically, this command should be called by a "
              "program (or cron job) running on each src host.\n\n")
-    parser.add_argument(  # `choices` are deprecated; use --replicate without argument instead
-        "--replicate", choices=["pull", "push"], default=None, const="pull", nargs="?", metavar="",
+    parser.add_argument(
+        "--replicate", action="store_true",
         help="Replicate snapshots from the selected source hosts to the selected destinations hosts as necessary. For pull "
              "mode (recommended), this command should be called by a program (or cron job) running on each dst "
              "host; for push mode, on the src host; for pull-push mode on a third-party host.\n\n")
@@ -260,7 +261,12 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--dst-hosts", default="{}", metavar="DICT_STRING",
         help="Dictionary that maps each destination hostname to a list of zero or more logical replication target names "
-             "(the infix portion of snapshot name). "
+             "(the infix portion of snapshot name). As hostname use the real output of the `hostname` CLI. "
+             "The target is an arbitrary user-defined name that serves as an abstraction of the destination hostnames for "
+            "a group of snapshots, like target 'onsite', 'offsite', 'hotspare', a geographically independent datacenter like "
+            "'us-west', or similar. Rather than the snapshot name embedding (i.e. hardcoding) a list of destination "
+            "hostnames where it should be sent to, the snapshot name embeds the user-defined target name, which is later "
+            "mapped by this jobconfig to a list of destination hostnames. "
              f"Example: `{format_dict(dst_hosts_example)}`.\n\n"
              "With this, given a snapshot name, we can find the destination hostnames to which the snapshot shall be "
              "replicated. Also, given a snapshot name and its own name, a destination host can determine if it shall "
@@ -358,12 +364,12 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "pruned on schedule. "
              "Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively. "
              f"Example DICT_STRING: `{format_dict(monitor_snapshot_plan_example)}`. "
-             "This example alerts the user if the latest src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more "
-             "than 30 minutes late (i.e. more than 30+60=90 minutes old) [warning] or more than 300 minutes late (i.e. more "
-             "than 300+60=360 minutes old) [critical]. In addition, the example alerts the user if the oldest src or dst "
-             "snapshot named `prod_onsite_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning] or more than "
-             "300 + 60x36 minutes old [critical], where 36 is the number of period cycles specified in `src_snapshot_plan` "
-             "or `dst_snapshot_plan`, respectively. "
+             "This example alerts the user if the *latest* src or dst snapshot named `prod_onsite_<timestamp>_hourly` is "
+             "more than 30 minutes late (i.e. more than 30+60=90 minutes old) [warning] or more than 300 minutes late (i.e. "
+             "more than 300+60=360 minutes old) [critical]. In addition, the example alerts the user if the *oldest* src or "
+             "dst snapshot named `prod_onsite_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning] or more "
+             "than 300 + 60x36 minutes old [critical], where 36 is the number of period cycles specified in "
+             "`src_snapshot_plan` or `dst_snapshot_plan`, respectively. "
              "Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
              "Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for "
              "the given snapshot name pattern.\n\n")
@@ -382,20 +388,11 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI. "
                  "The basename must contain the substring 'bzfs_ssh_config'.\n\n")
     parser.add_argument(
-        "--src-user", default="", metavar="STRING",
-        help=argparse.SUPPRESS)  # deprecated; was renamed to --ssh-src-user
-    parser.add_argument(
-        "--dst-user", default="", metavar="STRING",
-        help=argparse.SUPPRESS)  # deprecated; was renamed to --ssh-dst-user
-    parser.add_argument(
         "--job-id", required=True, action=bzfs_main.argparse_actions.NonEmptyStringAction, metavar="STRING",
         help="The identifier that remains constant across all runs of this particular job; will be included in the log file "
              "name infix. Example: mytestjob\n\n")
     parser.add_argument(
-        "--jobid", default=None, action=bzfs_main.argparse_actions.NonEmptyStringAction, metavar="STRING",
-        help=argparse.SUPPRESS)   # deprecated; was renamed to --job-run
-    parser.add_argument(
-        "--job-run", default=None, action=bzfs_main.argparse_actions.NonEmptyStringAction, metavar="STRING",
+        "--job-run", default="", action=bzfs_main.argparse_actions.NonEmptyStringAction, metavar="STRING",
         help="The identifier of this particular run of the overall job; will be included in the log file name suffix. "
              "Default is a hex UUID. Example: 0badc0f003a011f0a94aef02ac16083c\n\n")
     workers_default = 100  # percent
@@ -476,13 +473,14 @@ def main() -> None:
         set_logging_runtime_defaults()
         # On CTRL-C and SIGTERM, send signal to all descendant processes to terminate them
         termination_event: threading.Event = threading.Event()
-        with termination_signal_handler(termination_event=termination_event):
+        with termination_signal_handler(termination_events=[termination_event]):
             Job(log=None, termination_event=termination_event).run_main(sys_argv=sys.argv)
     finally:
         os.umask(prev_umask)  # restore prior global state
 
 
 #############################################################################
+@final
 class Job:
     """Coordinates subjobs per the CLI flags; Each subjob handles one host pair and may run in its own process or thread."""
 
@@ -491,13 +489,14 @@ class Job:
         self.log_was_None: Final[bool] = log is None
         self.log: Final[Logger] = get_simple_logger(PROG_NAME) if log is None else log
         self.termination_event: Final[threading.Event] = termination_event
-        self.subprocesses: Final[Subprocesses] = Subprocesses()
+        self.subprocesses: Final[Subprocesses] = Subprocesses(termination_event=self.termination_event)
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
         self.loopback_address: Final[str] = _detect_loopback_address()
 
         # mutable variables:
         self.first_exception: int | None = None
+        self.worst_exception: int | None = None
         self.stats: JobStats = JobStats(jobs_all=0)
         self.cache_existing_dst_pools: set[str] = set()
         self.cache_known_dst_pools: set[str] = set()
@@ -514,6 +513,7 @@ class Job:
 
     def _run_main(self, sys_argv: list[str]) -> None:
         self.first_exception = None
+        self.worst_exception = None
         log: Logger = self.log
         log.info("CLI arguments: %s", " ".join(sys_argv))
         nsp = argparse.Namespace(no_argument_file=True)  # disable --root-dataset-pairs='+file' option in DatasetPairsAction
@@ -577,15 +577,14 @@ class Job:
         if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
             random.SystemRandom().shuffle(src_hosts)
             dst_hosts = shuffle_dict(dst_hosts)
-        ssh_src_user: str = args.ssh_src_user or args.src_user  # --src-user is deprecated
-        ssh_dst_user: str = args.ssh_dst_user or args.dst_user  # --dst-user is deprecated
+        ssh_src_user: str = args.ssh_src_user
+        ssh_dst_user: str = args.ssh_dst_user
         ssh_src_port: int | None = args.ssh_src_port
         ssh_dst_port: int | None = args.ssh_dst_port
         ssh_src_config_file: str | None = args.ssh_src_config_file
         ssh_dst_config_file: str | None = args.ssh_dst_config_file
         job_id: str = _sanitize(args.job_id)
-        job_run: str = args.job_run if args.job_run is not None else args.jobid  # --jobid deprecat; was renamed to --job-run
-        job_run = _sanitize(job_run) if job_run else uuid.uuid1().hex
+        job_run: str = _sanitize(args.job_run) if args.job_run else uuid.uuid1().hex
         workers, workers_is_percent = args.workers
         max_workers: int = max(1, round((os.cpu_count() or 1) * workers / 100.0) if workers_is_percent else round(workers))
         worker_timeout_seconds: int = args.worker_timeout_seconds
@@ -714,10 +713,10 @@ class Job:
                 subjobs[subjob_name] = bzfs_prog_header + opts
 
             if args.prune_src_snapshots:
-                prune_src(["--delete-dst-snapshots"], src_snapshot_plan, "prune-src-snapshots")
+                prune_src(["--delete-dst-snapshots"], src_snapshot_plan, tag="prune-src-snapshots")
 
             if args.prune_src_bookmarks:
-                prune_src(["--delete-dst-snapshots=bookmarks"], src_bookmark_plan, "prune-src-bookmarks")
+                prune_src(["--delete-dst-snapshots=bookmarks"], src_bookmark_plan, tag="prune-src-bookmarks")
 
             if args.prune_dst_snapshots:
                 self.validate_true(
@@ -764,6 +763,7 @@ class Job:
                         latest_dict.pop(f"{prefix}cycles", None)
                     oldest_dict = latest_dict.copy()
                     oldest_dict["cycles"] = int(alertdict.get(f"{cycles_prefix}cycles", cycles))
+                    latest_dict.pop("oldest_skip_holds", None)
                     return {"latest": latest_dict, "oldest": oldest_dict}
 
                 return {
@@ -793,7 +793,7 @@ class Job:
                 j = 0
                 marker = "monitor-dst-snapshots"
                 for dst_hostname, targets in dst_hosts.items():
-                    monitor_targets = set(targets).intersection(set(retain_dst_targets[dst_hostname]))
+                    monitor_targets: set[str] = set(targets).intersection(set(retain_dst_targets[dst_hostname]))
                     monitor_plan = {  # only retain targets that belong to the host
                         org: {target: periods for target, periods in target_periods.items() if target in monitor_targets}
                         for org, target_periods in monitor_snapshot_plan.items()
@@ -818,7 +818,7 @@ class Job:
         )
         log.log(LOG_TRACE, "subjobs: \n%s", _pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds, args.jitter)
-        ex = self.first_exception
+        ex = self.worst_exception
         if isinstance(ex, int):
             assert ex != 0
             sys.exit(ex)
@@ -938,6 +938,8 @@ class Job:
         - Subjob failures are converted to return codes (not exceptions) so the policy does not invoke a termination handler
           on such failures and sibling subjobs continue unaffected. This preserves per-subjob isolation, both within a single
           process (thread-per-subjob mode; default) as well as in process-per-subjob mode (``--spawn-process-per-job``).
+        - The first failure is retained for diagnostics.
+        - Process exit code precedence is: fatal/non-monitor failure > monitor CRITICAL/WARNING > STILL_RUNNING > success.
         """
         self.stats = JobStats(len(subjobs))
         log = self.log
@@ -965,11 +967,11 @@ class Job:
             termination_event=self.termination_event,
             termination_handler=self.subprocesses.terminate_process_subtrees,
             task_name="Subjob",
-            retry_policy=None,  # no retries
             dry_run=False,
             is_test_mode=self.is_test_mode,
         ):
             self.first_exception = DIE_STATUS if self.first_exception is None else self.first_exception
+            self.worst_exception = self.get_worst_exception(self.worst_exception, DIE_STATUS)
         stats = self.stats
         jobs_skipped = stats.jobs_all - stats.jobs_started
         msg = f"{stats}, skipped:" + percent(jobs_skipped, total=stats.jobs_all, print_total=True)
@@ -1008,6 +1010,7 @@ class Job:
                 with stats.lock:
                     if self.first_exception is None:
                         self.first_exception = DIE_STATUS if returncode is None else returncode
+                    self.worst_exception = self.get_worst_exception(self.worst_exception, returncode)
                 log.error("Worker job failed with exit code %s in %s: %s", returncode, elapsed_human, cmd_str)
             else:
                 log.debug("Worker job succeeded in %s: %s", elapsed_human, cmd_str)
@@ -1026,7 +1029,7 @@ class Job:
                 self._bzfs_run_main(cmd)
             return 0
         except subprocess.CalledProcessError as e:
-            return e.returncode
+            return bzfs.normalize_called_process_error(e)
         except SystemExit as e:
             assert e.code is None or isinstance(e.code, int)
             return e.code
@@ -1047,35 +1050,61 @@ class Job:
             cmd = [sys.executable, "-m", "bzfs_main." + cmd[0]] + cmd[1:]
         if self.jobrunner_dryrun:
             return 0
-        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, text=True)  # run job in a separate subprocess
-        pid: int = proc.pid
-        self.subprocesses.register_child_pid(pid)
-        try:
-            if self.termination_event.is_set():
-                timeout_secs = 1.0 if timeout_secs is None else timeout_secs
-                raise subprocess.TimeoutExpired(cmd, timeout_secs)  # do not wait for normal completion
-            proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to complete and exit normally
-        except subprocess.TimeoutExpired:
-            cmd_str = " ".join(cmd)
-            if self.termination_event.is_set():
-                log.error("%s", f"Terminating worker job due to async termination request: {cmd_str}")
-            else:
-                log.error("%s", f"Terminating worker job as it failed to complete within {timeout_secs}s: {cmd_str}")
-            proc.terminate()  # Sends SIGTERM signal to job subprocess
-            assert timeout_secs is not None
-            timeout_secs = min(1.0, timeout_secs)
+
+        with self.subprocesses.popen_and_track(cmd, stdin=subprocess.DEVNULL, text=True) as proc:
             try:
-                proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
+                if self.termination_event.is_set():
+                    timeout_secs = 1.0 if timeout_secs is None else timeout_secs
+                    raise subprocess.TimeoutExpired(cmd, timeout_secs)  # do not wait for normal completion
+                proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to complete and exit normally
             except subprocess.TimeoutExpired:
-                log.error("%s", f"Killing worker job as it failed to terminate within {timeout_secs}s: {cmd_str}")
-                terminate_process_subtree(root_pids=[proc.pid])  # Send SIGTERM to process subtree
-                proc.kill()  # Sends SIGKILL signal to job subprocess because SIGTERM wasn't enough
-                timeout_secs = min(0.025, timeout_secs)
-                with contextlib.suppress(subprocess.TimeoutExpired):
+                cmd_str = " ".join(cmd)
+                if self.termination_event.is_set():
+                    log.error("%s", f"Terminating worker job due to async termination request: {cmd_str}")
+                else:
+                    log.error("%s", f"Terminating worker job as it failed to complete within {timeout_secs}s: {cmd_str}")
+                proc.terminate()  # Sends SIGTERM signal to job subprocess
+                assert timeout_secs is not None
+                timeout_secs = min(1.0, timeout_secs)
+                try:
                     proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
-        finally:
-            self.subprocesses.unregister_child_pid(pid)
+                except subprocess.TimeoutExpired:
+                    log.error("%s", f"Killing worker job as it failed to terminate within {timeout_secs}s: {cmd_str}")
+                    terminate_process_subtree(root_pids=[proc.pid])  # Send SIGTERM to process subtree
+                    proc.kill()  # Sends SIGKILL signal to job subprocess because SIGTERM wasn't enough
+                    timeout_secs = min(0.025, timeout_secs)
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
         return proc.returncode
+
+    @staticmethod
+    def get_worst_exception(existing_code: int | None, new_code: int | None) -> int:
+        """Process exit code precedence is: fatal/non-monitor failure > monitor CRITICAL/WARNING > STILL_RUNNING > success."""
+        new_code = DIE_STATUS if new_code is None else new_code
+        if existing_code is None:
+            return new_code
+        assert existing_code is not None
+        assert new_code is not None
+
+        nonfatal: tuple[int, ...] = (0, bzfs.WARNING_STATUS, bzfs.CRITICAL_STATUS, bzfs.STILL_RUNNING_STATUS)
+        existing_is_fatal = existing_code not in nonfatal
+        new_is_fatal = new_code not in nonfatal
+        if existing_is_fatal and new_is_fatal:
+            return max(existing_code, new_code)
+        if existing_is_fatal or new_is_fatal:
+            return existing_code if existing_is_fatal else new_code
+
+        monitor: tuple[int, ...] = (bzfs.WARNING_STATUS, bzfs.CRITICAL_STATUS)
+        existing_is_monitor = existing_code in monitor
+        new_is_monitor = new_code in monitor
+        if existing_is_monitor and new_is_monitor:
+            return max(existing_code, new_code)
+        if existing_is_monitor or new_is_monitor:
+            return existing_code if existing_is_monitor else new_code
+
+        assert existing_code in (0, bzfs.STILL_RUNNING_STATUS), existing_code
+        assert new_code in (0, bzfs.STILL_RUNNING_STATUS), new_code
+        return max(existing_code, new_code)
 
     def validate_src_hosts(self, src_hosts: list[str]) -> list[str]:
         """Checks ``src_hosts`` contains valid hostnames."""
@@ -1229,6 +1258,7 @@ class Job:
 
 
 #############################################################################
+@final
 class RejectArgumentAction(argparse.Action):
     """An argparse Action that immediately fails if it is ever triggered."""
 
@@ -1268,6 +1298,7 @@ def _log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str
 def _pretty_print_formatter(dictionary: dict[str, Any]) -> Any:
     """Lazy JSON formatter used to avoid overhead in disabled log levels."""
 
+    @final
     class PrettyPrintFormatter:
         """Wrapper returning formatted JSON on ``str`` conversion."""
 

@@ -50,6 +50,7 @@ _T = TypeVar("_T")
 
 def parallel_iterator(
     iterator_builder: Callable[[Executor], Iterable[Iterable[Future[_T]]]],
+    *,
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
     termination_event: threading.Event | None = None,  # optional event to request early async termination
@@ -57,8 +58,9 @@ def parallel_iterator(
     """Executes multiple iterators in parallel/concurrently, with explicit backpressure and configurable result ordering;
     avoids pre-submitting the entire workload.
 
-    This function provides high-performance parallel execution of iterator-based tasks using a shared thread pool, with
-    precise control over result delivery ordering and concurrency management through a sliding window buffer approach.
+    This function provides efficient parallel execution of iterator-based tasks using a shared thread pool, with precise
+    control over result delivery ordering and concurrency management through a bounded buffer (a sliding window of at most
+    ``max_workers`` in-flight futures).
 
     Purpose:
     --------
@@ -80,9 +82,9 @@ def parallel_iterator(
     where I/O or ZFS overhead dominates and parallel execution provides substantial performance improvements over
     sequential processing. The implementation addresses several key design challenges:
 
-    - Sliding Window Buffer: Maintains at most ``max_workers`` futures in flight, preventing resource exhaustion and
-      bounding memory consumption while maximizing thread utilization. New tasks are submitted as completed ones are
-      consumed. This is crucial when processing large numbers of datasets typical in ZFS operation.
+    - Bounded Buffer: Maintains at most ``max_workers`` futures in flight, preventing resource exhaustion and bounding memory
+      consumption while maximizing thread utilization. New tasks are submitted as completed ones are consumed. This is
+      crucial when processing large numbers of datasets typical in ZFS operation.
 
     - Ordered vs Unordered Execution:
 
@@ -97,12 +99,14 @@ def parallel_iterator(
     Parameters:
     -----------
     iterator_builder : Callable[[ThreadPoolExecutor], Iterable[Iterable[Future[T]]]]
-        Factory function that receives a ThreadPoolExecutor and returns a series of iterators. Each iterator must yield
-        Future[T] objects representing tasks that have already been submitted to the executor. The builder is called once
-        with the managed thread pool.
+        Factory function that is called once (and only once) with the ThreadPoolExecutor as parameter, returning a
+        corresponding series of iterators. Typically, each iterator is a lazy on-demand Python Generator of (a potentially
+        infinite number of) Future[T] objects representing the (future and eventually actual) result of tasks that have been
+        incrementally submitted to the thread pool, avoiding submitting all tasks at once. Typically, advancing the iterator
+        submits the next task to the executor and yields the corresponding Future.
 
     max_workers : int, default=os.cpu_count() or 1
-        Maximum number of worker threads in the thread pool. Also determines the buffer size for the sliding window
+        Maximum number of worker threads in the thread pool. Also determines the buffer size for the bounded-concurrency
         execution model. Often higher than the number of available CPU cores for I/O-bound tasks.
 
     ordered : bool, default=True
@@ -125,7 +129,7 @@ def parallel_iterator(
     # Parallel SSH command execution with ordered results
     def build_ssh_commands(executor):
         return [
-            (executor.submit(run_ssh_cmd, cmd) for cmd in commands)
+            (executor.submit(run_ssh_cmd, cmd) for cmd in commands)  # lazy on-demand Python Generator of Future objects
         ]
 
     for result in parallel_iterator(build_ssh_commands, max_workers=4, ordered=True):
@@ -142,11 +146,12 @@ def parallel_iterator(
 
 def parallel_iterator_results(
     iterator: Iterator[Future[_T]],
+    *,
     max_workers: int,
     ordered: bool,
     termination_event: threading.Event | None = None,  # optional event to request early async termination
 ) -> Iterator[_T]:
-    """Yield results from an iterator of Future[T] using sliding-window parallelism with optional ordered delivery."""
+    """Yield results from an iterator of Future[T] using bounded concurrency with optional ordered delivery."""
     assert max_workers >= 0
     max_workers = max(1, max_workers)
     termination_event = threading.Event() if termination_event is None else termination_event
@@ -170,7 +175,7 @@ def parallel_iterator_results(
             yield curr_future.result()  # blocks until CLI returns
     else:
         todo_futures: set[Future[_T]] = set(fifo_buffer)
-        fifo_buffer.clear()  # help gc
+        del fifo_buffer  # help gc
         done_futures: set[Future[_T]]
         while todo_futures:
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
@@ -202,6 +207,7 @@ def run_in_parallel(fn1: Callable[[], _K], fn2: Callable[[], _V]) -> tuple[_K, _
 def batch_cmd_iterator(
     cmd_args: Iterable[str],  # list of arguments to be split across one or more commands
     fn: Callable[[list[str]], _T],  # callback that runs a CLI command with a single batch
+    *,
     max_batch_items: int = 2**29,  # max number of args per batch
     max_batch_bytes: int = 127 * 1024,  # max number of bytes per batch
     sep: str = " ",  # separator between batch args

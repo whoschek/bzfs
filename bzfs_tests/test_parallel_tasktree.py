@@ -63,6 +63,7 @@ def suite() -> unittest.TestSuite:
         TestCustomPriorityOrder,
         TestBarriersCleared,
         TestProcessPoolExecutor,
+        TestBarrierName,
         TestParallelTaskTreeBenchmark,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
@@ -783,6 +784,48 @@ class TestProcessPoolExecutor(unittest.TestCase):
         self.assertTrue(any(worker_pid != main_pid for _, worker_pid, _ in PP_CALLS), PP_CALLS)
         # Callback runs in the main process
         self.assertTrue(all(main_pid == cb_main_pid for _, _, cb_main_pid in PP_CALLS), PP_CALLS)
+
+
+#############################################################################
+class TestBarrierName(unittest.TestCase):
+
+    def test_rejects_empty_barrier_name(self) -> None:
+        """Validates that barrier_name must be non-empty."""
+
+        log = MagicMock(logging.Logger)
+        datasets: list[str] = []
+
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+            raise AssertionError("process_dataset should not be called for invalid barrier_name")
+
+        with self.assertRaisesRegex(ValueError, r"Invalid barrier_name"):
+            run_parallel_tasktree(
+                log=log,
+                datasets=datasets,
+                process_dataset=process_dataset,
+                barrier_name="",
+                is_test_mode=True,
+            )
+
+    def test_rejects_barrier_name_with_slash(self) -> None:
+        """Validates that barrier_name must not contain '/'."""
+
+        log = MagicMock(logging.Logger)
+        datasets: list[str] = []
+
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+            raise AssertionError("process_dataset should not be called for invalid barrier_name")
+
+        for barrier_name in ["/", "a/b"]:
+            with self.subTest(barrier_name=barrier_name):
+                with self.assertRaisesRegex(ValueError, r"Invalid barrier_name"):
+                    run_parallel_tasktree(
+                        log=log,
+                        datasets=datasets,
+                        process_dataset=process_dataset,
+                        barrier_name=barrier_name,
+                        is_test_mode=True,
+                    )
 
 
 #############################################################################

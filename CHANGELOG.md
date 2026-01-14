@@ -2,7 +2,42 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.16.0] - Not yet released
+## [1.17.0] - Not yet released
+
+- [bzfs_jobrunner] docs: Improve Getting Started.
+- [bzfs_jobrunner,bzfs] Make `--monitor-snapshots` report exit code for worst encountered alert instead of first
+  encountered alert.
+- [bzfs] Fix snapshot schedule for N-minutely periods where N > 1.
+- [bzfs] `--delete-dst-snapshots`: Don't attempt to delete snapshots that carry a `zfs hold`; instead auto-skip them
+  without failing.
+- [bzfs] `--ssh-{src|dst}-config-file`: Make it possible to specify that no ssh configuration files shall be read.
+- [bzfs] Make `call_with_retries()` more widely applicable.
+- [bzfs] [security] Make `os.utime()` not follow symlinks for additional safety.
+
+## [1.16.0] - December 20, 2025
+
+- [bzfs] Include `--zfs-send-program-opts` also when resuming a previously interrupted `zfs receive -s`.
+- [bzfs] Fix potential delay of process exit when receiving SIGINT/SIGTERM while spawning a subprocess.
+- [bzfs] Log better diagnostics on `subprocess_run()`.
+- [bzfs] Make `run_with_retries()` more widely applicable and more performant.
+- [bzfs] Make `run_ssh_command()` more widely applicable.
+- [bzfs] Make `process_datasets_in_parallel()` more widely applicable.
+- [bzfs] Also run nightly tests on zfs-2.4.0 and zfs-2.2.9.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.15.0...v1.16.0
+
+Removed CLI options that were deprecated in version ≤ 1.12.0:
+
+- [bzfs_jobrunner] Removed deprecated `--jobid` CLI option (was renamed to `--job-run`).
+- [bzfs_jobrunner] Removed deprecated `--src-user` and `--dst-user` CLI options (were renamed to `--ssh-src-user` and
+  `--ssh-dst-user`).
+- [bzfs_jobrunner] Removed deprecated `--replicate=xyz` CLI option (was replaced by `--replicate`).
+- [bzfs] Removed deprecated `--create-src-snapshots-enable-snapshots-changed-cache` CLI option (was replaced with
+  `--cache-snapshots`).
+- [bzfs] Removed deprecated `--cache-snapshots=true|false` CLI option (was replaced with `--cache-snapshots`).
+- [bzfs] Removed deprecated `--no-create-bookmark` CLI option (was replaced with `--create-bookmarks=none`).
+- [bzfs] Removed deprecated `--force-hard` CLI option (was renamed to `--force-destroy-dependents`).
+
+## [1.15.1] - December 2, 2025
 
 - [bzfs] Include `--zfs-send-program-opts` also when resuming a previously interrupted `zfs receive -s`.
 

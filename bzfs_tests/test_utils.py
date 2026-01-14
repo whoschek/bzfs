@@ -49,6 +49,9 @@ from datetime import (
     timezone,
     tzinfo,
 )
+from enum import (
+    IntEnum,
+)
 from logging import (
     Logger,
 )
@@ -59,6 +62,7 @@ from subprocess import (
 from typing import (
     Any,
     Callable,
+    SupportsIndex,
     Union,
     cast,
 )
@@ -103,7 +107,9 @@ from bzfs_main.util.utils import (
     human_readable_duration,
     human_readable_float,
     is_descendant,
+    is_included,
     isotime_from_unixtime,
+    list_formatter,
     open_nofollow,
     parse_duration_to_milliseconds,
     percent,
@@ -183,6 +189,10 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(has_duplicates([1, 1, 2, 3, 3, 4, 4, 5]))
         self.assertTrue(has_duplicates(["a", "b", "b", "c"]))
         self.assertFalse(has_duplicates(["ant", "bee", "cat"]))
+        self.assertFalse(has_duplicates([None]))
+        self.assertTrue(has_duplicates([None, None]))
+        self.assertTrue(has_duplicates([None, None, None]))
+        self.assertFalse(has_duplicates([1, 2, 3, 4, 5, None]))
 
     def test_is_descendant(self) -> None:
         self.assertTrue(is_descendant("pool/fs/child", "pool/fs"))
@@ -259,7 +269,21 @@ class TestHelperFunctions(unittest.TestCase):
         assert_full_match("foo", "!foo", re_suffix)
         assert_full_match("foo", "!foo")
         with self.assertRaises(re.error):
-            compile_regexes(["fo$o"], re_suffix)
+            compile_regexes(["fo$o"], suffix=re_suffix)
+
+    def test_is_included_with_negated_exclude_regex(self) -> None:
+        """Negated exclude regex excludes non-matching names but not matching ones."""
+        exclude_regexes = compile_regexes(["!foo"])
+        include_regexes = compile_regexes([".*"])
+        self.assertTrue(is_included("foo", include_regexes, exclude_regexes))
+        self.assertFalse(is_included("bar", include_regexes, exclude_regexes))
+
+    def test_is_included_with_negated_include_regex(self) -> None:
+        """Negated include regex includes non-matching names and excludes matching ones."""
+        include_regexes = compile_regexes(["!foo"])
+        exclude_regexes = compile_regexes([])
+        self.assertTrue(is_included("bar", include_regexes, exclude_regexes))
+        self.assertFalse(is_included("foo", include_regexes, exclude_regexes))
 
     def test_parse_duration_to_milliseconds(self) -> None:
         self.assertEqual(5000, parse_duration_to_milliseconds("5 seconds"))
@@ -277,6 +301,14 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_pretty_print_formatter(self) -> None:
         self.assertIsNotNone(str(pretty_print_formatter(argparse.Namespace(src="src", dst="dst"))))
+
+    def test_list_formatter_lstrip_branch(self) -> None:
+        """list_formatter strips or preserves leading whitespace depending on the lstrip flag."""
+        items = ["  leading", "space"]
+        formatter_no_lstrip = list_formatter(items, separator=" ", lstrip=False)
+        formatter_lstrip = list_formatter(items, separator=" ", lstrip=True)
+        self.assertEqual("  leading space", str(formatter_no_lstrip))
+        self.assertEqual("leading space", str(formatter_lstrip))
 
     def test_xprint(self) -> None:
         log = MagicMock(spec=Logger)
@@ -481,19 +513,27 @@ class TestSortedDict(unittest.TestCase):
 
     def test_sorted_dict_empty_dictionary_returns_empty(self) -> None:
         result: dict[str, int] = sorted_dict({})
-        self.assertEqual({}, result)
+        self.assertEqual([], list(result.items()))
 
     def test_sorted_dict_single_key_value_pair_is_sorted_correctly(self) -> None:
         result: dict[str, int] = sorted_dict({"a": 1})
-        self.assertEqual({"a": 1}, result)
+        self.assertEqual([("a", 1)], list(result.items()))
 
     def test_sorted_dict_multiple_key_value_pairs_are_sorted_by_keys(self) -> None:
         result: dict[str, int] = sorted_dict({"b": 2, "a": 1, "c": 3})
-        self.assertEqual({"a": 1, "b": 2, "c": 3}, result)
+        self.assertEqual([("a", 1), ("b", 2), ("c", 3)], list(result.items()))
 
     def test_sorted_dict_with_numeric_keys_is_sorted_correctly(self) -> None:
         result: dict[int, str] = sorted_dict({3: "three", 1: "one", 2: "two"})
-        self.assertEqual({1: "one", 2: "two", 3: "three"}, result)
+        self.assertEqual([(1, "one"), (2, "two"), (3, "three")], list(result.items()))
+
+    def test_sorted_dict_key_sorts_by_value(self) -> None:
+        result: dict[str, int] = sorted_dict({"b": 2, "a": 3, "c": 1}, key=lambda item: item[1])
+        self.assertEqual([("c", 1), ("b", 2), ("a", 3)], list(result.items()))
+
+    def test_sorted_dict_reverse_reverses_sort_order(self) -> None:
+        result: dict[str, int] = sorted_dict({"b": 2, "a": 1, "c": 3}, reverse=True)
+        self.assertEqual([("c", 3), ("b", 2), ("a", 1)], list(result.items()))
 
     def test_sorted_dict_with_mixed_key_types_raises_error(self) -> None:
         with self.assertRaises(TypeError):
@@ -810,6 +850,29 @@ class TestOpenNoFollow(unittest.TestCase):
                 self.assertEqual("hello", f.read())
         m_fstat.assert_not_called()
 
+    def test_read_allows_root_owner(self) -> None:
+        class Stat:
+            st_uid = 0
+
+        with patch("os.fstat", return_value=Stat()), patch("os.geteuid", return_value=1234):
+            with open_nofollow(self.real_path, "r", encoding="utf-8") as f:
+                self.assertEqual("hello", f.read())
+
+    def test_write_requires_ownership_and_closes_fd(self) -> None:
+        class Stat:
+            st_uid = 0
+
+        orig_close = os.close
+        with (
+            patch("os.fstat", return_value=Stat()),
+            patch("os.geteuid", return_value=1234),
+            patch("os.close", side_effect=orig_close) as m_close,
+        ):
+            with self.assertRaises(PermissionError) as cm:
+                open_nofollow(self.real_path, "a", encoding="utf-8")
+        self.assertEqual(errno.EPERM, cm.exception.errno)
+        m_close.assert_called_once()
+
     def test_owner_mismatch_raises_and_closes_fd(self) -> None:
         class Stat:
             st_uid = os.geteuid() + 1
@@ -1025,6 +1088,10 @@ class TestFindMatch(unittest.TestCase):
         self.assertEqual(2, find_match(lst, condition, start=-3, end=None, reverse=False))
         self.assertEqual(3, find_match(lst, condition, start=-3, end=None, reverse=True))
 
+        lst = ["-a", "b", "-c", "d"]
+        self.assertEqual(0, find_match(lst, condition, start=-999, end=None, reverse=False))
+        self.assertEqual(2, find_match(lst, condition, start=-999, end=None, reverse=True))
+
         lst = ["-a", "-b", "c", "d"]
         self.assertEqual(0, find_match(lst, condition, end=-1, reverse=False))
         self.assertEqual(1, find_match(lst, condition, end=-1, reverse=True))
@@ -1040,6 +1107,81 @@ class TestFindMatch(unittest.TestCase):
         self.assertEqual(2, find_match(lst, condition, start=1, end=-1, reverse=True))
         self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=False))
         self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=True))
+
+    def test_raises_when_no_match_without_slice(self) -> None:
+        """Covers raises-paths when start/end are None (no slicing)."""
+
+        def condition(arg: str) -> bool:
+            return arg.startswith("-")
+
+        lst: list[str] = ["a", "b"]
+        for reverse in (False, True):
+            with self.subTest(reverse=reverse):
+                with self.assertRaises(ValueError) as cm:
+                    find_match(lst, condition, reverse=reverse, raises=True)
+                self.assertEqual("No matching item found in sequence", str(cm.exception))
+
+                with self.assertRaises(ValueError) as cm:
+                    find_match(lst, condition, reverse=reverse, raises=lambda: "foo")
+                self.assertEqual("foo", str(cm.exception))
+
+    def test_slicing_semantics_clamping(self) -> None:
+        """find_match() must match Python slicing semantics for start/end, including clamping."""
+
+        class Idx(IntEnum):
+            NEG_HUGE = -999
+            POS_HUGE = 999
+            NEG_TEN = -10
+            NEG_ONE = -1
+            ZERO = 0
+            ONE = 1
+            THREE = 3
+            FOUR = 4
+
+        def condition(arg: str) -> bool:
+            return arg.startswith("-")
+
+        seq: list[str] = ["-0", "a", "-2", "b", "-4"]
+
+        def expected(
+            *,
+            start: int | SupportsIndex | None,
+            end: int | SupportsIndex | None,
+            reverse: bool,
+        ) -> int:
+            sliced = seq[start:end]
+            slice_start, _, _ = slice(start, end).indices(len(seq))
+            if reverse:
+                for j in range(len(sliced) - 1, -1, -1):
+                    if condition(sliced[j]):
+                        return slice_start + j
+            else:
+                for j in range(len(sliced)):
+                    if condition(sliced[j]):
+                        return slice_start + j
+            return -1
+
+        cases: list[tuple[SupportsIndex | None, SupportsIndex | None]] = [
+            (None, None),
+            (Idx.NEG_HUGE, None),
+            (Idx.POS_HUGE, None),
+            (None, Idx.NEG_HUGE),
+            (None, Idx.POS_HUGE),
+            (Idx.NEG_TEN, Idx.NEG_ONE),
+            (Idx.ONE, Idx.POS_HUGE),
+            (Idx.ONE, Idx.FOUR),
+            (Idx.THREE, Idx.NEG_HUGE),
+            (Idx.NEG_ONE, Idx.ZERO),  # start > end after normalization -> empty slice
+        ]
+        for start, end in cases:
+            with self.subTest(start=start, end=end):
+                self.assertEqual(
+                    expected(start=start, end=end, reverse=False), find_match(seq, condition, start=start, end=end)
+                )
+                self.assertEqual(
+                    expected(start=start, end=end, reverse=True),
+                    find_match(seq, condition, start=start, end=end, reverse=True),
+                )
 
     def assert_find_match(
         self,
@@ -1305,6 +1447,95 @@ class TestSubprocessRunWithSubprocesses(unittest.TestCase):
         assert result is not None
         self.assertNotEqual(0, result.returncode)
 
+    def test_termination_event_forces_timeout_and_cleanup(self) -> None:
+        """When termination_event is set, subprocess_run enforces timeout=0 and cleans up tracking on TimeoutExpired."""
+        termination_event = threading.Event()
+        sp = Subprocesses(termination_event=termination_event)
+        termination_event.set()
+        created_procs: list[Any] = []
+
+        class _FakeProc:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.args = args
+                self.kwargs = kwargs
+                self.pid = 12345
+                self.killed: bool = False
+                self.seen_timeout: float | None = None
+                created_procs.append(self)
+
+            def communicate(self, _input: Any | None = None, timeout: float | None = None) -> tuple[bytes, bytes]:
+                self.seen_timeout = timeout
+                t: float = 0.0 if timeout is None else float(timeout)
+                raise subprocess.TimeoutExpired(cmd=self.args, timeout=t)
+
+            def kill(self) -> None:
+                self.killed = True
+
+        with (
+            patch("bzfs_main.util.utils.terminate_process_subtree") as mock_term,
+            patch("bzfs_main.util.utils.subprocess.Popen", new=_FakeProc),
+        ):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                sp.subprocess_run(["sleep", "1"], stdout=PIPE, stderr=PIPE)
+
+        self.assertEqual(1, len(created_procs))
+        proc = cast(_FakeProc, created_procs[0])
+        self.assertEqual(0.0, proc.seen_timeout)
+        self.assertTrue(proc.killed)
+        self.assertEqual({}, sp._child_pids)
+        mock_term.assert_called_once()
+
+    def test_termination_event_set_during_spawn_forces_timeout(self) -> None:
+        """When termination_event becomes set after spawn, subprocess_run forces timeout=0 before communicate()."""
+        termination_event = threading.Event()
+        sp = Subprocesses(termination_event=termination_event)
+        created_procs: list[Any] = []
+
+        class _FakeProc:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.args = args
+                self.kwargs = kwargs
+                self.pid = 12345
+                self.killed: bool = False
+                self.seen_timeout: float | None = None
+                created_procs.append(self)
+                termination_event.set()
+
+            def communicate(self, _input: Any | None = None, timeout: float | None = None) -> tuple[bytes, bytes]:
+                self.seen_timeout = timeout
+                t: float = 0.0 if timeout is None else float(timeout)
+                raise subprocess.TimeoutExpired(cmd=self.args, timeout=t)
+
+            def kill(self) -> None:
+                self.killed = True
+
+        with (
+            patch("bzfs_main.util.utils.terminate_process_subtree") as mock_term,
+            patch("bzfs_main.util.utils.subprocess.Popen", new=_FakeProc),
+        ):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                sp.subprocess_run(["sleep", "1"], stdout=PIPE, stderr=PIPE, timeout=2.0)
+
+        self.assertTrue(termination_event.is_set())
+        self.assertEqual(1, len(created_procs))
+        proc = cast(_FakeProc, created_procs[0])
+        self.assertEqual(0.0, proc.seen_timeout)
+        self.assertTrue(proc.killed)
+        self.assertEqual({}, sp._child_pids)
+        mock_term.assert_called_once_with(root_pids=[proc.pid])
+
+    def test_termination_event_real_sleep_exits_quickly(self) -> None:
+        """Integration-style check: pre-set termination_event causes real subprocess_run to timeout promptly."""
+        termination_event = threading.Event()
+        sp = Subprocesses(termination_event=termination_event)
+        termination_event.set()
+        start = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            sp.subprocess_run(["sleep", "1"], stdout=PIPE, stderr=PIPE, timeout=2.0)
+        elapsed = time.monotonic() - start
+        self.assertLess(elapsed, 0.75, f"unexpected slow termination_event handling: {elapsed:.3f}s")
+        self.assertEqual({}, sp._child_pids)
+
 
 #############################################################################
 class TestSubprocessRunLogging(unittest.TestCase):
@@ -1378,14 +1609,14 @@ class TestSubprocessRunLogging(unittest.TestCase):
         self.assertEqual(0, result1.returncode)
         self.assertEqual(["Executed [success] [2ms]: true"], handler1.records)
 
-        # String args with leading whitespace and shell=True should be lstrip()'d in logs
+        # String args with leading whitespace should not be lstrip()'d in logs
         log2, handler2 = self._make_logger()
         with patch("bzfs_main.util.utils.time.monotonic_ns", side_effect=[0, 1_500_000]):
             result2 = subprocess_run(
                 args="  echo foo", shell=True, stdout=PIPE, stderr=PIPE, log=log2, loglevel=logging.INFO
             )
         self.assertEqual(0, result2.returncode)
-        self.assertEqual(["Executed [success] [1.5ms]: echo foo"], handler2.records)
+        self.assertEqual(["Executed [success] [1.5ms]:   echo foo"], handler2.records)
 
     def test_no_logging_when_level_disabled(self) -> None:
         logger = logging.getLogger(self.id() + ":disabled")
@@ -1514,12 +1745,15 @@ class TestTerminationSignalHandler(unittest.TestCase):
         old_sigint = signal.getsignal(signal.SIGINT)
         old_sigterm = signal.getsignal(signal.SIGTERM)
         try:
-            event = threading.Event()
+            event1 = threading.Event()
+            event2 = threading.Event()
+            events = [event1, event2]
             mock_handler = MagicMock()
-            with termination_signal_handler(event, termination_handler=mock_handler):
-                self.assertFalse(event.is_set(), "Event should not be set before a signal is received")
+            with termination_signal_handler(events, termination_handler=mock_handler):
+                self.assertFalse(any(event.is_set() for event in events), "Event must not be set before signal is received")
                 os.kill(os.getpid(), signal.SIGINT)
-                self.assertTrue(event.wait(1.0), "Event should be set after SIGINT")
+                for event in events:
+                    self.assertTrue(event.wait(1.0), "Event should be set after SIGINT")
                 mock_handler.assert_called_once()
         finally:
             # Ensure global handlers are restored to what they were before the test
@@ -1530,12 +1764,15 @@ class TestTerminationSignalHandler(unittest.TestCase):
         old_sigint = signal.getsignal(signal.SIGINT)
         old_sigterm = signal.getsignal(signal.SIGTERM)
         try:
-            event = threading.Event()
+            event1 = threading.Event()
+            event2 = threading.Event()
+            events = [event1, event2]
             mock_handler = MagicMock()
-            with termination_signal_handler(event, termination_handler=mock_handler):
-                self.assertFalse(event.is_set(), "Event should not be set before a signal is received")
+            with termination_signal_handler(events, termination_handler=mock_handler):
+                self.assertFalse(any(event.is_set() for event in events), "Event must not be set before signal is received")
                 os.kill(os.getpid(), signal.SIGTERM)
-                self.assertTrue(event.wait(1.0), "Event should be set after SIGTERM")
+                for event in events:
+                    self.assertTrue(event.wait(1.0), "Event should be set after SIGTERM")
                 mock_handler.assert_called_once()
         finally:
             signal.signal(signal.SIGINT, old_sigint)
@@ -1546,7 +1783,8 @@ class TestTerminationSignalHandler(unittest.TestCase):
         old_sigterm = signal.getsignal(signal.SIGTERM)
         try:
             event = threading.Event()
-            with termination_signal_handler(event):
+            events = [event]
+            with termination_signal_handler(events):
                 # Inside context, handlers should differ from originals
                 self.assertNotEqual(old_sigint, signal.getsignal(signal.SIGINT))
                 self.assertNotEqual(old_sigterm, signal.getsignal(signal.SIGTERM))
@@ -1563,7 +1801,8 @@ class TestTerminationSignalHandler(unittest.TestCase):
         try:
             event = threading.Event()
             with self.assertRaises(RuntimeError):
-                with termination_signal_handler(event):
+                events = [event]
+                with termination_signal_handler(events):
                     raise RuntimeError("boom")
             # Even on exception, original handlers are restored
             self.assertEqual(old_sigint, signal.getsignal(signal.SIGINT))
@@ -1578,7 +1817,8 @@ class TestTerminationSignalHandler(unittest.TestCase):
         old_sigterm = signal.getsignal(signal.SIGTERM)
         try:
             event = threading.Event()
-            with termination_signal_handler(event):
+            events = [event]
+            with termination_signal_handler(events):
                 os.kill(os.getpid(), signal.SIGINT)
                 self.assertTrue(event.wait(1.0), "Event should be set after SIGINT")
                 mock_terminate.assert_called_once()

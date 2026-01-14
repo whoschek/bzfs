@@ -17,8 +17,8 @@
 Purpose: Provide bzfs-specific behavior on top of the policy-free generic ``parallel_tasktree`` scheduling algorithm:
 retries, skip-on-error modes (fail/dataset/tree), and logging.
 
-Assumptions: Callers provide a thread-safe ``process_dataset(dataset, tid, Retry) -> bool``. Dataset list is sorted and
-unique (enforced by tests).
+Assumptions: Callers provide a thread-safe ``process_dataset(dataset, tid, Retry) -> bool`` callback. Dataset list is sorted
+and contains no duplicate entries (enforced by tests).
 
 Design rationale: Keep scheduling generic and reusable while concentrating error handling and side-effects here. This module
 exposes a stable API for callers like ``bzfs`` and ``bzfs_jobrunner``.
@@ -46,8 +46,9 @@ from bzfs_main.util.parallel_tasktree import (
 )
 from bzfs_main.util.retry import (
     Retry,
+    RetryOptions,
     RetryPolicy,
-    run_with_retries,
+    call_with_retries,
 )
 from bzfs_main.util.utils import (
     dry,
@@ -56,6 +57,7 @@ from bzfs_main.util.utils import (
 
 
 def process_datasets_in_parallel_and_fault_tolerant(
+    *,
     log: logging.Logger,
     datasets: list[str],  # (sorted) list of datasets to process
     process_dataset: Callable[
@@ -72,7 +74,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     task_name: str = "Task",
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error
-    retry_policy: RetryPolicy | None = None,
+    retry_options: RetryOptions[bool] = RetryOptions[bool]().copy(policy=RetryPolicy.no_retries()),  # noqa: B008
     dry_run: bool = False,
     is_test_mode: bool = False,
 ) -> bool:  # returns True if any dataset processing failed, False if all succeeded
@@ -92,7 +94,6 @@ def process_datasets_in_parallel_and_fault_tolerant(
     termination_event = threading.Event() if termination_event is None else termination_event
     assert "%" not in task_name
     assert callable(append_exception)
-    retry_policy = RetryPolicy.no_retries() if retry_policy is None else retry_policy
     len_datasets: int = len(datasets)
     is_debug: bool = log.isEnabledFor(logging.DEBUG)
 
@@ -103,8 +104,14 @@ def process_datasets_in_parallel_and_fault_tolerant(
         exception = None
         no_skip: bool = False
         try:
-            no_skip = run_with_retries(
-                lambda retry: process_dataset(dataset, tid, retry), retry_policy, log, termination_event=termination_event
+            no_skip = call_with_retries(
+                fn=lambda retry: process_dataset(dataset, tid, retry),
+                policy=retry_options.policy,
+                config=retry_options.config,
+                giveup=retry_options.giveup,
+                after_attempt=retry_options.after_attempt,
+                on_exhaustion=retry_options.on_exhaustion,
+                log=log,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
             exception = e  # may be reraised later

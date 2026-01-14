@@ -15,7 +15,7 @@
 """The core replication algorithm is in replicate_dataset(), which performs reliable full and/or incremental 'zfs send' and
 'zfs receive' operations on snapshots, using resumable ZFS sends when possible.
 
-For replication of multiple datasets, including recursive replication, see bzfs.py/replicate_datasets().
+For replication of multiple datasets, including recursive replication, see bzfs.py:replicate_datasets().
 """
 
 from __future__ import (
@@ -73,7 +73,6 @@ from bzfs_main.util.connection import (
     SHARED,
     ConnectionPool,
     dquote,
-    refresh_ssh_connection_if_necessary,
     squote,
     timeout,
 )
@@ -121,7 +120,7 @@ _RIGHT_JUST: Final[int] = 7
 
 def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
     """Replicates src_dataset to dst_dataset (thread-safe); For replication of multiple datasets, including recursive
-    replication, see bzfs.py/replicate_datasets()."""
+    replication, see bzfs.py:replicate_datasets()."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
     retry_count: int = retry.count
@@ -288,7 +287,7 @@ def _rollback_dst_dataset_if_necessary(
     done_checking: bool,
     tid: str,
 ) -> bool | tuple[str, str, bool]:
-    """On replication, rollback dst if necessary."""
+    """On replication, rollback dst if necessary; error out if not permitted."""
     p, log = job.params, job.params.log
     dst = p.dst
     latest_dst_snapshot: str = ""
@@ -345,9 +344,11 @@ def _rollback_dst_dataset_if_necessary(
             job.run_ssh_command(dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
         except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
             stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
-            no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
+            retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-            raise RetryableError("Subprocess failed", display_msg="zfs rollback", no_sleep=no_sleep) from e
+            raise RetryableError(
+                "Subprocess failed", display_msg="zfs rollback", retry_immediately_once=retry_immediately_once
+            ) from e
 
     if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
         log.info(f"{tid} Already up-to-date: %s", dst_dataset)
@@ -370,7 +371,7 @@ def _replicate_dataset_fully(
     tid: str,
 ) -> tuple[str, bool, bool, int]:
     """On replication, deletes all dst snapshots and performs a full send of the oldest selected src snapshot, which in turn
-    creates a common snapshot."""
+    creates a common snapshot; error out if not permitted."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
     latest_common_src_snapshot: str = ""
@@ -425,7 +426,7 @@ def _replicate_dataset_fully(
         dry_run_no_send = dry_run_no_send or p.dry_run_no_send
         job.maybe_inject_params(error_trigger="full_zfs_send_params")
         humansize = humansize.rjust(_RIGHT_JUST * 3 + 2)
-        _run_zfs_send_receive(
+        _run_zfs_send_receive(  # do the real work
             job, src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "full_zfs_send"
         )
         latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
@@ -537,7 +538,7 @@ def _replicate_dataset_incrementally(
             dry_run_no_send = True
         dry_run_no_send = dry_run_no_send or p.dry_run_no_send
         job.maybe_inject_params(error_trigger="incr_zfs_send_params")
-        _run_zfs_send_receive(
+        _run_zfs_send_receive(  # do the real work
             job, src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "incr_zfs_send"
         )
         done_size += curr_size
@@ -565,7 +566,7 @@ def _format_size(num_bytes: int) -> str:
 def _prepare_zfs_send_receive(
     job: Job, src_dataset: str, send_cmd: list[str], recv_cmd: list[str], size_estimate_bytes: int, size_estimate_human: str
 ) -> tuple[str, str, str]:
-    """Constructs zfs send/recv pipelines with optional compression and pv."""
+    """Constructs zfs send/recv pipelines with optional compression, mbuffer and pv."""
     p = job.params
     send_cmd_str: str = shlex.join(send_cmd)
     recv_cmd_str: str = shlex.join(recv_cmd)
@@ -694,8 +695,8 @@ def _run_zfs_send_receive(
     src_conn_pool: ConnectionPool = p.connection_pools[p.src.location].pool(conn_pool_name)
     dst_conn_pool: ConnectionPool = p.connection_pools[p.dst.location].pool(conn_pool_name)
     with src_conn_pool.connection() as src_conn, dst_conn_pool.connection() as dst_conn:
-        refresh_ssh_connection_if_necessary(src_conn, job)
-        refresh_ssh_connection_if_necessary(dst_conn, job)
+        src_conn.refresh_ssh_connection_if_necessary(job)
+        dst_conn.refresh_ssh_connection_if_necessary(job)
         src_ssh_cmd: str = " ".join(src_conn.ssh_cmd_quoted)
         dst_ssh_cmd: str = " ".join(dst_conn.ssh_cmd_quoted)
         cmd: list[str] = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
@@ -709,14 +710,18 @@ def _run_zfs_send_receive(
                     cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=True, log=log
                 )
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-                no_sleep: bool = False
+                retry_immediately_once: bool = False
                 if not isinstance(e, UnicodeDecodeError):
                     xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
                     log.warning("%s", stderr_to_str(e.stderr).rstrip())
                 if isinstance(e, subprocess.CalledProcessError):
-                    no_sleep = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr_to_str(e.stderr))
+                    retry_immediately_once = _clear_resumable_recv_state_if_necessary(
+                        job, dst_dataset, stderr_to_str(e.stderr)
+                    )
                 # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-                raise RetryableError("Subprocess failed", display_msg="zfs send/receive", no_sleep=no_sleep) from e
+                raise RetryableError(
+                    "Subprocess failed", display_msg="zfs send/receive", retry_immediately_once=retry_immediately_once
+                ) from e
             else:
                 xprint(log, process.stdout, file=sys.stdout)
                 xprint(log, process.stderr, file=sys.stderr)
@@ -936,9 +941,11 @@ def _delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str
         job.run_ssh_command(r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
         stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
-        no_sleep: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
-        # op isn't idempotent so retries regather current state from the start
-        raise RetryableError("Subprocess failed", display_msg="zfs destroy snapshot", no_sleep=no_sleep) from e
+        retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
+        # op isn't idempotent so retries regather current state from the start of delete_destination_snapshots() or similar
+        raise RetryableError(
+            "Subprocess failed", display_msg="zfs destroy snapshot", retry_immediately_once=retry_immediately_once
+        ) from e
 
 
 def _delete_snapshot_cmd(p: Params, r: Remote, snapshots_to_delete: str) -> list[str]:
@@ -1062,7 +1069,7 @@ def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_
         if recv_resume_token:
             e = retryable_error.__cause__
             stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
-            retryable_error.no_sleep = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
+            retryable_error.retry_immediately_once = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
         # op isn't idempotent so retries regather current state from the start of replicate_dataset()
         raise
     if lines is None:
@@ -1221,17 +1228,17 @@ def _add_recv_property_options(
 
 
 def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:
-    """Decline to start a state changing ZFS operation that is, although harmless, likely to collide with other currently
-    running processes. Instead, retry the operation later, after some delay. For example, decline to start a 'zfs receive'
-    into a destination dataset if another process is already running another 'zfs receive' into the same destination dataset,
-    as ZFS would reject any such attempt. However, it's actually fine to run an incremental 'zfs receive' into a dataset in
+    """Decline to start a state changing ZFS operation that is, although harmless, likely to collide with another currently
+    running process. Instead, retry the operation later, after some delay. For example, decline to start a 'zfs receive' into
+    a destination dataset if another process is already running another 'zfs receive' into the same destination dataset, as
+    ZFS would reject any such attempt. However, it's actually fine to run an incremental 'zfs receive' into a dataset in
     parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use cases where A replicates to B,
     and B replicates to C.
 
     _check_zfs_dataset_busy() offers no guarantees, it merely proactively avoids likely collisions. In other words, even if
     the process check below passes there is no guarantee that the destination dataset won't be busy by the time we actually
     execute the 'zfs send' operation. In such an event ZFS will reject the operation, we'll detect that, and we'll simply
-    retry, after some delay. _check_zfs_dataset_busy() can be disabled via --ps-program=-.
+    auto-retry, after some delay. _check_zfs_dataset_busy() can be disabled via --ps-program=-.
 
     TLDR: As is common for long-running operations in distributed systems, we use coordination-free optimistic concurrency
     control where the parties simply retry on collision detection (rather than coordinate concurrency via a remote lock

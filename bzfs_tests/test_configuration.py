@@ -258,7 +258,7 @@ class TestHelperFunctions(AbstractTestCase):
             non_socket_file = os.path.join(tmpdir, "f")
             Path(non_socket_file).touch()
 
-            configuration._delete_stale_files(tmpdir, "s", millis=31 * 24 * 60 * 60 * 1000)
+            configuration._delete_stale_files(tmpdir, prefix="s", millis=31 * 24 * 60 * 60 * 1000)
 
             self.assertTrue(os.path.exists(new_socket_file))
             self.assertFalse(os.path.exists(stale_socket_file))
@@ -275,7 +275,7 @@ class TestHelperFunctions(AbstractTestCase):
                 sock.bind(socket_path)
                 time.sleep(0.001)  # sleep to ensure the file's mtime is in the past
                 # Call delete_stale_files with millis=0 to mark all files as stale.
-                configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+                configuration._delete_stale_files(tmpdir, prefix="s", millis=0, ssh=True)
                 # The file should still exist because the current process is alive.
                 self.assertTrue(os.path.exists(socket_path))
             finally:
@@ -296,7 +296,7 @@ class TestHelperFunctions(AbstractTestCase):
             try:
                 sock.bind(socket_path)
                 time.sleep(0.001)  # sleep to ensure the file's mtime is in the past
-                configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+                configuration._delete_stale_files(tmpdir, prefix="s", millis=0, ssh=True)
                 # The file should be removed because the fake pid is not alive.
                 self.assertFalse(os.path.exists(socket_path))
             finally:
@@ -309,7 +309,7 @@ class TestHelperFunctions(AbstractTestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             regular_file = os.path.join(tmpdir, "s_regular_file")
             Path(regular_file).touch()
-            configuration._delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+            configuration._delete_stale_files(tmpdir, prefix="s", millis=0, ssh=True)
             self.assertFalse(os.path.exists(regular_file))
 
     def test_unset_matching_env_vars_include_overrides_exclude(self) -> None:
@@ -637,9 +637,37 @@ class TestHelperFunctions(AbstractTestCase):
             [(alert.oldest.warning_millis, alert.oldest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
+        self.assertListEqual([False], [alert.oldest_skip_holds for alert in config.alerts])
         self.assertTrue(config.enable_monitor_snapshots)
         self.assertFalse(config.dont_warn)
         self.assertFalse(config.dont_crit)
+
+        args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--monitor-snapshots=" + plan({"oldest": {"warning": "1 millis", "oldest_skip_holds": True, "cycles": 1}}),
+            ]
+        )
+        config = configuration.MonitorSnapshotsConfig(args, params)
+        self.assertTrue(str(config))
+        self.assertListEqual([None], [alert.latest for alert in config.alerts])
+        self.assertListEqual(
+            [(100 + 1, UNIX_TIME_INFINITY_SECS)],
+            [(alert.oldest.warning_millis, alert.oldest.critical_millis) for alert in config.alerts],  # type: ignore
+        )
+        self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
+        self.assertListEqual([True], [alert.oldest_skip_holds for alert in config.alerts])
+
+        args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--monitor-snapshots=" + plan({"oldest": {"warning": "1 millis", "oldest_skip_holds": "true", "cycles": 1}}),
+            ]
+        )
+        with self.assertRaises(SystemExit):
+            configuration.MonitorSnapshotsConfig(args, params)
 
         args = bzfs.argument_parser().parse_args(
             ["src", "dst", "--monitor-snapshots=" + plan({"latest": {"warning": "2 millis"}})]

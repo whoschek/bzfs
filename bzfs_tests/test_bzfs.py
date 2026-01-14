@@ -80,6 +80,8 @@ from bzfs_main.util.connection import (
 )
 from bzfs_main.util.retry import (
     Retry,
+    RetryConfig,
+    RetryPolicy,
 )
 from bzfs_main.util.utils import (
     DIE_STATUS,
@@ -1301,7 +1303,20 @@ class TestJobMethods(AbstractTestCase):
             mock_run.return_value = None
 
             # Act: Should complete without conflict and run a single incremental send based on h1->d2.
-            replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0))
+            replicate_dataset(
+                job,
+                src_dataset,
+                tid="1/1",
+                retry=Retry(
+                    count=0,
+                    start_time_nanos=0,
+                    attempt_start_time_nanos=0,
+                    policy=RetryPolicy(),
+                    config=RetryConfig(),
+                    log=None,
+                    previous_outcomes=(),
+                ),
+            )
             # Assert: incremental planning was invoked (found common base -> incremental)
             mock_steps.assert_called_once()
             # And exactly one zfs send/receive pipeline executed
@@ -1629,11 +1644,11 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
         datasets = ["tank/ds1", "tank/ds2", "tank/ds3", "tank/ds4"]
 
         lines = [
-            "1\t100\ttank/ds1@bzfs_2023-01-01_00:00:00_hourly",
-            "2\t200\ttank/ds1@bzfs_2024-01-01_00:00:00_hourly",
-            "1\t150\ttank/ds2@unrelated_snap",
-            "1\t100\ttank/ds4@bzfs_us-west-1_2023-01-01_00:00:00_hourly",
-            "2\t200\ttank/ds4@bzfs_us-west-1_2024-01-01_00:00:00_hourly",
+            "tank/ds1@bzfs_2023-01-01_00:00:00_hourly\t1\t100",
+            "tank/ds1@bzfs_2024-01-01_00:00:00_hourly\t2\t200",
+            "tank/ds2@unrelated_snap\t1\t150",
+            "tank/ds4@bzfs_us-west-1_2023-01-01_00:00:00_hourly\t1\t100",
+            "tank/ds4@bzfs_us-west-1_2024-01-01_00:00:00_hourly\t2\t200",
         ]
 
         def fake_zfs_list(
@@ -1643,6 +1658,8 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
             datasets_arg: list[str],
             ordered: bool = False,
         ) -> Iterator[list[str]]:
+            o_index = cmd.index("-o")
+            self.assertNotIn("userrefs", cmd[o_index + 1].split(","))
             yield lines
 
         latest_calls: list[tuple[int, int, str, str]] = []
@@ -1655,7 +1672,14 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
             oldest_calls.append((i, t, dataset, snap))
 
         with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", new=fake_zfs_list):
-            missing = job.handle_minmax_snapshots(remote, datasets, [label1, label2], latest_cb, oldest_cb)
+            missing = job.handle_minmax_snapshots(
+                remote,
+                datasets,
+                [label1, label2],
+                fn_latest=latest_cb,
+                fn_oldest=oldest_cb,
+                fn_oldest_skip_holds=[False, False],
+            )
 
         self.assertListEqual(["tank/ds3"], missing)
 
@@ -1679,6 +1703,57 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
         ]
         self.assertListEqual(expected_oldest, oldest_calls)
 
+    def test_oldest_skip_holds_ignores_held_snapshots(self) -> None:
+        """Ensures oldest selection ignores snapshots with user holds when requested."""
+
+        args = self.argparser_parse_args(args=["src", "dst"])
+        job = bzfs.Job()
+        job.params = self.make_params(args=args)
+        job.is_test_mode = True
+        remote = MagicMock(spec=Remote)
+        label = SnapshotLabel("bzfs_", "", "", "_hourly")
+        datasets = ["tank/ds1"]
+
+        lines = [
+            "tank/ds1@bzfs_2023-01-01_00:00:00_hourly\t1\t100\t1",
+            "tank/ds1@bzfs_2023-02-01_00:00:00_hourly\t2\t150\t0",
+            "tank/ds1@bzfs_2023-03-01_00:00:00_hourly\t3\t200\t0",
+        ]
+
+        def fake_zfs_list(
+            job_obj: bzfs.Job,
+            remote_obj: Remote,
+            cmd: list[str],
+            datasets_arg: list[str],
+            ordered: bool = False,
+        ) -> Iterator[list[str]]:
+            o_index = cmd.index("-o")
+            self.assertIn("userrefs", cmd[o_index + 1].split(","))
+            yield lines
+
+        latest_calls: list[tuple[int, int, str, str]] = []
+        oldest_calls: list[tuple[int, int, str, str]] = []
+
+        def latest_cb(i: int, t: int, dataset: str, snap: str) -> None:
+            latest_calls.append((i, t, dataset, snap))
+
+        def oldest_cb(i: int, t: int, dataset: str, snap: str) -> None:
+            oldest_calls.append((i, t, dataset, snap))
+
+        with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", new=fake_zfs_list):
+            missing = job.handle_minmax_snapshots(
+                remote,
+                datasets,
+                [label],
+                fn_latest=latest_cb,
+                fn_oldest=oldest_cb,
+                fn_oldest_skip_holds=[True],
+            )
+
+        self.assertListEqual([], missing)
+        self.assertListEqual([(0, 200, "tank/ds1", "bzfs_2023-03-01_00:00:00_hourly")], latest_calls)
+        self.assertListEqual([(0, 150, "tank/ds1", "bzfs_2023-02-01_00:00:00_hourly")], oldest_calls)
+
     def test_latest_only(self) -> None:
         """Ensures latest callback runs when oldest is omitted and reports missing datasets."""
 
@@ -1692,8 +1767,8 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
         datasets = ["tank/ds1", "tank/ds2"]
 
         lines = [
-            "1\t100\ttank/ds1@bzfs_2023-01-01_00:00:00_hourly",
-            "2\t200\ttank/ds1@bzfs_2024-01-01_00:00:00_hourly",
+            "tank/ds1@bzfs_2023-01-01_00:00:00_hourly\t1\t100",
+            "tank/ds1@bzfs_2024-01-01_00:00:00_hourly\t2\t200",
         ]
 
         def fake_zfs_list(
@@ -1703,6 +1778,8 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
             datasets_arg: list[str],
             ordered: bool = False,
         ) -> Iterator[list[str]]:
+            o_index = cmd.index("-o")
+            self.assertNotIn("userrefs", cmd[o_index + 1].split(","))
             yield lines
 
         latest_calls: list[tuple[int, int, str, str]] = []
@@ -1711,7 +1788,7 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
             latest_calls.append((i, t, dataset, snap))
 
         with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", new=fake_zfs_list):
-            missing = job.handle_minmax_snapshots(remote, datasets, [label], latest_cb)
+            missing = job.handle_minmax_snapshots(remote, datasets, [label], fn_latest=latest_cb)
 
         self.assertListEqual(["tank/ds2"], missing)
         self.assertListEqual(
@@ -1951,6 +2028,21 @@ class TestTerminationEventBehavior(AbstractTestCase):
         self.assertLess(time.monotonic_ns(), stoptime_nanos - 0.2 * 1_000_000_000)
         self.assertFalse(result, "Expected False when termination_event is set during daemon sleep")
 
+    def test_subprocess_run_respects_termination_event(self) -> None:
+        """Integration-style check: Job.subprocesses.subprocess_run reacts promptly to a pre-set termination_event."""
+        job = self.make_job(["src", "dst"])
+        sp = job.subprocesses
+        job.termination_event.set()
+
+        start = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            sp.subprocess_run(["sleep", "1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=2.0)
+        elapsed = time.monotonic() - start
+
+        # We should not wait anywhere near the full timeout; allow generous slack for slow environments.
+        self.assertLess(elapsed, 0.75, f"unexpected slow termination_event handling in bzfs.Job: {elapsed:.3f}s")
+        self.assertEqual({}, sp._child_pids)
+
 
 #############################################################################
 class TestPerJobTermination(AbstractTestCase):
@@ -1958,26 +2050,25 @@ class TestPerJobTermination(AbstractTestCase):
 
     def test_scoped_termination_kills_only_registered_children(self) -> None:
         job = bzfs.Job()
-        # Start two child processes; register only one with the job
-        p1 = subprocess.Popen(["sleep", "1"])
-        p2 = subprocess.Popen(["sleep", "1"])
-        try:
-            job.subprocesses.register_child_pid(p1.pid)
-            self.assertIsNone(p1.poll())
-            self.assertIsNone(p2.poll())
+        # Start two child processes; track only one with the job
+        with job.subprocesses.popen_and_track(["sleep", "1"]) as p1:
+            p2 = subprocess.Popen(["sleep", "1"])
+            try:
+                self.assertIsNone(p1.poll())
+                self.assertIsNone(p2.poll())
 
-            # Enable job-scoped termination and invoke terminate()
-            job.terminate()
-            time.sleep(0.05)
+                # Enable job-scoped termination and invoke terminate()
+                job.terminate()
+                time.sleep(0.05)
 
-            # Registered child should be terminated; unregistered should still be running
-            self.assertIsNotNone(p1.poll(), "Registered child should be terminated")
-            self.assertIsNone(p2.poll(), "Unregistered child should remain running")
-        finally:
-            with contextlib.suppress(Exception):
-                p1.kill()
-            with contextlib.suppress(Exception):
-                p2.kill()
+                # Tracked child should be terminated; untracked should still be running
+                self.assertIsNotNone(p1.poll(), "Tracked child should be terminated")
+                self.assertIsNone(p2.poll(), "Untracked child should remain running")
+            finally:
+                with contextlib.suppress(Exception):
+                    p1.kill()
+                with contextlib.suppress(Exception):
+                    p2.kill()
 
 
 #############################################################################

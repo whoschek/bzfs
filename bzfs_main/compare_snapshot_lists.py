@@ -35,6 +35,7 @@ from dataclasses import (
 from typing import (
     TYPE_CHECKING,
     Callable,
+    final,
 )
 
 from bzfs_main.argparse_cli import (
@@ -73,6 +74,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 
 
 @dataclass(order=True, frozen=True)
+@final
 class _ComparableSnapshot:
     """Snapshot entry comparable by rel_dataset and GUID for sorting and merging."""
 
@@ -95,7 +97,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
     task: str = src.root_dataset + " vs. " + dst.root_dataset
-    tsv_dir: str = p.log_params.log_file[0 : -len(".log")] + ".cmp"
+    tsv_dir: str = p.log_params.log_file[: -len(".log")] + ".cmp"
     os.makedirs(tsv_dir, mode=DIR_PERMISSIONS, exist_ok=True)
     tsv_file: str = os.path.join(tsv_dir, (src.root_dataset + "%" + dst.root_dataset).replace("/", "~") + ".tsv")
     tmp_tsv_file: str = tsv_file + ".tmp"
@@ -151,6 +153,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         )
 
         @dataclass
+        @final
         class SnapshotStats:
             snapshot_count: int = field(default=0)
             sum_written: int = field(default=0)
@@ -264,7 +267,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     os.rename(tmp_tsv_file, tsv_file)
     log.info("%s", f"Final TSV output file comparing {task} is: {tsv_file}")
 
-    tsv_file = tsv_file[0 : tsv_file.rindex(".")] + ".rel_datasets_tsv"
+    tsv_file = tsv_file[: tsv_file.rindex(".")] + ".rel_datasets_tsv"
     tmp_tsv_file = tsv_file + ".tmp"
     with open_nofollow(tmp_tsv_file, "w", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
         header: str = "location rel_dataset src_dataset dst_dataset"

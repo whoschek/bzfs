@@ -47,6 +47,7 @@ from typing import (
     Literal,
     NamedTuple,
     cast,
+    final,
 )
 
 from bzfs_main.argparse_actions import (
@@ -115,12 +116,12 @@ from bzfs_main.util.utils import (
 )
 
 # constants:
-HOME_DIRECTORY: Final[str] = get_home_directory()
 _UNSET_ENV_VARS_LOCK: Final[threading.Lock] = threading.Lock()
 _UNSET_ENV_VARS_LATCH: Final[SynchronizedBool] = SynchronizedBool(True)
 
 
 #############################################################################
+@final
 class LogParams:
     """Option values for logging."""
 
@@ -144,13 +145,13 @@ class LogParams:
             if self.isatty and args.pv_program != DISABLE_PRG and not self.quiet
             else 0
         )
-        self.home_dir: Final[str] = HOME_DIRECTORY
+        self.home_dir: Final[str] = get_home_directory()
         log_parent_dir: Final[str] = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)
         if LOG_DIR_DEFAULT not in os.path.basename(log_parent_dir):
             die(f"Basename of --log-dir must contain the substring '{LOG_DIR_DEFAULT}', but got: {log_parent_dir}")
         sep: str = "_" if args.log_subdir == "daily" else ":"
         timestamp: str = self.timestamp
-        subdir: str = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
+        subdir: str = timestamp[: timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
         self.log_dir: Final[str] = os.path.join(log_parent_dir, subdir)
         os.makedirs(log_parent_dir, mode=DIR_PERMISSIONS, exist_ok=True)
@@ -169,8 +170,8 @@ class LogParams:
         )
         os.fchmod(fd, FILE_PERMISSIONS)
         os.close(fd)
-        self.pv_log_file: Final[str] = self.log_file[0 : -len(".log")] + ".pv"
-        log_file_stem: str = os.path.basename(self.log_file)[0 : -len(".log")]
+        self.pv_log_file: Final[str] = self.log_file[: -len(".log")] + ".pv"
+        log_file_stem: str = os.path.basename(self.log_file)[: -len(".log")]
         # Python's standard logger naming API interprets chars such as '.', '-', ':', spaces, etc in special ways, e.g.
         # logging.getLogger("foo.bar") vs logging.getLogger("foo-bar"). Thus, we sanitize the Python logger name via a regex:
         self.logger_name_suffix: Final[str] = re.sub(r"[^A-Za-z0-9_]", repl="_", string=log_file_stem)
@@ -203,6 +204,7 @@ class LogParams:
 
 
 #############################################################################
+@final
 class Params(MiniParams):
     """All parsed CLI options combined into a single bundle; simplifies passing around numerous settings and defaults."""
 
@@ -212,7 +214,7 @@ class Params(MiniParams):
         sys_argv: list[str],
         log_params: LogParams,
         log: Logger,
-        inject_params: dict[str, bool] | None = None,
+        inject_params: dict[str, bool] | None = None,  # for testing only
     ) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
@@ -266,13 +268,12 @@ class Params(MiniParams):
         self.force: Final[SynchronizedBool] = SynchronizedBool(args.force)
         self.force_once: Final[bool] = args.force_once
         self.force_unmount: Final[str] = "-f" if args.force_unmount else ""
-        force_hard: str = "-R" if args.force_destroy_dependents else ""
-        self.force_hard: Final[str] = "-R" if args.force_hard else force_hard  # --force-hard is deprecated
+        self.force_hard: Final[str] = "-R" if args.force_destroy_dependents else ""
 
         self.skip_parent: Final[bool] = args.skip_parent
         self.skip_missing_snapshots: Final[str] = args.skip_missing_snapshots
         self.skip_on_error: Final[str] = args.skip_on_error
-        self.retry_policy: Final[RetryPolicy] = RetryPolicy(args)
+        self.retry_policy: Final[RetryPolicy] = RetryPolicy.from_namespace(args).copy(reraise=True)
         self.skip_replication: Final[bool] = args.skip_replication
         self.delete_dst_snapshots: Final[bool] = args.delete_dst_snapshots is not None
         self.delete_dst_bookmarks: Final[bool] = args.delete_dst_snapshots == "bookmarks"
@@ -289,18 +290,15 @@ class Params(MiniParams):
         self.enable_privilege_elevation: Final[bool] = not args.no_privilege_elevation
         self.no_stream: Final[bool] = args.no_stream
         self.resume_recv: Final[bool] = not args.no_resume_recv
-        self.create_bookmarks: Final[str] = (
-            "none" if args.no_create_bookmark else args.create_bookmarks
-        )  # no_create_bookmark depr
+        self.create_bookmarks: Final[str] = args.create_bookmarks
         self.use_bookmark: Final[bool] = not args.no_use_bookmark
 
         self.src: Final[Remote] = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst: Final[Remote] = Remote("dst", args, self)  # dst dataset, host and ssh options
         self.create_src_snapshots_config: Final[CreateSrcSnapshotConfig] = CreateSrcSnapshotConfig(args, self)
         self.monitor_snapshots_config: Final[MonitorSnapshotsConfig] = MonitorSnapshotsConfig(args, self)
-        self.is_caching_snapshots: Final[bool] = args.cache_snapshots == "true"
+        self.is_caching_snapshots: Final[bool] = args.cache_snapshots
         self.prometheus_textfile_dir: Final[str | None] = args.prometheus_textfile_dir
-
         self.compression_program: Final[str] = self._program_name(args.compression_program)
         self.compression_program_opts: Final[list[str]] = self.split_args(args.compression_program_opts)
         for opt in {"-o", "--output-file"}.intersection(self.compression_program_opts):
@@ -418,7 +416,7 @@ class Params(MiniParams):
             exclude_long_opts={"--dryrun"},
             exclude_short_opts="den",
             include_arg_opts={"-X", "--exclude", "--redact"},
-            exclude_arg_opts=frozenset({"-i", "-I"}),
+            exclude_arg_opts=frozenset({"-i", "-I", "-t", "--resume"}),
         )[0]
 
     def _program_name(self, program: str) -> str:
@@ -490,6 +488,7 @@ class Params(MiniParams):
 
 
 #############################################################################
+@final
 class Remote(MiniRemote):
     """Connection settings for either source or destination host."""
 
@@ -503,7 +502,7 @@ class Remote(MiniRemote):
         self.basis_ssh_host: Final[str] = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: Final[int | None] = getattr(args, f"ssh_{loc}_port")
         self.ssh_config_file: Final[str | None] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
-        if self.ssh_config_file:
+        if self.ssh_config_file and self.ssh_config_file != "none":
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
         self.ssh_config_file_hash: Final[str] = (
@@ -523,7 +522,7 @@ class Remote(MiniRemote):
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         self.ssh_socket_dir: str = ""
         if self.reuse_ssh_connection:
-            ssh_home_dir: str = os.path.join(HOME_DIRECTORY, ".ssh")
+            ssh_home_dir: str = os.path.join(get_home_directory(), ".ssh")
             os.makedirs(ssh_home_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             self.ssh_socket_dir = os.path.join(ssh_home_dir, "bzfs")
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
@@ -531,7 +530,7 @@ class Remote(MiniRemote):
             self.ssh_exit_on_shutdown_socket_dir: Final[str] = os.path.join(self.ssh_socket_dir, "x")
             os.makedirs(self.ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             validate_file_permissions(self.ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS)
-            _delete_stale_files(self.ssh_exit_on_shutdown_socket_dir, self.socket_prefix, ssh=True)
+            _delete_stale_files(self.ssh_exit_on_shutdown_socket_dir, prefix=self.socket_prefix, ssh=True)
         self.sanitize1_regex: Final[re.Pattern[str]] = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with ~ char
         self.sanitize2_regex: Final[re.Pattern[str]] = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # remove bad chars
 
@@ -580,7 +579,7 @@ class Remote(MiniRemote):
                 optional: str = f"@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
                 socket_name: str = f"{self.socket_prefix}{unique}{optional}"
                 socket_file = os.path.join(self.ssh_exit_on_shutdown_socket_dir, socket_name)
-                socket_file = socket_file[0 : max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(socket_file) - len(optional))]
+                socket_file = socket_file[: max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(socket_file) - len(optional))]
                 # `ssh` will error out later if the max OS Unix domain socket path limit cannot be met reasonably as the
                 # home directory path is too long, typically because the Unix user name is unreasonably long.
             ssh_cmd += ["-S", socket_file]
@@ -608,6 +607,7 @@ class Remote(MiniRemote):
 
 
 #############################################################################
+@final
 class CopyPropertiesConfig:
     """--zfs-recv-o* and --zfs-recv-x* option groups for copying or excluding ZFS properties on receive."""
 
@@ -633,6 +633,7 @@ class CopyPropertiesConfig:
 
 
 #############################################################################
+@final
 class SnapshotLabel(NamedTuple):
     """Contains the individual parts that are concatenated into a ZFS snapshot name."""
 
@@ -674,6 +675,7 @@ class SnapshotLabel(NamedTuple):
 
 
 #############################################################################
+@final
 class CreateSrcSnapshotConfig:
     """Option values for --create-src-snapshots, that is, for automatically creating source snapshots."""
 
@@ -744,7 +746,7 @@ class CreateSrcSnapshotConfig:
             timeformat = timeformat[0:-1] + "f"  # replace %F with %f (append microseconds)
         timestamp: str = self.current_datetime.strftime(timeformat)
         if is_millis:
-            timestamp = timestamp[0 : -len("000")]  # replace microseconds with milliseconds
+            timestamp = timestamp[: -len("000")]  # replace microseconds with milliseconds
         timestamp = timestamp.replace("+", "z")  # zfs CLI does not accept the '+' character in snapshot names
         return [SnapshotLabel(label.prefix, label.infix, timestamp, label.suffix) for label in self._snapshot_labels]
 
@@ -754,6 +756,7 @@ class CreateSrcSnapshotConfig:
 
 #############################################################################
 @dataclass(frozen=True)
+@final
 class AlertConfig:
     """Thresholds controlling when alerts fire for snapshot age."""
 
@@ -764,15 +767,18 @@ class AlertConfig:
 
 #############################################################################
 @dataclass(frozen=True)
+@final
 class MonitorSnapshotAlert:
     """Alert configuration for a single monitored snapshot label."""
 
     label: SnapshotLabel
     latest: AlertConfig | None
     oldest: AlertConfig | None
+    oldest_skip_holds: bool
 
 
 #############################################################################
+@final
 class MonitorSnapshotsConfig:
     """Option values for --monitor-snapshots*, that is, policy describing which snapshots to monitor for staleness."""
 
@@ -792,6 +798,7 @@ class MonitorSnapshotsConfig:
                 for period_unit, alert_dicts in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     label = SnapshotLabel(prefix=prefix, infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
                     alert_latest, alert_oldest = None, None
+                    oldest_skip_holds: bool = False
                     for alert_type, alert_dict in alert_dicts.items():
                         m = "--monitor-snapshots: "
                         if alert_type not in ["latest", "oldest"]:
@@ -807,6 +814,10 @@ class MonitorSnapshotsConfig:
                                 critical_millis = max(0, parse_duration_to_milliseconds(str(value), context=context))
                             elif kind == "cycles":
                                 cycles = max(0, int(value))
+                            elif kind == "oldest_skip_holds" and alert_type == "oldest":
+                                if not isinstance(value, bool):
+                                    die(f"{m}'{kind}' must be a bool within {context}")
+                                oldest_skip_holds = value
                             else:
                                 die(f"{m}'{kind}' must be 'warning', 'critical' or 'cycles' within {context}")
                         if warning_millis > 0 or critical_millis > 0:
@@ -826,7 +837,7 @@ class MonitorSnapshotsConfig:
                                 if not self.no_oldest_check:
                                     alert_oldest = alert_config
                     if alert_latest is not None or alert_oldest is not None:
-                        alerts.append(MonitorSnapshotAlert(label, alert_latest, alert_oldest))
+                        alerts.append(MonitorSnapshotAlert(label, alert_latest, alert_oldest, oldest_skip_holds))
 
         def alert_sort_key(alert: MonitorSnapshotAlert) -> tuple[int, SnapshotLabel]:
             duration_amount, duration_unit = xperiods.suffix_to_duration1(alert.label.suffix)
@@ -844,6 +855,7 @@ class MonitorSnapshotsConfig:
 #############################################################################
 def _fix_send_recv_opts(
     opts: list[str],
+    *,
     exclude_long_opts: set[str],
     exclude_short_opts: str,
     include_arg_opts: set[str],
@@ -886,6 +898,7 @@ _SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: Final[re.Pattern[str]] = re.compile(r"
 
 def _delete_stale_files(
     root_dir: str,
+    *,
     prefix: str,
     millis: int = 60 * 60 * 1000,
     dirs: bool = False,

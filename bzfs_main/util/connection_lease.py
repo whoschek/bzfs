@@ -15,10 +15,12 @@
 """
 Purpose
 -----------------
-This module safely reduces SSH startup latency on bzfs process startup. Using this, a fresh bzfs CLI process can attach
-immediately to an existing OpenSSH ControlMaster connection, and in doing so skip TCP handshake, SSH handshake, key exchange,
+This module safely reduces SSH startup latency on bzfs process startup. Using this, a fresh bzfs CLI process can immediately
+attach to an existing OpenSSH ControlMaster connection, and in doing so skip TCP handshake, SSH handshake, key exchange,
 authentication, and other delays from multiple network round-trips. This way, the very first remote ZFS command starts
-hundreds of milliseconds earlier as compared to when creating an SSH connection from scratch.
+hundreds of milliseconds earlier as compared to when creating an SSH connection from scratch. Crucially, this module
+guarantees that a bzfs process can (as long as it is alive) maintain exclusive access to the OpenSSH connections it has
+obtained.
 
 The higher-level goal is predictable performance, shorter critical paths, and less noisy-neighbor impact across frequent
 periodic replication jobs at fleet scale, including at high concurrency. To achieve this, OpenSSH masters remain alive after
@@ -35,9 +37,15 @@ local user) plus a hashed subdirectory derived from the remote endpoint identity
 A bzfs process acquires an exclusive advisory file lock via flock(2) on a named empty lock file in the namespace directory
 tree, then atomically moves it between free/ and used/ subdirectories to speed up later searches for available names in each
 category of that namespace. The held lease exposes the open file descriptor (which maintains the lock) and the computed
-ControlPath so callers can safely establish or reuse SSH master connections without races or leaks. Holding a lease's lock
-for the duration of a `bzfs` process guarantees exclusive ownership of that SSH master while allowing the underlying TCP
-connection to persist beyond bzfs process exit via OpenSSH ControlPersist.
+ControlPath so callers can safely establish, reuse and maintain exclusive access to OpenSSH master connections without races
+or leaks.
+
+Holding a lease's lock for the duration of a `bzfs` process guarantees exclusive ownership of that SSH master while allowing
+the underlying TCP connection to persist beyond bzfs process exit via OpenSSH ControlPersist. No other `bzfs` process can use
+the TCP connection while the lease's lock is held, which ensures the connection cannot be degraded/overloaded with an
+unbounded number of concurrent SSH sessions (aka too many concurrent requests per connection, via multiple processes). See
+the server-side sshd_config(5) MaxSessions parameter (which defaults to 10, see
+https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html).
 
 Also see https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
 and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
@@ -85,6 +93,7 @@ import time
 from typing import (
     Final,
     NamedTuple,
+    final,
 )
 
 from bzfs_main.util.utils import (
@@ -108,6 +117,7 @@ NAMESPACE_DIR_LENGTH: Final[int] = 43  # 43 Base64 chars contain the entire SHA-
 
 
 #############################################################################
+@final
 class ConnectionLease(NamedTuple):
     """Purpose: Reduce SSH connection startup latency of a fresh bzfs process via safe OpenSSH ControlPath reuse.
 
@@ -140,12 +150,13 @@ class ConnectionLease(NamedTuple):
     def set_socket_mtime_to_now(self) -> None:
         """Sets the mtime of the lease's ControlPath socket file to now; noop if the file is missing."""
         try:
-            os.utime(self.socket_path, None)
+            os.utime(self.socket_path, None, follow_symlinks=False)
         except FileNotFoundError:
             pass  # harmless
 
 
 #############################################################################
+@final
 class ConnectionLeaseManager:
     """Purpose: Reduce SSH connection startup latency of a fresh bzfs process via safe OpenSSH ControlPath reuse.
 
@@ -257,7 +268,7 @@ class ConnectionLeaseManager:
                     f"shorten it by shortening the home directory path: {socket_path}"
                 )
 
-            free_path: str = os.path.join(self._free_dir, os.path.basename(socket_path))
+            free_path: str = os.path.join(self._free_dir, socket_name)
             lease: ConnectionLease | None = self._try_lock(free_path, open_flags=self._open_flags | os.O_CREAT)
             if lease is not None:
                 return lease

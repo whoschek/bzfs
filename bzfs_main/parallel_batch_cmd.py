@@ -35,6 +35,7 @@ zfs list -t snapshot d4
 ```
 zfs list -t snapshot d1 d2
 zfs list -t snapshot d3 d4
+```
 
 - max_batch_items=N (seq or par):
 ```
@@ -86,6 +87,7 @@ def run_ssh_cmd_batched(
     cmd: list[str],
     cmd_args: Iterable[str],
     fn: Callable[[list[str]], Any],
+    *,
     max_batch_items: int = 2**29,
     sep: str = " ",
 ) -> None:
@@ -99,6 +101,7 @@ def itr_ssh_cmd_batched(
     cmd: list[str],
     cmd_args: Iterable[str],
     fn: Callable[[list[str]], _T],
+    *,
     max_batch_items: int = 2**29,
     sep: str = " ",
 ) -> Iterator[_T]:
@@ -112,6 +115,7 @@ def run_ssh_cmd_parallel(
     r: MiniRemote,
     cmd_args_list: Iterable[tuple[list[str], Iterable[str]]],
     fn: Callable[[list[str], list[str]], Any],
+    *,
     max_batch_items: int = 2**29,
 ) -> None:
     """Runs multiple ssh commands in parallel, batching each set of args."""
@@ -123,6 +127,7 @@ def itr_ssh_cmd_parallel(
     r: MiniRemote,
     cmd_args_list: Iterable[tuple[list[str], Iterable[str]]],
     fn: Callable[[list[str], list[str]], _T],
+    *,
     max_batch_items: int = 2**29,
     ordered: bool = True,
 ) -> Iterator[_T]:
@@ -133,10 +138,10 @@ def itr_ssh_cmd_parallel(
     """
     return parallel_iterator(
         iterator_builder=lambda executr: (
-            itr_ssh_cmd_batched(
+            itr_ssh_cmd_batched(  # advancing the Generator submits the next task and yields the corresponding Future
                 job, r, cmd, cmd_args, lambda batch, cmd=cmd: executr.submit(fn, cmd, batch), max_batch_items=max_batch_items  # type: ignore[misc]
             )
-            for cmd, cmd_args in cmd_args_list
+            for cmd, cmd_args in cmd_args_list  # lazy on-demand Python Generator
         ),
         max_workers=job.max_workers[r.location],
         ordered=ordered,
@@ -145,7 +150,7 @@ def itr_ssh_cmd_parallel(
 
 
 def zfs_list_snapshots_in_parallel(
-    job: Job, r: MiniRemote, cmd: list[str], datasets: list[str], ordered: bool = True
+    job: Job, r: MiniRemote, cmd: list[str], datasets: list[str], *, ordered: bool = True
 ) -> Iterator[list[str]]:
     """Runs 'zfs list -t snapshot' on multiple datasets at the same time.
 

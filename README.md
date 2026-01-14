@@ -557,8 +557,10 @@ sudo --non-interactive ls          # verify non-interactive sudo works
 # Choose test scope
 # export bzfs_test_mode=unit       # unit tests only (takes < 5 seconds)
 export bzfs_test_mode=smoke        # small, quick integration test subset (takes < 1 minute)
-# export bzfs_test_mode=functional # most integration tests but only in a single local config (takes ~4 minutes)
-# unset bzfs_test_mode             # all tests (takes ~1 hour)
+# export bzfs_test_mode=functional # most integration tests but only in a single local config (takes ~3 minutes)
+# unset bzfs_test_mode             # all tests (takes ~15 mins)
+
+export bzfs_test_no_run_quietly=true  # print more than just a progress bar
 
 # Confirm passwordless ssh works on connecting to localhost loopback address
 # You should not get prompted for a password
@@ -622,9 +624,8 @@ usage: bzfs [-h] [--recursive]
             [--monitor-snapshots-dont-warn]
             [--monitor-snapshots-dont-crit]
             [--compare-snapshot-lists [{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]]
-            [--cache-snapshots [{true,false}]]
-            [--dryrun [{recv,send}]] [--verbose] [--quiet]
-            [--no-privilege-elevation] [--no-stream]
+            [--cache-snapshots] [--dryrun [{recv,send}]] [--verbose]
+            [--quiet] [--no-privilege-elevation] [--no-stream]
             [--no-resume-recv]
             [--create-bookmarks {all,hourly,minutely,secondly,none}]
             [--no-use-bookmark] [--ssh-cipher STRING]
@@ -973,9 +974,9 @@ usage: bzfs [-h] [--recursive]
 
     * 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)
 
-    *Note:* If multiple RANKRANGEs are specified within a single
-    --include-snapshot-times-and-ranks option, each subsequent rank range operates on the output
-    of the preceding rank rage.
+    *Note for multiple RANKRANGEs:* `--include-snapshot-times-and-ranks TIMERANGE RANKRANGE1
+    RANKRANGE2` is equivalent to `--include-snapshot-times-and-ranks TIMERANGE RANKRANGE1
+    --include-snapshot-times-and-ranks TIMERANGE RANKRANGE2`.
 
     *Note:* Percentage calculations are not based on the number of snapshots contained in the
     dataset on disk, but rather based on the number of snapshots arriving at the filter. For
@@ -1462,6 +1463,9 @@ usage: bzfs [-h] [--recursive]
     which case no snapshots are selected and the --{include|exclude}-snapshot-* filter options
     treat bookmarks as snapshots wrt. selecting.
 
+    *Note:* Does not attempt to delete snapshots that carry a `zfs hold`; instead auto-skips
+    them without failing.
+
     *Performance Note:* --delete-dst-snapshots operates on multiple datasets in parallel (and
     serially within a dataset), using the same dataset order as bzfs replication. The degree of
     parallelism is configurable with the --threads option (see below).
@@ -1668,9 +1672,9 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--cache-snapshots"></div>
 
-**--cache-snapshots** *[{true,false}]*
+**--cache-snapshots**
 
-*  Default is 'false'. If 'true', maintain a persistent local cache of recent snapshot
+*  If --cache-snapshots is specified, maintain a persistent local cache of recent snapshot
     creation times, recent successful replication times, and recent monitoring times, and compare
     them to a quick 'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if
     a new snapshot shall be created on the src, and if there are any changes that need to be
@@ -1806,7 +1810,7 @@ usage: bzfs [-h] [--recursive]
 **--create-bookmarks** *{all,hourly,minutely,secondly,none}*
 
 *  For increased safety, bzfs replication behaves as follows wrt. ZFS bookmark creation, if it is
-    autodetected that the source ZFS pool support bookmarks:
+    autodetected that the source ZFS pool supports bookmarks:
 
     * `all` (default): Whenever it has successfully completed a 'zfs send' operation, bzfs
     creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send'

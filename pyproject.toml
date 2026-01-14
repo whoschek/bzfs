@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bzfs"
-version = "1.16.0.dev0"
+version = "1.17.0.dev0"
 
 description = """
 bzfs is a reliable near real-time, parallel replication and backup command-line tool for ZFS. It replicates snapshots \
@@ -59,12 +59,12 @@ dev = [  # for development only
   "argparse-manpage==4.7",          # see https://github.com/praiskup/argparse-manpage
   # "pandoc", # instead use this for pandoc >= 3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
   "genbadge[coverage]==1.1.3",      # see https://smarie.github.io/python-genbadge/
-  "commitizen==4.10.0",             # see https://github.com/commitizen-tools/commitizen
-  "pre-commit==4.5.0",              # see https://github.com/pre-commit/pre-commit
+  "commitizen==4.10.1",             # see https://github.com/commitizen-tools/commitizen
+  "pre-commit==4.5.1",              # see https://github.com/pre-commit/pre-commit
   "black==25.11.0",                 # see https://github.com/psf/black
-  "ruff==0.14.7",                   # see https://github.com/astral-sh/ruff
+  "ruff==0.14.11",                  # see https://github.com/astral-sh/ruff
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
-  "mypy==1.19.0",                   # see https://github.com/python/mypy
+  "mypy==1.19.1",                   # see https://github.com/python/mypy
   "shellcheck-py==0.11.0.1",        # see https://github.com/shellcheck-py/shellcheck-py
   # "ast-grep-cli==0.39.9",         # see https://github.com/ast-grep/ast-grep
 ]
@@ -271,10 +271,14 @@ ignore-decorators = [  # Don't require docstrings (via D102) for items decorated
 profile="black"
 line_length = 125
 known_first_party = ["bzfs_*"]
+no_lines_before = ["STDLIB"]
+lines_between_types = 0
+no_inline_sort = true
 split_on_trailing_comma = true
 include_trailing_comma = true
 use_parentheses = true
-force_grid_wrap = 1
+force_grid_wrap = 1  # ruff does not have this option, which is why we still use `isort`.
+                     # See https://github.com/astral-sh/ruff/issues/2601
 
 [tool.pylint.main]
 py-version = "3.9"

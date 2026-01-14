@@ -63,6 +63,8 @@ from bzfs_main.replication import (
 from bzfs_main.util.retry import (
     Retry,
     RetryableError,
+    RetryConfig,
+    RetryPolicy,
 )
 from bzfs_main.util.utils import (
     LOG_DEBUG,
@@ -73,7 +75,7 @@ from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
 
-if TYPE_CHECKING:  # type-only imports for annotations
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import (
         Job,
     )
@@ -445,7 +447,7 @@ class TestReplication(AbstractTestCase):
         with patch.object(job, "try_ssh_command", side_effect=raise_retryable):
             with self.assertRaises(RetryableError) as ctx:
                 _estimate_send_size(job, remote, "pool/ds", "token", "src@snap")
-        self.assertTrue(ctx.exception.no_sleep)
+        self.assertTrue(ctx.exception.retry_immediately_once)
         clear.assert_called_once_with(job, "pool/ds", cp_error.stderr)
 
     @patch("bzfs_main.replication._estimate_send_size")
@@ -945,7 +947,20 @@ class TestReplication(AbstractTestCase):
             with patch.object(
                 job, "try_ssh_command", side_effect=lambda *args, **kwargs: fake_try_ssh_command(job, *args, **kwargs)
             ):
-                replicate_dataset(job, src_dataset, tid="1/1", retry=Retry(0))
+                replicate_dataset(
+                    job,
+                    src_dataset,
+                    tid="1/1",
+                    retry=Retry(
+                        count=0,
+                        start_time_nanos=0,
+                        attempt_start_time_nanos=0,
+                        policy=RetryPolicy(),
+                        config=RetryConfig(),
+                        log=None,
+                        previous_outcomes=(),
+                    ),
+                )
 
         self.assertTrue(captured_steps, "No steps captured")
         to_snaps_all = [snap for step in captured_steps[0] for snap in step[3]]

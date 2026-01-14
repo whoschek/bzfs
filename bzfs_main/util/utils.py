@@ -13,7 +13,7 @@
 # limitations under the License.
 #
 """Collection of helper functions used across bzfs; includes environment variable parsing, process management and lightweight
-concurrency primitives.
+concurrency primitives, etc.
 
 Everything in this module relies only on the Python standard library so other modules remain dependency free. Each utility
 favors simple, predictable behavior on all supported platforms.
@@ -25,11 +25,12 @@ from __future__ import (
 import argparse
 import base64
 import bisect
-import collections
 import contextlib
 import errno
 import hashlib
+import itertools
 import logging
+import operator
 import os
 import platform
 import pwd
@@ -76,9 +77,11 @@ from typing import (
     Literal,
     NoReturn,
     Protocol,
+    SupportsIndex,
     TextIO,
     TypeVar,
     cast,
+    final,
 )
 
 # constants:
@@ -93,7 +96,8 @@ LOG_TRACE: Final[int] = logging.DEBUG // 2  # custom log level is halfway in bet
 YEAR_WITH_FOUR_DIGITS_REGEX: Final[re.Pattern] = re.compile(r"[1-9][0-9][0-9][0-9]")  # empty shall not match nonempty target
 UNIX_TIME_INFINITY_SECS: Final[int] = 2**64  # billions of years and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET: Final[str] = ""
-SHELL_CHARS: Final[str] = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
+SHELL_CHARS: Final[str] = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"  # intentionally not included: -_.:/
+SHELL_CHARS_AND_SLASH: Final[str] = SHELL_CHARS + "/"
 FILE_PERMISSIONS: Final[int] = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
 DIR_PERMISSIONS: Final[int] = stat.S_IRWXU  # rwx------ (user read + write + execute)
 UMASK: Final[int] = (~DIR_PERMISSIONS) & 0o777  # so intermediate dirs created by os.makedirs() have stricter permissions
@@ -123,7 +127,7 @@ def cut(field: int, separator: str = "\t", *, lines: list[str]) -> list[str]:
     assert isinstance(lines, list)
     assert len(separator) == 1
     if field == 1:
-        return [line[0 : line.index(separator)] for line in lines]
+        return [line[: line.index(separator)] for line in lines]
     elif field == 2:
         return [line[line.index(separator) + 1 :] for line in lines]
     else:
@@ -133,7 +137,7 @@ def cut(field: int, separator: str = "\t", *, lines: list[str]) -> list[str]:
 def drain(iterable: Iterable[Any]) -> None:
     """Consumes all items in the iterable, effectively draining it."""
     for _ in iterable:
-        _ = None  # help gc (iterable can block)
+        del _  # help gc (iterable can block)
 
 
 _K_ = TypeVar("_K_")
@@ -141,16 +145,18 @@ _V_ = TypeVar("_V_")
 _R_ = TypeVar("_R_")
 
 
-def shuffle_dict(dictionary: dict[_K_, _V_], rand: random.Random = random.SystemRandom()) -> dict[_K_, _V_]:  # noqa: B008
+def shuffle_dict(dictionary: dict[_K_, _V_], /, rand: random.Random = random.SystemRandom()) -> dict[_K_, _V_]:  # noqa: B008
     """Returns a new dict with items shuffled randomly."""
     items: list[tuple[_K_, _V_]] = list(dictionary.items())
     rand.shuffle(items)
     return dict(items)
 
 
-def sorted_dict(dictionary: dict[_K_, _V_]) -> dict[_K_, _V_]:
-    """Returns a new dict with items sorted primarily by key and secondarily by value."""
-    return dict(sorted(dictionary.items()))
+def sorted_dict(
+    dictionary: dict[_K_, _V_], /, *, key: Callable[[tuple[_K_, _V_]], Any] | None = None, reverse: bool = False
+) -> dict[_K_, _V_]:
+    """Returns a new dict with items sorted, primarily by key and secondarily by value (unless a custom key is supplied)."""
+    return dict(sorted(dictionary.items(), key=key, reverse=reverse))
 
 
 def tail(file: str, n: int, errors: str | None = None) -> Sequence[str]:
@@ -211,7 +217,7 @@ def get_home_directory() -> str:
     return pwd.getpwuid(os.getuid()).pw_dir
 
 
-def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int | None = None) -> str:
+def human_readable_bytes(num_bytes: float, *, separator: str = " ", precision: int | None = None) -> str:
     """Formats 'num_bytes' as a human-readable size; for example "567 MiB"."""
     sign = "-" if num_bytes < 0 else ""
     s = abs(num_bytes)
@@ -225,7 +231,7 @@ def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int 
     return f"{sign}{formatted_num}{separator}{units[i]}"
 
 
-def human_readable_duration(duration: float, unit: str = "ns", separator: str = "", precision: int | None = None) -> str:
+def human_readable_duration(duration: float, *, unit: str = "ns", separator: str = "", precision: int | None = None) -> str:
     """Formats a duration in human units, automatically scaling as needed; for example "567ms"."""
     sign = "-" if duration < 0 else ""
     t = abs(duration)
@@ -276,7 +282,7 @@ def human_readable_float(number: float) -> str:
     return "0" if result == "-0" else result
 
 
-def percent(number: int, total: int, print_total: bool = False) -> str:
+def percent(number: int, total: int, *, print_total: bool = False) -> str:
     """Returns percentage string of ``number`` relative to ``total``."""
     tot: str = f"/{total}" if print_total else ""
     return f"{number}{tot}={'inf' if total == 0 else human_readable_float(100 * number / total)}%"
@@ -297,7 +303,10 @@ def open_nofollow(
     """Behaves exactly like built-in open(), except that it refuses to follow symlinks, i.e. raises OSError with
     errno.ELOOP/EMLINK if basename of path is a symlink.
 
-    Also, can specify permissions on O_CREAT, and verify ownership.
+    Also, can specify custom permissions on O_CREAT, and verify ownership.
+
+    If check_owner=True, write-capable opens require ownership by the effective UID; read-only opens also allow ownership by
+    uid 0 (root). This allows safe reads of root-owned system files while preventing writes to files not owned by the caller.
     """
     if not mode:
         raise ValueError("Must have exactly one of create/read/write/append mode and at most one plus")
@@ -317,7 +326,10 @@ def open_nofollow(
         if check_owner:
             st_uid: int = os.fstat(fd).st_uid
             if st_uid != os.geteuid():  # verify ownership is current effective UID
-                raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
+                if (flags & (os.O_WRONLY | os.O_RDWR)) != 0:  # require that writer owns the file
+                    raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
+                elif st_uid != 0:  # it's ok for root to own a file that we'll merely read
+                    raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()} or 0", path)
         return os.fdopen(fd, mode, buffering=buffering, encoding=encoding, errors=errors, newline=newline, **kwargs)
     except Exception:
         try:
@@ -342,34 +354,39 @@ _P = TypeVar("_P")
 def find_match(
     seq: Sequence[_P],
     predicate: Callable[[_P], bool],
-    start: int | None = None,
-    end: int | None = None,
+    start: SupportsIndex | None = None,
+    end: SupportsIndex | None = None,
+    *,
     reverse: bool = False,
-    raises: bool | str | Callable[[], str] = False,  # raises: bool | str | Callable = False,  # python >= 3.10
+    raises: bool | object | Callable[[], object] = False,  # raises: bool | object | Callable = False,  # python >= 3.10
 ) -> int:
-    """Returns the integer index within seq of the first item (or last item if reverse==True) that matches the given
-    predicate condition. If no matching item is found returns -1 or ValueError, depending on the raises parameter, which is a
-    bool indicating whether to raise an error, or a string containing the error message, but can also be a Callable/lambda in
-    order to support efficient deferred generation of error messages. Analog to str.find(), including slicing semantics with
-    parameters start and end. For example, seq can be a list, tuple or str.
+    """Returns the integer index within ``seq`` of the first item (or last item if reverse=True) that matches the given
+    predicate condition.
+
+    If no matching item is found returns -1 or ValueError, depending on the ``raises`` parameter, which is a bool indicating
+    whether to raise an error, or an object containing the error message, but can also be a Callable/lambda in order to
+    support efficient deferred generation of error messages.
+
+    Analog to ``str.find()``, including slicing semantics with parameters start and end, i.e. respects Python slicing
+    semantics for start/end (including clamping). For example, seq can be a list, tuple or str.
 
     Example usage:
         lst = ["a", "b", "-c", "d"]
         i = find_match(lst, lambda arg: arg.startswith("-"), start=1, end=3, reverse=True)
         if i >= 0:
-            ...
+            print(lst[i])
         i = find_match(lst, lambda arg: arg.startswith("-"), raises=f"Tag {tag} not found in {file}")
         i = find_match(lst, lambda arg: arg.startswith("-"), raises=lambda: f"Tag {tag} not found in {file}")
     """
-    offset: int = 0 if start is None else start if start >= 0 else len(seq) + start
-    if start is not None or end is not None:
-        seq = seq[start:end]
-    for i, item in enumerate(reversed(seq) if reverse else seq):
-        if predicate(item):
-            if reverse:
-                return len(seq) - i - 1 + offset
-            else:
-                return i + offset
+    if start is None and end is None:
+        for i in range(len(seq) - 1, -1, -1) if reverse else range(len(seq)):
+            if predicate(seq[i]):
+                return i
+    else:
+        slice_start, slice_end, _ = slice(start, end).indices(len(seq))
+        for i in range(slice_end - 1, slice_start - 1, -1) if reverse else range(slice_start, slice_end):
+            if predicate(seq[i]):
+                return i
     if raises is False or raises is None:
         return -1
     if raises is True:
@@ -386,7 +403,7 @@ def is_descendant(dataset: str, of_root_dataset: str) -> bool:
 
 def has_duplicates(sorted_list: list[Any]) -> bool:
     """Returns True if any adjacent items within the given sorted sequence are equal."""
-    return any(a == b for a, b in zip(sorted_list, sorted_list[1:]))
+    return any(map(operator.eq, sorted_list, itertools.islice(sorted_list, 1, None)))
 
 
 def has_siblings(sorted_datasets: list[str], is_test_mode: bool = False) -> bool:
@@ -461,7 +478,7 @@ def xappend(lst: list[_TAPPEND], *items: _TAPPEND | Iterable[_TAPPEND]) -> list[
     """Appends each of the items to the given list if the item is "truthy", for example not None and not an empty string; If
     an item is an iterable does so recursively, flattening the output."""
     for item in items:
-        if isinstance(item, str) or not isinstance(item, collections.abc.Iterable):
+        if isinstance(item, str) or not isinstance(item, Iterable):
             if item:
                 lst.append(item)
         else:
@@ -491,7 +508,7 @@ def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexLis
     return False
 
 
-def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
+def compile_regexes(regexes: list[str], *, suffix: str = "") -> RegexList:
     """Compiles regex strings and keeps track of negations."""
     assert isinstance(regexes, list)
     compiled_regexes: RegexList = []
@@ -515,6 +532,7 @@ def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
 def list_formatter(iterable: Iterable[Any], separator: str = " ", lstrip: bool = False) -> Any:
     """Lazy formatter joining items with ``separator`` used to avoid overhead in disabled log levels."""
 
+    @final
     class CustomListFormatter:
         """Formatter object that joins items when converted to ``str``."""
 
@@ -528,6 +546,7 @@ def list_formatter(iterable: Iterable[Any], separator: str = " ", lstrip: bool =
 def pretty_print_formatter(obj_to_format: Any) -> Any:
     """Lazy pprint formatter used to avoid overhead in disabled log levels."""
 
+    @final
     class PrettyPrintFormatter:
         """Formatter that pretty-prints the object on conversion to ``str``."""
 
@@ -544,7 +563,7 @@ def stderr_to_str(stderr: Any) -> str:
     return str(stderr) if not isinstance(stderr, bytes) else stderr.decode("utf-8", errors="replace")
 
 
-def xprint(log: logging.Logger, value: Any, run: bool = True, end: str = "\n", file: TextIO | None = None) -> None:
+def xprint(log: logging.Logger, value: Any, *, run: bool = True, end: str = "\n", file: TextIO | None = None) -> None:
     """Optionally logs ``value`` at stdout/stderr level."""
     if run and value:
         value = value if end else str(value).rstrip()
@@ -557,7 +576,7 @@ def sha256_hex(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def sha256_urlsafe_base64(text: str, padding: bool = True) -> str:
+def sha256_urlsafe_base64(text: str, *, padding: bool = True) -> str:
     """Returns the URL-safe base64-encoded sha256 value for the given text."""
     digest: bytes = hashlib.sha256(text.encode()).digest()
     s: str = base64.urlsafe_b64encode(digest).decode()
@@ -577,7 +596,7 @@ def sha256_85_urlsafe_base64(text: str) -> str:
 
 
 def urlsafe_base64(
-    value: int, max_value: int = 2**64 - 1, padding: bool = True, byteorder: Literal["little", "big"] = "big"
+    value: int, max_value: int = 2**64 - 1, *, padding: bool = True, byteorder: Literal["little", "big"] = "big"
 ) -> str:
     """Returns the URL-safe base64 string encoding of the int value, assuming it is contained in the range [0..max_value]."""
     assert 0 <= value <= max_value
@@ -613,6 +632,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
     loglevel: int | None = kwargs.pop("loglevel", None)
     start_time_nanos: int = time.monotonic_ns()
     is_timeout: bool = False
+    is_cancel: bool = False
     exitcode: int | None = None
 
     def log_status() -> None:
@@ -620,41 +640,42 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
             _loglevel: int = loglevel if loglevel is not None else getenv_int("subprocess_run_loglevel", LOG_TRACE)
             if log.isEnabledFor(_loglevel):
                 elapsed_time: str = human_readable_float((time.monotonic_ns() - start_time_nanos) / 1_000_000) + "ms"
-                status: str = "timeout" if is_timeout else "success" if exitcode == 0 else "failure"
+                status = "cancel" if is_cancel else "timeout" if is_timeout else "success" if exitcode == 0 else "failure"
                 cmd = kwargs["args"] if "args" in kwargs else (args[0] if args else None)
                 cmd_str: str = " ".join(str(arg) for arg in iter(cmd)) if isinstance(cmd, (list, tuple)) else str(cmd)
-                log.log(_loglevel, f"Executed [{status}] [{elapsed_time}]: %s", cmd_str.lstrip())
+                log.log(_loglevel, f"Executed [{status}] [{elapsed_time}]: %s", cmd_str)
 
     with xfinally(log_status):
-        pid: int | None = None
-        try:
-            with subprocess.Popen(*args, **kwargs) as proc:
-                pid = proc.pid
-                if subprocesses is not None:
-                    subprocesses.register_child_pid(pid)
+        ctx: contextlib.AbstractContextManager[subprocess.Popen]
+        if subprocesses is None:
+            ctx = subprocess.Popen(*args, **kwargs)
+        else:
+            ctx = subprocesses.popen_and_track(*args, **kwargs)
+        with ctx as proc:
+            try:
+                sp = subprocesses
+                if sp is not None and sp._termination_event.is_set():  # noqa: SLF001  # pylint: disable=protected-access
+                    is_cancel = True
+                    timeout = 0.0
+                stdout, stderr = proc.communicate(input_value, timeout=timeout)
+            except BaseException as e:
                 try:
-                    stdout, stderr = proc.communicate(input_value, timeout=timeout)
-                except BaseException as e:
-                    try:
-                        if isinstance(e, subprocess.TimeoutExpired):
-                            is_timeout = True
-                            terminate_process_subtree(root_pids=[proc.pid])  # send SIGTERM to child proc and its descendants
-                    finally:
-                        proc.kill()
-                        raise
-                else:
-                    exitcode = proc.poll()
-                    assert exitcode is not None
-                    if check and exitcode:
-                        raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
-            return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
-        finally:
-            if subprocesses is not None and isinstance(pid, int):
-                subprocesses.unregister_child_pid(pid)
+                    if isinstance(e, subprocess.TimeoutExpired):
+                        is_timeout = True
+                        terminate_process_subtree(root_pids=[proc.pid])  # send SIGTERM to child proc and descendants
+                finally:
+                    proc.kill()
+                    raise
+            else:
+                exitcode = proc.poll()
+                assert exitcode is not None
+                if check and exitcode:
+                    raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
+        return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
 
 
 def terminate_process_subtree(
-    except_current_process: bool = True, root_pids: list[int] | None = None, sig: signal.Signals = signal.SIGTERM
+    *, except_current_process: bool = True, root_pids: list[int] | None = None, sig: signal.Signals = signal.SIGTERM
 ) -> None:
     """For each root PID: Sends the given signal to the root PID and all its descendant processes."""
     current_pid: int = os.getpid()
@@ -706,15 +727,17 @@ def _get_descendant_processes(root_pids: list[int]) -> list[list[int]]:
 
 @contextlib.contextmanager
 def termination_signal_handler(
-    termination_event: threading.Event,
+    termination_events: list[threading.Event],
+    *,
     termination_handler: Callable[[], None] = lambda: terminate_process_subtree(),
 ) -> Iterator[None]:
-    """Context manager that installs SIGINT/SIGTERM handlers that set ``termination_event`` and, by default, terminate all
-    descendant processes."""
-    assert termination_event is not None
+    """Context manager that installs SIGINT/SIGTERM handlers that set all ``termination_events`` and, by default, terminate
+    all descendant processes."""
+    termination_events = list(termination_events)  # shallow copy
 
     def _handler(_sig: int, _frame: object) -> None:
-        termination_event.set()
+        for event in termination_events:
+            event.set()
         termination_handler()
 
     previous_int_handler = signal.signal(signal.SIGINT, _handler)  # install new signal handler
@@ -727,27 +750,40 @@ def termination_signal_handler(
 
 
 #############################################################################
+@final
 class Subprocesses:
     """Provides per-job tracking of child PIDs so a job can safely terminate only the subprocesses it spawned itself; used
-    when multiple jobs run concurrently within the same Python process."""
+    when multiple jobs run concurrently within the same Python process.
 
-    def __init__(self) -> None:
+    Optionally binds to a termination_event to enforce async cancellation by forcing immediate timeouts for newly spawned
+    subprocesses once cancellation is requested.
+    """
+
+    def __init__(self, termination_event: threading.Event | None = None) -> None:
+        self._termination_event: Final[threading.Event] = termination_event or threading.Event()
         self._lock: Final[threading.Lock] = threading.Lock()
         self._child_pids: Final[dict[int, None]] = {}  # a set that preserves insertion order
+
+    @contextlib.contextmanager
+    def popen_and_track(self, *popen_args: Any, **popen_kwargs: Any) -> Iterator[subprocess.Popen]:
+        """Context manager that calls subprocess.Popen() and tracks the child PID for per-job termination.
+
+        Holds a lock across Popen+PID registration to prevent a race when terminate_process_subtrees() is invoked (e.g. from
+        SIGINT/SIGTERM handlers), ensuring newly spawned child processes cannot escape termination. The child PID is
+        unregistered on context exit.
+        """
+        with self._lock:
+            proc: subprocess.Popen = subprocess.Popen(*popen_args, **popen_kwargs)
+            self._child_pids[proc.pid] = None
+        try:
+            yield proc
+        finally:
+            with self._lock:
+                self._child_pids.pop(proc.pid, None)
 
     def subprocess_run(self, *args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
         """Wrapper around utils.subprocess_run() that auto-registers/unregisters child PIDs for per-job termination."""
         return subprocess_run(*args, **kwargs, subprocesses=self)
-
-    def register_child_pid(self, pid: int) -> None:
-        """Registers a child PID as managed by this instance."""
-        with self._lock:
-            self._child_pids[pid] = None
-
-    def unregister_child_pid(self, pid: int) -> None:
-        """Unregisters a child PID that has exited or is no longer tracked."""
-        with self._lock:
-            self._child_pids.pop(pid, None)
 
     def terminate_process_subtrees(self, sig: signal.Signals = signal.SIGTERM) -> None:
         """Sends the given signal to all tracked child PIDs and their descendants, ignoring errors for dead PIDs."""
@@ -816,9 +852,9 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
 
 
 def validate_property_name(propname: str, input_text: str) -> str:
-    """Checks that the ZFS property name contains no spaces or shell chars."""
+    """Checks that the ZFS property name contains no spaces or shell chars, etc."""
     invalid_chars: str = SHELL_CHARS
-    if not propname or any(char.isspace() or char in invalid_chars for char in propname):
+    if (not propname) or propname.startswith("-") or any(char.isspace() or char in invalid_chars for char in propname):
         die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
     return propname
 
@@ -843,7 +879,7 @@ def validate_file_permissions(path: str, mode: int) -> None:
         )
 
 
-def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
+def parse_duration_to_milliseconds(duration: str, *, regex_suffix: str = "", context: str = "") -> int:
     """Parses human duration strings like '5m' or '2 hours' to milliseconds."""
     unit_milliseconds: dict[str, int] = {
         "milliseconds": 1,
@@ -918,6 +954,7 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
 
 
 ###############################################################################
+@final
 class SnapshotPeriods:  # thread-safe
     """Parses snapshot suffix strings and converts between durations."""
 
@@ -974,6 +1011,7 @@ class SnapshotPeriods:  # thread-safe
 
 
 #############################################################################
+@final
 class JobStats:
     """Simple thread-safe counters summarizing job progress."""
 
@@ -1034,6 +1072,7 @@ class Comparable(Protocol):
 TComparable = TypeVar("TComparable", bound=Comparable)  # Generic type variable for elements stored in a SmallPriorityQueue
 
 
+@final
 class SmallPriorityQueue(Generic[TComparable]):
     """A priority queue that can handle updates to the priority of any element that is already contained in the queue, and
     does so very efficiently if there are a small number of elements in the queue (no more than thousands), as is the case
@@ -1098,6 +1137,7 @@ class SmallPriorityQueue(Generic[TComparable]):
 
 
 ###############################################################################
+@final
 class SortedInterner(Generic[TComparable]):
     """Same as sys.intern() except that it isn't global and that it assumes the input list is sorted (for binary search)."""
 
@@ -1126,6 +1166,7 @@ def binary_search(sorted_list: list[TComparable], item: TComparable) -> int:
 _S = TypeVar("_S")
 
 
+@final
 class HashedInterner(Generic[_S]):
     """Same as sys.intern() except that it isn't global and can also be used for types other than str."""
 
@@ -1145,6 +1186,7 @@ class HashedInterner(Generic[_S]):
 
 
 #############################################################################
+@final
 class SynchronizedBool:
     """Thread-safe wrapper around a regular bool."""
 
@@ -1195,6 +1237,7 @@ _K = TypeVar("_K")
 _V = TypeVar("_V")
 
 
+@final
 class SynchronizedDict(Generic[_K, _V]):
     """Thread-safe wrapper around a regular dict."""
 
@@ -1253,6 +1296,7 @@ class SynchronizedDict(Generic[_K, _V]):
 
 
 #############################################################################
+@final
 class InterruptibleSleep:
     """Provides a sleep(timeout) function that can be interrupted by another thread; The underlying lock is configurable."""
 
@@ -1287,6 +1331,7 @@ class InterruptibleSleep:
 
 
 #############################################################################
+@final
 class SynchronousExecutor(Executor):
     """Executor that runs tasks inline in the calling thread, sequentially."""
 
@@ -1317,6 +1362,7 @@ class SynchronousExecutor(Executor):
 
 
 #############################################################################
+@final
 class _XFinally(contextlib.AbstractContextManager):
     """Context manager ensuring cleanup code executes after ``with`` blocks."""
 

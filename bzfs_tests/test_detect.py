@@ -83,7 +83,7 @@ class TestRemoteConfCache(AbstractTestCase):
         p.dst.ssh_host = "host2"
         p.dst.ssh_user_host = "host2"
         job.params.available_programs["local"] = {"ssh": ""}
-        pools = ConnectionPools(p.src, {SHARED: 1, DEDICATED: 1})
+        pools = ConnectionPools(remote=p.src, capacities={SHARED: 1, DEDICATED: 1})
         item = RemoteConfCacheItem(pools, {"os": "Linux", "ssh": ""}, {"tank": {"feat": "on"}}, time.monotonic_ns())
         job.remote_conf_cache[p.src.cache_key()] = item
         job.remote_conf_cache[p.dst.cache_key()] = item
@@ -109,7 +109,7 @@ class TestRemoteConfCache(AbstractTestCase):
         p.dst.ssh_host = "host2"
         p.dst.ssh_user_host = "host2"
         job.params.available_programs["local"] = {"ssh": ""}
-        pools = ConnectionPools(p.src, {SHARED: 1, DEDICATED: 1})
+        pools = ConnectionPools(remote=p.src, capacities={SHARED: 1, DEDICATED: 1})
         expired_ts = time.monotonic_ns() - p.remote_conf_cache_ttl_nanos - 1
         item = RemoteConfCacheItem(pools, {"os": "Linux"}, {"tank": {"feat": "on"}}, expired_ts)
         job.remote_conf_cache[p.src.cache_key()] = item
@@ -446,8 +446,8 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         available_programs = {"zpool": ""}
         # Provide a real connection pool for local-mode ssh (ssh_user_host == "").
         p.connection_pools[remote.location] = ConnectionPools(
-            remote,
-            {SHARED: remote.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1},
+            remote=remote,
+            capacities={SHARED: remote.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1},
         )
 
         # Avoid touching the real zfs CLI in the fallback path.
@@ -478,8 +478,8 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         remote.ssh_extra_opts = tuple(list(remote.ssh_extra_opts) + ["-oConnectTimeout=1"])
         # Provide a real connection pool so Job.run_ssh_command() can establish ssh connections.
         p.connection_pools[remote.location] = ConnectionPools(
-            remote,
-            {SHARED: remote.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1},
+            remote=remote,
+            capacities={SHARED: remote.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1},
         )
 
         with self.assertRaises(SystemExit) as cm, suppress_output():

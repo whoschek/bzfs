@@ -6,14 +6,14 @@ cd "$(dirname "$(realpath "$0")")"
 # bzfs_main.* must be part of a venv for `argparse-manpage` to work correctly
 tmp_venv=venv-argparse-manpage
 if [ -d venv ]; then
-  # shellcheck disable=SC1091
-  . venv/bin/activate
+    # shellcheck disable=SC1091
+    . venv/bin/activate
 else
-  rm -rf $tmp_venv
-  python3 -m venv $tmp_venv
-  # shellcheck disable=SC1091
-  . $tmp_venv/bin/activate
-  pip install -e '.[dev]'
+    rm -rf $tmp_venv
+    python3 -m venv $tmp_venv
+    # shellcheck disable=SC1091
+    . $tmp_venv/bin/activate
+    pip install -e '.[dev]'
 fi
 
 python3 -m bzfs_docs.update_readme bzfs_main.bzfs README.md

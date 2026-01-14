@@ -54,7 +54,7 @@ from bzfs_main.util.utils import (
 )
 
 # constants:
-__version__: Final[str] = "1.16.0.dev0"
+__version__: Final[str] = "1.17.0.dev0"
 PROG_AUTHOR: Final[str] = "Wolfgang Hoschek"
 EXCLUDE_DATASET_REGEXES_DEFAULT: Final[str] = r"(?:.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 LOG_DIR_DEFAULT: Final[str] = PROG_NAME + "-logs"
@@ -570,8 +570,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "* 'oldest 100%%' aka 'oldest 0..oldest 100%%' (include all snapshots)\n\n"
              "* 'oldest 0%%' aka 'oldest 0..oldest 0%%' (include no snapshots)\n\n"
              "* 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)\n\n"
-             "*Note:* If multiple RANKRANGEs are specified within a single --include-snapshot-times-and-ranks option, each "
-             "subsequent rank range operates on the output of the preceding rank rage.\n\n"
+             "*Note for multiple RANKRANGEs:* `--include-snapshot-times-and-ranks TIMERANGE RANKRANGE1 RANKRANGE2` is "
+             "equivalent to `--include-snapshot-times-and-ranks TIMERANGE RANKRANGE1 --include-snapshot-times-and-ranks "
+             "TIMERANGE RANKRANGE2`.\n\n"
              "*Note:* Percentage calculations are not based on the number of snapshots "
              "contained in the dataset on disk, but rather based on the number of snapshots arriving at the filter. "
              "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
@@ -701,9 +702,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="Take snapshots immediately regardless of the creation time of any existing snapshot, even if snapshots "
              "are periodic and not actually due per the schedule.\n\n")
     parser.add_argument(
-        "--create-src-snapshots-enable-snapshots-changed-cache", action="store_true",
-        help=argparse.SUPPRESS)  # deprecated; was replaced by --cache-snapshots
-    parser.add_argument(
         "--zfs-send-program-opts", type=str, default="--raw --compressed", metavar="STRING",
         help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
              "The value is split on runs of one or more whitespace characters. "
@@ -765,9 +763,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "'-R' flag to their use of 'zfs rollback' and 'zfs destroy', causing them to delete dependents such as "
              "clones and bookmarks. This can be very destructive and is rarely advisable.\n\n")
     parser.add_argument(
-        "--force-hard", action="store_true",  # deprecated; was renamed to --force-destroy-dependents
-        help=argparse.SUPPRESS)
-    parser.add_argument(
         "--force-unmount", action="store_true",
         help="On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f' flag to their "
              "use of 'zfs rollback' and 'zfs destroy'.\n\n")
@@ -796,7 +791,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Eventually create empty destination dataset and ancestors if they do not yet exist and source dataset "
              "has at least one descendant that selects at least one snapshot.\n\n")
     parser.add_argument(
-        "--retries", type=int, min=0, default=2, action=CheckRange, metavar="INT",
+        "--retries", dest="max_retries", type=int, min=0, default=2, action=CheckRange, metavar="INT",
         help="The maximum number of times a retryable replication or deletion step shall be retried if it fails, for "
              "example because of network hiccups (default: %(default)s, min: %(min)s). "
              "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
@@ -878,6 +873,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "*Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
              "case no snapshots are selected and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
              "snapshots wrt. selecting.\n\n"
+             "*Note:* Does not attempt to delete snapshots that carry a `zfs hold`; instead auto-skips them without "
+             "failing.\n\n"
              "*Performance Note:* --delete-dst-snapshots operates on multiple datasets in parallel (and serially "
              f"within a dataset), using the same dataset order as {PROG_NAME} replication. "
              "The degree of parallelism is configurable with the --threads option (see below).\n\n")
@@ -1030,8 +1027,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "usage because the former issues requests with a higher degree of parallelism than the latter. The "
              "degree is configurable with the --threads option (see below).\n\n")
     parser.add_argument(
-        "--cache-snapshots", choices=["true", "false"], default="false", const="true", nargs="?",
-        help="Default is '%(default)s'. If 'true', maintain a persistent local cache of recent snapshot creation times, "
+        "--cache-snapshots", action="store_true",
+        help="If --cache-snapshots is specified, maintain a persistent local cache of recent snapshot creation times, "
              "recent successful replication times, and recent monitoring times, and compare them to a quick "
              "'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if a new snapshot shall be created "
              "on the src, and if there are any changes that need to be replicated or monitored. Enabling the cache "
@@ -1160,9 +1157,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"`{PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --recursive --skip-replication "
              "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks notime 'all except latest 200' "
              "--include-snapshot-times-and-ranks 'anytime..90 days ago'`\n\n")
-    parser.add_argument(
-        "--no-create-bookmark", action="store_true",
-        help=argparse.SUPPRESS)  # deprecated; was replaced by --create-bookmarks=none
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
         help=f"For increased safety, in normal replication operation {PROG_NAME} replication also looks for bookmarks "

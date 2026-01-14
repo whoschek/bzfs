@@ -54,6 +54,7 @@ from typing import (
     Any,
     Final,
     NamedTuple,
+    final,
 )
 
 from bzfs_main.util.utils import (
@@ -73,6 +74,7 @@ _PV_SIZE_TO_BYTES_REGEX: Final[re.Pattern[str]] = re.compile(
 
 
 #############################################################################
+@final
 class State(Enum):
     """Progress reporter lifecycle state transitions."""
 
@@ -81,6 +83,7 @@ class State(Enum):
 
 
 #############################################################################
+@final
 class ProgressReporter:
     """Periodically prints progress updates to the same console status line, which is helpful if the program runs in an
     interactive Unix terminal session.
@@ -189,10 +192,12 @@ class ProgressReporter:
                 log.exception("%s", "ProgressReporter:")
 
     @dataclass
+    @final
     class TransferStat:
         """Tracks per-file transfer state and ETA."""
 
         @dataclass(order=True)
+        @final
         class ETA:
             """Estimated time of arrival."""
 
@@ -206,6 +211,7 @@ class ProgressReporter:
     def _run_internal(self, fds: list[IO[Any]], selector: selectors.BaseSelector) -> None:
         """Tails pv log files and periodically logs aggregated progress."""
 
+        @final
         class Sample(NamedTuple):
             """Sliding window entry for throughput calculation."""
 
@@ -380,7 +386,7 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
         return 0
 
     total_bytes: int = 0
-    files: list[str] = [basis_pv_log_file] + glob.glob(basis_pv_log_file + PV_FILE_THREAD_SEPARATOR + "[0-9]*")
+    files: list[str] = [basis_pv_log_file] + glob.glob(glob.escape(basis_pv_log_file + PV_FILE_THREAD_SEPARATOR) + "[0-9]*")
     for file in files:
         if os.path.isfile(file):
             try:

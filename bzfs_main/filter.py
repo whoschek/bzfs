@@ -249,7 +249,7 @@ def _filter_snapshots_by_creation_time(
     for snapshot in snapshots:
         if (not filter_bookmarks) and "@" not in snapshot:
             continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
-        elif lo_snaptime <= int(snapshot[0 : snapshot.index("\t")]) < hi_snaptime:
+        elif lo_snaptime <= int(snapshot[: snapshot.index("\t")]) < hi_snaptime:
             results.append(snapshot)
             if is_debug:
                 log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -293,6 +293,7 @@ def _filter_snapshots_by_creation_time_and_rank(
         hi: int = get_idx(hi_rank, n)
         lo, hi = (lo, hi) if lo <= hi else (hi, lo)
         i: int = 0
+        k: int = 0
         results: list[str] = []
         for snapshot in snapshots:
             is_snapshot = "@" in snapshot
@@ -302,17 +303,18 @@ def _filter_snapshots_by_creation_time_and_rank(
                 msg = None
                 if is_snapshot and lo <= i < hi:
                     msg = "Including b/c snapshot rank: %s"
-                elif lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
+                elif lo_time <= int(snapshot[: snapshot.index("\t")]) < hi_time:
                     msg = "Including b/c creation time: %s"
                 if msg:
                     results.append(snapshot)
+                    k += 1 if is_snapshot else 0
                 else:
                     msg = "Excluding b/c snapshot rank: %s"
                 if is_debug:
                     log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
                 i += 1 if is_snapshot else 0
         snapshots = results
-        n = hi - lo
+        n = k
     return snapshots
 
 
@@ -338,14 +340,14 @@ def filter_lines(input_list: Iterable[str], input_set: set[str]) -> list[str]:
     """For each line in input_list, includes the line if input_set contains the first column field of that line."""
     if len(input_set) == 0:
         return []
-    return [line for line in input_list if line[0 : line.index("\t")] in input_set]
+    return [line for line in input_list if line[: line.index("\t")] in input_set]
 
 
 def filter_lines_except(input_list: list[str], input_set: set[str]) -> list[str]:
     """For each line in input_list, includes the line if input_set does not contain the first column field of that line."""
     if len(input_set) == 0:
         return input_list
-    return [line for line in input_list if line[0 : line.index("\t")] not in input_set]
+    return [line for line in input_list if line[: line.index("\t")] not in input_set]
 
 
 def dataset_regexes(src: Remote, dst: Remote, datasets: list[str]) -> list[str]:

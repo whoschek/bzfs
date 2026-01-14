@@ -34,6 +34,7 @@ on:
         options:
         - test_ubuntu_24_04_fast
         - test_ubuntu_24_04_hpnssh
+        - test_ubuntu_24_04_zfs_2_4
         - test_ubuntu_24_04_zfs_2_4_latest
         - test_ubuntu_24_04_zfs_2_3_latest
         - test_ubuntu_24_04_zfs_2_2_latest
@@ -84,6 +85,7 @@ permissions:
 
 env:  # it's sufficient to run smoke tests when dependabot is detected
   bzfs_test_mode: ${{ (github.actor == 'dependabot[bot]' && 'smoke') || (github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string) || (github.event.inputs.bzfs_test_mode != 'all' && github.event.inputs.bzfs_test_mode) || '' }}
+  bzfs_test_no_run_quietly: "true"
   NUM_RUNS: ${{ github.event.inputs.num_runs != '' && github.event.inputs.num_runs || '1' }}
 
 jobs:
@@ -110,7 +112,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -129,15 +131,9 @@ jobs:
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
     - name: Run pre-commit
-      run: |
-        python -m pip install --upgrade pip
-        pip install --upgrade "pre-commit==4.5.0"
-        # In CI, disable pre-commit fail_fast so all hooks run and report.
-        # This keeps local developer experience unchanged (fail_fast remains true in the repo config).
-        sed -i 's/^fail_fast:\s*true/fail_fast: false/' .pre-commit-config.yaml
-        echo "[CI] pre-commit fail_fast is now set to: $(grep '^fail_fast:' .pre-commit-config.yaml)"
-        # Run all normal pre-commit hooks, plus the manual stage for CI-only checks such as cyclic import detection by pylint
-        pre-commit run --all-files --hook-stage manual
+      uses: ./.github/actions/pre-commit
+      with:
+        python-version: ${{ matrix.python-version }}
     - name: Run tests
       run: |
         ./test.sh
@@ -155,7 +151,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Show iteration info ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -209,7 +205,56 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_4_latest:  # currently uses zfs-2.4.0-rcX
+  test_ubuntu_24_04_zfs_2_4:  # currently uses zfs-2.4.0
+    needs: create_iteration_test_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_4' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_4')
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
+        python-version: ["3.14"]
+      fail-fast: false
+    timeout-minutes: 110
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - name: Upgrade zfs kernel + userland to specific upstream zfs version
+      run: |
+        # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
+        sudo add-apt-repository ppa:patrickdk/zfs; sudo apt update
+        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
+        sudo apt-get -y install zfs-dkms zfsutils-linux
+        zfs --version
+    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+      uses: ./.github/actions/common
+      with:
+        python-version: ${{ matrix.python-version }}
+        install-zfs: false
+    - name: Display ZFS version and Python version
+      run: |
+        id -u -n
+        uname -a
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+    - name: Run tests
+      run: |
+        ./test.sh
+    - name: Run tests and generate code coverage
+      run: |
+        ./coverage.sh
+        echo "bzfs-testrun-success"
+    - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+      uses: ./.github/actions/coverage-upload
+
+
+  test_ubuntu_24_04_zfs_2_4_latest:  # currently uses zfs-2.4.0
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_4_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_4_latest')
     runs-on: ubuntu-24.04
@@ -220,7 +265,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
@@ -257,7 +302,7 @@ jobs:
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/actions/coverage-upload
 
-  test_ubuntu_24_04_zfs_2_3_latest:  # currently uses zfs-2.3.5
+  test_ubuntu_24_04_zfs_2_3_latest:  # currently uses zfs-2.3.4
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_3_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_3_latest')
     runs-on: ubuntu-24.04
@@ -268,15 +313,14 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
-        # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
-        sudo add-apt-repository ppa:patrickdk/zfs; sudo apt update
-        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
-        sudo apt-get -y install zfs-dkms zfsutils-linux
+        # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.3-latest
+        sudo add-apt-repository ppa:weiers/openzfs-2.3-latest; sudo apt update
+        sudo apt-get -y install openzfs-zfs-dkms
         zfs --version
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/actions/common
@@ -307,7 +351,7 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.8
+  test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.9
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_2_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_2_latest')
     runs-on: ubuntu-24.04
@@ -318,14 +362,14 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
-        # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.2.8
-        sudo add-apt-repository ppa:weiers/openzfs-2.2.8; sudo apt update
-        sudo apt-get -y install openzfs-zfs-dkms
+        # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
+        sudo add-apt-repository ppa:arter97/zfs-lts; sudo apt update
+        sudo apt-get -y install zfs-dkms
         zfs --version
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/actions/common
@@ -366,7 +410,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -407,7 +451,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 150
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -425,6 +469,10 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
+    - name: Run pre-commit
+      uses: ./.github/actions/pre-commit
+      with:
+        python-version: ${{ matrix.python-version }}
     - name: Run tests
       run: |
         ./test.sh
@@ -454,7 +502,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 150
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -498,7 +546,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -506,7 +554,7 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "15.0"
-        envs: "bzfs_test_mode"
+        envs: "bzfs_test_mode bzfs_test_no_run_quietly"
         run: |
           ./.github-workflow-scripts/test_freebsd_14_1.sh
     - name: Upload code coverage report to workflow run page
@@ -524,7 +572,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -532,7 +580,7 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "14.3"
-        envs: "bzfs_test_mode"
+        envs: "bzfs_test_mode bzfs_test_no_run_quietly"
         run: |
           ./.github-workflow-scripts/test_freebsd_14_1.sh
     - name: Upload code coverage report to workflow run page
@@ -550,7 +598,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
       with:
         persist-credentials: false
     - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -558,7 +606,7 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "13.4"
-        envs: "bzfs_test_mode"
+        envs: "bzfs_test_mode bzfs_test_no_run_quietly"
         run: |
          touch coverage_report.txt; exit 0  # ./.github-workflow-scripts/test_freebsd_13_3.sh
     - name: Upload code coverage report to workflow run page
@@ -573,6 +621,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - test_ubuntu_24_04_hpnssh
+      - test_ubuntu_24_04_zfs_2_4
       - test_ubuntu_24_04_zfs_2_4_latest
       - test_ubuntu_24_04_zfs_2_3_latest
       - test_ubuntu_24_04_zfs_2_2_latest
@@ -583,56 +632,61 @@ jobs:
       - test_freebsd_14_3
       - test_freebsd_13_4
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04_hpnssh
           path: coverage-test_ubuntu_24_04_hpnssh
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage-test_ubuntu_24_04_zfs_2_4
+          path: coverage-test_ubuntu_24_04_zfs_2_4
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_4_latest
           path: coverage-test_ubuntu_24_04_zfs_2_4_latest
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_3_latest
           path: coverage-test_ubuntu_24_04_zfs_2_3_latest
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_2_latest
           path: coverage-test_ubuntu_24_04_zfs_2_2_latest
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_24_04
           path: coverage-test_ubuntu_24_04
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_22_04
           path: coverage-test_ubuntu_22_04
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_ubuntu_22_04_zfs_0_8_x
           path: coverage-test_ubuntu_22_04_zfs_0_8_x
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_freebsd_15_0
           path: coverage-test_freebsd_15_0
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_freebsd_14_3
           path: coverage-test_freebsd_14_3
       - name: Download coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-test_freebsd_13_4
           path: coverage-test_freebsd_13_4
@@ -667,7 +721,7 @@ jobs:
       BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
     steps:
       - name: Download combined coverage artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: coverage-combine_coverage_reports
           path: site/branch
@@ -685,7 +739,7 @@ jobs:
             rm -fr "site/$branchname"
           fi
       - name: Upload site to workflow run page
-        uses: actions/upload-artifact@v5  # see https://github.com/actions/upload-artifact
+        uses: actions/upload-artifact@v6  # see https://github.com/actions/upload-artifact
         with:
           name: ${{ github.job }}
           include-hidden-files: true
@@ -711,7 +765,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Download website artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: generate_website
           path: generate_website

@@ -59,6 +59,7 @@ from typing import (
     Any,
     Callable,
     cast,
+    final,
 )
 from unittest.mock import (
     patch,
@@ -93,6 +94,10 @@ from bzfs_main.util import (
     utils,
 )
 from bzfs_main.util.connection import (
+    SHARED,
+    ConnectionPool,
+    create_simple_minijob,
+    create_simple_miniremote,
     dquote,
 )
 from bzfs_main.util.utils import (
@@ -178,6 +183,7 @@ def suite() -> unittest.TestSuite:
     if not (ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
+        suite.addTest(ParametrizedTestCase.parametrize(TestSSHMasterIntermittentFailure))
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
@@ -485,7 +491,7 @@ class IntegrationTestCase(ParametrizedTestCase):
             args = args + ["--skip-on-error=" + skip_on_error]
 
         args = args + ["--exclude-envvar-regex=EDITOR"]
-        args += ["--cache-snapshots=" + str(cache_snapshots).lower()]
+        args += ["--cache-snapshots"] if cache_snapshots else []
 
         job: bzfs.Job | bzfs_jobrunner.Job
         if use_jobrunner:
@@ -698,6 +704,7 @@ class IntegrationTestCase(ParametrizedTestCase):
 
 
 #############################################################################
+@final
 class SmokeTestCase(IntegrationTestCase):
     """Runs only a small subset of tests."""
 
@@ -727,6 +734,7 @@ class SmokeTestCase(IntegrationTestCase):
 
 
 #############################################################################
+@final
 class AdhocTestCase(IntegrationTestCase):
     """For testing isolated changes you are currently working on.
 
@@ -801,6 +809,7 @@ class AdhocTestCase(IntegrationTestCase):
 
 
 #############################################################################
+@final
 class IncrementalSendStepsTestCase(IntegrationTestCase):
 
     def test_snapshot_series_excluding_hourlies(self) -> None:
@@ -927,6 +936,7 @@ class IncrementalSendStepsTestCase(IntegrationTestCase):
 
 
 #############################################################################
+@final
 class TestSSHLatency(IntegrationTestCase):
 
     def run_latency_cmd(self, cmd: list[str], *, close_fds: bool = True) -> tuple[str, str]:
@@ -1023,6 +1033,96 @@ class TestSSHLatency(IntegrationTestCase):
 
 
 #############################################################################
+@final
+class TestSSHMasterIntermittentFailure(IntegrationTestCase):
+    """Documents and verifies SSH master behavior under intermittent failure.
+
+    This test exists to answer a subtle but important question for operators: what happens when ``bzfs`` is configured to
+    reuse an SSH ControlMaster (``reuse_ssh_connection=True`` with ``ControlPersist``), that master dies unexpectedly, and
+    replication continues to run every few seconds? In particular: do SSH commands fail for the remainder of the persistence
+    window, or do they keep working, and when is a new master created?
+
+    The expected behavior is:
+    * While the master is alive, ``Connection.run_ssh_command`` calls ``refresh_ssh_connection_if_necessary()``, which
+      periodically extends the master lifetime by running ``ssh -O check`` and, if needed, starting a new master via
+      ``ssh -M -oControlPersist=... exit``. The timestamp ``_last_refresh_time`` records successful refreshes.
+    * If the master dies shortly after a refresh, subsequent ``run_ssh_command`` calls initially take the fast path:
+      they skip the ``-O check`` and directly invoke ``ssh -S <socket> ...``.  OpenSSH then automatically falls back to
+      a fresh direct TCP connection when the control socket is missing, so commands continue to succeed, albeit with
+      higher latency per call.
+    * Once the refresh window has elapsed (ssh_control_persist_secs=90 secs by default), the next
+      ``refresh_ssh_connection_if_necessary()`` invocation leaves the fast path, detects that ``-O check`` fails, and
+      recreates a new ControlMaster.  From that point on, commands are again multiplexed over a hot TCP connection with
+      low startup latency.
+    This test method verifies that the actual behavior is as described above.
+    """
+
+    def test_master_dies_then_recovers_via_refresh(self) -> None:
+        username = pwd.getpwuid(os.getuid()).pw_name
+        ssh_port = int(cast(str, getenv_any("test_ssh_port", "22")))
+        args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+        log_params = LogParams(args)
+        log = bzfs_main.loggers.get_logger(
+            log_params=log_params, args=args, log=get_simple_logger("test_ssh_master_intermittent_failure")
+        )
+        remote = create_simple_miniremote(
+            log=log,
+            ssh_user_host=f"{username}@127.0.0.1",
+            ssh_port=ssh_port,
+            ssh_config_file=SSH_CONFIG_FILE,
+            ssh_program=ssh_program,
+            reuse_ssh_connection=True,
+            ssh_control_persist_secs=4,  # to speed up the test, reduce 90 sec refresh window down to a few secs
+            ssh_control_persist_margin_secs=1,
+        )
+        pool = ConnectionPool(remote, SHARED)
+        try:
+            conn = pool.get_connection()
+            job = create_simple_minijob(timeout_duration_secs=10.0)
+            # Initial command: should create a master and succeed.
+            proc1 = conn.run_ssh_command(["echo", "one"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
+            self.assertEqual("one\n", proc1.stdout)
+
+            ssh_cmd = conn.ssh_cmd
+            ssh_sock_cmd = ssh_cmd[0:-1]
+            ssh_user_host = remote.ssh_user_host
+            check_cmd = ssh_sock_cmd + ["-O", "check", ssh_user_host]
+            exit_cmd = ssh_sock_cmd + ["-O", "exit", ssh_user_host]
+
+            # Confirm master is running.
+            check_proc1 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            self.assertEqual(0, check_proc1.returncode, check_proc1.stderr)
+            self.assertIn("Master running", check_proc1.stderr)
+
+            # Kill the master to simulate an intermittent failure.
+            subprocess.run(exit_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            check_proc2 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            self.assertNotEqual(0, check_proc2.returncode)
+            self.assertIn("Control socket connect", check_proc2.stderr)
+
+            last_refresh_before = conn._last_refresh_time
+
+            # Immediately run a command: refresh takes the fast path, ssh falls back to a direct connection and succeeds
+            proc2 = conn.run_ssh_command(["echo", "two"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
+            self.assertEqual("two\n", proc2.stdout)
+            check_proc3 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            self.assertNotEqual(0, check_proc3.returncode)  # assert master is not running
+
+            # Wait long enough so that a subsequent refresh will perform -O check and recreate the master.
+            time.sleep(remote.ssh_control_persist_secs - remote.ssh_control_persist_margin_secs + 1)
+
+            proc3 = conn.run_ssh_command(["echo", "three"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
+            self.assertEqual("three\n", proc3.stdout)
+            check_proc4 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            self.assertEqual(0, check_proc4.returncode, check_proc4.stderr)
+            self.assertIn("Master running", check_proc4.stderr)
+            self.assertGreater(conn._last_refresh_time, last_refresh_before)
+        finally:
+            pool.shutdown()
+
+
+#############################################################################
+@final
 class LocalTestCase(IntegrationTestCase):
 
     def test_aaa_log_diagnostics_first(self) -> None:
@@ -3829,7 +3929,7 @@ class LocalTestCase(IntegrationTestCase):
     def test_compare_snapshot_lists(self) -> None:
         def snapshot_list(_job: bzfs.Job, location: str = "") -> list[str]:
             log_file = _job.params.log_params.log_file
-            tsv_file = glob.glob(log_file[0 : log_file.rindex(".log")] + ".cmp/*.tsv")[0]
+            tsv_file = glob.glob(glob.escape(log_file[0 : log_file.rindex(".log")] + ".cmp/") + "*.tsv")[0]
             with open(tsv_file, "r", encoding="utf-8") as fd:
                 return [line.strip() for line in fd if line.startswith(location) and not line.startswith("location")]
 
@@ -4495,6 +4595,37 @@ class LocalTestCase(IntegrationTestCase):
         )
         self.assertFalse(dataset_exists(dst_root_dataset))
 
+    def test_delete_dst_snapshots_skips_held_snapshots(self) -> None:
+        """Ensures destination snapshots that carry a `zfs hold` are skipped by --delete-dst-snapshots."""
+        unaffected_snapshot = take_snapshot(src_root_dataset, "s2")
+        held_snapshot = take_snapshot(src_root_dataset, "dstonly_hold")
+        nonheld_snapshot = take_snapshot(src_root_dataset, "dstonly_nohold")
+        self.assertIn(unaffected_snapshot, snapshots(src_root_dataset))
+        self.assertIn(held_snapshot, snapshots(src_root_dataset))
+        self.assertIn(nonheld_snapshot, snapshots(src_root_dataset))
+
+        hold_tag = "myhold"
+        self.assertEqual("0", snapshot_property(held_snapshot, "userrefs"))
+        run_cmd(sudo_cmd + ["zfs", "hold", hold_tag, held_snapshot])
+        self.assertEqual("1", snapshot_property(held_snapshot, "userrefs"))
+
+        try:
+            self.run_bzfs(
+                DUMMY_DATASET,
+                src_root_dataset,
+                "--skip-replication",
+                "--delete-dst-snapshots",
+                "--include-snapshot-regex=dstonly_.*",
+                delete_injection_triggers={},
+            )
+            self.assertIn(unaffected_snapshot, snapshots(src_root_dataset))
+            self.assertIn(held_snapshot, snapshots(src_root_dataset))
+            self.assertNotIn(nonheld_snapshot, snapshots(src_root_dataset))
+        finally:
+            if held_snapshot in snapshots(src_root_dataset):
+                run_cmd(sudo_cmd + ["zfs", "release", hold_tag, held_snapshot])
+                self.assertEqual("0", snapshot_property(held_snapshot, "userrefs"))
+
     def test_delete_dst_bookmarks_flat(self) -> None:
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
@@ -4706,7 +4837,7 @@ class LocalTestCase(IntegrationTestCase):
             dst_root_dataset,
             "--force-rollback-to-latest-common-snapshot",
             "--no-use-bookmark",
-            "--no-create-bookmark",
+            "--create-bookmarks=none",
             retries=1,
         )
         self.assert_snapshot_names(dst_root_dataset, ["s1", "s3"])
@@ -5168,7 +5299,7 @@ class LocalTestCase(IntegrationTestCase):
                 )
 
                 # replicate from src to dst:
-                run_jobrunner("--replicate=pull", *pull_args)
+                run_jobrunner("--replicate", *pull_args)
                 self.assertEqual(1, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
@@ -5198,14 +5329,14 @@ class LocalTestCase(IntegrationTestCase):
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
                 # replication to nonexistingpool target does nothing:
-                run_jobrunner("--replicate=pull", *pull_args_bad)
+                run_jobrunner("--replicate", *pull_args_bad)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
                 # replication to nonexistingpool destination pool does nothing:
                 run_jobrunner(
-                    "--replicate=pull",
+                    "--replicate",
                     "--root-dataset-pairs",
                     *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[3:]),
                 )
@@ -5275,7 +5406,7 @@ class LocalTestCase(IntegrationTestCase):
                 # replicate new snapshot from src to dst:
                 nonexisting_snap = "s1_nonexisting_2024-01-01_00:00:00_secondly"
                 take_snapshot(src_root_dataset, nonexisting_snap)
-                run_jobrunner("--replicate=pull", *pull_args)
+                run_jobrunner("--replicate", *pull_args)
                 self.assertEqual(3, len(snapshots(src_root_dataset)))
                 self.assertEqual(2, len(bookmarks(src_root_dataset)))
                 self.assertEqual(2, len(snapshots(dst_root_dataset)))
@@ -5315,7 +5446,7 @@ class LocalTestCase(IntegrationTestCase):
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
                 # push replication does nothing if target isn't mapped to destination host:
-                run_jobrunner("--replicate=push", "--workers=1", *push_args_bad)
+                run_jobrunner("--replicate", "--workers=1", *push_args_bad)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
@@ -5324,7 +5455,7 @@ class LocalTestCase(IntegrationTestCase):
                 dst_snapshot_plan_empty = {"z": {"onsite": {"daily": 0}}}
                 push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
                 push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
-                run_jobrunner("--replicate=push", *push_args_empty)
+                run_jobrunner("--replicate", *push_args_empty)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
@@ -5333,7 +5464,7 @@ class LocalTestCase(IntegrationTestCase):
                 dst_snapshot_plan_empty = {"z": {"onsite": {}}}
                 push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
                 push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
-                run_jobrunner("--replicate=push", *push_args_empty)
+                run_jobrunner("--replicate", *push_args_empty)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
@@ -5342,7 +5473,7 @@ class LocalTestCase(IntegrationTestCase):
                     continue  # only Linux supports 127.0.0.2 and 127.0.0.1 test scenario simultaneously by default
 
                 # push replicate successfully from src to dst:
-                run_jobrunner("--replicate=push", "--workers=1", *push_args)
+                run_jobrunner("--replicate", "--workers=1", *push_args)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(2, len(bookmarks(src_root_dataset)))
                 self.assertEqual(2, len(snapshots(dst_root_dataset)))
@@ -5451,7 +5582,7 @@ class LocalTestCase(IntegrationTestCase):
                 self.assertFalse(dataset_exists(dst_root_dataset))
 
                 # replicate empty targets from src to dst:
-                run_jobrunner("--replicate=pull", *pull_args_empty)
+                run_jobrunner("--replicate", *pull_args_empty)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assert_snapshot_name_regexes(dst_root_dataset, ["z_(?!onsite).*_yearly"])
 
@@ -5460,7 +5591,7 @@ class LocalTestCase(IntegrationTestCase):
                 dst_snapshot_plan_nonempty = {"z": {"onsite": {"yearly": 1, "daily": 0}}}
                 pull_args_nonempty = [arg for arg in pull_args if not arg.startswith("--dst-snapshot-plan=")]
                 pull_args_nonempty += [f"--dst-snapshot-plan={dst_snapshot_plan_nonempty}"]
-                run_jobrunner("--replicate=pull", *pull_args_nonempty)
+                run_jobrunner("--replicate", *pull_args_nonempty)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assert_snapshot_name_regexes(dst_root_dataset, ["z_onsite_.*_yearly"])
 
@@ -5477,6 +5608,90 @@ class LocalTestCase(IntegrationTestCase):
                 pull_args_empty += [f"--src-snapshot-plan={src_snapshot_plan_empty}"]
                 run_jobrunner("--prune-src-snapshots", *pull_args_empty)
                 self.assertEqual(0, len(snapshots(src_root_dataset)))
+
+    def test_jobrunner_monitor_oldest_skip_holds(self) -> None:
+        """Integration coverage for `oldest_skip_holds` configuration option in bzfs_jobrunner monitoring.
+
+        Creates two snapshots for the same monitored label: an older snapshot that is held (`zfs hold` implies `userrefs>0`)
+        and a newer snapshot without holds. The test asserts that `oldest_skip_holds=True` reports OK (the held snapshot is
+        ignored when choosing the oldest), and that `oldest_skip_holds=False` reports CRITICAL (the held snapshot becomes the
+        oldest and is therefore too old).
+        The test intentionally uses a short sleep to ensure the held snapshot becomes stale while the non-held snapshot
+        remains fresh.
+        """
+
+        def run_jobrunner(*args: str, **kwargs: Any) -> bzfs_jobrunner.Job:
+            return self.run_bzfs_jobrunner(*args, **kwargs)
+
+        self.tearDownAndSetup()
+        self.assert_snapshots(src_root_dataset, 0)
+
+        localhostname = socket.gethostname()
+        src_hosts = [localhostname]  # for local mode (no ssh, no network)
+        dst_hosts = {localhostname: ["onsite"]}
+        retain_dst_targets = dst_hosts.copy()
+        dst_root_datasets = {localhostname: ""}
+        src_snapshot_plan = {"z": {"onsite": {"millisecondly": 1}}}
+        dst_snapshot_plan = {"z": {"onsite": {"millisecondly": 1}}}
+        src_bookmark_plan = dst_snapshot_plan
+
+        jobrunner_args = [
+            "--root-dataset-pairs",
+            src_root_dataset,
+            dst_root_dataset,
+            f"--src-hosts={src_hosts}",
+            f"--localhost={localhostname}",
+            f"--dst-hosts={dst_hosts}",
+            f"--retain-dst-targets={retain_dst_targets}",
+            f"--dst-root-datasets={dst_root_datasets}",
+            f"--src-snapshot-plan={src_snapshot_plan}",
+            f"--src-bookmark-plan={src_bookmark_plan}",
+            f"--dst-snapshot-plan={dst_snapshot_plan}",
+            "--job-id=myjobid",
+            f"--ssh-src-port={getenv_any('test_ssh_port', '22')}",
+            f"--ssh-dst-port={getenv_any('test_ssh_port', '22')}",
+        ]
+
+        held_snapshot = take_snapshot(src_root_dataset, "z_onsite_20000101_000000_millisecondly")
+        hold_tag = "bzfs_test_hold"
+        self.assertEqual("0", snapshot_property(held_snapshot, "userrefs"))
+        run_cmd(sudo_cmd + ["zfs", "hold", hold_tag, held_snapshot])
+        self.assertEqual("1", snapshot_property(held_snapshot, "userrefs"))
+        try:
+            time.sleep(3.0)  # ensure the held snapshot becomes older than the critical threshold
+            nonheld_snapshot = take_snapshot(src_root_dataset, "z_onsite_20000101_000001_millisecondly")
+            self.assertEqual("0", snapshot_property(nonheld_snapshot, "userrefs"))
+
+            def monitor_plan(oldest_skip_holds: bool) -> dict[str, dict[str, dict[str, dict[str, Any]]]]:
+                return {
+                    "z": {
+                        "onsite": {
+                            "millisecondly": {
+                                "critical": "2 seconds",
+                                "src_snapshot_cycles": 0,  # do not extend threshold by period duration
+                                "oldest_skip_holds": oldest_skip_holds,
+                            }
+                        }
+                    }
+                }
+
+            run_jobrunner(
+                "--monitor-snapshots-no-latest-check",
+                "--monitor-src-snapshots",
+                f"--monitor-snapshot-plan={monitor_plan(True)}",
+                *jobrunner_args,
+            )
+            run_jobrunner(
+                "--monitor-snapshots-no-latest-check",
+                "--monitor-src-snapshots",
+                f"--monitor-snapshot-plan={monitor_plan(False)}",
+                *jobrunner_args,
+                expected_status=bzfs.CRITICAL_STATUS,
+            )
+        finally:
+            if held_snapshot in snapshots(src_root_dataset):
+                run_cmd(sudo_cmd + ["zfs", "release", hold_tag, held_snapshot])
+                self.assertEqual("0", snapshot_property(held_snapshot, "userrefs"))
 
 
 #############################################################################
@@ -5537,6 +5752,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
 
 
 #############################################################################
+@final
 class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_ssh_program_must_not_be_disabled_in_nonlocal_mode(self) -> None:

@@ -48,6 +48,9 @@ from unittest.mock import (
 from bzfs_main import (
     bzfs_jobrunner,
 )
+from bzfs_main.bzfs import (
+    STILL_RUNNING_STATUS,
+)
 from bzfs_main.util.utils import (
     DIE_STATUS,
 )
@@ -71,6 +74,7 @@ def suite() -> unittest.TestSuite:
         TestRunSubJobSpawnProcessPerJob,
         TestRunSubJobInCurrentThread,
         TestRunSubJob,
+        TestGetWorstException,
         TestErrorPropagation,
         TestValidateSnapshotPlan,
         TestValidateMonitorSnapshotPlan,
@@ -909,13 +913,28 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
                 self.returncode = -signal.SIGKILL
 
         start = time.monotonic()
-        with patch("bzfs_main.bzfs_jobrunner.subprocess.Popen", new=_FakeProc):
+        with patch("bzfs_main.util.utils.subprocess.Popen", new=_FakeProc):
             code, _logs = self.run_and_capture(["sleep", "600"], timeout_secs=10.0)
         elapsed = time.monotonic() - start
 
         # Assert we did not wait for the full timeout; should return very quickly (< 0.2s on CI).
         self.assertLess(elapsed, 0.2, f"unexpected slow early-termination: {elapsed:.3f}s")
         self.assertIn(code, (-signal.SIGTERM, -signal.SIGKILL))
+
+    def test_termination_event_real_sleep_exits_quickly(self) -> None:
+        """Integration-style check: pre-set termination_event causes real spawned process to exit promptly."""
+        self.job.termination_event.set()
+        start = time.monotonic()
+        code, logs = self.run_and_capture(["sleep", "1"], timeout_secs=2.0)
+        elapsed = time.monotonic() - start
+
+        # We should not wait anywhere near the full timeout; allow generous slack for slow CI.
+        self.assertLess(elapsed, 0.75, f"unexpected slow early-termination with real sleep: {elapsed:.3f}s")
+        self.assertIn(code, (-signal.SIGTERM, -signal.SIGKILL))
+        self.assertTrue(
+            logs and logs[0].startswith("Terminating worker job due to async termination request"),
+            f"Expected first log starting with async termination request, got {logs!r}",
+        )
 
 
 #############################################################################
@@ -943,6 +962,16 @@ class TestRunSubJobInCurrentThread(AbstractTestCase):
         mock_bzfs_run_main.side_effect = subprocess.CalledProcessError(returncode=7, cmd=cmd)
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(7, result)
+
+    def test_called_process_error_normalizes_reserved_exit_codes(self, mock_bzfs_run_main: MagicMock) -> None:
+        cmd = ["bzfs", "foo"]
+        for returncode in (1, 2, 3, 4):
+            with self.subTest(returncode=returncode):
+                mock_bzfs_run_main.reset_mock()
+                mock_bzfs_run_main.side_effect = subprocess.CalledProcessError(returncode=returncode, cmd=cmd)
+                result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
+                self.assertEqual(DIE_STATUS, result)
+                mock_bzfs_run_main.assert_called_once_with(cmd)
 
     def test_system_exit_with_code(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo"]
@@ -992,6 +1021,7 @@ class TestRunSubJob(AbstractTestCase):
         self.job = make_bzfs_jobrunner_job()
         self.job.stats.jobs_all = 1
         self.assertIsNone(self.job.first_exception)
+        self.assertIsNone(self.job.worst_exception)
 
     def test_success(self) -> None:
         """Run a successful subjob and silence its informational logs."""
@@ -1006,13 +1036,60 @@ class TestRunSubJob(AbstractTestCase):
             result = self.job.run_subjob(cmd=["false"], name="j0", timeout_secs=None, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
-        self.assertTrue(self.job.first_exception != 0)
+        self.assertEqual(1, self.job.first_exception)
+        self.assertIsInstance(self.job.worst_exception, int)
+        self.assertEqual(1, self.job.worst_exception)
 
         with suppress_output():
             result = self.job.run_subjob(cmd=["false"], name="j1", timeout_secs=None, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
-        self.assertTrue(self.job.first_exception != 0)
+        self.assertEqual(1, self.job.first_exception)
+        self.assertIsInstance(self.job.worst_exception, int)
+        self.assertEqual(1, self.job.worst_exception)
+
+    def test_first_failure_retained_worst_failure_propagated(self) -> None:
+        """Track first failing exit code for diagnostics but use worst exit code for final process status."""
+        self.job.stats.jobs_all = 2
+        with suppress_output():
+            rc1 = self.job.run_subjob(cmd=["false"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+        with suppress_output():
+            rc2 = self.job.run_subjob(cmd=["bash", "-c", "exit 2"], name="j1", timeout_secs=None, spawn_process_per_job=True)
+
+        self.assertEqual(1, rc1)
+        self.assertEqual(2, rc2)
+        self.assertEqual(1, self.job.first_exception)
+        self.assertEqual(2, self.job.worst_exception)
+
+    def test_still_running_is_lowest_priority(self) -> None:
+        """Ensure still-running status (4) never masks monitor (1/2) or fatal failures."""
+        self.job.stats.jobs_all = 3
+        with suppress_output():
+            rc1 = self.job.run_subjob(cmd=["bash", "-c", "exit 4"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+        with suppress_output():
+            rc2 = self.job.run_subjob(cmd=["bash", "-c", "exit 2"], name="j1", timeout_secs=None, spawn_process_per_job=True)
+        self.assertEqual(4, self.job.first_exception)
+        self.assertEqual(2, self.job.worst_exception)
+        with suppress_output():
+            rc3 = self.job.run_subjob(cmd=["bash", "-c", "exit 3"], name="j2", timeout_secs=None, spawn_process_per_job=True)
+
+        self.assertEqual(4, rc1)
+        self.assertEqual(2, rc2)
+        self.assertEqual(3, rc3)
+        self.assertEqual(3, self.job.worst_exception)
+
+    def test_monitor_status_beats_still_running_regardless_of_order(self) -> None:
+        """Ensure monitor WARNING/CRITICAL (1/2) always beats STILL_RUNNING (4), regardless of completion order."""
+        self.job.stats.jobs_all = 2
+        with suppress_output():
+            rc1 = self.job.run_subjob(cmd=["bash", "-c", "exit 2"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+        with suppress_output():
+            rc2 = self.job.run_subjob(cmd=["bash", "-c", "exit 4"], name="j1", timeout_secs=None, spawn_process_per_job=True)
+
+        self.assertEqual(2, rc1)
+        self.assertEqual(4, rc2)
+        self.assertEqual(2, self.job.first_exception)
+        self.assertEqual(2, self.job.worst_exception)
 
     def test_timeout(self) -> None:
         """Check subjobs respect timeouts and silence their logs."""
@@ -1028,6 +1105,26 @@ class TestRunSubJob(AbstractTestCase):
         """Ensure missing commands raise FileNotFoundError without noisy logs."""
         with self.assertRaises(FileNotFoundError), suppress_output():
             self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+
+
+#############################################################################
+class TestGetWorstException(AbstractTestCase):
+
+    def test_fatal_exit_codes_choose_larger_code(self) -> None:
+        """Both inputs fatal => pick max(exit_code)."""
+        for existing_code, new_code, expected in ((7, 9, 9), (9, 7, 9), (5, 5, 5)):
+            with self.subTest(existing_code=existing_code, new_code=new_code):
+                self.assertEqual(expected, bzfs_jobrunner.Job.get_worst_exception(existing_code, new_code))
+
+    def test_success_and_still_running_choose_still_running(self) -> None:
+        """Non-monitor, non-fatal inputs (0/4) reach final max() branch in get_worst_exception()."""
+        for existing_code, new_code in (
+            (0, STILL_RUNNING_STATUS),
+            (STILL_RUNNING_STATUS, 0),
+            (STILL_RUNNING_STATUS, STILL_RUNNING_STATUS),
+        ):
+            with self.subTest(existing_code=existing_code, new_code=new_code):
+                self.assertEqual(STILL_RUNNING_STATUS, bzfs_jobrunner.Job.get_worst_exception(existing_code, new_code))
 
 
 #############################################################################
@@ -1049,6 +1146,8 @@ class TestErrorPropagation(AbstractTestCase):
                 )
         self.assertIsInstance(self.job.first_exception, int)
         self.assertEqual(DIE_STATUS, self.job.first_exception)
+        self.assertIsInstance(self.job.worst_exception, int)
+        self.assertEqual(DIE_STATUS, self.job.worst_exception)
         self.assertEqual(1, self.job.stats.jobs_started)
 
 

@@ -35,6 +35,7 @@ from datetime import (
 )
 from typing import (
     Final,
+    final,
 )
 
 # constants:
@@ -49,6 +50,7 @@ METADATA_MICROSECOND: Final = {"min": 0, "max": 999, "help": "The microsecond wi
 
 
 @dataclass(frozen=True)
+@final
 class PeriodAnchors:
     """Anchor offsets used to round datetimes up to periodic boundaries; Immutable."""
 
@@ -152,7 +154,7 @@ class PeriodAnchors:
             period = timedelta(seconds=duration_amount)
 
         elif duration_unit == "minutely":
-            anchor = dt.replace(second=self.minutely_second, microsecond=0)
+            anchor = dt.replace(hour=0, minute=0, second=self.minutely_second, microsecond=0)
             anchor = anchor if anchor <= dt else anchor - timedelta(minutes=1)
             period = timedelta(minutes=duration_amount)
 
