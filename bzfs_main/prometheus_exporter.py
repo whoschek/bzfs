@@ -64,6 +64,10 @@ def write_prometheus_metrics(job: Job, exit_code: int, elapsed_nanos: int, sent_
     if not hasattr(p, "prometheus_textfile_dir") or not p.prometheus_textfile_dir:
         return  # Feature not enabled
 
+    if p.dry_run:
+        p.log.info("Not writing prometheus metrics in dry-run mode")
+        return
+
     textfile_dir: str = p.prometheus_textfile_dir
     os.makedirs(textfile_dir, mode=0o755, exist_ok=True)
 
@@ -183,6 +187,9 @@ def write_prometheus_metrics_on_error(job: Job, exit_code: int, log: Logger) -> 
     try:
         if hasattr(job, "params") and hasattr(job, "replication_start_time_nanos"):
             p = job.params
+            if p.dry_run:
+                log.info("Not writing prometheus file in dry-run mode")
+                return
             elapsed_nanos = time.monotonic_ns() - job.replication_start_time_nanos
             sent_bytes = 0
             if p.is_program_available("pv", "local"):
