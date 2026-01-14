@@ -27,7 +27,7 @@ from bzfs_main.prometheus_exporter import (
     _escape_label,
     _generate_job_id,
     write_prometheus_metrics,
-    _sanitize_filename
+    _sanitize_filename,
 )
 
 
@@ -36,10 +36,10 @@ class TestPrometheusExporter(unittest.TestCase):
 
     def test_escape_label(self) -> None:
         """Test label value escaping."""
-        self.assertEqual(_escape_label('simple'), 'simple')
+        self.assertEqual(_escape_label("simple"), "simple")
         self.assertEqual(_escape_label('with"quote'), 'with\\"quote')
-        self.assertEqual(_escape_label('with\\backslash'), 'with\\\\backslash')
-        self.assertEqual(_escape_label('with\nnewline'), 'with\\nnewline')
+        self.assertEqual(_escape_label("with\\backslash"), "with\\\\backslash")
+        self.assertEqual(_escape_label("with\nnewline"), "with\\nnewline")
         self.assertEqual(_escape_label('mixed"\\n'), 'mixed\\"\\\\\\n')
 
     def test_determine_action(self) -> None:
@@ -188,8 +188,12 @@ class TestPrometheusExporter(unittest.TestCase):
             # Verify metrics file was created
             job_id = _generate_job_id(job)
             action = "replicate"
-            src_root: str = job.src.basis_root_dataset.split(":")[1] if ":" in job.src.basis_root_dataset else job.src.basis_root_dataset
-            dst_root: str = job.dst.basis_root_dataset.split(":")[1] if ":" in job.dst.basis_root_dataset else job.dst.basis_root_dataset
+            src_root: str = (
+                job.src.basis_root_dataset.split(":")[1] if ":" in job.src.basis_root_dataset else job.src.basis_root_dataset
+            )
+            dst_root: str = (
+                job.dst.basis_root_dataset.split(":")[1] if ":" in job.dst.basis_root_dataset else job.dst.basis_root_dataset
+            )
             # Prefer using basis_ssh_host (the given by cli args) in order to preserve proper metric labels instead of resvoled hostnames
             src_host: str = job.src.ssh_host or job.src.basis_ssh_host or "localhost"
             dst_host: str = job.dst.ssh_host or job.dst.basis_ssh_host or "localhost"
@@ -256,8 +260,12 @@ class TestPrometheusExporter(unittest.TestCase):
             # Verify metrics file was created
             job_id = _generate_job_id(job)
             action = "replicate"
-            src_root: str = job.src.basis_root_dataset.split(":")[1] if ":" in job.src.basis_root_dataset else job.src.basis_root_dataset
-            dst_root: str = job.dst.basis_root_dataset.split(":")[1] if ":" in job.dst.basis_root_dataset else job.dst.basis_root_dataset
+            src_root: str = (
+                job.src.basis_root_dataset.split(":")[1] if ":" in job.src.basis_root_dataset else job.src.basis_root_dataset
+            )
+            dst_root: str = (
+                job.dst.basis_root_dataset.split(":")[1] if ":" in job.dst.basis_root_dataset else job.dst.basis_root_dataset
+            )
             # Prefer using basis_ssh_host (the given by cli args) in order to preserve proper metric labels instead of resvoled hostnames
             src_host: str = job.src.ssh_host or job.src.basis_ssh_host or "localhost"
             dst_host: str = job.dst.ssh_host or job.dst.basis_ssh_host or "localhost"
