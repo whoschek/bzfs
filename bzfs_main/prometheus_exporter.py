@@ -193,7 +193,7 @@ def write_prometheus_metrics_on_error(job: Job, exit_code: int, log: Logger) -> 
             write_prometheus_metrics(job, exit_code=exit_code, elapsed_nanos=elapsed_nanos, sent_bytes=sent_bytes)
     except Exception as exc:
         log.error(
-            f"Could not write prometheus metrics while an error occured in replication process. exit_code={exit_code}, error={exc}",
+            f"Could not write prometheus metrics while an error occurred in replication process. exit_code={exit_code}, error={exc}",
             exc_info=True,
         )
 
