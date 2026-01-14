@@ -315,5 +315,5 @@ def _sanitize_filename(value: str) -> str:
         usable string for filename.
     """
     value = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode("ascii")
-    value = re.sub("[^\w\s-]", "", value).strip()
-    return re.sub("[-\s]+", "-", value)
+    value = re.sub(r"[^\w\s-]", "", value).strip()
+    return re.sub(r"[-\s]+", "-", value)
