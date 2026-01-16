@@ -812,10 +812,9 @@ class Job:
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
-        msg = dry("Ready to run %s subjobs using %s/%s src hosts: %s, %s/%s dst hosts: %s", is_dry_run=self.jobrunner_dryrun)
-        log.info(
-            msg, len(subjobs), len(src_hosts), nb_src_hosts, src_hosts, len(dst_hosts), nb_dst_hosts, list(dst_hosts.keys())
-        )
+        msg = f"Ready to run {len(subjobs)} subjobs using {len(src_hosts)}/{nb_src_hosts} src hosts: {src_hosts}, "
+        msg += f"{len(dst_hosts)}/{nb_dst_hosts} dst hosts: {list(dst_hosts.keys())}"
+        log.info("%s", dry(msg, is_dry_run=self.jobrunner_dryrun))
         log.log(LOG_TRACE, "subjobs: \n%s", _pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds, args.jitter)
         ex = self.worst_exception

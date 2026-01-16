@@ -880,7 +880,7 @@ def validate_file_permissions(path: str, mode: int) -> None:
 
 
 def parse_duration_to_milliseconds(duration: str, *, regex_suffix: str = "", context: str = "") -> int:
-    """Parses human duration strings like '5m' or '2 hours' to milliseconds."""
+    """Parses human duration strings like '5minutes' or '2 hours' to milliseconds."""
     unit_milliseconds: dict[str, int] = {
         "milliseconds": 1,
         "millis": 1,
@@ -910,7 +910,7 @@ def parse_duration_to_milliseconds(duration: str, *, regex_suffix: str = "", con
 
 
 def unixtime_fromisoformat(datetime_str: str) -> int:
-    """Converts ISO 8601 datetime string into UTC Unix time seconds."""
+    """Converts ISO 8601 datetime string into UTC Unix time in integer seconds."""
     return int(datetime.fromisoformat(datetime_str).timestamp())
 
 
