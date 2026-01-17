@@ -2631,3 +2631,34 @@ group.
 *  Same syntax as --zfs-recv-x-include-regex (see above), and the default is to exclude no
     properties. Example: --zfs-recv-x-exclude-regex encryptionroot keystatus origin volblocksize
     volsize
+
+# Monitoring
+
+bzfs includes support to write prometheus metric files which can be picked up by node_exporter's textfile collector plugin.  
+
+In order to use generate those metrics, one can use `--prometheus-textfile-dir` argument for 
+both `bzfs` and `bzfs_job_runner` in order to specify a directory path where bzfs should
+write metric files. This is usually `/var/lib/node_exporter/textfile_collector`
+
+Your instance of node_exporter should run with the textfile collector argument, 
+eg `--collector.textfile.directory=/var/lib/node_exporter/textfile_collector`.
+
+Also make sure that bzfs can write to your specified textfile collector directory.
+
+You'll find an example grafana dashboard in `bzfs_docs` which would look like the following
+![image](bzfs_docs/grafana_dashboard.png)
+
+The following metrics are generated:
+
+- `bzfs_job_status`: bzfs exit code, contains 0 if everything went well
+- `bzfs_job_duration_seconds`: bzfs job duration in seconds
+- `bzfs_job_last_run_timestamp_seconds`: bzfs last run timestamp (in order to detect stale jobs)
+- `bzfs_snapshots_found_total` total count of snapshots that bzfs would address
+- `bzfs_snapshots_replicated_total` total count of replicated snapshots
+- `bzfs_bytes_sent_total` amount of replicated bytes
+- `bzfs_throughput_bytes_per_second` calculated throughput
+- `bzfs_cache_hits_total` cache hits if snapshot cache is used
+- `bzfs_cache_misses_total` cache misses if snapshot cache is used
+
+Please note that in order to get bytes_sent / throughput metrics, the system running bzfs needs
+to have `pv` installed. Otherwise, `bzfs_bytes_sent_total` will get value -1.
