@@ -7,8 +7,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs_jobrunner] docs: Improve Getting Started.
 - [bzfs_jobrunner,bzfs] Make `--monitor-snapshots` report exit code for worst encountered alert instead of first
   encountered alert.
-- [bzfs_jobrunner,bzfs] `--monitor-snapshots`: Add (optional) flag to indicate that snapshots that carry a `zfs hold`
-  shall be skipped when monitoring the oldest snapshot.
+- [bzfs_jobrunner,bzfs] `--monitor-snapshots`: Add (optional) `oldest_skip_holds` flag to indicate that snapshots that
+  carry a `zfs hold` shall be skipped when monitoring the oldest snapshot. The default is to not skip, i.e. the same
+  behavior as before this change.
 - [bzfs] `--delete-dst-snapshots`: Don't attempt to delete snapshots that carry a `zfs hold`; instead auto-skip them
   without failing.
 - [bzfs] Fix snapshot schedule for N-minutely periods where N > 1.
