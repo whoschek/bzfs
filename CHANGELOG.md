@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.17.0] - Not yet released
+## [1.17.0] - January 18, 2026
 
 - [bzfs_jobrunner] docs: Improve Getting Started.
 - [bzfs_jobrunner,bzfs] Make `--monitor-snapshots` report exit code for worst encountered alert instead of first
@@ -18,6 +18,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   read.
 - [bzfs] [security] Enhance validation of `--ssh-{src|dst}-user` and ZFS property names.
 - [bzfs] [security] Make `os.utime()` not follow symlinks for additional safety.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.16.0...v1.17.0
 
 ## [1.16.0] - December 20, 2025
 
