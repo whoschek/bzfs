@@ -643,8 +643,8 @@ class RetryConfig:
     """Configures termination behavior and logging for call_with_retries(); all defaults work out of the box; immutable."""
 
     termination_event: threading.Event | None = None  # optionally allows for async cancellation
-    display_msg: str = "Retrying"
-    dots: str = " ..."
+    display_msg: str = "Retrying"  # message prefix for retry log messages
+    dots: str = " ..."  # suffix appended to retry log messages
     format_msg: Callable[[str, RetryableError], str] = _format_msg  # lambda: display_msg, retryable_error
     format_pair: Callable[[object, object], str] = _format_pair  # lambda: first, second
     format_duration: Callable[[int], str] = human_readable_duration  # lambda: nanos
