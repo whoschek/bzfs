@@ -1810,7 +1810,7 @@ usage: bzfs [-h] [--recursive]
 **--create-bookmarks** *{all,hourly,minutely,secondly,none}*
 
 *  For increased safety, bzfs replication behaves as follows wrt. ZFS bookmark creation, if it is
-    autodetected that the source ZFS pool supports bookmarks:
+    autodetected that the source ZFS pool support bookmarks:
 
     * `all` (default): Whenever it has successfully completed a 'zfs send' operation, bzfs
     creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send'
