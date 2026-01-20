@@ -124,6 +124,7 @@ import random
 import threading
 import time
 from collections.abc import (
+    Awaitable,
     Iterable,
     Mapping,
     Sequence,
@@ -270,6 +271,87 @@ def call_with_retries(
                     after_attempt(outcome)
                     if sleep_nanos > 0:
                         sleep(sleep_nanos, retry)
+                    if not is_terminated(retry):
+                        n: int = policy.max_previous_outcomes
+                        if n > 0:  #  outcome will be passed to next attempt via Retry.previous_outcomes
+                            if previous_outcomes:  # detach to reduce memory footprint
+                                outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))
+                            previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # imm deque
+                        del outcome  # help gc
+                        retry_count += 1
+                        continue  # continue retry loop with next attempt
+                else:
+                    sleep_nanos = 0
+            outcome = AttemptOutcome(
+                retry, False, True, is_terminated(retry), giveup_reason, elapsed_nanos, sleep_nanos, retryable_error
+            )
+            after_attempt(outcome)
+            return on_exhaustion(outcome)  # raise error or return fallback value
+
+
+async def call_with_retries_async(
+    fn: Callable[[Retry], Awaitable[_T]],  # wraps work and raises RetryableError for failures that shall be retried
+    policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
+    *,
+    config: RetryConfig | None = None,  # controls logging settings and async cancellation between attempts
+    giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
+    after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
+    on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
+    log: logging.Logger | None = None,
+) -> _T:
+    """Async version of call_with_retries(); awaits ``fn`` and uses non-blocking sleep."""
+
+    async def sleep(sleep_nanos: int, retry: Retry) -> None:
+        import asyncio
+
+        termination_event = retry.config.termination_event
+        if termination_event is None:
+            await asyncio.sleep(sleep_nanos / 1_000_000_000)
+        else:
+            assert isinstance(termination_event, asyncio.Event)
+            try:
+                await asyncio.wait_for(termination_event.wait(), timeout=sleep_nanos / 1_000_000_000)
+            except asyncio.TimeoutError:
+                pass  # expected
+
+    config = _DEFAULT_RETRY_CONFIG if config is None else config
+    rng: random.Random | None = None
+    retry_count: int = 0
+    curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
+    previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
+    start_time_nanos: Final[int] = time.monotonic_ns()
+    while True:
+        attempt_start_time_nanos: int = time.monotonic_ns() if retry_count != 0 else start_time_nanos
+        retry: Retry = Retry(retry_count, start_time_nanos, attempt_start_time_nanos, policy, config, log, previous_outcomes)
+        try:
+            result: _T = await fn(retry)  # Call the target function and supply retry attempt number and other metadata
+            if after_attempt is not after_attempt_log_failure:
+                elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
+                outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, None, elapsed_nanos, 0, result)
+                after_attempt(outcome)
+            return result
+        except RetryableError as retryable_error:
+            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+            giveup_reason: object | None = None
+            sleep_nanos: int = 0
+            is_terminated: Callable[[Retry], bool] = _is_terminated
+            if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
+                if policy.max_sleep_nanos == 0 and policy.backoff_strategy is full_jitter_backoff_strategy:
+                    pass  # perf: e.g. spin-before-block
+                elif retry_count == 0 and retryable_error.retry_immediately_once:
+                    pass  # retry once immediately without backoff
+                else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
+                    rng = _thread_local_rng() if rng is None else rng
+                    sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
+                        retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
+                    )
+                    assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, sleep_nanos
+
+                outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
+                if (not is_terminated(retry)) and (giveup_reason := giveup(outcome)) is None:
+                    after_attempt(outcome)
+                    if sleep_nanos > 0:
+                        await sleep(sleep_nanos, retry)
                     if not is_terminated(retry):
                         n: int = policy.max_previous_outcomes
                         if n > 0:  #  outcome will be passed to next attempt via Retry.previous_outcomes

@@ -18,6 +18,7 @@ from __future__ import (
     annotations,
 )
 import argparse
+import asyncio
 import importlib.util
 import logging
 import random
@@ -35,6 +36,7 @@ from typing import (
     Callable,
 )
 from unittest.mock import (
+    AsyncMock,
     MagicMock,
     patch,
 )
@@ -54,6 +56,7 @@ from bzfs_main.util.retry import (
     any_giveup,
     call_with_exception_handlers,
     call_with_retries,
+    call_with_retries_async,
     full_jitter_backoff_strategy,
     multi_after_attempt,
     no_giveup,
@@ -66,6 +69,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestSleep,
         TestCallWithRetries,
+        TestCallWithRetriesAsync,
         TestMiscBackoffStrategies,
         TestRetryPolicyCopy,
         TestRetryConfigCopy,
@@ -1256,6 +1260,94 @@ class TestCallWithRetries(unittest.TestCase):
         giveup = all_giveup([handler_returns_r1, handler_returns_r2])
         self.assertEqual("r2", giveup(outcome))
         self.assertEqual(["h1", "h2"], calls)
+
+
+#############################################################################
+class TestCallWithRetriesAsync(unittest.TestCase):
+
+    def test_call_with_retries_async_success(self) -> None:
+        calls: list[int] = []
+        retry_policy = RetryPolicy(
+            max_retries=2,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+
+        async def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            if retry.count < 2:
+                raise RetryableError(
+                    "fail", display_msg="connect", retry_immediately_once=(retry.count == 0)
+                ) from ValueError("boom")
+            return "ok"
+
+        actual: str = asyncio.run(
+            call_with_retries_async(fn, policy=retry_policy, config=RetryConfig(display_msg="foo"), log=None)
+        )
+        self.assertEqual("ok", actual)
+        self.assertEqual([0, 1, 2], calls)
+
+    def test_call_with_retries_async_uses_asyncio_sleep(self) -> None:
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0.001,
+            initial_max_sleep_secs=0.001,
+            max_sleep_secs=0.001,
+            max_elapsed_secs=1,
+        )
+        calls: list[int] = []
+
+        async def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            if retry.count == 0:
+                raise RetryableError("fail") from ValueError("boom")
+            return "ok"
+
+        mock_sleep = AsyncMock()
+        with patch("asyncio.sleep", mock_sleep):
+            actual: str = asyncio.run(call_with_retries_async(fn, policy=retry_policy, config=RetryConfig(), log=None))
+
+        self.assertEqual("ok", actual)
+        self.assertEqual([0, 1], calls)
+        mock_sleep.assert_awaited_once()
+        self.assertAlmostEqual(0.001, mock_sleep.call_args[0][0])
+
+    def test_call_with_retries_async_uses_asyncio_event_for_termination(self) -> None:
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0.001,
+            initial_max_sleep_secs=0.001,
+            max_sleep_secs=0.001,
+            max_elapsed_secs=1,
+        )
+        termination_event: Any = asyncio.Event()
+        calls: list[int] = []
+
+        async def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            if retry.count == 0:
+                raise RetryableError("fail") from ValueError("boom")
+            return "ok"
+
+        mock_sleep = AsyncMock()
+        mock_wait_for = AsyncMock(side_effect=asyncio.TimeoutError)
+        with (
+            patch("asyncio.sleep", mock_sleep),
+            patch("asyncio.wait_for", mock_wait_for),
+        ):
+            actual: str = asyncio.run(
+                call_with_retries_async(
+                    fn, policy=retry_policy, config=RetryConfig(termination_event=termination_event), log=None
+                )
+            )
+
+        self.assertEqual("ok", actual)
+        self.assertEqual([0, 1], calls)
+        mock_sleep.assert_not_awaited()
+        mock_wait_for.assert_awaited_once()
+        self.assertAlmostEqual(0.001, mock_wait_for.call_args.kwargs["timeout"])
 
 
 #############################################################################
