@@ -105,11 +105,20 @@ class TestSleep(unittest.TestCase):
     def test_sleep_calls_time_sleep_when_termination_event_is_none(self) -> None:
         sleep_nanos = 123_000_000
         expected_secs = sleep_nanos / 1_000_000_000
+        retry = Retry(
+            count=0,
+            start_time_nanos=0,
+            attempt_start_time_nanos=0,
+            policy=RetryPolicy.no_retries(),
+            config=RetryConfig(termination_event=None),
+            log=None,
+            previous_outcomes=(),
+        )
         with (
             patch("bzfs_main.util.retry.time.sleep") as mock_sleep,
             patch("bzfs_main.util.retry.threading.Event.wait") as mock_wait,
         ):
-            _sleep(sleep_nanos, termination_event=None)
+            _sleep(sleep_nanos, retry)
         mock_sleep.assert_called_once()
         mock_wait.assert_not_called()
         self.assertAlmostEqual(expected_secs, mock_sleep.call_args[0][0])
@@ -118,9 +127,18 @@ class TestSleep(unittest.TestCase):
         sleep_nanos = 123_000_000
         expected_secs = sleep_nanos / 1_000_000_000
         termination_event = threading.Event()
+        retry = Retry(
+            count=0,
+            start_time_nanos=0,
+            attempt_start_time_nanos=0,
+            policy=RetryPolicy.no_retries(),
+            config=RetryConfig(termination_event=termination_event),
+            log=None,
+            previous_outcomes=(),
+        )
         with patch("bzfs_main.util.retry.time.sleep") as mock_sleep:
             with patch.object(termination_event, "wait") as mock_wait:
-                _sleep(sleep_nanos, termination_event=termination_event)
+                _sleep(sleep_nanos, retry)
         mock_sleep.assert_not_called()
         mock_wait.assert_called_once()
         self.assertAlmostEqual(expected_secs, mock_wait.call_args[0][0])
@@ -932,6 +950,7 @@ class TestCallWithRetries(unittest.TestCase):
         def after_attempt(outcome: AttemptOutcome) -> None:
             events.append(outcome)
 
+        config = RetryConfig()
         with (
             patch("bzfs_main.util.retry._thread_local_rng", return_value=rng),
             patch("bzfs_main.util.retry._sleep") as mock_sleep,
@@ -939,7 +958,7 @@ class TestCallWithRetries(unittest.TestCase):
             actual = call_with_retries(
                 fn,
                 policy=retry_policy,
-                config=RetryConfig(),
+                config=config,
                 after_attempt=after_attempt,
                 log=None,
             )
@@ -954,7 +973,10 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertTrue(events[1].is_success)
         self.assertEqual(1, events[1].retry.count)
         self.assertEqual(0, events[1].sleep_nanos)
-        mock_sleep.assert_called_once_with(retry_policy.initial_max_sleep_nanos, None)
+        mock_sleep.assert_called_once()
+        self.assertEqual(retry_policy.initial_max_sleep_nanos, mock_sleep.call_args.args[0])
+        self.assertIs(events[0].retry, mock_sleep.call_args.args[1])
+        self.assertIs(config, mock_sleep.call_args.args[1].config)
         rng.randint.assert_not_called()
 
     def test_thread_local_rng_is_cached_after_first_initialization(self) -> None:

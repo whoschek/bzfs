@@ -249,9 +249,10 @@ def call_with_retries(
             return result
         except RetryableError as retryable_error:
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            termination_event: threading.Event | None = config.termination_event
             giveup_reason: object | None = None
             sleep_nanos: int = 0
+            sleep: Callable[[int, Retry], None] = _sleep
+            is_terminated: Callable[[Retry], bool] = _is_terminated
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
                 if policy.max_sleep_nanos == 0 and policy.backoff_strategy is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
@@ -265,12 +266,11 @@ def call_with_retries(
                     assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, sleep_nanos
 
                 outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
-                termination_evt = termination_event
-                if (termination_evt is None or not termination_evt.is_set()) and (giveup_reason := giveup(outcome)) is None:
+                if (not is_terminated(retry)) and (giveup_reason := giveup(outcome)) is None:
                     after_attempt(outcome)
                     if sleep_nanos > 0:
-                        _sleep(sleep_nanos, termination_event)
-                    if termination_event is None or not termination_event.is_set():
+                        sleep(sleep_nanos, retry)
+                    if not is_terminated(retry):
                         n: int = policy.max_previous_outcomes
                         if n > 0:  #  outcome will be passed to next attempt via Retry.previous_outcomes
                             if previous_outcomes:  # detach to reduce memory footprint
@@ -281,19 +281,24 @@ def call_with_retries(
                         continue  # continue retry loop with next attempt
                 else:
                     sleep_nanos = 0
-            is_terminated: bool = termination_event is not None and termination_event.is_set()
             outcome = AttemptOutcome(
-                retry, False, True, is_terminated, giveup_reason, elapsed_nanos, sleep_nanos, retryable_error
+                retry, False, True, is_terminated(retry), giveup_reason, elapsed_nanos, sleep_nanos, retryable_error
             )
             after_attempt(outcome)
             return on_exhaustion(outcome)  # raise error or return fallback value
 
 
-def _sleep(sleep_nanos: int, termination_event: threading.Event | None) -> None:
+def _sleep(sleep_nanos: int, retry: Retry) -> None:
+    termination_event: threading.Event | None = retry.config.termination_event
     if termination_event is None:
         time.sleep(sleep_nanos / 1_000_000_000)
     else:
         termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
+
+
+def _is_terminated(retry: Retry) -> bool:
+    termination_event: threading.Event | None = retry.config.termination_event
+    return termination_event is not None and termination_event.is_set()
 
 
 def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) -> Callable[[AttemptOutcome], None]:
