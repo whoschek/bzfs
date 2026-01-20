@@ -449,10 +449,10 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
                 component = interner.intern(component)
                 current[component] = child
             current = child
-    shared_empty_leaf: _Tree = {}
 
     def compact(node: _Tree) -> None:
         """Tree with shared empty leaf nodes has some 30% lower memory footprint than the non-compacted version."""
+        shared_empty_leaf: _Tree = {}
         stack: list[_Tree] = [node]
         while stack:  # algo implemented using iteration to avoid hitting recursion limits with pathologically deep trees
             current_node: _Tree = stack.pop()

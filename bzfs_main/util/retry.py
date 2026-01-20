@@ -155,7 +155,7 @@ INFINITY_MAX_RETRIES: Final[int] = 2**90 - 1  # a number that's essentially infi
 def no_giveup(outcome: AttemptOutcome) -> object | None:
     """Default implementation of ``giveup`` callback for call_with_retries(); never gives up; returning anything other than
     ``None`` indicates to give up retrying; thread-safe."""
-    return None
+    return None  # don't give up retrying
 
 
 def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
@@ -330,7 +330,7 @@ def any_giveup(handlers: Iterable[Callable[[AttemptOutcome], object | None]]) ->
             giveup_reason: object | None = handler(outcome)
             if giveup_reason is not None:
                 return giveup_reason
-        return None  # don't give up
+        return None  # don't give up retrying
 
     return _giveup
 
@@ -350,7 +350,7 @@ def all_giveup(handlers: Iterable[Callable[[AttemptOutcome], object | None]]) ->
         for handler in handlers:
             giveup_reason = handler(outcome)
             if giveup_reason is None:
-                return None  # don't give up
+                return None  # don't give up retrying
         return giveup_reason
 
     return _giveup
@@ -497,7 +497,7 @@ class AttemptOutcome(NamedTuple):
 
 #############################################################################
 def full_jitter_backoff_strategy(
-    retry: Retry, curr_max_sleep_nanos: int, rand: random.Random, elapsed_nanos: int, retryable_error: RetryableError
+    retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
 ) -> tuple[int, int]:
     """Default implementation of ``backoff_strategy`` callback for RetryPolicy.
 
@@ -508,7 +508,7 @@ def full_jitter_backoff_strategy(
     if policy.min_sleep_nanos == curr_max_sleep_nanos:
         sleep_nanos = curr_max_sleep_nanos  # perf
     else:
-        sleep_nanos = rand.randint(policy.min_sleep_nanos, curr_max_sleep_nanos)  # nanos to delay until next attempt
+        sleep_nanos = rng.randint(policy.min_sleep_nanos, curr_max_sleep_nanos)  # nanos to delay until next attempt
     curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
     curr_max_sleep_nanos = min(curr_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap for next attempt
     return sleep_nanos, curr_max_sleep_nanos
