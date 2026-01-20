@@ -42,6 +42,9 @@ sub-second intervals across large fleets of hosts. bzfs incrementally replicates
 since the most recent common snapshot, supporting disaster recovery and high availability (DR/HA),
 scale-out deployments, and protection against data loss or ransomware.*
 
+It handles the many edge cases that you will eventually run into over the course of your
+deployment.
+
 When run for the first time, bzfs replicates the dataset and all its snapshots from the source to
 the destination. On subsequent runs, bzfs transfers only the data that has changed since the
 previous run, i.e. it incrementally replicates to the destination all intermediate snapshots that
@@ -1810,12 +1813,12 @@ usage: bzfs [-h] [--recursive]
 **--create-bookmarks** *{all,hourly,minutely,secondly,none}*
 
 *  For increased safety, bzfs replication behaves as follows wrt. ZFS bookmark creation, if it is
-    autodetected that the source ZFS pool support bookmarks:
+    autodetected that the source ZFS pool supports bookmarks:
 
     * `all` (default): Whenever it has successfully completed a 'zfs send' operation, bzfs
     creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send'
-    operation, and attaches it to the source dataset. This increases safety at the expense of some
-    performance.
+    operation, and attaches it to the source dataset. This increases safety at the expense of a
+    little performance.
 
     * `hourly`: Whenever it has successfully completed replication of the most recent source
     snapshot, bzfs creates a ZFS bookmark of that snapshot, and attaches it to the source dataset.

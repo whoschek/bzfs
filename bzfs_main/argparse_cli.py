@@ -117,6 +117,8 @@ datasets, using zfs send/receive and ssh, and can operate at sub-second interval
 {PROG_NAME} incrementally replicates all ZFS snapshots since the most recent common snapshot, supporting disaster
 recovery and high availability (DR/HA), scale-out deployments, and protection against data loss or ransomware.*
 
+It handles the many edge cases that you will eventually run into over the course of your deployment.
+
 When run for the first time, {PROG_NAME} replicates the dataset and all its snapshots from the source to the
 destination. On subsequent runs, {PROG_NAME} transfers only the data that has changed since the previous run,
 i.e. it incrementally replicates to the destination all intermediate snapshots that have been created on
@@ -1110,10 +1112,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--create-bookmarks", choices=["all", "hourly", "minutely", "secondly", "none"], default="all",
         help=f"For increased safety, {PROG_NAME} replication behaves as follows wrt. ZFS bookmark creation, if it is "
-             "autodetected that the source ZFS pool support bookmarks:\n\n"
+             "autodetected that the source ZFS pool supports bookmarks:\n\n"
              "* `all` (default): Whenever it has successfully completed a 'zfs send' operation, "
              f"{PROG_NAME} creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send' operation, "
-             "and attaches it to the source dataset. This increases safety at the expense of some performance.\n\n"
+             "and attaches it to the source dataset. This increases safety at the expense of a little performance.\n\n"
              "* `hourly`: Whenever it has successfully completed replication of the most recent source snapshot, "
              f"{PROG_NAME} creates a ZFS bookmark of that snapshot, and attaches it to the source dataset. In addition, "
              f"whenever it has successfully completed a 'zfs send' operation, {PROG_NAME} creates a ZFS bookmark of each "
