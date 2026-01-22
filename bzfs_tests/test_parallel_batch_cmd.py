@@ -23,6 +23,9 @@ import unittest
 from collections.abc import (
     Iterable,
 )
+from unittest.mock import (
+    patch,
+)
 
 from bzfs_main import (
     bzfs,
@@ -32,6 +35,9 @@ from bzfs_main.configuration import (
 )
 from bzfs_main.parallel_batch_cmd import (
     itr_ssh_cmd_parallel,
+    run_ssh_cmd_batched,
+    run_ssh_cmd_parallel,
+    zfs_list_snapshots_in_parallel,
 )
 from bzfs_main.util.connection import (
     DEDICATED,
@@ -208,3 +214,202 @@ class TestItrSshCmdParallel(AbstractTestCase):
             itr_ssh_cmd_parallel(self.job, self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=False)
         )
         self.assertEqual(expected_ordered, results)
+
+    def test_run_ssh_cmd_batched_calls_fn_for_each_batch(self) -> None:
+        """Validates sequential batching calls `fn` per chunk.
+
+        Assumes `max_command_line_bytes` is large so batching is driven by `max_batch_items`.
+        Design rationale: verifies batching boundaries without depending on SSH or real subprocess calls.
+        """
+        self.job.max_command_line_bytes = 1_000_000
+        seen: list[list[str]] = []
+
+        def fn(batch: list[str]) -> list[str]:
+            seen.append(batch)
+            return batch
+
+        run_ssh_cmd_batched(
+            self.job,
+            self.r,
+            ["cmd"],
+            ["a1", "a2", "a3", "a4", "a5"],
+            fn,
+            max_batch_items=2,
+        )
+        self.assertEqual([["a1", "a2"], ["a3", "a4"], ["a5"]], seen)
+
+    def test_run_ssh_cmd_parallel_drains_results_unordered(self) -> None:
+        """Ensures the parallel wrapper drains all results.
+
+        Assumes unordered execution; completion order is not stable.
+        Design rationale: assert the multiset of `(cmd, batch)` invocations matches expected batching.
+        """
+        self.job.max_command_line_bytes = 1_000_000
+        seen: list[tuple[list[str], list[str]]] = []
+
+        def fn(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
+            seen.append((cmd, batch))
+            return cmd, batch
+
+        cmd_args_list: list[tuple[list[str], Iterable[str]]] = [
+            (["c1"], ["d1", "d2", "d3", "d4"]),
+            (["c2"], ["d5", "d6", "d7", "d8"]),
+        ]
+        run_ssh_cmd_parallel(self.job, self.r, cmd_args_list, fn=fn, max_batch_items=2)
+        expected = [
+            (["c1"], ["d1", "d2"]),
+            (["c1"], ["d3", "d4"]),
+            (["c2"], ["d5", "d6"]),
+            (["c2"], ["d7", "d8"]),
+        ]
+        self.assertEqual(sorted(expected), sorted(seen))
+
+    def test_zfs_list_snapshots_in_parallel_uses_smaller_batches_on_local(self) -> None:
+        """Checks local mode uses a smaller minibatch size; validates dataset-arg minibatching behavior."""
+        self.job.max_command_line_bytes = 1_000_000
+        self.job.max_datasets_per_minibatch_on_list_snaps["src"] = 100
+        self.r.ssh_user_host = ""  # local mode
+        datasets = ["d1", "d2", "d3", "d4"]
+        base_cmd = ["zfs", "list", "-t", "snapshot"]
+        seen_batches: list[list[str]] = []
+
+        def try_ssh(_r: object, _loglevel: int, *, cmd: list[str], **_kwargs: object) -> str:
+            seen_batches.append(cmd[len(base_cmd) :])
+            return "s1\ns2\n"
+
+        with patch.object(self.job, "try_ssh_command_with_retries", side_effect=try_ssh):
+            results = list(zfs_list_snapshots_in_parallel(self.job, self.r, base_cmd, datasets, ordered=True))
+        self.assertEqual(sorted([["d1"], ["d2"], ["d3"], ["d4"]]), sorted(seen_batches))
+        self.assertEqual(4, len(results))
+        self.assertTrue(all(r == ["s1", "s2"] for r in results))
+
+    def test_zfs_list_snapshots_in_parallel_uses_larger_batches_over_ssh(self) -> None:
+        """Checks remote mode prefers larger minibatches to amortize latency; confirms the heuristic picks a single batch for
+        4 datasets when remote."""
+        self.job.max_command_line_bytes = 1_000_000
+        self.job.max_datasets_per_minibatch_on_list_snaps["src"] = 100
+        self.r.ssh_user_host = "myhost"  # remote mode
+        datasets = ["d1", "d2", "d3", "d4"]
+        base_cmd = ["zfs", "list", "-t", "snapshot"]
+        seen_batches: list[list[str]] = []
+
+        def try_ssh(_r: object, _loglevel: int, *, cmd: list[str], **_kwargs: object) -> str:
+            seen_batches.append(cmd[len(base_cmd) :])
+            return "s1\ns2\n"
+
+        with patch.object(self.job, "try_ssh_command_with_retries", side_effect=try_ssh):
+            results = list(zfs_list_snapshots_in_parallel(self.job, self.r, base_cmd, datasets, ordered=True))
+        self.assertEqual([["d1", "d2", "d3", "d4"]], seen_batches)
+        self.assertEqual([["s1", "s2"]], results)
+
+    def test_docstring_example_max_batch_items_1_seq_and_par(self) -> None:
+        """Validates module docstring example for `max_batch_items=1`.
+
+        Assumes bytes budget is ample, so batching is item-count driven.
+        Design rationale: check that seq+par helpers construct one command per dataset.
+        """
+        self.job.max_command_line_bytes = 1_000_000
+        cmd = ["zfs", "list", "-t", "snapshot"]
+        datasets = ["d1", "d2", "d3", "d4"]
+        expected = [
+            ["zfs", "list", "-t", "snapshot", "d1"],
+            ["zfs", "list", "-t", "snapshot", "d2"],
+            ["zfs", "list", "-t", "snapshot", "d3"],
+            ["zfs", "list", "-t", "snapshot", "d4"],
+        ]
+
+        seen_seq: list[list[str]] = []
+
+        def fn(batch: list[str]) -> list[str]:
+            cmdline = cmd + batch
+            seen_seq.append(cmdline)
+            return cmdline
+
+        run_ssh_cmd_batched(self.job, self.r, cmd, datasets, fn, max_batch_items=1)
+        self.assertEqual(expected, seen_seq)
+
+        cmd_args_list: list[tuple[list[str], Iterable[str]]] = [(cmd, datasets)]
+        seen_par = list(itr_ssh_cmd_parallel(self.job, self.r, cmd_args_list, fn=lambda c, b: c + b, max_batch_items=1))
+        self.assertEqual(expected, seen_par)
+
+    def test_docstring_example_max_batch_items_2_seq_and_par(self) -> None:
+        """Validates module docstring example for `max_batch_items=2`.
+
+        Assumes bytes budget is ample, so batching is item-count driven.
+        Design rationale: check that seq+par helpers construct two commands of two datasets each.
+        """
+        self.job.max_command_line_bytes = 1_000_000
+        cmd = ["zfs", "list", "-t", "snapshot"]
+        datasets = ["d1", "d2", "d3", "d4"]
+        expected = [
+            ["zfs", "list", "-t", "snapshot", "d1", "d2"],
+            ["zfs", "list", "-t", "snapshot", "d3", "d4"],
+        ]
+
+        seen_seq: list[list[str]] = []
+
+        def fn(batch: list[str]) -> list[str]:
+            cmdline = cmd + batch
+            seen_seq.append(cmdline)
+            return cmdline
+
+        run_ssh_cmd_batched(self.job, self.r, cmd, datasets, fn, max_batch_items=2)
+        self.assertEqual(expected, seen_seq)
+
+        cmd_args_list: list[tuple[list[str], Iterable[str]]] = [(cmd, datasets)]
+        seen_par = list(itr_ssh_cmd_parallel(self.job, self.r, cmd_args_list, fn=lambda c, b: c + b, max_batch_items=2))
+        self.assertEqual(expected, seen_par)
+
+    def test_docstring_example_max_batch_items_2_five_datasets_seq_and_par(self) -> None:
+        """Extends the `max_batch_items=2` example to five datasets.
+
+        Assumes bytes budget is ample, so batching is item-count driven.
+        Design rationale: validate the final partial batch is emitted in both seq and par helpers.
+        """
+        self.job.max_command_line_bytes = 1_000_000
+        cmd = ["zfs", "list", "-t", "snapshot"]
+        datasets = ["d1", "d2", "d3", "d4", "d5"]
+        expected = [
+            ["zfs", "list", "-t", "snapshot", "d1", "d2"],
+            ["zfs", "list", "-t", "snapshot", "d3", "d4"],
+            ["zfs", "list", "-t", "snapshot", "d5"],
+        ]
+
+        seen_seq: list[list[str]] = []
+
+        def fn(batch: list[str]) -> list[str]:
+            cmdline = cmd + batch
+            seen_seq.append(cmdline)
+            return cmdline
+
+        run_ssh_cmd_batched(self.job, self.r, cmd, datasets, fn, max_batch_items=2)
+        self.assertEqual(expected, seen_seq)
+
+        cmd_args_list: list[tuple[list[str], Iterable[str]]] = [(cmd, datasets)]
+        seen_par = list(itr_ssh_cmd_parallel(self.job, self.r, cmd_args_list, fn=lambda c, b: c + b, max_batch_items=2))
+        self.assertEqual(expected, seen_par)
+
+    def test_docstring_example_max_batch_items_n_seq_and_par(self) -> None:
+        """Validates module docstring example for `max_batch_items=N`.
+
+        Assumes `N` exceeds the dataset count.
+        Design rationale: check that seq+par helpers keep all datasets in a single command.
+        """
+        self.job.max_command_line_bytes = 1_000_000
+        cmd = ["zfs", "list", "-t", "snapshot"]
+        datasets = ["d1", "d2", "d3", "d4"]
+        expected = [["zfs", "list", "-t", "snapshot", "d1", "d2", "d3", "d4"]]
+
+        seen_seq: list[list[str]] = []
+
+        def fn(batch: list[str]) -> list[str]:
+            cmdline = cmd + batch
+            seen_seq.append(cmdline)
+            return cmdline
+
+        run_ssh_cmd_batched(self.job, self.r, cmd, datasets, fn, max_batch_items=10)
+        self.assertEqual(expected, seen_seq)
+
+        cmd_args_list: list[tuple[list[str], Iterable[str]]] = [(cmd, datasets)]
+        seen_par = list(itr_ssh_cmd_parallel(self.job, self.r, cmd_args_list, fn=lambda c, b: c + b, max_batch_items=10))
+        self.assertEqual(expected, seen_par)
