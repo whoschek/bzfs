@@ -88,7 +88,7 @@ ZFS_RECV_O_INCLUDE_REGEX_DEFAULT: Final[str] = "|".join(
 def argument_parser() -> argparse.ArgumentParser:
     """Returns the CLI parser used by bzfs."""
     create_src_snapshots_plan_example1: str = str({"test": {"": {"adhoc": 1}}}).replace(" ", "")
-    create_src_snapshots_plan_example2: str = str({"prod": {"us-west-1": {"hourly": 36, "daily": 31}}}).replace(" ", "")
+    create_src_snapshots_plan_example2: str = str({"prod": {"us-west": {"hourly": 36, "daily": 31}}}).replace(" ", "")
     delete_dst_snapshots_except_plan_example1: str = str(
         {
             "prod": {
@@ -208,9 +208,9 @@ tank1/foo/bar@test_2024-11-06_08:30:05_adhoc```
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_daily
 
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly```
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_hourly```
 
 Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g. `_daily` or `_hourly`
 or `_minutely` or `_2secondly` or `_100millisecondly`), or if the --create-src-snapshots-even-if-not-due flag is specified,
@@ -225,15 +225,15 @@ creation time of any existing snapshot.
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_daily
 
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly```
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_hourly```
 
 ```$ zfs list -t snapshot tank2/boo/bar
 
-tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
+tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_daily
 
-tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly```
+tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_hourly```
 
 * Same example in pull mode:
 
@@ -254,23 +254,23 @@ datasets to tank2/boo/bar:
 
 ```$ zfs list -t snapshot -r tank1/foo/bar
 
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_daily
 
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_hourly
 
-tank1/foo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_daily
+tank1/foo/bar/baz@prod_us-west_2024-11-06_08:40:00_daily
 
-tank1/foo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_hourly```
+tank1/foo/bar/baz@prod_us-west_2024-11-06_08:40:00_hourly```
 
 ```$ zfs list -t snapshot -r tank2/boo/bar
 
-tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
+tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_daily
 
-tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
+tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_hourly
 
-tank2/boo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_daily
+tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_daily
 
-tank2/boo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_hourly```
+tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_hourly```
 
 * Example that makes destination identical to source even if the two have drastically diverged:
 
@@ -588,8 +588,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     src_snapshot_plan_example = {
         "prod": {
             "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
-            "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
-            "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+            "us-west": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+            "eu-west": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
         },
         "test": {
             "offsite": {"12hourly": 42, "weekly": 12},
@@ -662,14 +662,14 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"Example: `{format_dict(src_snapshot_plan_example)}`. This example will, for the organization 'prod' and "
              "the intended logical target 'onsite', create 'secondly' snapshots every second, 'minutely' snapshots every "
              "minute, hourly snapshots every hour, and so on. "
-             "It will also create snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. "
+             "It will also create snapshots for the targets 'us-west' and 'eu-west' within the 'prod' organization. "
              "In addition, it will create snapshots every 12 hours and every week for the 'test' organization, "
              "and name them as being intended for the 'offsite' replication target. Analog for snapshots that are taken "
              "every 100 milliseconds within the 'test' organization.\n\n"
              "The example creates ZFS snapshots with names like "
              "`prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`, "
-             "`prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`, "
-             "`prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`, "
+             "`prod_us-west_<timestamp>_hourly`, `prod_us-west_<timestamp>_daily`, "
+             "`prod_eu-west_<timestamp>_hourly`, `prod_eu-west_<timestamp>_daily`, "
              "`test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on.\n\n"
              "Note: A period name that is missing indicates that no snapshots shall be created for the given period.\n\n"
              "The period name can contain an optional positive integer immediately preceding the time period unit, for "
@@ -687,7 +687,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"`{argparser_escape('%Y-%m-%d_%H:%M:%S%z')}` (adds timezone offset), "
              f"`{argparser_escape('%Y-%m-%dT%H-%M-%S')}` (no colons).\n\n"
              "The name of the snapshot created on the src is `$org_$target_strftime(--create-src-snapshots-time*)_$period`. "
-             "Example: `tank/foo@prod_us-west-1_2024-09-03_12:26:15_daily`\n\n")
+             "Example: `tank/foo@prod_us-west_2024-09-03_12:26:15_daily`\n\n")
     parser.add_argument(
         "--create-src-snapshots-timezone", default="", type=str, metavar="TZ_SPEC",
         help=f"Default is the local timezone of the system running {PROG_NAME}. When creating a new snapshot on the source, "
@@ -910,15 +910,15 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "the intended logical target 'onsite', retain secondly snapshots that were created less than 40 seconds ago, "
              "yet retain the latest 40 secondly snapshots regardless of creation time. Analog for the latest 40 minutely "
              "snapshots, latest 36 hourly snapshots, etc. "
-             "It will also retain snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. "
+             "It will also retain snapshots for the targets 'us-west' and 'eu-west' within the 'prod' organization. "
              "In addition, within the 'test' organization, it will retain snapshots that are created every 12 hours and "
              "every week as specified, and name them as being intended for the 'offsite' replication target. Analog for "
              "snapshots that are taken every 100 milliseconds within the 'test' organization. "
              "All other snapshots within the selected datasets will be deleted - you've been warned!\n\n"
              "The example scans the selected ZFS datasets for snapshots with names like "
              "`prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`, "
-             "`prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`, "
-             "`prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`, "
+             "`prod_us-west_<timestamp>_hourly`, `prod_us-west_<timestamp>_daily`, "
+             "`prod_eu-west_<timestamp>_hourly`, `prod_eu-west_<timestamp>_daily`, "
              "`test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on, and deletes all snapshots "
              "that do not match a retention rule.\n\n"
              "Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be retained for the given "
@@ -1332,8 +1332,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "do tac -s $(printf '\\r') $f | tr '\\r' '\\n' | grep -m1 -v '^$'; done; sleep 1; done`\n\n")
     h_fix = ("The path name of the log file on local host is "
              "`${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`. "
-             "Example: `--log-file-prefix=zrun_us-west-1_ --log-file-suffix=_daily` will generate log "
-             "file names such as `zrun_us-west-1_2024-09-03_12:26:15_daily-bl4i1fth.log`\n\n")
+             "Example: `--log-file-prefix=zrun_us-west_ --log-file-suffix=_daily` will generate log "
+             "file names such as `zrun_us-west_2024-09-03_12:26:15_daily-bl4i1fth.log`\n\n")
     parser.add_argument(
         "--log-file-prefix", default="zrun_", action=SafeFileNameAction, metavar="STRING",
         help="Default is %(default)s. " + h_fix)

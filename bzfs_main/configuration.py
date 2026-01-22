@@ -638,14 +638,14 @@ class SnapshotLabel(NamedTuple):
     """Contains the individual parts that are concatenated into a ZFS snapshot name."""
 
     prefix: str  # bzfs_
-    infix: str  # us-west-1_
+    infix: str  # us-west_
     timestamp: str  # 2024-11-06_08:30:05
     suffix: str  # _hourly
 
-    def __str__(self) -> str:  # bzfs_us-west-1_2024-11-06_08:30:05_hourly
+    def __str__(self) -> str:  # bzfs_us-west_2024-11-06_08:30:05_hourly
         return f"{self.prefix}{self.infix}{self.timestamp}{self.suffix}"
 
-    def notimestamp_str(self) -> str:  # bzfs_us-west-1_hourly
+    def notimestamp_str(self) -> str:  # bzfs_us-west_hourly
         """Returns the concatenation of all parts except for the timestamp part."""
         return f"{self.prefix}{self.infix}{self.suffix}"
 

@@ -261,7 +261,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
     than the snapshot name embedding (i.e. hardcoding) a list of destination hostnames where it
     should be sent to, the snapshot name embeds the user-defined target name, which is later
     mapped by this jobconfig to a list of destination hostnames. Example: `"{'nas':
-    ['onsite'], 'bak-us-west-1': ['us-west-1'], 'bak-eu-west-1': ['eu-west-1'],
+    ['onsite'], 'bak-us-west': ['us-west'], 'bak-eu-west': ['eu-west'],
     'archive': ['offsite']}"`.
 
     With this, given a snapshot name, we can find the destination hostnames to which the snapshot
@@ -289,7 +289,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
 
 *  Dictionary that maps each destination hostname to a list of zero or more logical replication
     target names (the infix portion of snapshot name). Example: `"{'nas': ['onsite'],
-    'bak-us-west-1': ['us-west-1'], 'bak-eu-west-1': ['eu-west-1'], 'archive':
+    'bak-us-west': ['us-west'], 'bak-eu-west': ['eu-west'], 'archive':
     ['offsite']}"`. Has same format as --dst-hosts.
 
     As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored
@@ -313,9 +313,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
     auto-replaced at runtime with the actual hostname. This can be used to force the use of a
     separate destination root dataset per source host or per destination host.
 
-    Example: `"{'nas': 'tank2/bak', 'bak-us-west-1': 'backups/bak001',
-    'bak-eu-west-1': 'backups/bak999', 'archive': 'archives/zoo/^SRC_HOST', 'hotspare':
-    ''}"`
+    Example: `"{'nas': 'tank2/bak', 'bak-us-west': 'backups/bak001', 'bak-eu-west':
+    'backups/bak999', 'archive': 'archives/zoo/^SRC_HOST', 'hotspare': ''}"`
 
 <!-- -->
 
@@ -329,22 +328,22 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
     given period.
 
     Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36,
-    'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':
-    0, 'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18,
-    'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 36, 'daily':
-    31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
-    42, 'weekly': 12}}}"`. This example will, for the organization 'prod' and the intended
-    logical target 'onsite', create and then retain secondly snapshots that were created less
-    than 40 seconds ago, yet retain the latest 40 secondly snapshots regardless of creation time.
-    Analog for the latest 40 minutely snapshots, 36 hourly snapshots, etc. It will also create and
-    retain snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod'
-    organization. In addition, it will create and retain snapshots every 12 hours and every week
-    for the 'test' organization, and name them as being intended for the 'offsite' replication
-    target. The example creates snapshots with names like
-    `prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`,
-    `prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`,
-    `prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`,
-    `test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on.
+    'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west': {'secondly': 0,
+    'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly':
+    5}, 'eu-west': {'secondly': 0, 'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly':
+    12, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly': 42, 'weekly':
+    12}}}"`. This example will, for the organization 'prod' and the intended logical target
+    'onsite', create and then retain secondly snapshots that were created less than 40 seconds
+    ago, yet retain the latest 40 secondly snapshots regardless of creation time. Analog for the
+    latest 40 minutely snapshots, 36 hourly snapshots, etc. It will also create and retain
+    snapshots for the targets 'us-west' and 'eu-west' within the 'prod' organization. In
+    addition, it will create and retain snapshots every 12 hours and every week for the 'test'
+    organization, and name them as being intended for the 'offsite' replication target. The
+    example creates snapshots with names like `prod_onsite_<timestamp>_secondly`,
+    `prod_onsite_<timestamp>_minutely`, `prod_us-west_<timestamp>_hourly`,
+    `prod_us-west_<timestamp>_daily`, `prod_eu-west_<timestamp>_hourly`,
+    `prod_eu-west_<timestamp>_daily`, `test_offsite_<timestamp>_12hourly`,
+    `test_offsite_<timestamp>_weekly`, and so on.
 
 <!-- -->
 

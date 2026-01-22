@@ -85,8 +85,8 @@ src_hosts = ["nas"]
 # snapshot name embeds the user-defined target name, which is later mapped by this jobconfig to a list of destination hostnames.
 # dst_hosts = {
 #     "nas": ["onsite"],
-#     "bak-us-west-1": ["us-west-1"],
-#     "bak-eu-west-1": ["eu-west-1"],
+#     "bak-us-west": ["us-west"],
+#     "bak-eu-west": ["eu-west"],
 #     "hotspare": ["hotspare"],
 #     "archive": ["offsite"],
 # }
@@ -119,8 +119,8 @@ retain_dst_targets = {"nas": ["", "onsite"]}  # host named "nas" retains replica
 # hostname. This can be used to force the use of a separate destination root dataset per source host or per destination host.
 # dst_root_datasets = {
 #     "nas": "tank2/bak",
-#     "bak-us-west-1": "backups/bak001",
-#     "bak-eu-west-1": "backups/bak999",
+#     "bak-us-west": "backups/bak001",
+#     "bak-eu-west": "backups/bak999",
 #     "archive": "archives/zoo/^SRC_HOST",  # force use of a separate destination root dataset per source host
 #     "hotspare": ""  # Empty string means 'Don't prepend a prefix' (for safety, the hostname must always be in the dict)
 # }
@@ -149,8 +149,8 @@ org = "prod"
 # src_snapshot_plan = {
 #     org: {
 #         "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
-#         "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
-#         "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+#         "us-west": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+#         "eu-west": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
 #         "hotspare": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31},
 #     },
 #     "test": {
@@ -272,7 +272,7 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 # extra_args += ["--ssh-dst-port=2222"]  # for hpnssh
 # extra_args += [f"--ssh-src-config-file={home_dir}/.ssh/example_bzfs_ssh_config"]  # for custom ssh options
 # extra_args += [f"--ssh-dst-config-file={home_dir}/.ssh/example_bzfs_ssh_config"]  # for custom ssh options
-# extra_args += ["--localhost=bak-us-west-1"]
+# extra_args += ["--localhost=bak-us-west"]
 # extra_args += ["--ssh-src-user=alice"]  # ssh username on src; for pull mode and pull-push mode
 # extra_args += ["--ssh-dst-user=root"]  # ssh username on dst; for push mode and pull-push mode
 # extra_args += ["--include-dataset", "foo", "zoo"]  # see bzfs --help
