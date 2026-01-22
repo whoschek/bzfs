@@ -298,6 +298,75 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         ):
             detect_available_programs(job)
 
+    def test_detect_available_programs_parses_uname_default_shell_and_getconf(self) -> None:
+        """Verifies detect_available_programs parses and normalizes special keys.
+
+        Assumes the remote detection returns `uname-*`, `default_shell-*`, and `getconf_cpu_count-*` sentinel keys.
+        Design rationale: ensures the post-processing replaces sentinel keys with stable `uname/os/default_shell/getconf_cpu_count`.
+        """
+        job = self._setup_job()
+        p = job.params
+        p.available_programs["local"] = {
+            "uname-Linux local 6.1.0 x86_64": "",
+            "default_shell-/bin/sh": "",
+            "getconf_cpu_count-4": "",
+            "sh": "",
+        }
+
+        def detect_remote(_job: bzfs.Job, _remote: Remote, _ssh_user_host: str) -> dict[str, str]:
+            return {
+                "uname-Linux remote 5.15.0 x86_64": "",
+                "default_shell-/bin/bash": "",
+                "getconf_cpu_count-8": "",
+                "sh": "",
+                "zfs": "2.2.4",
+            }
+
+        with (
+            patch.object(bzfs_main.detect, "_detect_available_programs_remote", side_effect=detect_remote),
+            patch.object(bzfs_main.detect, "_detect_zpool_features", return_value={}),
+        ):
+            detect_available_programs(job)
+
+        for key in ("local", "src", "dst"):
+            with self.subTest(location=key):
+                programs = p.available_programs[key]
+                self.assertIn("uname", programs)
+                self.assertIn("os", programs)
+                self.assertIn("default_shell", programs)
+                self.assertIn("getconf_cpu_count", programs)
+                self.assertTrue(all(not name.startswith("uname-") for name in programs))
+                self.assertTrue(all(not name.startswith("default_shell-") for name in programs))
+                self.assertTrue(all(not name.startswith("getconf_cpu_count-") for name in programs))
+
+        self.assertEqual("Linux", p.available_programs["src"]["os"])
+        self.assertEqual("Linux", p.available_programs["dst"]["os"])
+
+    def test_detect_available_programs_dies_on_csh_default_shell(self) -> None:
+        """Ensures csh/tcsh default shells are rejected during detection.
+
+        Assumes remote detection reports `default_shell-/bin/csh`.
+        Design rationale: detection must fail fast because bzfs relies on POSIX shell quoting semantics.
+        """
+        job = self._setup_job()
+        p = job.params
+        p.available_programs["local"] = {"default_shell-/bin/sh": "", "sh": ""}
+
+        def detect_remote(_job: bzfs.Job, _remote: Remote, _ssh_user_host: str) -> dict[str, str]:
+            return {
+                "default_shell-/bin/csh": "",
+                "sh": "",
+                "zfs": "2.2.4",
+            }
+
+        with (
+            patch.object(bzfs_main.detect, "_detect_available_programs_remote", side_effect=detect_remote),
+            patch.object(bzfs_main.detect, "_detect_zpool_features", return_value={}),
+            self.assertRaises(SystemExit) as cm,
+        ):
+            detect_available_programs(job)
+        self.assertIn("Cowardly refusing to proceed", str(cm.exception))
+
 
 #############################################################################
 class TestDetectAvailableProgramsRemote(AbstractTestCase):
@@ -320,12 +389,49 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
                 return "zfs-2.2.3\n"
             return "sh\n"
 
-        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=run):
+        with patch.object(bzfs.Job, "run_ssh_command", side_effect=run):
             avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
             p.available_programs[remote.location] = avail
         self.assertEqual("2.2.3", p.available_programs[remote.location]["zfs"])
         self.assertIn("sh", p.available_programs[remote.location])
         self.assertIn(bzfs_main.detect.ZFS_VERSION_IS_AT_LEAST_2_2_0, p.available_programs[remote.location])
+
+    def test_dummy_remote_returns_empty(self) -> None:
+        """Confirms dummy remotes skip detection and return an empty map.
+
+        Assumes dummy datasets are synthetic and must not trigger SSH/ZFS probing.
+        Design rationale: avoid side effects and external dependencies when `root_dataset` is the dummy marker.
+        """
+        job, remote = self._setup()
+        remote.root_dataset = bzfs_main.detect.DUMMY_DATASET
+        with patch.object(bzfs.Job, "run_ssh_command") as mock_run:
+            avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
+        self.assertEqual({}, avail)
+        mock_run.assert_not_called()
+
+    def test_shell_detection_called_process_error_falls_back(self) -> None:
+        """Falls back to minimum assumptions when shell probing fails.
+
+        Assumes `zfs --version` works, but running the shell probe raises `CalledProcessError`.
+        Design rationale: warn and continue with a minimal `available_programs` set to avoid hard failures.
+        """
+        job, remote = self._setup()
+        p = job.params
+
+        def run(*_args: str, cmd: list[str] | None = None, **_kw: str) -> str:
+            assert cmd is not None
+            if "--version" in cmd:
+                return "zfs-2.2.4\n"
+            raise subprocess.CalledProcessError(returncode=1, cmd="sh", output="", stderr="fail")
+
+        with patch.object(bzfs.Job, "run_ssh_command", side_effect=run):
+            avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
+            p.available_programs[remote.location] = avail
+        self.assertEqual("2.2.4", p.available_programs[remote.location]["zfs"])
+        self.assertIn("sudo", p.available_programs[remote.location])
+        self.assertNotIn("sh", p.available_programs[remote.location])
+        log = cast(MagicMock, p.log)
+        log.warning.assert_called_once()
 
     def test_zfs_version_parsing_space_variant(self) -> None:
         """Accept version strings like 'zfs 2.2.4' without a hyphen."""
@@ -338,7 +444,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
                 return "zfs 2.2.4\n"
             return "sh\n"
 
-        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=run):
+        with patch.object(bzfs.Job, "run_ssh_command", side_effect=run):
             avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
             p.available_programs[remote.location] = avail
         self.assertEqual("2.2.4", p.available_programs[remote.location]["zfs"])
@@ -355,7 +461,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
                 return "zfs-version unknown build\n"
             return "sh\n"
 
-        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=run), self.assertRaises(SystemExit) as cm:
+        with patch.object(bzfs.Job, "run_ssh_command", side_effect=run), self.assertRaises(SystemExit) as cm:
             bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
         self.assertIn("Unparsable zfs version string", str(cm.exception))
 
@@ -382,13 +488,13 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
 
                 if expect_die:
                     with (
-                        patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=run),
+                        patch.object(bzfs.Job, "run_ssh_command", side_effect=run),
                         self.assertRaises(SystemExit) as cm,
                     ):
                         bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
                     self.assertIn("Unparsable zfs version string", str(cm.exception))
                 else:
-                    with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=run):
+                    with patch.object(bzfs.Job, "run_ssh_command", side_effect=run):
                         avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
                         p.available_programs[remote.location] = avail
                     self.assertEqual(expect_version, p.available_programs[remote.location]["zfs"])
@@ -400,7 +506,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         job, remote = self._setup()
         p = job.params
         p.shell_program = bzfs_main.detect.DISABLE_PRG  # type: ignore[misc]  # cannot assign to final attribute
-        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", return_value="zfs-2.1.0\n"):
+        with patch.object(bzfs.Job, "run_ssh_command", return_value="zfs-2.1.0\n"):
             avail = bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
             p.available_programs[remote.location] = avail
         self.assertNotIn("zpool", p.available_programs[remote.location])
@@ -410,7 +516,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         job, remote = self._setup()
         with (
             patch.object(
-                bzfs_main.bzfs.Job,
+                bzfs.Job,
                 "run_ssh_command",
                 side_effect=FileNotFoundError(),
             ),
@@ -423,7 +529,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         err = subprocess.CalledProcessError(
             returncode=1, cmd="zfs", output="", stderr="unrecognized command '--version'\nrun: zfs help"
         )
-        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit) as cm:
+        with patch.object(bzfs.Job, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit) as cm:
             bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
         self.assertIn("Unsupported ZFS platform", str(cm.exception))
         self.assertIn("unrecognized command '--version'", str(cm.exception))
@@ -431,7 +537,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
     def test_called_process_error_non_zfs(self) -> None:
         job, remote = self._setup()
         err = subprocess.CalledProcessError(returncode=1, cmd="zfs", output="bad", stderr="fail")
-        with patch.object(bzfs_main.bzfs.Job, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit):
+        with patch.object(bzfs.Job, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit):
             bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
 
     def test_zpool_features_file_not_found_warns_and_falls_back(self) -> None:
@@ -451,7 +557,7 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         )
 
         # Avoid touching the real zfs CLI in the fallback path.
-        with patch.object(bzfs_main.bzfs.Job, "try_ssh_command_with_retries", return_value="tank\n") as mock_try:
+        with patch.object(bzfs.Job, "try_ssh_command_with_retries", return_value="tank\n") as mock_try:
             features = bzfs_main.detect._detect_zpool_features(job, remote, available_programs)
 
         # No features detected, but detection must succeed and fall back cleanly.
