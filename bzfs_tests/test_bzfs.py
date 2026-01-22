@@ -85,6 +85,7 @@ from bzfs_main.util.retry import (
 )
 from bzfs_main.util.utils import (
     DIE_STATUS,
+    RegexList,
     is_descendant,
 )
 from bzfs_tests.abstract_testcase import (
@@ -1114,8 +1115,9 @@ class TestJobMethods(AbstractTestCase):
         ]
         job.validate_once()
         filt = job.params.snapshot_filters[0][0]
-        self.assertIsInstance(filt.options[0][0][0], re.Pattern)
-        self.assertEqual("bar", filt.options[1][0][0].pattern)
+        regexes = cast(tuple[RegexList, RegexList], filt.options)
+        self.assertIsInstance(regexes[0][0][0], re.Pattern)
+        self.assertEqual("bar", regexes[1][0][0].pattern)
 
     def test_validate_once_snapshot_regex_filter_defaults_to_match_all(self) -> None:
         """Empty include list defaults to a match-all regex."""
@@ -1125,7 +1127,8 @@ class TestJobMethods(AbstractTestCase):
         ]
         job.validate_once()
         regex_filter = job.params.snapshot_filters[0][0]
-        self.assertEqual(".*", regex_filter.options[1][0][0].pattern)
+        regexes = cast(tuple[RegexList, RegexList], regex_filter.options)
+        self.assertEqual(".*", regexes[1][0][0].pattern)
 
     def test_validate_once_ignores_non_regex_snapshot_filter(self) -> None:
         """Non-regex snapshot filters remain untouched."""

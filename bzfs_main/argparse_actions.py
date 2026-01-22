@@ -31,6 +31,7 @@ from datetime import (
 )
 from typing import (
     Any,
+    cast,
     final,
 )
 
@@ -48,6 +49,7 @@ from bzfs_main.util.utils import (
     SHELL_CHARS,
     UNIX_TIME_INFINITY_SECS,
     YEAR_WITH_FOUR_DIGITS_REGEX,
+    RegexList,
     SnapshotPeriods,
     die,
     ninfix,
@@ -67,12 +69,13 @@ class SnapshotFilter:
 
     name: str
     timerange: UnixTimeRange  # defined in bzfs_main.filter
-    options: Any = field(compare=False, default=None)
+    options: None | list[RankRange] | list[str] | tuple[list[str], list[str]] | tuple[RegexList, RegexList] = field(
+        compare=False, default=None
+    )
 
 
 def _add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> None:
     """Appends snapshot filter to namespace list, creating the list if absent."""
-
     if not hasattr(args, SNAPSHOT_FILTERS_VAR):
         args.snapshot_filters_var = [[]]
     args.snapshot_filters_var[-1].append(_filter)
@@ -82,7 +85,6 @@ def _add_time_and_rank_snapshot_filter(
     args: argparse.Namespace, dst: str, timerange: UnixTimeRange, rankranges: list[RankRange]
 ) -> None:
     """Creates and adds a SnapshotFilter using timerange and rank ranges."""
-
     if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
         _add_snapshot_filter(args, SnapshotFilter("include_snapshot_times", timerange, None))
     else:
@@ -92,7 +94,6 @@ def _add_time_and_rank_snapshot_filter(
 
 def has_timerange_filter(snapshot_filters: list[list[SnapshotFilter]]) -> bool:
     """Interacts with add_time_and_rank_snapshot_filter() and optimize_snapshot_filters()."""
-
     return any(f.timerange is not None for snapshot_filter in snapshot_filters for f in snapshot_filter)
 
 
@@ -120,9 +121,10 @@ def _merge_adjacent_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> 
         if isinstance(filter_i.options, list):
             j = i - 1
             if j >= 0 and snapshot_filters[j] == filter_i:
-                lst: list = snapshot_filters[j].options
+                lst: list = cast(list, snapshot_filters[j].options)
                 assert isinstance(lst, list)
-                lst += filter_i.options
+                assert isinstance(filter_i.options, list)
+                lst.extend(filter_i.options)
                 snapshot_filters.pop(i)
         i -= 1
 
@@ -143,9 +145,10 @@ def _merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> 
             j = i - 1
             while j >= 0 and snapshot_filters[j].name in SNAPSHOT_REGEX_FILTER_NAMES:
                 if snapshot_filters[j].name == filter_i.name:
-                    lst: list[object] = snapshot_filters[j].options
+                    lst: list = cast(list[str], snapshot_filters[j].options)
                     assert isinstance(lst, list)
-                    lst += filter_i.options
+                    assert isinstance(filter_i.options, list)
+                    lst.extend(filter_i.options)
                     snapshot_filters.pop(i)
                     break
                 j -= 1
@@ -171,7 +174,8 @@ def _merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> 
                 name_j: str = next(iter(SNAPSHOT_REGEX_FILTER_NAMES.difference({name})))
                 filter_j = SnapshotFilter(name_j, None, [])
             sorted_filters: list[SnapshotFilter] = sorted([filter_i, filter_j])
-            exclude_regexes, include_regexes = (sorted_filters[0].options, sorted_filters[1].options)
+            exclude_regexes = cast(list[str], sorted_filters[0].options)
+            include_regexes = cast(list[str], sorted_filters[1].options)
             snapshot_filters[i] = SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, (exclude_regexes, include_regexes))
         i -= 1
 
@@ -287,7 +291,6 @@ class SSHConfigFileNameAction(argparse.Action):
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
         """Reject invalid file names with spaces or shell metacharacters."""
-
         values = values.strip()
         if values == "":
             parser.error(f"{option_string}: Empty string is not valid")

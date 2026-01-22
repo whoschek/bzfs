@@ -31,6 +31,7 @@ from typing import (
     Final,
     Optional,
     Union,
+    cast,
 )
 
 from bzfs_main.util.utils import (
@@ -176,7 +177,10 @@ def filter_snapshots(
             name: str = _filter.name
             if name == SNAPSHOT_REGEX_FILTER_NAME:
                 snapshots = _filter_snapshots_by_regex(
-                    job, snapshots, regexes=_filter.options, filter_bookmarks=filter_bookmarks
+                    job,
+                    snapshots,
+                    regexes=cast(tuple[RegexList, RegexList], _filter.options),
+                    filter_bookmarks=filter_bookmarks,
                 )
             elif name == "include_snapshot_times":
                 timerange = resolve_timerange(_filter.timerange) if _filter.timerange is not None else _filter.timerange
@@ -190,7 +194,7 @@ def filter_snapshots(
                     job,
                     snapshots,
                     include_snapshot_times=timerange,
-                    include_snapshot_ranks=_filter.options,
+                    include_snapshot_ranks=cast(list[RankRange], _filter.options),
                     filter_bookmarks=filter_bookmarks,
                 )
         resultset.update(snapshots)  # union

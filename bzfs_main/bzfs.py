@@ -514,8 +514,11 @@ class Job(MiniJob):
         for snapshot_filter in p.snapshot_filters:
             for _filter in snapshot_filter:
                 if _filter.name == SNAPSHOT_REGEX_FILTER_NAME:
-                    exclude_snapshot_regexes = compile_regexes(_filter.options[0])
-                    include_snapshot_regexes = compile_regexes(_filter.options[1] or [".*"])
+                    exclude_snapshot_regexes_strings, include_snapshot_regexes_strings = cast(
+                        tuple[list[str], list[str]], _filter.options
+                    )
+                    exclude_snapshot_regexes = compile_regexes(exclude_snapshot_regexes_strings)
+                    include_snapshot_regexes = compile_regexes(include_snapshot_regexes_strings or [".*"])
                     _filter.options = (exclude_snapshot_regexes, include_snapshot_regexes)
 
         exclude_regexes: list[str] = [EXCLUDE_DATASET_REGEXES_DEFAULT]
