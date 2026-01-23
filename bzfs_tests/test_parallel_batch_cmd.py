@@ -166,7 +166,7 @@ class TestItrSshCmdParallel(AbstractTestCase):
         cmd_args_list: list[tuple[list[str], Iterable[str]]] = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
         gen = itr_ssh_cmd_parallel(self.job, self.r, cmd_args_list, dummy_fn_raise, max_batch_items=2, ordered=False)
         caught_exception = False
-        results = []
+        results: list[tuple[list[str], list[str]]] = []
         try:
             for r in gen:
                 results.append(r)

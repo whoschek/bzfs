@@ -323,7 +323,7 @@ class TestHelperFunctions(unittest.TestCase):
 
                 # Attempt to read from the original, exhausted iter_fd again.
                 # fd_read (to which iter_fd is bound) is still open.
-                read_lines_after_append_from_original_iterator = []
+                read_lines_after_append_from_original_iterator: list[str] = []
                 # This loop should yield additional lines even though 'iter_fd' was previously exhausted.
                 for line in iter_fd:  # Attempting to iterate over the *exhausted* iterator
                     read_lines_after_append_from_original_iterator.append(line)

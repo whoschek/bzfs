@@ -5741,7 +5741,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
 
     def inject_unavailable_program(self, *flags: str, expected_error: int = 0) -> None:
         self.setup_basic()
-        inject_params = {}
+        inject_params: dict[str, bool] = {}
         for flag in flags:
             inject_params[flag] = True
         self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=expected_error, inject_params=inject_params)
