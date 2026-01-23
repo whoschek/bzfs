@@ -29,6 +29,7 @@ from bzfs_main import (
 )
 from bzfs_main.filter import (
     SNAPSHOT_FILTERS_VAR,
+    SNAPSHOT_REGEX_FILTER_NAME,
 )
 from bzfs_main.util.check_range import (
     CheckRange,
@@ -47,6 +48,8 @@ def suite() -> unittest.TestSuite:
         TestDatasetPairsAction,
         TestFileOrLiteralAction,
         TestNewSnapshotFilterGroupAction,
+        TestIncludeSnapshotPlanAction,
+        TestDeleteDstSnapshotsExceptPlanAction,
         TestNonEmptyStringAction,
         SSHConfigFileNameAction,
         TestSafeFileNameAction,
@@ -183,6 +186,58 @@ class TestNewSnapshotFilterGroupAction(AbstractTestCase):
     def test_basic1(self) -> None:
         args = self.parser.parse_args(["--new-snapshot-filter-group", "--new-snapshot-filter-group"])
         self.assertListEqual([[]], getattr(args, SNAPSHOT_FILTERS_VAR))
+
+    def test_appends_after_nonempty_group(self) -> None:
+        """Covers the branch that starts a new group only after the current one is non-empty."""
+        action = argparse_actions.NewSnapshotFilterGroupAction(
+            option_strings=["--new-snapshot-filter-group"],
+            dest="ignored",
+            nargs=0,
+        )
+        args = argparse.Namespace(
+            snapshot_filters_var=[
+                [
+                    argparse_actions.SnapshotFilter(
+                        SNAPSHOT_REGEX_FILTER_NAME,
+                        None,
+                        ["dummy"],
+                    )
+                ]
+            ]
+        )
+        action(self.parser, args, values=None, option_string="--new-snapshot-filter-group")
+        self.assertEqual(2, len(getattr(args, SNAPSHOT_FILTERS_VAR)))
+        self.assertListEqual([], getattr(args, SNAPSHOT_FILTERS_VAR)[-1])
+
+
+###############################################################################
+class TestIncludeSnapshotPlanAction(AbstractTestCase):
+    """Covers safety fallbacks and validation for include-snapshot plan parsing."""
+
+    def setUp(self) -> None:
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("--plan", action=argparse_actions.IncludeSnapshotPlanAction)
+
+    def test_empty_plan_adds_default_exclude_all(self) -> None:
+        args = self.parser.parse_args(["--plan", "{}"])
+        self.assertListEqual(["--new-snapshot-filter-group", "--include-snapshot-regex=!.*"], args.plan)
+
+    def test_negative_period_amount_errors(self) -> None:
+        with self.assertRaises(SystemExit), suppress_output():
+            self.parser.parse_args(["--plan", "{'org': {'tgt': {'daily': -1}}}"])
+
+
+###############################################################################
+class TestDeleteDstSnapshotsExceptPlanAction(AbstractTestCase):
+    """Covers guardrails that prevent accidental deletion of all destination snapshots."""
+
+    def setUp(self) -> None:
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("--plan", action=argparse_actions.DeleteDstSnapshotsExceptPlanAction)
+
+    def test_empty_plan_errors_to_prevent_delete_all(self) -> None:
+        with self.assertRaises(SystemExit), suppress_output():
+            self.parser.parse_args(["--plan", "{}"])
 
 
 ###############################################################################
