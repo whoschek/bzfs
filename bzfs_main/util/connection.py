@@ -168,7 +168,7 @@ def create_simple_miniremote(
     ssh_connect_timeout_secs: int | None = None,  # option passed to `ssh -oConnectTimeout=N`; default is system TCP timeout
     ssh_program: str = "ssh",  # name or path of CLI executable; "hpnssh" is also valid
     reuse_ssh_connection: bool = True,
-    ssh_control_persist_secs: int = 90,
+    ssh_control_persist_secs: int = 600,
     ssh_control_persist_margin_secs: int = 2,
     ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs"),
     location: str = "dst",

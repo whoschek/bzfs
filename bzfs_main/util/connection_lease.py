@@ -174,7 +174,7 @@ class ConnectionLeaseManager:
         self,
         root_dir: str,  # the local user is implied by root_dir
         namespace: str,  # derived from the remote endpoint identity (ssh_user_host, port, ssh_config_file hash)
-        ssh_control_persist_secs: int = 90,  # TTL for garbage collecting stale files while preserving reuse of live masters
+        ssh_control_persist_secs: int = 600,  # TTL for garbage collecting stale files while preserving reuse of live masters
         *,
         log: logging.Logger,
     ) -> None:

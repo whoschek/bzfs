@@ -1206,7 +1206,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             f"--ssh-{loc}-config-file", type=str, action=SSHConfigFileNameAction, metavar="FILE",
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI. "
                  "The basename must contain the substring 'bzfs_ssh_config'.\n\n")
-    control_persist_secs_dflt: int = 90
+    control_persist_secs_dflt: int = 600
     parser.add_argument(
         "--ssh-exit-on-shutdown", action="store_true",
         # help="On process shutdown, ask the SSH ControlMaster to exit immediately via 'ssh -O exit'. By default, masters "

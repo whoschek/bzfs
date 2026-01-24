@@ -1980,7 +1980,7 @@ usage: bzfs [-h] [--recursive]
 **--ssh-control-persist-secs** *INT*
 
 *  The number of seconds an idle SSH connection will stay alive to improve latency on subsequent
-    reuse (default: 90, min: 1).
+    reuse (default: 600, min: 1).
 
 <!-- -->
 
