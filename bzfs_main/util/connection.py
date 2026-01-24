@@ -163,7 +163,7 @@ def create_simple_miniremote(
     ssh_port: int | None = None,  # option passed to `ssh -p` CLI
     ssh_extra_opts: list[str] | None = None,  # optional args passed to `ssh` CLI
     ssh_verbose: bool = False,  # option passed to `ssh -v` CLI
-    ssh_config_file: str = "",  # option passed to `ssh -F` CLI; example: /path/to/homedir/.ssh/config
+    ssh_config_file: str = "",  # option passed to `ssh -F` CLI; path to ssh_config(5) file; e.g /path/to/homedir/.ssh/config
     ssh_cipher: str = "^aes256-gcm@openssh.com",  # option passed to `ssh -c` CLI
     ssh_connect_timeout_secs: int | None = None,  # option passed to `ssh -oConnectTimeout=N`; default is system TCP timeout
     ssh_program: str = "ssh",  # name or path of CLI executable; "hpnssh" is also valid

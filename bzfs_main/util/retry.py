@@ -502,7 +502,7 @@ def full_jitter_backoff_strategy(
     """Default implementation of ``backoff_strategy`` callback for RetryPolicy.
 
     Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
-    exponential backoff with cap to the next attempt; thread-safe. min_sleep_nanos is typically 0.
+    exponential backoff with cap to the next attempt; thread-safe. Typically, min_sleep_nanos is 0 and exponential_base is 2.
     """
     policy: RetryPolicy = retry.policy
     if policy.min_sleep_nanos == curr_max_sleep_nanos:
@@ -737,7 +737,7 @@ def call_with_exception_handlers(
     handlers: Mapping[type[BaseException], Sequence[tuple[ExceptionPredicate, Callable[[BaseException], _T]]]],
 ) -> _T:
     """Convenience function that calls ``fn`` and returns its result; on exception runs the first matching handler in a per-
-    exception handler chain; composes independent handlers via predicates into one function.
+    exception handler chain; composes independent handlers via predicates into one function, in Event-Predicate-Action style.
 
     Lookup uses the exception type's Method Resolution Order (most-specific class in the exception class hierarchy wins). For
     the first class that exists as a key in ``handlers``, its chain is scanned in order. Each chain element is

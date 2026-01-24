@@ -1018,7 +1018,7 @@ class Job(MiniJob):
                 replace_in_lines(snapshots, old="#", new="@", count=1)  # treat bookmarks as snapshots
             dst_datasets_having_snapshots.update(snap[: snap.index("@")] for snap in snapshots)  # union
 
-        orphans = compute_orphans(dst_datasets_having_snapshots)  # compute the real orphans
+        orphans: set[str] = compute_orphans(dst_datasets_having_snapshots)  # compute the real orphans
         delete_datasets(self, dst, orphans)  # finally, delete the orphan datasets in an efficient way
         sorted_dst_datasets = sorted(set(sorted_dst_datasets).difference(orphans))
         basis_dst_datasets = sorted(set(basis_dst_datasets).difference(orphans))
