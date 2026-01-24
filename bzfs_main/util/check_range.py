@@ -37,8 +37,8 @@ from typing import (
 )
 
 
-# fmt: off
 class CheckRange(argparse.Action):
+    # fmt: off
     """Argparse action validating numeric ranges like ``(a,b]`` or ``[a,+∞)``."""
     ops: Final = {
         'inf': operator.gt,
@@ -89,4 +89,5 @@ class CheckRange(argparse.Action):
             if hasattr(self, name) and not op(values, getattr(self, name)):
                 raise argparse.ArgumentError(self, self.interval())
         setattr(namespace, self.dest, values)
-# fmt: on
+
+    # fmt: on

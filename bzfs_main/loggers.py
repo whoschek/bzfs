@@ -20,6 +20,7 @@ without interfering with each other's logging semantics. This is achieved by pas
 to ``get_logger()`` so each job receives an isolated Logger instance. Callers are responsible for closing any loggers they
 own via ``reset_logger()``.
 """
+
 from __future__ import (
     annotations,
 )
