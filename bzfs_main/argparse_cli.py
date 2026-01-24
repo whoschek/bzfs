@@ -1215,7 +1215,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help=argparse.SUPPRESS)
     parser.add_argument(
         "--ssh-control-persist-secs", type=int, min=1, default=control_persist_secs_dflt, action=CheckRange, metavar="INT",
-        help=argparse.SUPPRESS)
+        help="The number of seconds an idle SSH connection will stay alive to improve latency on subsequent reuse (default: "
+             "%(default)s, min: %(min)s).\n\n")
     parser.add_argument(
         "--timeout", default=None, metavar="DURATION",
         # help="Exit the program (or current task with non-zero --daemon-lifetime) with an error after this much time has "

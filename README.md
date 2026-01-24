@@ -636,7 +636,7 @@ usage: bzfs [-h] [--recursive]
             [--ssh-src-host STRING] [--ssh-dst-host STRING]
             [--ssh-src-port INT] [--ssh-dst-port INT]
             [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
-            [--threads INT[%]]
+            [--ssh-control-persist-secs INT] [--threads INT[%]]
             [--max-concurrent-ssh-sessions-per-tcp-connection INT]
             [--bwlimit STRING] [--no-estimate-send-size]
             [--compression-program {zstd,lz4,pzstd,pigz,gzip,-}]
@@ -1972,6 +1972,15 @@ usage: bzfs [-h] [--recursive]
 
 *  Path to SSH ssh_config(5) file to connect to dst (optional); will be passed into ssh -F CLI.
     The basename must contain the substring 'bzfs_ssh_config'.
+
+<!-- -->
+
+<div id="--ssh-control-persist-secs"></div>
+
+**--ssh-control-persist-secs** *INT*
+
+*  The number of seconds an idle SSH connection will stay alive to improve latency on subsequent
+    reuse (default: 90, min: 1).
 
 <!-- -->
 
