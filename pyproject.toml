@@ -97,8 +97,8 @@ tag_format = "v$version"
 bump_message = "chore(release): v$new_version"
 update_changelog_on_bump = false
 
-[tool.coverage.run]  # see https://coverage.readthedocs.io/
-branch = true
+[tool.coverage.run]         # see https://coverage.readthedocs.io/
+branch = true               # also flag conditionals that haven't visited all of their possible destinations
 include = ["bzfs_main/**/*.py"]
 omit = ["bzfs_tests/**/*.py", "**/__init__.py"]
 
