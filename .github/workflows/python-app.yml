@@ -41,6 +41,7 @@ on:
         - test_ubuntu_24_04
         - test_ubuntu_22_04
         - test_ubuntu_22_04_zfs_0_8_x
+        - test_almalinux_10_1
         - test_freebsd_15_0
         - test_freebsd_14_3
         - test_freebsd_13_4
@@ -534,6 +535,85 @@ jobs:
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/actions/coverage-upload
+
+
+  test_almalinux_10_1:
+    needs: create_iteration_test_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_10_1' || contains(github.event.inputs.job_names, 'test_almalinux_10_1')
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
+      fail-fast: false
+    timeout-minutes: 170
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - name: Set up Lima
+      uses: lima-vm/lima-actions/setup@v1
+    - name: Start AlmaLinux 10.1 VM via Lima
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > alma101.yaml <<EOF
+        minimumLimaVersion: 2.0.0
+        images:
+        - location: "https://repo.almalinux.org/almalinux/10.1/cloud/x86_64/images/AlmaLinux-10-GenericCloud-10.1-20251125.0.x86_64.qcow2"
+          arch: "x86_64"
+        EOF
+        limactl start --name=alma101 --tty=false alma101.yaml
+    - name: Provision ZFS and test dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        limactl shell alma101 -- bash -s <<'EOF'
+        set -euo pipefail
+        grep -q "10\\.1" /etc/almalinux-release
+        sudo -n true
+        sudo dnf -y install dnf-plugins-core epel-release
+        sudo dnf -y install mbuffer nmap-ncat openssh-clients openssh-server pv rsync sudo zstd
+        sudo dnf -y install https://zfsonlinux.org/epel/zfs-release-3-0.el10.noarch.rpm
+        sudo dnf config-manager --disable zfs || true
+        sudo dnf config-manager --enable zfs-kmod
+        sudo dnf -y install zfs
+        sudo modprobe zfs
+        sudo systemctl enable --now sshd
+        mkdir -p "$HOME/.ssh"
+        rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
+        ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N ""
+        cat "$HOME/.ssh/id_rsa.pub" >> "$HOME/.ssh/authorized_keys"
+        chmod 700 "$HOME/.ssh"
+        chmod 600 "$HOME/.ssh/id_rsa" "$HOME/.ssh/authorized_keys"
+        chmod 644 "$HOME/.ssh/id_rsa.pub"
+        python3 --version
+        zfs --version
+        EOF
+    - name: Run tests inside AlmaLinux VM
+      shell: bash
+      run: |
+        set -euo pipefail
+        eval "$(
+          limactl show-ssh --format=options alma101 2>/dev/null | awk -F= '
+            $1=="Hostname"{print "LIMA_HOST="$2}
+            $1=="Port"{print "LIMA_PORT="$2}
+            $1=="User"{print "LIMA_USER="$2}
+            $1=="IdentityFile"{gsub(/^\"|\"$/, "", $2); print "LIMA_IDENTITYFILE="$2}
+          '
+        )"
+        export bzfs_test_remote_userhost="${LIMA_USER}@${LIMA_HOST}"
+        export bzfs_test_ssh_port="${LIMA_PORT}"
+        export bzfs_test_remote_private_key="${LIMA_IDENTITYFILE}"
+        export bzfs_test_remote_path="bzfs"
+        ./test.sh
+        echo "bzfs-testrun-success"
+    - name: Tear down VM
+      if: always()
+      shell: bash
+      run: |
+        limactl stop alma101 || true
+        limactl delete -f alma101 || true
+        rm -f alma101.yaml || true
 
 
   test_freebsd_15_0:  # currently uses zfs-2.4.0rcX
