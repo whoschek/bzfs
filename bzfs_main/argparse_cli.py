@@ -959,6 +959,13 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             },
         },
     }
+    monitor_snapshots_output_example: str = (
+        "--monitor_snapshots: OK. Latest snapshot for tank/foo@prod_<timestamp>_daily is 4.18h old: @prod_2025-01-10_08:30:05_daily1\n\n"
+        "--monitor_snapshots: OK. Latest snapshot for tank/bar@prod_<timestamp>_daily is 4.18h old: @prod_2025-01-10_08:30:05_daily\n\n"
+        "--monitor_snapshots: Latest snapshot for tank/baz@prod_<timestamp>_daily is 1.2d old but should be at most 1.1d old: @prod_2025-01-09_08:30:05_daily\n\n"
+        " ...\n\n"
+        "ERROR: Exiting bzfs with status code 2. Cause: --monitor_snapshots: Latest snapshot for tank/baz@prod_<timestamp>_daily is 1.2d old but should be at most 1.1d old: @prod_2025-01-09_08:30:05_daily\n\n"
+    )
     parser.add_argument(
         "--monitor-snapshots", default="{}", type=str, metavar="DICT_STRING",
         help="Do nothing if the --monitor-snapshots flag is missing. Otherwise, after all other steps, "
@@ -972,7 +979,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "than 300+60=360 minutes old) [critical]. "
              "Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
              "Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for "
-             "the given snapshot name pattern.\n\n")
+             "the given snapshot name pattern.\n\n"
+             f"Example output with `--verbose`:\n\n{monitor_snapshots_output_example}\n\n")
     parser.add_argument(
         "--monitor-snapshots-dont-warn", action="store_true",
         help="Log a message for monitoring warnings but nonetheless exit with zero exit code.\n\n")

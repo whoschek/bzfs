@@ -1598,6 +1598,23 @@ usage: bzfs [-h] [--recursive]
     Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots
     shall be checked for the given snapshot name pattern.
 
+    Example output with `--verbose`:
+
+    --monitor_snapshots: OK. Latest snapshot for tank/foo@prod_<timestamp>_daily is 4.18h
+    old: @prod_2025-01-10_08:30:05_daily1
+
+    --monitor_snapshots: OK. Latest snapshot for tank/bar@prod_<timestamp>_daily is 4.18h
+    old: @prod_2025-01-10_08:30:05_daily
+
+    --monitor_snapshots: Latest snapshot for tank/baz@prod_<timestamp>_daily is 1.2d old but
+    should be at most 1.1d old: @prod_2025-01-09_08:30:05_daily
+
+    ...
+
+    ERROR: Exiting bzfs with status code 2. Cause: --monitor_snapshots: Latest snapshot for
+    tank/baz@prod_<timestamp>_daily is 1.2d old but should be at most 1.1d old:
+    @prod_2025-01-09_08:30:05_daily
+
 <!-- -->
 
 <div id="--monitor-snapshots-dont-warn"></div>
