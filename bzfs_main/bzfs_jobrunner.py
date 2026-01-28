@@ -456,6 +456,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--daemon-monitor-snapshots-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.\n\n")
     bad_opts = ["--daemon-frequency", "--include-snapshot-plan", "--create-src-snapshots-plan", "--skip-replication",
+                "--include-snapshot-regex", "--exclude-snapshot-regex", "--include-snapshot-times-and-ranks",
                 "--log-file-prefix", "--log-file-infix", "--log-file-suffix",
                 "--delete-dst-datasets", "--delete-dst-snapshots", "--delete-dst-snapshots-except",
                 "--delete-dst-snapshots-except-plan", "--delete-empty-dst-datasets",

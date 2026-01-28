@@ -199,8 +199,18 @@ class TestHelperFunctions(AbstractTestCase):
         opts = ["--create-src-snapshots", "--job-id=myid", "--root-dataset-pairs", "src", "dst"]
         parser = bzfs_jobrunner.argument_parser()
         parser.parse_args(opts)
-        with self.assertRaises(SystemExit), suppress_output():
-            parser.parse_args(["--delete-dst-snapshots"] + opts)
+        rejected_opts = [
+            "--delete-dst-snapshots",
+            "--exclude-snapshot-regex",
+            "--include-snapshot-regex",
+            "--include-snapshot-times-and-ranks",
+        ]
+        for rejected_opt in rejected_opts:
+            with self.assertRaises(SystemExit), suppress_output():
+                parser.parse_args([rejected_opt] + opts)
+        for rejected_opt in rejected_opts[1:]:
+            with self.assertRaises(SystemExit), suppress_output():
+                parser.parse_args([f"{rejected_opt}=x"] + opts)
 
     def test_dedupe_and_flatten(self) -> None:
         pairs = [("a", "b"), ("a", "b"), ("c", "d")]
