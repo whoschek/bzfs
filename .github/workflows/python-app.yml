@@ -567,7 +567,7 @@ jobs:
           arch: "x86_64"
         EOF
         limactl start --name=alma101 --tty=false alma101.yaml
-    - name: Provision ZFS and test dependencies
+    - name: Install ZFS and other dependencies
       shell: bash
       run: |
         set -euo pipefail
@@ -603,7 +603,7 @@ jobs:
         # sudo dnf -y config-manager --enable zfs-kmod
         #sudo dnf -y install zfs --enablerepo=epel
         sudo modprobe zfs
-        sudo systemctl enable --now sshd
+
         mkdir -p "$HOME/.ssh"
         rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
         ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N ""
@@ -611,6 +611,7 @@ jobs:
         chmod 700 "$HOME/.ssh"
         chmod 600 "$HOME/.ssh/id_rsa" "$HOME/.ssh/authorized_keys"
         chmod 644 "$HOME/.ssh/id_rsa.pub"
+        sudo systemctl enable --now sshd
 
         id -u -n
         uname -a
@@ -621,7 +622,6 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-
         EOF
     - name: Run tests inside AlmaLinux VM
       shell: bash
