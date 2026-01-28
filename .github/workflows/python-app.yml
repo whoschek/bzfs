@@ -572,12 +572,12 @@ jobs:
         grep -q "10\\.1" /etc/almalinux-release
         sudo dnf -y upgrade --refresh
         sudo dnf -y install dnf-plugins-core
-        # sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
-        sudo dnf -y install epel-release
         # sudo dnf config-manager --set-enabled crb || true
         sudo dnf -y config-manager --set-enabled crb
-        # sudo dnf -y install pv
-        # sudo dnf -y install mbuffer
+        # sudo dnf -y install epel-release
+        sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+        sudo dnf -y install pv
+        sudo dnf -y install mbuffer
         sudo dnf -y install openssh-clients openssh-server rsync zstd
         # if ! sudo dnf -y install mbuffer; then
         #   sudo tee /usr/local/bin/mbuffer >/dev/null <<'SH'
