@@ -615,8 +615,17 @@ jobs:
         chmod 700 "$HOME/.ssh"
         chmod 600 "$HOME/.ssh/id_rsa" "$HOME/.ssh/authorized_keys"
         chmod 644 "$HOME/.ssh/id_rsa.pub"
-        python3 --version
+
+        id -u -n
+        uname -a
         zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+
         EOF
     - name: Run tests inside AlmaLinux VM
       shell: bash
