@@ -574,8 +574,8 @@ jobs:
         sudo dnf -y upgrade --refresh
         sudo dnf -y install dnf-plugins-core
         sudo dnf -y config-manager --set-enabled crb
-        #sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
-        sudo dnf -y install epel-release
+        sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+        # sudo dnf -y install epel-release
         sudo dnf clean all
         sudo dnf makecache --refresh
 
