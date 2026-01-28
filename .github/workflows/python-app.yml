@@ -579,29 +579,16 @@ jobs:
         sudo dnf -y config-manager --set-enabled crb
         # sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
         sudo dnf -y install epel-release
-        sudo dnf clean all
-        sudo dnf makecache --refresh
+        # sudo dnf clean all
+        # sudo dnf makecache --refresh
 
-        sudo dnf repoinfo epel || sudo dnf repo info epel
+        sudo dnf repoinfo epel
         # sudo dnf -y repolist --enabled | grep -i epel
         sudo dnf -y --refresh install pv --enablerepo=epel
         # sudo dnf -y --refresh install pv
         #sudo dnf -y --refresh install pv || sudo dnf -y install https://dl.fedoraproject.org/pub/epel/10/Everything/x86_64/Packages/p/pv-1.8.14-2.el10_0.x86_64.rpm
         sudo dnf -y --refresh install mbuffer --enablerepo=epel
         sudo dnf -y install openssh-clients openssh-server rsync zstd
-        # if ! sudo dnf -y install mbuffer; then
-        #   sudo tee /usr/local/bin/mbuffer >/dev/null <<'SH'
-        # #!/usr/bin/env bash
-        # set -euo pipefail
-        # for a in "$@"; do
-        #   case "$a" in
-        #     -I|-O) echo "mbuffer shim: -I/-O unsupported" >&2; exit 2;;
-        #   esac
-        # done
-        # cat
-        # SH
-        #   sudo chmod 0755 /usr/local/bin/mbuffer
-        # fi
         # sudo dnf -y install https://zfsonlinux.org/epel/zfs-release-3-0.el10.noarch.rpm
         # sudo dnf -y config-manager --disable zfs || true
         # sudo dnf -y config-manager --enable zfs-kmod
