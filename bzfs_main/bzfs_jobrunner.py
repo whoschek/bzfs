@@ -277,7 +277,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             "a group of snapshots, like target 'onsite', 'offsite', 'hotspare', a geographically independent datacenter like "
             "'us-west', or similar. Rather than the snapshot name embedding (i.e. hardcoding) a list of destination "
             "hostnames where it should be sent to, the snapshot name embeds the user-defined target name, which is later "
-            "mapped by this jobconfig to a list of destination hostnames. "
+            "mapped by this jobconfig to a list of destination hostnames.\n\n"
              f"Example: `{format_dict(dst_hosts_example)}`.\n\n"
              "With this, given a snapshot name, we can find the destination hostnames to which the snapshot shall be "
              "replicated. Also, given a snapshot name and its own name, a destination host can determine if it shall "
@@ -295,7 +295,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--retain-dst-targets", default="{}", metavar="DICT_STRING",
         help="Dictionary that maps each destination hostname to a list of zero or more logical replication target names "
-             "(the infix portion of snapshot name). "
+             "(the infix portion of snapshot name).\n\n"
              f"Example: `{format_dict(dst_hosts_example)}`. Has same format as --dst-hosts.\n\n"
              "As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored whose target has "
              "no mapping to that destination host in this dictionary. Do not remove a mapping here unless you are sure it's "
@@ -376,7 +376,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "snapshot pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to "
              "check if snapshots are successfully taken on schedule, successfully replicated on schedule, and successfully "
              "pruned on schedule. "
-             "Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively. "
+             "Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.\n\n"
              f"Example DICT_STRING: `{format_dict(monitor_snapshot_plan_example)}`. "
              "This example alerts the user if the *latest* src or dst snapshot named `prod_onsite_<timestamp>_hourly` is "
              "more than 30 minutes late (i.e. more than 30+60=90 minutes old) [warning] or more than 300 minutes late (i.e. "

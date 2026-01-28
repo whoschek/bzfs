@@ -272,9 +272,10 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
     'hotspare', a geographically independent datacenter like 'us-west', or similar. Rather
     than the snapshot name embedding (i.e. hardcoding) a list of destination hostnames where it
     should be sent to, the snapshot name embeds the user-defined target name, which is later
-    mapped by this jobconfig to a list of destination hostnames. Example: `"{'nas':
-    ['onsite'], 'bak-us-west': ['us-west'], 'bak-eu-west': ['eu-west'],
-    'archive': ['offsite']}"`.
+    mapped by this jobconfig to a list of destination hostnames.
+
+    Example: `"{'nas': ['onsite'], 'bak-us-west': ['us-west'], 'bak-eu-west':
+    ['eu-west'], 'archive': ['offsite']}"`.
 
     With this, given a snapshot name, we can find the destination hostnames to which the snapshot
     shall be replicated. Also, given a snapshot name and its own name, a destination host can
@@ -304,9 +305,10 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
 **--retain-dst-targets** *DICT_STRING*
 
 *  Dictionary that maps each destination hostname to a list of zero or more logical replication
-    target names (the infix portion of snapshot name). Example: `"{'nas': ['onsite'],
-    'bak-us-west': ['us-west'], 'bak-eu-west': ['eu-west'], 'archive':
-    ['offsite']}"`. Has same format as --dst-hosts.
+    target names (the infix portion of snapshot name).
+
+    Example: `"{'nas': ['onsite'], 'bak-us-west': ['us-west'], 'bak-eu-west':
+    ['eu-west'], 'archive': ['offsite']}"`. Has same format as --dst-hosts.
 
     As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored
     whose target has no mapping to that destination host in this dictionary. Do not remove a
@@ -389,23 +391,24 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
     specified snapshot pattern within the selected datasets is too old wrt. the specified age
     limit. The purpose is to check if snapshots are successfully taken on schedule, successfully
     replicated on schedule, and successfully pruned on schedule. Process exit code is 0, 1, 2 on
-    OK, WARNING, CRITICAL, respectively. Example DICT_STRING: `"{'prod': {'onsite':
-    {'100millisecondly': {'warning': '650 milliseconds', 'critical': '2 seconds'},
-    'secondly': {'warning': '2 seconds', 'critical': '14 seconds'}, 'minutely':
-    {'warning': '30 seconds', 'critical': '300 seconds'}, 'hourly': {'warning': '30
-    minutes', 'critical': '300 minutes'}, 'daily': {'warning': '4 hours', 'critical':
-    '8 hours'}, 'weekly': {'warning': '2 days', 'critical': '8 days'}, 'monthly':
-    {'warning': '2 days', 'critical': '8 days'}, 'yearly': {'warning': '5 days',
-    'critical': '14 days'}, '10minutely': {'warning': '0 minutes', 'critical': '0
-    minutes'}}, '': {'daily': {'warning': '4 hours', 'critical': '8 hours'}}}}"`.
-    This example alerts the user if the *latest* src or dst snapshot named
-    `prod_onsite_<timestamp>_hourly` is more than 30 minutes late (i.e. more than 30+60=90
-    minutes old) [warning] or more than 300 minutes late (i.e. more than 300+60=360 minutes old)
-    [critical]. In addition, the example alerts the user if the *oldest* src or dst snapshot
-    named `prod_onsite_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning]
-    or more than 300 + 60x36 minutes old [critical], where 36 is the number of period cycles
-    specified in `src_snapshot_plan` or `dst_snapshot_plan`, respectively. Analog for the
-    latest snapshot named `prod_<timestamp>_daily`, and so on.
+    OK, WARNING, CRITICAL, respectively.
+
+    Example DICT_STRING: `"{'prod': {'onsite': {'100millisecondly': {'warning': '650
+    milliseconds', 'critical': '2 seconds'}, 'secondly': {'warning': '2 seconds',
+    'critical': '14 seconds'}, 'minutely': {'warning': '30 seconds', 'critical': '300
+    seconds'}, 'hourly': {'warning': '30 minutes', 'critical': '300 minutes'},
+    'daily': {'warning': '4 hours', 'critical': '8 hours'}, 'weekly': {'warning':
+    '2 days', 'critical': '8 days'}, 'monthly': {'warning': '2 days', 'critical':
+    '8 days'}, 'yearly': {'warning': '5 days', 'critical': '14 days'}, '10minutely':
+    {'warning': '0 minutes', 'critical': '0 minutes'}}, '': {'daily': {'warning':
+    '4 hours', 'critical': '8 hours'}}}}"`. This example alerts the user if the *latest*
+    src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more than 30 minutes late
+    (i.e. more than 30+60=90 minutes old) [warning] or more than 300 minutes late (i.e. more
+    than 300+60=360 minutes old) [critical]. In addition, the example alerts the user if the
+    *oldest* src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more than 30 +
+    60x36 minutes old [warning] or more than 300 + 60x36 minutes old [critical], where 36 is
+    the number of period cycles specified in `src_snapshot_plan` or `dst_snapshot_plan`,
+    respectively. Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.
 
     Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots
     shall be checked for the given snapshot name pattern.
