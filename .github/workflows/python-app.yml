@@ -593,7 +593,7 @@ jobs:
         sudo dnf install -y https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval "%{dist}").noarch.rpm
         sudo dnf config-manager --disable 'zfs*'
         sudo dnf config-manager --enable zfs-2.2-kmod   # or zfs-kmod on some setups
-        sudo dnf install -y zfs
+        sudo dnf install -y zfs --enablerepo=epel
 
         # sudo dnf -y install https://zfsonlinux.org/epel/zfs-release-3-0.el10.noarch.rpm
         # sudo dnf -y config-manager --disable zfs || true
