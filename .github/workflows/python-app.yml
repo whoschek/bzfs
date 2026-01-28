@@ -552,7 +552,7 @@ jobs:
         persist-credentials: false
     - name: Set up Lima
       uses: lima-vm/lima-actions/setup@v1
-    - name: Start AlmaLinux 10.1 VM via Lima
+    - name: Start AlmaLinux VM via Lima
       shell: bash
       run: |
         set -euo pipefail
@@ -591,8 +591,11 @@ jobs:
         sudo dnf -y install openssh-clients openssh-server rsync zstd
 
         sudo dnf install -y https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval "%{dist}").noarch.rpm
+        sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
+        sudo dnf repolist all | grep -i zfs
         sudo dnf config-manager --disable 'zfs*'
-        sudo dnf config-manager --enable zfs-2.2-kmod   # or zfs-kmod on some setups
+        # sudo dnf config-manager --enable zfs-2.2-kmod   # or zfs-kmod on some setups
+        sudo dnf config-manager --enable zfs-2.2
         sudo dnf install -y zfs --enablerepo=epel
 
         # sudo dnf -y install https://zfsonlinux.org/epel/zfs-release-3-0.el10.noarch.rpm
