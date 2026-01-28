@@ -581,17 +581,18 @@ jobs:
         sudo dnf -y upgrade --refresh
         sudo dnf -y install dnf-plugins-core
         sudo dnf config-manager --set-enabled crb
-        # sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
         sudo dnf -y install epel-release
         # sudo dnf clean all
         # sudo dnf makecache --refresh
 
         sudo dnf repoinfo epel
         # sudo dnf -y repolist --enabled | grep -i epel
-        sudo dnf -y --refresh install pv --enablerepo=epel
+        # sudo dnf -y --refresh install pv --enablerepo=epel
+        sudo dnf -y install pv --enablerepo=epel
         # sudo dnf -y --refresh install pv
         #sudo dnf -y --refresh install pv || sudo dnf -y install https://dl.fedoraproject.org/pub/epel/10/Everything/x86_64/Packages/p/pv-1.8.14-2.el10_0.x86_64.rpm
-        sudo dnf -y --refresh install mbuffer --enablerepo=epel
+        # sudo dnf -y --refresh install mbuffer --enablerepo=epel
+        sudo dnf -y install mbuffer --enablerepo=epel
         sudo dnf -y install openssh-clients openssh-server zstd
         sudo systemctl enable --now sshd
 
@@ -638,7 +639,6 @@ jobs:
       run: |
         limactl stop alma101 || true
         limactl delete -f alma101 || true
-        rm -f alma101.yaml || true
 
 
   test_freebsd_15_0:  # currently uses zfs-2.4.0rcX
