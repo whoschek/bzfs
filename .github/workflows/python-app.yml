@@ -575,9 +575,10 @@ jobs:
         # sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
         sudo dnf -y install epel-release
         # sudo dnf config-manager --set-enabled crb || true
-        sudo dnf config-manager --set-enabled crb
-        sudo dnf -y install openssh-clients openssh-server rsync zstd mbuffer
+        sudo dnf -y config-manager --set-enabled crb
         sudo dnf -y install pv
+        sudo dnf -y install mbuffer
+        sudo dnf -y install openssh-clients openssh-server rsync zstd
         # if ! sudo dnf -y install mbuffer; then
         #   sudo tee /usr/local/bin/mbuffer >/dev/null <<'SH'
         # #!/usr/bin/env bash
@@ -592,8 +593,8 @@ jobs:
         #   sudo chmod 0755 /usr/local/bin/mbuffer
         # fi
         sudo dnf -y install https://zfsonlinux.org/epel/zfs-release-3-0.el10.noarch.rpm
-        sudo dnf config-manager --disable zfs || true
-        sudo dnf config-manager --enable zfs-kmod
+        sudo dnf -y config-manager --disable zfs || true
+        sudo dnf -y config-manager --enable zfs-kmod
         sudo dnf -y install zfs
         sudo modprobe zfs
         sudo systemctl enable --now sshd
