@@ -72,6 +72,15 @@ systemd timers or Monit entries or similar), along these lines:
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)"
 --monitor-dst-snapshots`
 
+### Applying Actions to a Subset of Hosts
+
+`--src-host` and `--dst-host` are ways to tell `bzfs_jobrunner` to only perform actions
+for a specified subset of source hosts and destination hosts, e.g. only replicate from a certain
+subset of source hosts to a certain subset of destination hosts. Each `bzfs_jobrunner`
+invocation will do all actions that apply to the final effective value of `--src-hosts` and
+`--dst-hosts`, after the subsetting step has been applied using the `--src-host` and
+`--dst-host` parameters.
+
 ### High Frequency Replication (Experimental Feature)
 
 Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is
@@ -247,6 +256,9 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
 *  For subsetting --src-hosts; Can be specified multiple times; Indicates to only use the
     --src-hosts that are contained in the specified --src-host values (optional).
 
+    Example: `--src-host=src1 --src-host=src2 --src-hosts="['src1', 'src2', 'src3',
+    'src4']"` indicates to effectively only use `--src-hosts="['src1', 'src2']"`.
+
 <!-- -->
 
 <div id="--dst-hosts"></div>
@@ -280,6 +292,10 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
 
 *  For subsetting --dst-hosts; Can be specified multiple times; Indicates to only use the
     --dst-hosts keys that are contained in the specified --dst-host values (optional).
+
+    Example: `--dst-host=dst1 --dst-host=dst2 --dst-hosts="{'dst1': ..., 'dst2': ...,
+    'dst3': ..., 'dst4': ...}"` indicates to effectively only use
+    `--dst-hosts="{'dst1': ..., 'dst2': ...}"`.
 
 <!-- -->
 

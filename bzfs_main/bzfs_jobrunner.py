@@ -176,6 +176,15 @@ lines:
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)" --monitor-dst-snapshots`
 
+
+### Applying Actions to a Subset of Hosts
+
+`--src-host` and `--dst-host` are ways to tell `{PROG_NAME}` to only perform actions for a specified subset of source hosts
+and destination hosts, e.g. only replicate from a certain subset of source hosts to a certain subset of destination hosts.
+Each `{PROG_NAME}` invocation will do all actions that apply to the final effective value of `--src-hosts` and `--dst-hosts`,
+after the subsetting step has been applied using the `--src-host` and `--dst-host` parameters.
+
+
 ### High Frequency Replication (Experimental Feature)
 
 Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is considered high frequency. For
@@ -255,7 +264,9 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--src-host", default=None, action="append", metavar="STRING",
         help="For subsetting --src-hosts; Can be specified multiple times; Indicates to only use the --src-hosts that are "
-             "contained in the specified --src-host values (optional).\n\n")
+             "contained in the specified --src-host values (optional).\n\n"
+             "Example: `--src-host=src1 --src-host=src2 --src-hosts=\"['src1', 'src2', 'src3', 'src4']\"` indicates to "
+             "effectively only use `--src-hosts=\"['src1', 'src2']\"`.\n\n")
     dst_hosts_example = {"nas": ["onsite"], "bak-us-west": ["us-west"],
                          "bak-eu-west": ["eu-west"], "archive": ["offsite"]}
     parser.add_argument(
@@ -277,7 +288,10 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--dst-host", default=None, action="append", metavar="STRING",
         help="For subsetting --dst-hosts; Can be specified multiple times; Indicates to only use the --dst-hosts keys that "
-             "are contained in the specified --dst-host values (optional).\n\n")
+             "are contained in the specified --dst-host values (optional).\n\n"
+             "Example: "
+             "`--dst-host=dst1 --dst-host=dst2 --dst-hosts=\"{'dst1': ..., 'dst2': ..., 'dst3': ..., 'dst4': ...}\"` "
+             "indicates to effectively only use `--dst-hosts=\"{'dst1': ..., 'dst2': ...}\"`.\n\n")
     parser.add_argument(
         "--retain-dst-targets", default="{}", metavar="DICT_STRING",
         help="Dictionary that maps each destination hostname to a list of zero or more logical replication target names "
