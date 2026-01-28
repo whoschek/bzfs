@@ -565,6 +565,10 @@ jobs:
         images:
         - location: "https://repo.almalinux.org/almalinux/9.7/cloud/x86_64/images/AlmaLinux-9-GenericCloud-9.7-20251118.x86_64.qcow2"
           arch: "x86_64"
+        mounts:
+        - location: "${GITHUB_WORKSPACE}"
+          mountPoint: "/testworkspace"
+          writable: true
         EOF
         limactl start --name=alma101 --tty=false alma101.yaml
     - name: Install ZFS and other dependencies
@@ -588,7 +592,7 @@ jobs:
         # sudo dnf -y --refresh install pv
         #sudo dnf -y --refresh install pv || sudo dnf -y install https://dl.fedoraproject.org/pub/epel/10/Everything/x86_64/Packages/p/pv-1.8.14-2.el10_0.x86_64.rpm
         sudo dnf -y --refresh install mbuffer --enablerepo=epel
-        sudo dnf -y install openssh-clients openssh-server rsync zstd
+        sudo dnf -y install openssh-clients openssh-server zstd
         sudo systemctl enable --now sshd
 
         # Install ZFS:
@@ -626,15 +630,8 @@ jobs:
         limactl shell alma101 -- env \
           bzfs_test_mode="$bzfs_test_mode" \
           bzfs_test_no_run_quietly="$bzfs_test_no_run_quietly" \
-          GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-          HOST_HOME="$HOME" \
-          bash -s <<'EOF'
-        set -euo pipefail
-        workspace="${GITHUB_WORKSPACE/#$HOST_HOME/$HOME}"
-        cd "$workspace"
-        ./test.sh
+          bash -lc 'cd /testworkspace && ./test.sh'
         echo "bzfs-testrun-success"
-        EOF
     - name: Tear down VM
       if: always()
       shell: bash
