@@ -556,10 +556,12 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
+        # - location: "https://repo.almalinux.org/almalinux/10.1/cloud/x86_64/images/AlmaLinux-10-GenericCloud-10.1-20251125.0.x86_64.qcow2"
+        #   arch: "x86_64"
         cat > alma101.yaml <<EOF
         minimumLimaVersion: 2.0.0
         images:
-        - location: "https://repo.almalinux.org/almalinux/10.1/cloud/x86_64/images/AlmaLinux-10-GenericCloud-10.1-20251125.0.x86_64.qcow2"
+        - location: "https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2"
           arch: "x86_64"
         EOF
         limactl start --name=alma101 --tty=false alma101.yaml
@@ -569,13 +571,12 @@ jobs:
         set -euo pipefail
         limactl shell alma101 -- bash -s <<'EOF'
         set -euo pipefail
-        grep -q "10\\.1" /etc/almalinux-release
         # sudo dnf config-manager --set-enabled crb || true
         sudo dnf -y upgrade --refresh
         sudo dnf -y install dnf-plugins-core
         sudo dnf -y config-manager --set-enabled crb
-        sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
-        # sudo dnf -y install epel-release
+        # sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+        sudo dnf -y install epel-release
         sudo dnf clean all
         sudo dnf makecache --refresh
 
@@ -599,8 +600,8 @@ jobs:
         # SH
         #   sudo chmod 0755 /usr/local/bin/mbuffer
         # fi
-        sudo dnf -y install https://zfsonlinux.org/epel/zfs-release-3-0.el10.noarch.rpm
-        sudo dnf -y config-manager --disable zfs || true
+        # sudo dnf -y install https://zfsonlinux.org/epel/zfs-release-3-0.el10.noarch.rpm
+        # sudo dnf -y config-manager --disable zfs || true
         sudo dnf -y config-manager --enable zfs-kmod
         sudo dnf -y install zfs
         sudo modprobe zfs
