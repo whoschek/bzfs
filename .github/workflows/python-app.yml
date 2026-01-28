@@ -571,6 +571,7 @@ jobs:
         set -euo pipefail
         grep -q "10\\.1" /etc/almalinux-release
         sudo -n true
+        sudo dnf -y upgrade --refresh
         sudo dnf -y install dnf-plugins-core
         sudo dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
         # sudo dnf config-manager --set-enabled crb || true
