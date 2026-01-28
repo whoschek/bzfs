@@ -589,6 +589,7 @@ jobs:
         #sudo dnf -y --refresh install pv || sudo dnf -y install https://dl.fedoraproject.org/pub/epel/10/Everything/x86_64/Packages/p/pv-1.8.14-2.el10_0.x86_64.rpm
         sudo dnf -y --refresh install mbuffer --enablerepo=epel
         sudo dnf -y install openssh-clients openssh-server rsync zstd
+        sudo systemctl enable --now sshd
 
         sudo dnf install -y https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval "%{dist}").noarch.rpm
         sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
@@ -611,7 +612,6 @@ jobs:
         chmod 700 "$HOME/.ssh"
         chmod 600 "$HOME/.ssh/id_rsa" "$HOME/.ssh/authorized_keys"
         chmod 644 "$HOME/.ssh/id_rsa.pub"
-        sudo systemctl enable --now sshd
 
         id -u -n
         uname -a
@@ -627,20 +627,18 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        eval "$(
-          limactl show-ssh --format=options alma101 2>/dev/null | awk -F= '
-            $1=="Hostname"{print "LIMA_HOST="$2}
-            $1=="Port"{print "LIMA_PORT="$2}
-            $1=="User"{print "LIMA_USER="$2}
-            $1=="IdentityFile"{gsub(/^\"|\"$/, "", $2); print "LIMA_IDENTITYFILE="$2}
-          '
-        )"
-        export bzfs_test_remote_userhost="${LIMA_USER}@${LIMA_HOST}"
-        export bzfs_test_ssh_port="${LIMA_PORT}"
-        export bzfs_test_remote_private_key="${LIMA_IDENTITYFILE}"
-        export bzfs_test_remote_path="bzfs"
+        limactl shell alma101 -- env \
+          bzfs_test_mode="$bzfs_test_mode" \
+          bzfs_test_no_run_quietly="$bzfs_test_no_run_quietly" \
+          GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+          HOST_HOME="$HOME" \
+          bash -s <<'EOF'
+        set -euo pipefail
+        workspace="${GITHUB_WORKSPACE/#$HOST_HOME/$HOME}"
+        cd "$workspace"
         ./test.sh
         echo "bzfs-testrun-success"
+        EOF
     - name: Tear down VM
       if: always()
       shell: bash
