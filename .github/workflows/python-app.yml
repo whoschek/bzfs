@@ -593,7 +593,7 @@ jobs:
         # sudo dnf -y install https://zfsonlinux.org/epel/zfs-release-3-0.el10.noarch.rpm
         # sudo dnf -y config-manager --disable zfs || true
         # sudo dnf -y config-manager --enable zfs-kmod
-        # sudo dnf -y install zfs
+        sudo dnf -y install zfs --enablerepo=epel
         sudo modprobe zfs
         sudo systemctl enable --now sshd
         mkdir -p "$HOME/.ssh"
