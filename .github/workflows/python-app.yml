@@ -586,7 +586,7 @@ jobs:
           sudo dnf -y \
             --repofrompath=epel9,https://dl.fedoraproject.org/pub/epel/9/Everything/$(rpm --eval '%{_arch}')/ \
             --setopt=epel9.gpgcheck=1 \
-            --setopt=epel9.includepkgs=mbuffer \
+            --setopt=epel9.includepkgs=mbuffer \  # prevent accidentally pulling a bunch of EL9 packages into EL10
             --enablerepo=epel9 \
             install mbuffer
         }
