@@ -41,7 +41,7 @@ on:
         - test_ubuntu_24_04
         - test_ubuntu_22_04
         - test_ubuntu_22_04_zfs_0_8_x
-        - test_almalinux_10_1
+        - test_almalinux_9_7
         - test_freebsd_15_0
         - test_freebsd_14_3
         - test_freebsd_13_4
@@ -537,9 +537,9 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_almalinux_10_1:
+  test_almalinux_9_7:
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_10_1' || contains(github.event.inputs.job_names, 'test_almalinux_10_1')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_9_7' || contains(github.event.inputs.job_names, 'test_almalinux_9_7')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
