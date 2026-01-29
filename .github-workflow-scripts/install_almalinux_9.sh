@@ -9,7 +9,7 @@ sudo dnf repoinfo epel
 sudo dnf -y install pv --enablerepo=epel
 if ! sudo dnf -y install mbuffer --enablerepo=epel; then
   # workaround for the fact that EPEL for Almalinux-10 does not (yet) contain an RPM for mbuffer
-  # prevent accidentally pulling a bunch of other EL9 packages into EL10
+  # guardrail: includepkgs=mbuffer prevents accidentally pulling a bunch of other EL9 packages into EL10
   sudo rpm --import https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
   sudo dnf -y \
     --repofrompath=epel9,https://dl.fedoraproject.org/pub/epel/9/Everything/$(rpm --eval '%{_arch}')/ \
