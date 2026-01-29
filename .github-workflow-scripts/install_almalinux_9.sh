@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+#
+# Copyright 2024 Wolfgang Hoschek AT mac DOT com
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -euo pipefail
+ZFS_VERSION="$1"  # e.g. 'zfs-2.2' or 'zfs-2.3' or 'zfs-2.4'
+
+cat /etc/redhat-release
+# sudo dnf -y upgrade --refresh
+cat /etc/redhat-release
+sudo dnf -y install dnf-plugins-core
+# sudo dnf config-manager --set-enabled crb
+sudo dnf -y install openssh-clients openssh-server zstd coreutils
+sudo systemctl enable --now sshd
+sudo dnf -y install epel-release
+sudo dnf repoinfo epel
+sudo dnf -y install pv --enablerepo=epel
+if ! sudo dnf -y install mbuffer --enablerepo=epel; then
+  # workaround for the fact that EPEL for Almalinux-10 does not (yet) contain an RPM for `mbuffer`
+  # see https://rpmfind.net/linux/rpm2html/search.php?query=mbuffer(x86-64)
+  # guardrail: includepkgs=mbuffer prevents accidentally pulling a bunch of other EL9 packages into EL10
+  sudo rpm --import https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
+  sudo dnf -y install mbuffer \
+    --repofrompath=epel9,https://dl.fedoraproject.org/pub/epel/9/Everything/$(rpm --eval '%{_arch}')/ \
+    --setopt=epel9.gpgcheck=1 \
+    --setopt=epel9.includepkgs=mbuffer \
+    --enablerepo=epel9
+fi
+
+# Install ZFS:
+sudo dnf install -y https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval "%{dist}").noarch.rpm
+sudo dnf repolist all | grep -i zfs
+sudo dnf config-manager --disable 'zfs*'
+# sudo dnf config-manager --enable zfs-2.2-kmod   # or zfs-kmod on some setups
+sudo dnf config-manager --enable "$ZFS_VERSION"
+sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
+sudo dnf install -y zfs --enablerepo=epel
+sudo modprobe zfs
+zfs --version
+
+mkdir -p "$HOME/.ssh"
+rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
+ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N "" # create private key and public key
+cat "$HOME/.ssh/id_rsa.pub" >> "$HOME/.ssh/authorized_keys"
+chmod 700 "$HOME/.ssh"
+chmod 600 "$HOME/.ssh/id_rsa" "$HOME/.ssh/authorized_keys"
+chmod 644 "$HOME/.ssh/id_rsa.pub"
