@@ -592,10 +592,11 @@ jobs:
         sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
         sudo dnf install -y zfs --enablerepo=epel
         sudo modprobe zfs
+        zfs --version
 
         mkdir -p "$HOME/.ssh"
         rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
-        ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N ""
+        ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N "" # create private key and public key
         cat "$HOME/.ssh/id_rsa.pub" >> "$HOME/.ssh/authorized_keys"
         chmod 700 "$HOME/.ssh"
         chmod 600 "$HOME/.ssh/id_rsa" "$HOME/.ssh/authorized_keys"
