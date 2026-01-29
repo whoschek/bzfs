@@ -1601,7 +1601,7 @@ usage: bzfs [-h] [--recursive]
     Example output with `--verbose`:
 
     --monitor_snapshots: OK. Latest snapshot for tank/foo@prod_<timestamp>_daily is 4.18h
-    old: @prod_2025-01-10_08:30:05_daily1
+    old: @prod_2025-01-10_08:30:05_daily
 
     --monitor_snapshots: OK. Latest snapshot for tank/bar@prod_<timestamp>_daily is 4.18h
     old: @prod_2025-01-10_08:30:05_daily

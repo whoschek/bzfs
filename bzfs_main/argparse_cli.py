@@ -960,7 +960,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         },
     }
     monitor_snapshots_output_example: str = (
-        "--monitor_snapshots: OK. Latest snapshot for tank/foo@prod_<timestamp>_daily is 4.18h old: @prod_2025-01-10_08:30:05_daily1\n\n"
+        "--monitor_snapshots: OK. Latest snapshot for tank/foo@prod_<timestamp>_daily is 4.18h old: @prod_2025-01-10_08:30:05_daily\n\n"
         "--monitor_snapshots: OK. Latest snapshot for tank/bar@prod_<timestamp>_daily is 4.18h old: @prod_2025-01-10_08:30:05_daily\n\n"
         "--monitor_snapshots: Latest snapshot for tank/baz@prod_<timestamp>_daily is 1.2d old but should be at most 1.1d old: @prod_2025-01-09_08:30:05_daily\n\n"
         " ...\n\n"
