@@ -578,9 +578,9 @@ jobs:
         set -euo pipefail
         limactl shell alma101 -- bash -s <<'EOF'
         set -euo pipefail
-        sudo dnf -y upgrade --refresh
-        sudo dnf -y install dnf-plugins-core
-        sudo dnf config-manager --set-enabled crb
+        # sudo dnf -y upgrade --refresh
+        # sudo dnf -y install dnf-plugins-core
+        # sudo dnf config-manager --set-enabled crb
         sudo dnf -y install epel-release
         sudo dnf repoinfo epel
         sudo dnf -y install mbuffer pv --enablerepo=epel
@@ -591,9 +591,9 @@ jobs:
         sudo dnf install -y https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval "%{dist}").noarch.rpm
         sudo dnf repolist all | grep -i zfs
         sudo dnf config-manager --disable 'zfs*'
-        sudo dnf config-manager --enable zfs-2.2-kmod   # or zfs-kmod on some setups
-        # sudo dnf config-manager --enable zfs-2.2
-        # sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
+        # sudo dnf config-manager --enable zfs-2.2-kmod   # or zfs-kmod on some setups
+        sudo dnf config-manager --enable zfs-2.2
+        sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
         sudo dnf install -y zfs --enablerepo=epel
         sudo modprobe zfs
 
