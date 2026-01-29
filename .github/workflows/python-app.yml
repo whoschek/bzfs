@@ -585,8 +585,8 @@ jobs:
         limactl shell alma101 -- bash -s <<'EOF'
         set -euo pipefail
         sudo dnf -y upgrade --refresh
-        # sudo dnf -y install dnf-plugins-core
-        # sudo dnf config-manager --set-enabled crb
+        sudo dnf -y install dnf-plugins-core
+        sudo dnf config-manager --set-enabled crb
         sudo dnf -y install epel-release
         sudo dnf repoinfo epel
         sudo dnf -y install mbuffer pv --enablerepo=epel
