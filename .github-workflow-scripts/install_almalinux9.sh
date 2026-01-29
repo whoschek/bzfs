@@ -13,7 +13,7 @@ if ! sudo dnf -y install mbuffer --enablerepo=epel; then
   sudo dnf -y \
     --repofrompath=epel9,https://dl.fedoraproject.org/pub/epel/9/Everything/$(rpm --eval '%{_arch}')/ \
     --setopt=epel9.gpgcheck=1 \
-    --setopt=epel9.includepkgs=mbuffer \  # prevent accidentally pulling a bunch of other EL9 packages into EL10
+    --setopt=epel9.includepkgs=mbuffer # prevent accidentally pulling a bunch of other EL9 packages into EL10 \
     --enablerepo=epel9 \
     install mbuffer
 fi
