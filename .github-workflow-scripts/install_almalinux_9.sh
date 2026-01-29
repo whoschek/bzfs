@@ -45,7 +45,7 @@ sudo dnf repolist all | grep -i zfs
 sudo dnf config-manager --disable 'zfs*'
 # sudo dnf config-manager --enable zfs-2.2-kmod   # or zfs-kmod on some setups
 sudo dnf config-manager --enable "$ZFS_VERSION"
-sudo dnf install -y kernel-devel
+sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
 sudo dnf install -y zfs --enablerepo=epel
 sudo modprobe zfs
 zfs --version
