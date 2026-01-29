@@ -552,6 +552,8 @@ jobs:
         persist-credentials: false
     - name: Set up Lima
       uses: lima-vm/lima-actions/setup@v1
+      with:
+        version: "v2.0.3"
     - name: Start VM via Lima
       run: |
         # image_location="https://repo.almalinux.org/almalinux/9.7/cloud/x86_64/images/AlmaLinux-9-GenericCloud-9.7-20251118.x86_64.qcow2"
@@ -578,7 +580,7 @@ jobs:
         # sudo dnf config-manager --set-enabled crb
         sudo dnf -y install epel-release
         sudo dnf repoinfo epel
-        sudo dnf -y install mbuffer pv --enablerepo=epel
+        sudo dnf -y install mbuffer pv --enablerepo=epel  # see https://rpmfind.net/linux/rpm2html/search.php?query=mbuffer(x86-64)
         sudo dnf -y install openssh-clients openssh-server zstd coreutils
         sudo systemctl enable --now sshd
 
