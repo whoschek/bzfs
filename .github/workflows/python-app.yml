@@ -582,17 +582,17 @@ jobs:
         sudo dnf -y install dnf-plugins-core
         sudo dnf config-manager --set-enabled crb
         sudo dnf -y install epel-release
+        sudo dnf repoinfo epel
         # sudo dnf clean all
         # sudo dnf makecache --refresh
 
-        sudo dnf repoinfo epel
         # sudo dnf -y repolist --enabled | grep -i epel
         # sudo dnf -y --refresh install pv --enablerepo=epel
-        sudo dnf -y install pv --enablerepo=epel
+        # sudo dnf -y install pv --enablerepo=epel
         # sudo dnf -y --refresh install pv
         #sudo dnf -y --refresh install pv || sudo dnf -y install https://dl.fedoraproject.org/pub/epel/10/Everything/x86_64/Packages/p/pv-1.8.14-2.el10_0.x86_64.rpm
         # sudo dnf -y --refresh install mbuffer --enablerepo=epel
-        sudo dnf -y install mbuffer --enablerepo=epel
+        sudo dnf -y install mbuffer pv --enablerepo=epel
         sudo dnf -y install openssh-clients openssh-server zstd
         sudo systemctl enable --now sshd
 
