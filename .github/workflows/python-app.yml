@@ -628,10 +628,10 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        limactl shell alma101 -- env \
+        limactl shell --workdir=/testworkspace alma101 -- env \
           bzfs_test_mode="$bzfs_test_mode" \
           bzfs_test_no_run_quietly="$bzfs_test_no_run_quietly" \
-          bash -lc 'cd /testworkspace && ./test.sh'
+          ./test.sh
         echo "bzfs-testrun-success"
     - name: Tear down VM
       if: always()
