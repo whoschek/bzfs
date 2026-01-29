@@ -552,7 +552,7 @@ jobs:
         persist-credentials: false
     - name: Set up Lima
       uses: lima-vm/lima-actions/setup@v1
-    - name: Start AlmaLinux VM via Lima
+    - name: Start VM via Lima
       shell: bash
       run: |
         set -euo pipefail
@@ -615,7 +615,7 @@ jobs:
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
         EOF
-    - name: Run tests inside AlmaLinux VM
+    - name: Run tests inside VM
       shell: bash
       run: |
         set -euo pipefail
