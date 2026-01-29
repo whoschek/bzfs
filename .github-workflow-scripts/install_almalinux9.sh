@@ -7,7 +7,7 @@ set -euo pipefail
 sudo dnf -y install epel-release
 sudo dnf repoinfo epel
 sudo dnf -y install pv --enablerepo=epel
-sudo dnf -y install mbuffer --enablerepo=epel || {
+if ! sudo dnf -y install mbuffer --enablerepo=epel; then
   # Workaround: EPEL for AlmaLinux 10 may not yet contain an RPM for mbuffer.
   sudo rpm --import https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
   sudo dnf -y \
@@ -16,7 +16,7 @@ sudo dnf -y install mbuffer --enablerepo=epel || {
     --setopt=epel9.includepkgs=mbuffer \  # prevent accidentally pulling a bunch of other EL9 packages into EL10
     --enablerepo=epel9 \
     install mbuffer
-}
+fi
 sudo dnf -y install openssh-clients openssh-server zstd coreutils
 sudo systemctl enable --now sshd
 
