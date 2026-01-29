@@ -558,7 +558,7 @@ jobs:
         #   arch: "x86_64"
         # - location: "https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2"
         #   arch: "x86_64"
-        cat > alma101.yaml <<EOF
+        cat > mylimavm.yaml <<EOF
         minimumLimaVersion: 2.0.0
         mountType: "reverse-sshfs"
         images:
@@ -569,10 +569,10 @@ jobs:
           mountPoint: "/testworkspace"
           writable: true
         EOF
-        limactl start --name=alma101 --tty=false alma101.yaml
+        limactl start --name=mylimavm --tty=false mylimavm.yaml
     - name: Install ZFS and other dependencies
       run: |
-        limactl shell alma101 -- bash -s <<'EOF'
+        limactl shell mylimavm -- bash -s <<'EOF'
         set -euo pipefail
         # sudo dnf -y upgrade --refresh
         # sudo dnf -y install dnf-plugins-core
@@ -603,7 +603,7 @@ jobs:
         EOF
     - name: Display ZFS version and Python version
       run: |
-        limactl shell alma101 -- bash -s <<'EOF'
+        limactl shell mylimavm -- bash -s <<'EOF'
         set -euo pipefail
         id -u -n
         uname -a
@@ -617,7 +617,7 @@ jobs:
         EOF
     - name: Run tests inside VM
       run: |
-        limactl shell --workdir=/testworkspace alma101 -- env \
+        limactl shell --workdir=/testworkspace mylimavm -- env \
           bzfs_test_mode="$bzfs_test_mode" \
           bzfs_test_no_run_quietly="$bzfs_test_no_run_quietly" \
           bash -lc './test.sh'
@@ -625,8 +625,8 @@ jobs:
     - name: Tear down VM
       if: always()
       run: |
-        limactl stop alma101 || true
-        limactl delete -f alma101 || true
+        limactl stop mylimavm || true
+        limactl delete -f mylimavm || true
 
 
   test_freebsd_15_0:  # currently uses zfs-2.4.0rcX
