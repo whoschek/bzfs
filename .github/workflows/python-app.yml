@@ -551,7 +551,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Set up Lima
-      uses: lima-vm/lima-actions/setup@v1
+      uses: lima-vm/lima-actions/setup@v1  # see https://github.com/lima-vm/lima-actions
       with:
         version: "v2.0.3"
     - name: Start VM via Lima
@@ -579,8 +579,17 @@ jobs:
         # sudo dnf config-manager --set-enabled crb
         sudo dnf -y install epel-release
         sudo dnf repoinfo epel
+        sudo dnf -y install pv --enablerepo=epel
+        sudo dnf -y install mbuffer --enablerepo=epel || {
+          sudo rpm --import https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
+          sudo dnf -y \
+            --repofrompath=epel9,https://dl.fedoraproject.org/pub/epel/9/Everything/$(rpm --eval '%{_arch}')/ \
+            --setopt=epel9.gpgcheck=1 \
+            --setopt=epel9.includepkgs=mbuffer \
+            --enablerepo=epel9 \
+            install mbuffer
+        }
         sudo dnf -y install openssh-clients openssh-server zstd coreutils
-        sudo dnf -y install mbuffer pv --enablerepo=epel  # see https://rpmfind.net/linux/rpm2html/search.php?query=mbuffer(x86-64)
         sudo systemctl enable --now sshd
 
         # Install ZFS:
