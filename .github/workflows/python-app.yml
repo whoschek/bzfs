@@ -559,7 +559,6 @@ jobs:
         # location="https://repo.almalinux.org/almalinux/10.1/cloud/x86_64/images/AlmaLinux-10-GenericCloud-10.1-20251125.0.x86_64.qcow2"
         cat > mylimavm.yaml <<EOF
         minimumLimaVersion: 2.0.0
-        mountType: "reverse-sshfs"
         images:
         - location: "$location"
           arch: "x86_64"
