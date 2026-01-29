@@ -545,7 +545,7 @@ jobs:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
       fail-fast: false
-    timeout-minutes: 170
+    timeout-minutes: 110
     steps:
     - uses: actions/checkout@v6
       with:
@@ -556,11 +556,10 @@ jobs:
         version: "v2.0.3"
     - name: Start VM via Lima
       run: |
-        image_location="https://repo.almalinux.org/almalinux/9.7/cloud/x86_64/images/AlmaLinux-9-GenericCloud-9.7-20251118.x86_64.qcow2"
+        # image_location="https://repo.almalinux.org/almalinux/9.7/cloud/x86_64/images/AlmaLinux-9-GenericCloud-9.7-20251118.x86_64.qcow2"
         # image_location="https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2"
-        # image_location="https://repo.almalinux.org/almalinux/10.1/cloud/x86_64/images/AlmaLinux-10-GenericCloud-10.1-20251125.0.x86_64.qcow2"
+        image_location="https://repo.almalinux.org/almalinux/10.1/cloud/x86_64/images/AlmaLinux-10-GenericCloud-10.1-20251125.0.x86_64.qcow2"
         cat > mylimavm.yaml <<EOF
-        minimumLimaVersion: 2.0.0
         mountType: "reverse-sshfs"
         images:
         - location: "$image_location"
@@ -580,8 +579,8 @@ jobs:
         # sudo dnf config-manager --set-enabled crb
         sudo dnf -y install epel-release
         sudo dnf repoinfo epel
-        sudo dnf -y install mbuffer pv --enablerepo=epel  # see https://rpmfind.net/linux/rpm2html/search.php?query=mbuffer(x86-64)
         sudo dnf -y install openssh-clients openssh-server zstd coreutils
+        sudo dnf -y install mbuffer pv --enablerepo=epel  # see https://rpmfind.net/linux/rpm2html/search.php?query=mbuffer(x86-64)
         sudo systemctl enable --now sshd
 
         # Install ZFS:
