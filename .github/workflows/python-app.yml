@@ -583,8 +583,8 @@ jobs:
         sudo dnf config-manager --set-enabled crb
         sudo dnf -y install epel-release
         sudo dnf repoinfo epel
-        sudo dnf -y install mbuffer pv dd --enablerepo=epel
-        sudo dnf -y install openssh-clients openssh-server zstd
+        sudo dnf -y install mbuffer pv --enablerepo=epel
+        sudo dnf -y install openssh-clients openssh-server zstd coreutils
         sudo systemctl enable --now sshd
 
         # Install ZFS:
