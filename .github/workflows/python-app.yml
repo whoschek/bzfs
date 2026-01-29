@@ -552,12 +552,6 @@ jobs:
         persist-credentials: false
     - name: Set up Lima
       uses: lima-vm/lima-actions/setup@v1
-      id: lima-actions-setup
-    - name: Set up Lima cache
-      uses: actions/cache@v5
-      with:
-        path: ~/.cache/lima
-        key: lima-${{ steps.lima-actions-setup.outputs.version }}
     - name: Start AlmaLinux VM via Lima
       shell: bash
       run: |
@@ -589,8 +583,8 @@ jobs:
         sudo dnf config-manager --set-enabled crb
         sudo dnf -y install epel-release
         sudo dnf repoinfo epel
-        sudo dnf -y install mbuffer pv --enablerepo=epel
-        sudo dnf -y install openssh-clients openssh-server zstd dd
+        sudo dnf -y install mbuffer pv dd --enablerepo=epel
+        sudo dnf -y install openssh-clients openssh-server zstd
         sudo systemctl enable --now sshd
 
         # Install ZFS:
