@@ -572,7 +572,7 @@ jobs:
         limactl start --name=mylimavm --tty=false mylimavm.yaml
     - name: Install ZFS and other dependencies
       run: |
-        limactl shell --workdir=/testworkspace mylimavm -- ./.github-workflow-scripts/install_almalinux9.sh
+        limactl shell --workdir=/testworkspace mylimavm -- bash -lc ./.github-workflow-scripts/install_almalinux9.sh
     - name: Display ZFS version and Python version
       run: |
         limactl shell mylimavm -- bash -s <<'EOF'
