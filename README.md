@@ -552,7 +552,7 @@ coverage report that merges all jobs of the run.
 # Check prerequisites
 zfs --version                      # verify ZFS is installed
 python3 --version                  # verify Python 3.9 or newer is installed
-sudo --non-interactive ls          # verify non-interactive sudo works
+sudo -n ls                         # verify non-interactive sudo works
 
 # If sshd uses a non-standard port
 # export bzfs_test_ssh_port=2222
