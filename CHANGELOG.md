@@ -2,6 +2,16 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - Not yet released
+
+- [bzfs_jobrunner] Also reject explicit CLI input opts `--include-snapshot-regex`, `--exclude-snapshot-regex`,
+  `--include-snapshot-times-and-ranks`.
+- [bzfs_jobrunner] docs: clarify how to apply actions to a subset of hosts via --src-host and --dst-host CLI options.
+- [bzfs] docs: add example output for `--monitor-snapshots` CLI option.
+- [bzfs] docs: Add docs for `--ssh-control-persist-secs` CLI option.
+- [bzfs] Bump default for `--ssh-control-persist-secs` to 600 seconds for improved operational stability.
+- [bzfs] Also run nightly tests on AlmaLinux-10.1 and AlmaLinux-9.7.
+
 ## [1.17.0] - January 18, 2026
 
 - [bzfs_jobrunner] docs: Improve Getting Started.
