@@ -168,6 +168,7 @@ def tail(file: str, *, n: int, errors: str | None = None) -> Sequence[str]:
 
 
 _NAMED_CAPTURING_GROUP: Final[re.Pattern[str]] = re.compile(r"^" + re.escape("(?P<") + r"[^\W\d]\w*" + re.escape(">"))
+_NUMERIC_BACKREFERENCE_REGEX: Final[re.Pattern[str]] = re.compile(r"\\\d+")  # example: \1
 
 
 def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
@@ -183,19 +184,16 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
 
     Also see https://docs.python.org/3/howto/regex.html#non-capturing-and-named-groups
     """
-    if "(" in regex and (
-        "[" in regex  # literal left square bracket
-        or "\\N{LEFT SQUARE BRACKET}" in regex  # named Unicode escape for '['
-        or "\\x5b" in regex  # hex escape for '[' (lowercase)
-        or "\\x5B" in regex  # hex escape for '[' (uppercase)
-        or "\\u005b" in regex  # 4-digit Unicode escape for '[' (lowercase)
-        or "\\u005B" in regex  # 4-digit Unicode escape for '[' (uppercase)
-        or "\\U0000005b" in regex  # 8-digit Unicode escape for '[' (lowercase)
-        or "\\U0000005B" in regex  # 8-digit Unicode escape for '[' (uppercase)
-        or "\\133" in regex  # octal escape for '['
-    ):
-        # Conservative fallback to minimize code complexity: skip the rewrite entirely in the rare case where the regex might
-        # contain a pathological regex character class that contains parenthesis, or when '[' is expressed via escapes.
+    i = regex.find("[")
+    if i >= 0 and regex.find("(", i) >= 0:
+        # Conservative fallback to minimize code complexity: skip the rewrite entirely in the case where the regex might
+        # contain a regex character class that contains parenthesis.
+        # Rewriting a regex is a performance optimization; correctness comes first.
+        return regex
+
+    if "(?P=" in regex or "(?(" in regex or _NUMERIC_BACKREFERENCE_REGEX.search(regex):
+        # Conservative fallback to minimize code complexity: skip the rewrite entirely if the regex might contain a
+        # (named or conditional or numeric) backreference.
         # Rewriting a regex is a performance optimization; correctness comes first.
         return regex
 

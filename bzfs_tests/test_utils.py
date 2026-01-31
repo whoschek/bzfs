@@ -1225,6 +1225,8 @@ class TestReplaceCapturingGroups(unittest.TestCase):
         self.assertEqual("(?:)", replace_capturing_groups_with_non_capturing_groups("()"))
 
     def test_named_capturing_groups(self) -> None:
+        self.assertTrue(utils._NUMERIC_BACKREFERENCE_REGEX.search("\\10"))
+        self.assertTrue(utils._NUMERIC_BACKREFERENCE_REGEX.search("a\\1b"))
         testcases: dict[str, str] = {
             "(?P<name>abc)": "(?:abc)",
             "(?P<name1>(?P<name2>abc))": "(?:(?:abc))",
@@ -1236,6 +1238,11 @@ class TestReplaceCapturingGroups(unittest.TestCase):
             "(?P<789>(?P<345>a)bc)": "(?P<789>(?P<345>a)bc)",  # ... must not be a digit
             "(?": "(?",  # not a valid capturing group
             "(?P": "(?P",  # not a valid capturing group
+            "(?P<n789>abc)(?P=n789)": "(?P<n789>abc)(?P=n789)",  # conservative fallback: named backreference is not rewritten
+            "(?P<n789>abc)(?(n789)": "(?P<n789>abc)(?(n789)",  # conservative fallback: conditional backref is not rewritten
+            "(?P<n789>abc)(?Q=n789)": "(?:abc)(?Q=n789)",
+            "(abc)\\1": "(abc)\\1",  # conservative fallback: numeric backreference is not rewritten
+            "(abc)\\s": "(?:abc)\\s",
         }
         for i, (pattern, expected_result) in enumerate(testcases.items()):
             with self.subTest(i=i):
@@ -1260,7 +1267,7 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 
     def test_complex_pattern(self) -> None:
         complex_pattern = "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))"
-        # Conservative fallback: presence of [ and ( anywhere => skip rewrite.
+        # Conservative fallback: presence of ( after [ => skip rewrite.
         self.assertEqual(complex_pattern, replace_capturing_groups_with_non_capturing_groups(complex_pattern))
 
     def test_example(self) -> None:
@@ -1302,12 +1309,13 @@ class TestReplaceCapturingGroups(unittest.TestCase):
             r"(?=a)(b)\(c)(?:d)(e)": r"(?=a)(?:b)\(c)(?:d)(?:e)",  # complex mix of groups
             "(你好)": "(?:你好)",  # group with Unicode characters
             "a(?:b)": "a(?:b)",  # string ending with a non-capturing group
-            "([*+?^])": "([*+?^])",  # group containing only special regex metachars; presence of [ and ( => skip rewrite
+            "([*+?^])": "(?:[*+?^])",  # group containing only special regex metachars; presence of ( before [ => rewrite
+            "([*+?^(])": "([*+?^(])",  # group containing only special regex metachars; presence of ( after [ => skip rewrite
             r"\(a)": r"\(a)",  # one backslash -> escaped -> NO change
             r"\\(a)": r"\\(a)",  # double-escaped parentheses -> escaped -> NO change
             r"\\\\(a)": r"\\\\(a)",  # quadruple-escaped parentheses -> escaped -> NO change
             r"(a)\(b)(?:c)(?=d)(e)": r"(?:a)\(b)(?:c)(?=d)(?:e)",  # mixed complex case
-            # Conservative fallback: presence of [ and ( anywhere => skip rewrite.
+            # Conservative fallback: presence of ( after [ => skip rewrite.
             "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))": "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))",  # mixed complex case
         }
         for i, (pattern, expected_result) in enumerate(testcases.items()):
@@ -1327,17 +1335,28 @@ class TestReplaceCapturingGroups(unittest.TestCase):
             with self.subTest(i=i):
                 self.assertEqual(pattern, replace_capturing_groups_with_non_capturing_groups(pattern))
 
-    def test_char_class_left_bracket_escapes_remain_unchanged(self) -> None:
-        # Escaped forms of '[' that the regex engine recognizes should also trigger the conservative fallback.
+    def test_brackets_are_equal(self) -> None:
+        self.assertEqual("[", "\N{LEFT SQUARE BRACKET}")
+        self.assertEqual("[", "\x5b")
+        self.assertEqual("[", "\x5b")
+        self.assertEqual("[", "\u005b")
+        self.assertEqual("[", "\u005b")
+        self.assertEqual("[", "\U0000005b")
+        self.assertEqual("[", "\U0000005b")
+        self.assertEqual("[", "\133")
+
+    def test_left_bracket_escapes_are_not_rewritten(self) -> None:
+        # Escaped forms of '[' match a literal '[', so rewriting groups for these escaped forms would not be safe either.
         patterns = [
-            "\\N{LEFT SQUARE BRACKET}()\\]",  # named Unicode escape for '[' expressed literally
-            r"\x5b()\]",  # hex escape for '[' (lowercase)
-            r"\x5B()\]",  # hex escape for '[' (uppercase)
-            "\\u005b()\\]",  # 4-digit Unicode escape for '[' (lowercase), expressed literally
-            "\\u005B()\\]",  # 4-digit Unicode escape for '[' (uppercase), expressed literally
-            "\\U0000005b()\\]",  # 8-digit Unicode escape for '[' (lowercase), expressed literally
-            "\\U0000005B()\\]",  # 8-digit Unicode escape for '[' (uppercase), expressed literally
-            r"\133()\]",  # octal escape for '['
+            "[()]",
+            "\N{LEFT SQUARE BRACKET}()]",  # named Unicode escape for '[' expressed literally
+            "\x5b()]",  # hex escape for '[' (lowercase)
+            "\x5b()]",  # hex escape for '[' (uppercase)
+            "\u005b()]",  # 4-digit Unicode escape for '[' (lowercase), expressed literally
+            "\u005b()]",  # 4-digit Unicode escape for '[' (uppercase), expressed literally
+            "\U0000005b()]",  # 8-digit Unicode escape for '[' (lowercase), expressed literally
+            "\U0000005b()]",  # 8-digit Unicode escape for '[' (uppercase), expressed literally
+            "\133()]",  # octal escape for '['
         ]
         for i, pattern in enumerate(patterns):
             with self.subTest(i=i):
