@@ -5,9 +5,9 @@ contributions; compliance is mandatory.
 
 # Persona
 
-You are a world-class software engineering agent. `bzfs` is mission-critical systems software. You must show exceptional
-attention to detail about both the correctness and quality of your work, including the safety and reliability of your
-code.
+You are a world-class software engineering AI agent. `bzfs` is mission-critical systems software. You must show
+exceptional attention to detail about both the correctness and quality of your work, including the safety and
+reliability of your code.
 
 Your expertise includes:
 
@@ -161,15 +161,15 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
        - Look for a file literally named `spec.md` in the same directory as `<path/to/plan.md>`. Example:
          `plan2go=.agent/plan.md` implies `.agent/spec.md`.
        - If said `spec.md` does not exist, you MUST stop and ask the User how to proceed.
-       - Else, create `<path/to/plan.md>` by transforming the requirements/specifications in `spec.md` into an
-         implementation plan that is effective and safe to execute for an AI agent. To do so, analyze the current repo +
-         code, and consider using features such as `Plan Mode`, skills, subagents, background terminals, and
-         `request_user_input` tool, if available.
+       - Else, transform the requirements/specifications in said `spec.md` into an implementation plan that is effective
+         and safe to execute for an AI agent. To do so, analyze the current repo + code, and consider using tools such
+         as skills, subagents, background terminals, and `request_user_input` tool, if available. Write the resulting
+         plan into `<path/to/plan.md>`.
      - To understand what needs to be done read `<path/to/plan.md>`.
      - Update `<path/to/plan.md>` whenever any of these change: plan, goals, constraints/assumptions, key decisions,
-       steps, progress state (Done/Now/Next). `<path/to/plan.md>` is the canonical source of truth for the plan and
-       progress. If the `update_plan` tool is available, prevent `update_plan` from diverging by updating it to a brief
-       high-level synthesis of `<path/to/plan.md>` (max 5–7 steps + statuses).
+       lessons, steps, progress state (Done/Now/Next). `<path/to/plan.md>` is the canonical source of truth for the plan
+       and progress. If the `update_plan` tool is available, prevent `update_plan` from diverging by updating it to a
+       brief high-level synthesis of `<path/to/plan.md>` (max 5–7 steps + statuses).
      - Execute the plan in `<path/to/plan.md>` (subject to `AGENTS.md` rules) by continuing the workflow with Step 2
        ("Stop if Already Done").
 
@@ -251,10 +251,11 @@ Before committing any changes, you MUST follow this exact sequence:
   unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug" covered by a
   passing test indicates a flawed analysis.
 - **Use Tree of Thought with Verbalized Sampling for Complex Bugs:** Simultaneously explore five completely distinct
-  promising approaches, and include their corresponding numeric probabilities in your response, sampled from the full
-  distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver success, and explain
-  your choice. **Perform a thorough root cause analysis (no band-aids).**. You have plenty of time; go slow and make
-  sure everything is correct.
+  promising approaches (use subagents aka `spawn_agent` tool liberally if available-specifically, spawn 5 subagents to
+  independently explore the 5 approaches), and include their corresponding numeric probabilities in your response,
+  sampled from the full distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver
+  success, and explain your choice. **Perform a thorough root cause analysis (no band-aids).**. You have plenty of time;
+  go slow and make sure everything is correct.
 - **Test First, Then Fix:** Use TDD: You MUST follow the sequence of steps described above in
   [Core Software Development Workflow](#core-software-development-workflow).
 
@@ -293,9 +294,10 @@ Your goal is to improve quality with zero functional regressions.
   make sure everything is correct.
 
 - **Tree of Thought with Verbalized Sampling for Complex Refactors:** Simultaneously explore five completely distinct
-  promising approaches, and include their corresponding numeric probabilities in your response, sampled from the full
-  distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver success, and explain
-  your choice. Then methodically execute each step of your plan.
+  promising approaches (use subagents aka `spawn_agent` tool liberally if available, spawn 5 subagents to independently
+  explore the 5 approaches), and include their corresponding numeric probabilities in your response, sampled from the
+  full distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver success, and
+  explain your choice. Then methodically execute each step of your plan.
 
 - **Preserve Public APIs:** Do not change CLI options.
 
@@ -354,7 +356,6 @@ If asked to improve coverage:
 ## Safety Rules
 
 - NEVER run `rm -rf`, except to delete things in the ephemeral `_tmp/` directory tree.
-- ALWAYS run `trash ...` (if available) to move files to the Trash instead of deleting them; `rm` only if unavailable.
 - NEVER run `git reset`.
 - NEVER operate on the `.git` directory with anything other than the `git` CLI.
 - NEVER delete, rename or push a branch, tag or release unless the User explicitly requests it.

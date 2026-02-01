@@ -157,4 +157,5 @@ trained_model.*
 tmp*/
 _tmp*/
 progress.md
-/.agent/
+.codex/
+.agent/
