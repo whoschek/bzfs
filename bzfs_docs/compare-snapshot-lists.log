@@ -1,0 +1,35 @@
+2026-01-31 22:08:10 [I] Log file is: /home/backup/bzfs-logs/2026-01-31/zrun_2026-01-31_22:08:10-ajtqp65j.log
+2026-01-31 22:08:10 [I] CLI arguments:                /home/backup/devel/bzfs/venv/bin/bzfs inta/pln/foo bak:inta/pln/foo --skip-replication --recursive --compare-snapshot-lists [uid: 1000, euid: 1000]
+2026-01-31 22:08:10 [I] Listing dst datasets:         inta/pln/foo -r --> bak:inta/pln/foo ...
+2026-01-31 22:08:10 [I] --compare-snapshot-lists:     inta/pln/foo -r --> bak:inta/pln/foo ...
+2026-01-31 22:08:10 [I] Comparing ~ of inta/pln/foo vs. bak:inta/pln/foo
+Comparing ~ Q: No src snapshots are missing on dst, and no dst snapshots are missing on src, and there is a common snapshot? A: False
+Comparing ~ Latest snapshot only in all: all	2026-01-24_13:30:05+00:00	28171063	@prod_2026-01-24_08:30:04_daily	11722496577318561570	inta/pln/foo		inta/pln/foo@prod_2026-01-24_08:30:04_daily	1769261405	0
+Comparing ~ Oldest snapshot only in all: all	2024-01-01_07:30:50+00:00	8532544	@prod_2024-01-01_08:30:50_yearly	11620352366261545756	inta/pln/foo		inta/pln/foo@prod_2024-01-01_08:30:50_yearly	1704094250	1182132817920
+Comparing ~ Snapshots only in all: 68
+Comparing ~ Snapshot data written only in all: 2.08 TiB
+Comparing ~ Time diff between now and latest snapshot only in all: 7.57d
+Comparing ~ Time diff between now and oldest snapshot only in all: 762d
+Comparing ~ Latest snapshot only in src: src	2026-01-31_13:30:10+00:00	28296893	@prod_2026-01-31_08:30:09_daily	14022318287144460818	inta/pln/foo		inta/pln/foo@prod_2026-01-31_08:30:09_daily	1769866210	0
+Comparing ~ Oldest snapshot only in src: src	2024-08-14_06:30:04+00:00	15645246	#prod_2024-08-14_08:30:04_daily	6095858604369365767	inta/pln/foo		inta/pln/foo#prod_2024-08-14_08:30:04_daily	1723617004	-
+Comparing ~ Snapshots only in src: 297
+Comparing ~ Snapshot data written only in src: 13.6 GiB
+Comparing ~ Snapshots only in src since latest common snapshot: 8
+Comparing ~ Snapshot data written only in src since latest common snapshot: 13.6 GiB
+Comparing ~ Time diff between latest common snapshot and latest snapshot only in src: -7d
+Comparing ~ Time diff between latest common snapshot and oldest snapshot only in src: 528d
+Comparing ~ Time diff between now and latest snapshot only in src: 13.6h
+Comparing ~ Time diff between now and oldest snapshot only in src: 536d
+Comparing ~ Latest snapshot only in dst: n/a
+Comparing ~ Oldest snapshot only in dst: n/a
+Comparing ~ Snapshots only in dst: 0
+Comparing ~ Snapshot data written only in dst: 0 B
+Comparing ~ Snapshots only in dst since latest common snapshot: 0
+Comparing ~ Snapshot data written only in dst since latest common snapshot: 0 B
+Comparing ~ Time diff between latest common snapshot and latest snapshot only in dst: n/a
+Comparing ~ Time diff between latest common snapshot and oldest snapshot only in dst: n/a
+Comparing ~ Time diff between now and latest snapshot only in dst: n/a
+Comparing ~ Time diff between now and oldest snapshot only in dst: n/a
+2026-01-31 22:08:10 [I] Final TSV output file comparing inta/pln/foo vs. bak:inta/pln/foo is: /home/backup/bzfs-logs/2026-01-31/zrun_2026-01-31_22:08:10-ajtqp65j.cmp/inta~pln~foo%int-wk2p2~inta~pln~foo.tsv
+2026-01-31 22:08:10 [I] Log file was: /home/backup/bzfs-logs/2026-01-31/zrun_2026-01-31_22:08:10-ajtqp65j.log
+2026-01-31 22:08:10 [I] Success. Goodbye!
