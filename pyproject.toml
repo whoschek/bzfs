@@ -88,7 +88,7 @@ exclude = ["bzfs_docs", "bash_completion_d", "lab"]
 
 [tool.setuptools.package-data]
 bzfs_main = ["py.typed"]
-bzfs_tests = ["*.json"]
+bzfs_tests = ["*.json", "py.typed"]
 
 [tool.commitizen]  # release mgmt via https://github.com/commitizen-tools/commitizen + https://www.conventionalcommits.org
 name = "cz_conventional_commits"
