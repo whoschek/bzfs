@@ -359,7 +359,7 @@ def all_giveup(handlers: Iterable[Callable[[AttemptOutcome], object | None]]) ->
 #############################################################################
 class RetryableError(Exception):
     """Indicates that the task that caused the underlying exception can be retried and might eventually succeed;
-    ``call_with_retries()`` will pass this exception to callbacks via ``AttemptOutcome.result``."""
+    ``call_with_retries()`` will pass this exception to callbacks via ``AttemptOutcome.result``; can be subclassed."""
 
     def __init__(
         self,
@@ -503,6 +503,8 @@ def full_jitter_backoff_strategy(
 
     Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
     exponential backoff with cap to the next attempt; thread-safe. Typically, min_sleep_nanos is 0 and exponential_base is 2.
+    Example curr_max_sleep_nanos sequence: 125ms --> 250ms --> 500ms --> 1s --> 2s --> 4s --> 8s --> 10s --> 10s...
+    Full-jitter provides optimal balance between reducing server load and minimizing retry latency.
     """
     policy: RetryPolicy = retry.policy
     if policy.min_sleep_nanos == curr_max_sleep_nanos:
@@ -521,6 +523,7 @@ class RetryPolicy:
 
     By default uses full jitter which works as follows: The maximum duration to sleep between retries initially starts with
     ``initial_max_sleep_secs`` and doubles on each retry, up to the final maximum of ``max_sleep_secs``.
+    Example: 125ms --> 250ms --> 500ms --> 1s --> 2s --> 4s --> 8s --> 10s --> 10s...
     On each retry a random sleep duration in the range ``[min_sleep_secs, current max]`` is picked.
     In a nutshell: ``0 <= min_sleep_secs <= initial_max_sleep_secs <= max_sleep_secs``. Typically, min_sleep_secs=0.
     """
@@ -552,8 +555,8 @@ class RetryPolicy:
     backoff_strategy: Callable[[Retry, int, random.Random, int, RetryableError], tuple[int, int]] = dataclasses.field(
         default=full_jitter_backoff_strategy, repr=False  # retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
     )
-    """Strategy that implements a backoff algorithm to reduce resource contention; default is full jitter; various other
-    example backoff strategies can be found in test_retry.py:TestMiscBackoffStrategies."""
+    """Strategy that implements a backoff algorithm that reduces server load while minimizing retry latency; default is full
+    jitter; various other example backoff strategies can be found in test_retry.py:TestMiscBackoffStrategies."""
 
     reraise: bool = True
     """On exhaustion, the default (``True``) is to re-raise the underlying exception when present."""
