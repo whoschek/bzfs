@@ -575,7 +575,7 @@ jobs:
         limactl shell --workdir=/testworkspace mylimavm -- bash -lc './.github-workflow-scripts/install_almalinux_9.sh zfs-2.3'
     - name: Display ZFS version and Python version
       run: |
-        limactl shell mylimavm -- bash -s <<'EOF'
+        limactl shell --workdir=/testworkspace mylimavm -- bash -s <<'EOF'
         set -euo pipefail
         id -u -n
         uname -a
@@ -637,7 +637,7 @@ jobs:
         limactl shell --workdir=/testworkspace mylimavm -- bash -lc './.github-workflow-scripts/install_almalinux_9.sh zfs-2.2'
     - name: Display ZFS version and Python version
       run: |
-        limactl shell mylimavm -- bash -s <<'EOF'
+        limactl shell --workdir=/testworkspace mylimavm -- bash -s <<'EOF'
         set -euo pipefail
         id -u -n
         uname -a
