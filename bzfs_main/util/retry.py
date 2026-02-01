@@ -61,8 +61,8 @@ Observability:
 
 Expert Configuration:
 ---------------------
-- Set ``backoff_strategy(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)`` to plug in a custom backoff
-  algorithm (e.g., decorrelated-jitter). The default is full-jitter exponential backoff with cap (aka industry standard).
+- Set ``RetryPolicy.backoff_strategy(BackoffContext)`` to plug in a custom backoff algorithm (e.g., decorrelated-jitter or
+  retry-after). The default is full-jitter exponential backoff with cap (aka industry standard).
 - Set ``RetryPolicy.max_previous_outcomes > 0`` to pass the N most recent AttemptOutcome objects to callbacks (default is 0).
 - If ``RetryPolicy.max_previous_outcomes > 0``, you can use ``RetryableError(..., attachment=...)`` to carry domain-specific
   state from a failed attempt to the next attempt via ``retry.previous_outcomes``. This pattern helps if attempt N+1 is a
@@ -261,7 +261,7 @@ def call_with_retries(
                 else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
                     rng = _thread_local_rng() if rng is None else rng
                     sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
-                        retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
+                        BackoffContext(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)
                     )
                     assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, sleep_nanos
 
@@ -496,12 +496,49 @@ class AttemptOutcome(NamedTuple):
 
 
 #############################################################################
-BackoffStrategy = Callable[[Retry, int, random.Random, int, RetryableError], tuple[int, int]]  # type alias
+@final
+class BackoffContext(NamedTuple):
+    """Captures per-backoff state for ``backoff_strategy`` callbacks."""
+
+    retry: Retry
+    """Attempt metadata passed into fn(retry)."""
+
+    curr_max_sleep_nanos: int
+    """Current maximum duration (in nanoseconds) to sleep before the next retry attempt;
+    Typically: ``RetryPolicy.initial_max_sleep_nanos <= curr_max_sleep_nanos <= RetryPolicy.max_sleep_nanos``."""
+
+    rng: random.Random
+    """Thread-local random number generator instance."""
+
+    elapsed_nanos: int
+    """Total duration between the start of call_with_retries() invocation and the end of this fn() attempt."""
+
+    retryable_error: RetryableError
+    """Result of failed fn(retry) attempt."""
+
+    def copy(self, **override_kwargs: Any) -> BackoffContext:
+        """Creates a new object copying an existing one with the specified fields overridden for customization."""
+        return self._replace(**override_kwargs)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"retry={self.retry!r}, "
+            f"curr_max_sleep_nanos={self.curr_max_sleep_nanos!r}, "
+            f"elapsed_nanos={self.elapsed_nanos!r})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        return self is other
+
+    def __hash__(self) -> int:
+        return object.__hash__(self)
 
 
-def full_jitter_backoff_strategy(
-    retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
-) -> tuple[int, int]:
+BackoffStrategy = Callable[[BackoffContext], tuple[int, int]]  # typealias; returns sleep_nanos:int, curr_max_sleep_nanos:int
+
+
+def full_jitter_backoff_strategy(context: BackoffContext) -> tuple[int, int]:
     """Default implementation of ``backoff_strategy`` callback for RetryPolicy.
 
     Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
@@ -509,11 +546,12 @@ def full_jitter_backoff_strategy(
     Example curr_max_sleep_nanos sequence: 125ms --> 250ms --> 500ms --> 1s --> 2s --> 4s --> 8s --> 10s --> 10s...
     Full-jitter provides optimal balance between reducing server load and minimizing retry latency.
     """
-    policy: RetryPolicy = retry.policy
+    policy: RetryPolicy = context.retry.policy
+    curr_max_sleep_nanos: int = context.curr_max_sleep_nanos
     if policy.min_sleep_nanos == curr_max_sleep_nanos:
         sleep_nanos = curr_max_sleep_nanos  # perf
     else:
-        sleep_nanos = rng.randint(policy.min_sleep_nanos, curr_max_sleep_nanos)  # nanos to delay until next attempt
+        sleep_nanos = context.rng.randint(policy.min_sleep_nanos, curr_max_sleep_nanos)  # nanos to delay until next attempt
     curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
     curr_max_sleep_nanos = min(curr_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap for next attempt
     return sleep_nanos, curr_max_sleep_nanos
@@ -556,9 +594,7 @@ class RetryPolicy:
     initial_max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
     max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
 
-    backoff_strategy: BackoffStrategy = dataclasses.field(
-        default=full_jitter_backoff_strategy, repr=False  # retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
-    )
+    backoff_strategy: BackoffStrategy = dataclasses.field(default=full_jitter_backoff_strategy, repr=False)
     """Strategy that implements a backoff algorithm that reduces server load while minimizing retry latency; default is full
     jitter; various other example backoff strategies can be found in test_retry.py:TestMiscBackoffStrategies."""
 
