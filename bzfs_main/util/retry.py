@@ -496,6 +496,9 @@ class AttemptOutcome(NamedTuple):
 
 
 #############################################################################
+BackoffStrategy = Callable[[Retry, int, random.Random, int, RetryableError], tuple[int, int]]  # type alias
+
+
 def full_jitter_backoff_strategy(
     retry: Retry, curr_max_sleep_nanos: int, rng: random.Random, elapsed_nanos: int, retryable_error: RetryableError
 ) -> tuple[int, int]:
@@ -516,6 +519,7 @@ def full_jitter_backoff_strategy(
     return sleep_nanos, curr_max_sleep_nanos
 
 
+#############################################################################
 @dataclass(frozen=True)
 @final
 class RetryPolicy:
@@ -552,7 +556,7 @@ class RetryPolicy:
     initial_max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
     max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
 
-    backoff_strategy: Callable[[Retry, int, random.Random, int, RetryableError], tuple[int, int]] = dataclasses.field(
+    backoff_strategy: BackoffStrategy = dataclasses.field(
         default=full_jitter_backoff_strategy, repr=False  # retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error
     )
     """Strategy that implements a backoff algorithm that reduces server load while minimizing retry latency; default is full
