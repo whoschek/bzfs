@@ -563,7 +563,7 @@ def full_jitter_backoff_strategy(context: BackoffContext) -> tuple[int, int]:
 class RetryPolicy:
     """Configuration controlling max retry counts and backoff delays for call_with_retries(); immutable.
 
-    By default uses full jitter which works as follows: The maximum duration to sleep between retries initially starts with
+    By default uses full jitter which works as follows: The maximum duration to sleep between attempts initially starts with
     ``initial_max_sleep_secs`` and doubles on each retry, up to the final maximum of ``max_sleep_secs``.
     Example: 125ms --> 250ms --> 500ms --> 1s --> 2s --> 4s --> 8s --> 10s --> 10s...
     On each retry a random sleep duration in the range ``[min_sleep_secs, current max]`` is picked.
@@ -574,13 +574,14 @@ class RetryPolicy:
     """The maximum number of times ``fn`` will be invoked additionally after the first attempt invocation; must be >= 0."""
 
     min_sleep_secs: float = 0
-    """The minimum duration to sleep between retries."""
+    """The minimum duration to sleep between any two attempts."""
 
     initial_max_sleep_secs: float = 0.125
-    """The initial maximum duration to sleep between retries."""
+    """The initial maximum duration to sleep between any two attempts."""
 
     max_sleep_secs: float = 10
-    """The final max duration to sleep between retries; 0 <= min_sleep_secs <= initial_max_sleep_secs <= max_sleep_secs."""
+    """The final max duration to sleep between any two attempts; 0 <= min_sleep_secs <= initial_max_sleep_secs <=
+    max_sleep_secs."""
 
     max_elapsed_secs: float = 60
     """``fn`` will not be retried (or not retried anymore) once this much time has elapsed since the initial start of

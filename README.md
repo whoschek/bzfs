@@ -1673,12 +1673,11 @@ usage: bzfs [-h] [--recursive]
     this info for post-processing, for example using custom scripts using 'csplit' or duckdb
     analytics queries.
 
-    The --compare-snapshot-lists option also directly logs various summary stats, such as the
-    metadata of the latest common snapshot, latest snapshots and oldest snapshots, as well as the
-    time diff between the latest common snapshot and latest snapshot only in src (and only in
-    dst), as well as how many src snapshots and how many GB of data are missing on dst, etc.
-    Example output:
-    https://github.com/whoschek/bzfs/blob/main/bzfs_docs/compare-snapshot-lists.log
+    The --compare-snapshot-lists option also directly logs [various summary
+    stats](https://github.com/whoschek/bzfs/blob/main/bzfs_docs/compare-snapshot-lists.log), such
+    as the metadata of the latest common snapshot, latest snapshots and oldest snapshots, as well
+    as the time diff between the latest common snapshot and latest snapshot only in src (and only
+    in dst), as well as how many src snapshots and how many GB of data are missing on dst, etc.
 
     *Note*: Consider omitting the 'all' flag to reduce noise and instead focus on missing
     snapshots only, like so: --compare-snapshot-lists=src+dst

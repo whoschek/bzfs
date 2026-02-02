@@ -29,7 +29,6 @@ from logging import (
 )
 from typing import (
     Any,
-    TypeVar,
 )
 from unittest.mock import (
     MagicMock,
@@ -57,8 +56,6 @@ from bzfs_main.util.retry import (
     raise_retryable_error_from,
 )
 
-_T = TypeVar("_T")
-
 
 #############################################################################
 def suite() -> unittest.TestSuite:
@@ -75,26 +72,6 @@ def suite() -> unittest.TestSuite:
         TestTenacityBenchmark,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
-
-
-#############################################################################
-class SequenceRandom:
-    """Deterministic `randint()` provider for backoff strategy tests."""
-
-    def __init__(self, values: list[int]) -> None:
-        self._values = values
-        self._idx = 0
-
-    def randint(self, a: int, b: int) -> int:
-        if a > b:
-            raise AssertionError(f"Invalid randint range: [{a}, {b}]")
-        if self._idx >= len(self._values):
-            raise AssertionError("SequenceRandom exhausted")
-        value = self._values[self._idx]
-        self._idx += 1
-        if not (a <= value <= b):
-            raise AssertionError(f"SequenceRandom value {value} not in [{a}, {b}]")
-        return value
 
 
 #############################################################################

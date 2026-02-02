@@ -59,8 +59,6 @@ from bzfs_main.util.retry import (
     on_exhaustion_raise,
 )
 
-_T = TypeVar("_T")
-
 
 #############################################################################
 def suite() -> unittest.TestSuite:
@@ -72,6 +70,9 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
+_T = TypeVar("_T")
+
+
 async def call_with_retries_async(
     fn: Callable[[Retry], Awaitable[_T]],  # wraps work and raises RetryableError for failures that shall be retried
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
@@ -199,11 +200,11 @@ def decorrelated_jitter_backoff_strategy(context: BackoffContext) -> tuple[int, 
     return sleep_nanos, sleep_nanos
 
 
-def exception_driven_backoff_strategy(sleep_nanos_fn: Callable[[RetryableError], int]) -> BackoffStrategy:
+def exception_driven_backoff_strategy(retry_after: Callable[[RetryableError], int]) -> BackoffStrategy:
     """Returns a strategy whose sleep duration is derived from RetryableError, for example RetryableError.attachment."""
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:
-        sleep_nanos: int = max(0, sleep_nanos_fn(context.retryable_error))
+        sleep_nanos: int = max(0, retry_after(context.retryable_error))
         return sleep_nanos, context.curr_max_sleep_nanos
 
     return _strategy
@@ -378,8 +379,6 @@ class RetryIntegrationExamples(unittest.TestCase):
             call_with_retries,
         )
 
-        _T = TypeVar("_T")
-
         breaker = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=60)
         # pybreaker default semantics: Calls pass through while the circuit is "closed". After fail_max failures, the circuit
         # "opens" and subsequently fails fast with CircuitBreakerError until reset_timeout elapses, at which point a trial
@@ -390,6 +389,8 @@ class RetryIntegrationExamples(unittest.TestCase):
             if retry.count < 100:
                 raise ValueError("temporary failure connecting to foo.example.com")
             return "ok"
+
+        _T = TypeVar("_T")
 
         def circuit_breaker(fn: Callable[[Retry], _T], breaker: pybreaker.CircuitBreaker) -> Callable[[Retry], _T]:
 
@@ -424,7 +425,6 @@ class RetryIntegrationExamples(unittest.TestCase):
 
         limiter = limits.strategies.MovingWindowRateLimiter(limits.storage.MemoryStorage())
         limit = limits.parse("5/second")
-        _T = TypeVar("_T")
 
         def unreliable_operation(retry: Retry) -> str:
             try:
@@ -434,6 +434,8 @@ class RetryIntegrationExamples(unittest.TestCase):
                 return "ok"
             except (TimeoutError, subprocess.CalledProcessError, OSError) as exc:
                 raise RetryableError(display_msg=type(exc).__name__) from exc
+
+        _T = TypeVar("_T")
 
         def rate_limited(
             fn: Callable[[Retry], _T], limiter: limits.strategies.RateLimiter, limit: limits.RateLimitItem, *identifiers: str
