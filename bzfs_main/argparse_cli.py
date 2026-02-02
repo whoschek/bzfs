@@ -363,9 +363,10 @@ prefix 'dst' then no source snapshots are missing on the destination, and no des
 on the source, indicating that the periodic replication and pruning jobs perform as expected. The TSV output is sorted
 by dataset, and by ZFS creation time within each dataset - the first and last line prefixed with 'all' contains the
 metadata of the oldest and latest common snapshot, respectively. The --compare-snapshot-lists option also directly
-logs various summary stats, such as the metadata of the latest common snapshot, latest snapshots and oldest snapshots,
-as well as the time diff between the latest common snapshot and latest snapshot only in src (and only in dst), as well
-as how many src snapshots and how many GB of data are missing on dst, etc.
+logs [various summary stats](https://github.com/whoschek/bzfs/blob/main/bzfs_docs/compare-snapshot-lists.log), such as
+the metadata of the latest common snapshot, latest snapshots and oldest snapshots, as well as the time diff between the
+latest common snapshot and latest snapshot only in src (and only in dst), as well as how many src snapshots and how many
+GB of data are missing on dst, etc.
 
 * Example with further options:
 
