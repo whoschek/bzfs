@@ -1250,6 +1250,39 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertEqual("r2", giveup(outcome))
         self.assertEqual(["h1", "h2"], calls)
 
+    def test_backoff_context_repr_eq_hash(self) -> None:
+        """Validates BackoffContext semantics for __repr__, __eq__ and __hash__."""
+        retry = Retry(
+            count=0,
+            start_time_nanos=123,
+            attempt_start_time_nanos=123,
+            policy=RetryPolicy(max_retries=1),
+            config=RetryConfig(display_msg="a"),
+            log=None,
+            previous_outcomes=(),
+        )
+        err = RetryableError("boom")
+        rng = random.Random(0)
+
+        context_a = BackoffContext(retry, 123, rng, 5, err)
+        context_b = context_a.copy(elapsed_nanos=6)
+        context_c = BackoffContext(retry, 123, rng, 5, err)
+
+        expected = (
+            "BackoffContext(retry=Retry(count=0, start_time_nanos=123, attempt_start_time_nanos=123), "
+            "curr_max_sleep_nanos=123, elapsed_nanos=5)"
+        )
+        self.assertEqual(expected, str(context_a))
+
+        self.assertTrue(context_a is context_a)
+        self.assertTrue(context_a == context_a)
+        self.assertFalse(context_a == context_b)
+        self.assertFalse(context_a == context_c)
+        self.assertEqual(3, len({context_a, context_b, context_c}))
+        self.assertNotEqual(context_a, object())
+        self.assertFalse(context_a == (context_a.retry, context_a.curr_max_sleep_nanos, context_a.elapsed_nanos))
+        self.assertEqual(object.__hash__(context_a), hash(context_a))
+
 
 #############################################################################
 class TestMiscBackoffStrategies(unittest.TestCase):
