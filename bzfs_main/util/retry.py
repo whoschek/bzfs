@@ -596,7 +596,7 @@ class RetryPolicy:
 
     backoff_strategy: BackoffStrategy = dataclasses.field(default=full_jitter_backoff_strategy, repr=False)
     """Strategy that implements a backoff algorithm that reduces server load while minimizing retry latency; default is full
-    jitter; various other example backoff strategies can be found in test_retry.py:TestMiscBackoffStrategies."""
+    jitter; various other example backoff strategies can be found in test_retry_examples.py."""
 
     reraise: bool = True
     """On exhaustion, the default (``True``) is to re-raise the underlying exception when present."""
