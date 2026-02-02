@@ -46,8 +46,8 @@ from bzfs_main.util.parallel_tasktree import (
 )
 from bzfs_main.util.retry import (
     Retry,
-    RetryOptions,
     RetryPolicy,
+    RetryTemplate,
     call_with_retries,
 )
 from bzfs_main.util.utils import (
@@ -74,7 +74,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     task_name: str = "Task",
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
     append_exception: Callable[[BaseException, str, str], None] = lambda ex, task, dataset: None,  # called on nonfatal error
-    retry_options: RetryOptions[bool] = RetryOptions[bool]().copy(policy=RetryPolicy.no_retries()),  # noqa: B008
+    retry_template: RetryTemplate[bool] = RetryTemplate[bool]().copy(policy=RetryPolicy.no_retries()),  # noqa: B008
     dry_run: bool = False,
     is_test_mode: bool = False,
 ) -> bool:  # returns True if any dataset processing failed, False if all succeeded
@@ -106,11 +106,11 @@ def process_datasets_in_parallel_and_fault_tolerant(
         try:
             no_skip = call_with_retries(
                 fn=lambda retry: process_dataset(dataset, tid, retry),
-                policy=retry_options.policy,
-                config=retry_options.config,
-                giveup=retry_options.giveup,
-                after_attempt=retry_options.after_attempt,
-                on_exhaustion=retry_options.on_exhaustion,
+                policy=retry_template.policy,
+                config=retry_template.config,
+                giveup=retry_template.giveup,
+                after_attempt=retry_template.after_attempt,
+                on_exhaustion=retry_template.on_exhaustion,
                 log=log,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:

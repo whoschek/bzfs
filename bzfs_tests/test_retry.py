@@ -48,8 +48,8 @@ from bzfs_main.util.retry import (
     RetryableError,
     RetryConfig,
     RetryError,
-    RetryOptions,
     RetryPolicy,
+    RetryTemplate,
     _sleep,
     after_attempt_log_failure,
     all_giveup,
@@ -71,8 +71,8 @@ def suite() -> unittest.TestSuite:
         TestMiscBackoffStrategies,
         TestRetryPolicyCopy,
         TestRetryConfigCopy,
-        TestRetryOptionsCopy,
-        TestRetryOptionsCall,
+        TestRetryTemplateCopy,
+        TestRetryTemplateCall,
         TestAttemptOutcomeCopy,
         TestCallWithExceptionHandlers,
         TestCallWithRetriesBenchmark,
@@ -1952,11 +1952,11 @@ class TestRetryConfigCopy(unittest.TestCase):
 
 
 #############################################################################
-class TestRetryOptionsCopy(unittest.TestCase):
+class TestRetryTemplateCopy(unittest.TestCase):
 
-    def test_copy_returns_distinct_but_equal_options(self) -> None:
-        """Ensures copy() returns a new RetryOptions instance with identical field values when no overrides are given."""
-        original: RetryOptions = RetryOptions()
+    def test_copy_returns_distinct_but_equal_template(self) -> None:
+        """Ensures copy() returns a new RetryTemplate instance with identical field values when no overrides are given."""
+        original: RetryTemplate = RetryTemplate()
         copied = original.copy()
 
         self.assertIsNot(original, copied)
@@ -1974,7 +1974,7 @@ class TestRetryOptionsCopy(unittest.TestCase):
             _ = outcome.giveup_reason
 
         log = MagicMock(spec=Logger)
-        original: RetryOptions = RetryOptions(
+        original: RetryTemplate = RetryTemplate(
             policy=original_policy,
             config=original_config,
             giveup=giveup,
@@ -1997,16 +1997,16 @@ class TestRetryOptionsCopy(unittest.TestCase):
 
 
 #############################################################################
-class TestRetryOptionsCall(unittest.TestCase):
+class TestRetryTemplateCall(unittest.TestCase):
 
     def test_default_fn_raises_not_implemented_error(self) -> None:
-        options: RetryOptions = RetryOptions()
+        template: RetryTemplate = RetryTemplate()
         with self.assertRaises(NotImplementedError) as ctx:
-            options()
-        self.assertEqual("Provide fn when calling RetryOptions", str(ctx.exception))
+            template()
+        self.assertEqual("Provide fn when calling RetryTemplate", str(ctx.exception))
 
-    def test_retry_options_is_callable_and_runs(self) -> None:
-        """Ensures RetryOptions instances are callable and execute call_with_retries() with their own parameters."""
+    def test_retry_template_is_callable_and_runs(self) -> None:
+        """Ensures RetryTemplate instances are callable and execute call_with_retries() with their own parameters."""
         calls: list[int] = []
 
         def fn(retry: Retry) -> str:
@@ -2023,10 +2023,10 @@ class TestRetryOptionsCall(unittest.TestCase):
         def after_attempt(outcome: AttemptOutcome) -> None:
             after_attempts.append(outcome.is_success)
 
-        options: RetryOptions[str] = RetryOptions(fn=fn, policy=retry_policy, after_attempt=after_attempt, log=None)
+        template: RetryTemplate[str] = RetryTemplate(fn=fn, policy=retry_policy, after_attempt=after_attempt, log=None)
 
-        self.assertTrue(callable(options))
-        self.assertEqual("ok", options())
+        self.assertTrue(callable(template))
+        self.assertEqual("ok", template())
         self.assertEqual([0, 1], calls)
         self.assertEqual([False, True], after_attempts)
 

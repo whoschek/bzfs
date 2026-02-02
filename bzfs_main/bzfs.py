@@ -164,7 +164,7 @@ from bzfs_main.util.retry import (
     Retry,
     RetryableError,
     RetryConfig,
-    RetryOptions,
+    RetryTemplate,
     call_with_retries,
     on_exhaustion_raise,
 )
@@ -258,7 +258,9 @@ class Job(MiniJob):
         self.params: Params
         self.termination_event: Final[threading.Event] = termination_event or threading.Event()
         self.subprocesses: Subprocesses = Subprocesses(termination_event=self.termination_event)
-        self.retry_options: Final[RetryOptions] = RetryOptions(config=RetryConfig(termination_event=self.termination_event))
+        self.retry_template: Final[RetryTemplate] = RetryTemplate(
+            config=RetryConfig(termination_event=self.termination_event)
+        )
         self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: dict[str, DatasetProperties] = {}
@@ -933,7 +935,7 @@ class Job(MiniJob):
                 enable_barriers=False,
                 task_name="--delete-dst-snapshots",
                 append_exception=self.append_exception,
-                retry_options=self.retry_options.copy(policy=p.retry_policy),
+                retry_template=self.retry_template.copy(policy=p.retry_policy),
                 dry_run=p.dry_run,
                 is_test_mode=self.is_test_mode,
             )
@@ -1300,7 +1302,7 @@ class Job(MiniJob):
             enable_barriers=False,
             task_name="Replication",
             append_exception=self.append_exception,
-            retry_options=self.retry_options.copy(policy=p.retry_policy),
+            retry_template=self.retry_template.copy(policy=p.retry_policy),
             dry_run=p.dry_run,
             is_test_mode=self.is_test_mode,
         )
@@ -1732,9 +1734,9 @@ class Job(MiniJob):
         return call_with_retries(
             fn=lambda retry: self.try_ssh_command(*args, **kwargs),
             policy=p.retry_policy,
-            config=self.retry_options.config,
-            giveup=self.retry_options.giveup,
-            after_attempt=self.retry_options.after_attempt,
+            config=self.retry_template.config,
+            giveup=self.retry_template.giveup,
+            after_attempt=self.retry_template.after_attempt,
             on_exhaustion=on_exhaustion_raise,
             log=p.log,
         )
@@ -1745,9 +1747,9 @@ class Job(MiniJob):
         return call_with_retries(
             fn=lambda retry: self.run_ssh_command(*args, **kwargs),
             policy=p.retry_policy,
-            config=self.retry_options.config,
-            giveup=self.retry_options.giveup,
-            after_attempt=self.retry_options.after_attempt,
+            config=self.retry_template.config,
+            giveup=self.retry_template.giveup,
+            after_attempt=self.retry_template.after_attempt,
             on_exhaustion=on_exhaustion_raise,
             log=p.log,
         )

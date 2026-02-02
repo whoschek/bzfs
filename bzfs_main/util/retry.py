@@ -67,9 +67,9 @@ Expert Configuration:
 - If ``RetryPolicy.max_previous_outcomes > 0``, you can use ``RetryableError(..., attachment=...)`` to carry domain-specific
   state from a failed attempt to the next attempt via ``retry.previous_outcomes``. This pattern helps if attempt N+1 is a
   function of attempt N or all prior attempts (e.g., switching endpoints or resuming from an offset).
-- Use ``RetryOptions`` as a 'bag of knobs' configuration template for functions that shall be retried in similar ways.
+- Use ``RetryTemplate`` as a 'bag of knobs' configuration template for functions that shall be retried in similar ways.
 - Or package up all knobs plus a ``fn(retry: Retry)`` function into a self-contained auto-retrying higher level function by
-  constructing a ``RetryOptions`` object (which is a ``Callable`` function itself).
+  constructing a ``RetryTemplate`` object (which is a ``Callable`` function itself).
 - To keep calling code retry-transparent, set ``RetryPolicy.reraise=True`` (the default) *and* raise retryable failures as
   ``raise RetryableError(...) from exc``. Client code now won't notice whether call_with_retries is used or not.
 - To make exhaustion observable to calling code, set ``RetryPolicy.reraise=False``: by default call_with_retries() now always
@@ -714,16 +714,16 @@ _DEFAULT_RETRY_CONFIG: Final[RetryConfig] = RetryConfig()  # constant
 
 #############################################################################
 def _fn_not_implemented(_retry: Retry) -> NoReturn:
-    """Default implementation of ``fn`` callback for RetryOptions; always raises."""
-    raise NotImplementedError("Provide fn when calling RetryOptions")
+    """Default implementation of ``fn`` callback for RetryTemplate; always raises."""
+    raise NotImplementedError("Provide fn when calling RetryTemplate")
 
 
 @dataclass(frozen=True)
 @final
-class RetryOptions(Generic[_T]):
+class RetryTemplate(Generic[_T]):
     """Convenience class that aggregates all knobs for call_with_retries(); and is itself callable too; immutable."""
 
-    fn: Callable[[Retry], _T] = _fn_not_implemented  # set this to make the RetryOptions object itself callable
+    fn: Callable[[Retry], _T] = _fn_not_implemented  # set this to make the RetryTemplate object itself callable
     policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
     config: RetryConfig = RetryConfig()  # controls logging settings and async cancellation between attempts
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic
@@ -731,17 +731,17 @@ class RetryOptions(Generic[_T]):
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise  # raise error or return fallback value
     log: logging.Logger | None = None
 
-    def copy(self, **override_kwargs: Any) -> RetryOptions[_T]:
+    def copy(self, **override_kwargs: Any) -> RetryTemplate[_T]:
         """Creates a new object copying an existing one with the specified fields overridden for customization; thread-safe.
 
-        Example usage: retry_options.copy(policy=policy.copy(max_sleep_secs=2, max_elapsed_secs=10), log=None)
+        Example usage: retry_template.copy(policy=policy.copy(max_sleep_secs=2, max_elapsed_secs=10), log=None)
         """
         return dataclasses.replace(self, **override_kwargs)
 
     def __call__(self) -> _T:
         """Executes ``self.fn`` via the call_with_retries() retry loop using the stored parameters; thread-safe.
 
-        Example Usage: result: str = retry_options.copy(fn=...)()
+        Example Usage: result: str = retry_template.copy(fn=...)()
         """
         return call_with_retries(
             fn=self.fn,

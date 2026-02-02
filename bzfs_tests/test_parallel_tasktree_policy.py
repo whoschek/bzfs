@@ -42,8 +42,8 @@ from bzfs_main.util.parallel_tasktree_policy import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
 from bzfs_main.util.retry import (
-    RetryOptions,
     RetryPolicy,
+    RetryTemplate,
 )
 from bzfs_tests.tools import (
     stop_on_failure_subtest,
@@ -107,7 +107,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                 src_datasets = ["a1", "a1/b1", "a2"]
                 if i > 0:
                     self.log.isEnabledFor.side_effect = lambda level: level >= logging.DEBUG
-                    self.default_kwargs["retry_options"] = RetryOptions[bool]().copy(policy=RetryPolicy.no_retries())
+                    self.default_kwargs["retry_template"] = RetryTemplate[bool]().copy(policy=RetryPolicy.no_retries())
                 failed = process_datasets_in_parallel_and_fault_tolerant(
                     datasets=src_datasets,
                     process_dataset=submit_no_skiptree,  # lambda
