@@ -1719,6 +1719,105 @@ class TestMiscBackoffStrategies(unittest.TestCase):
 
 
 #############################################################################
+class RetryIntegrationExamples(unittest.TestCase):
+    def demo_circuit_breaker(self) -> None:
+        """Demonstrates how to integrate a circuit breaker."""
+
+        import subprocess
+        from typing import (
+            TypeVar,
+            cast,
+        )
+
+        import pybreaker  # optional third-party ``pybreaker`` circuit breakers; see https://github.com/danielfm/pybreaker
+
+        from bzfs_main.util.retry import (
+            RetryableError,
+            RetryPolicy,
+            call_with_retries,
+        )
+
+        _T = TypeVar("_T")
+
+        breaker = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=60)
+        # pybreaker default semantics: Calls pass through while the circuit is "closed". After fail_max failures, the circuit
+        # "opens" and subsequently fails fast with CircuitBreakerError until reset_timeout elapses, at which point a trial
+        # call is allowed to either close or re-open the circuit.
+
+        def unreliable_operation(retry: Retry) -> str:
+            # return run_some_ssh_cmd(retry)  # may raise TimeoutError, CalledProcessError, etc.
+            if retry.count < 100:
+                raise ValueError("temporary failure connecting to foo.example.com")
+            return "ok"
+
+        def circuit_breaker(fn: Callable[[Retry], _T], breaker: pybreaker.CircuitBreaker) -> Callable[[Retry], _T]:
+
+            def _fn(retry: Retry) -> _T:
+                try:
+                    return cast(_T, breaker.call(fn, retry))
+                except pybreaker.CircuitBreakerError as exc:
+                    raise RetryableError(display_msg="circuit breaker open") from exc
+                except (TimeoutError, subprocess.CalledProcessError, OSError) as exc:
+                    raise RetryableError(display_msg=type(exc).__name__) from exc
+
+            return _fn
+
+        retry_policy = RetryPolicy(max_sleep_secs=60, max_elapsed_secs=600)
+        log = logging.getLogger(__name__)
+        _result: str = call_with_retries(fn=circuit_breaker(unreliable_operation, breaker), policy=retry_policy, log=log)
+
+    def demo_rate_limits_and_retry_after(self) -> None:
+        """Demonstrates how to integrate rate limits and honoring a Retry-After delay."""
+        import subprocess
+        from typing import (
+            TypeVar,
+        )
+
+        import limits  # optional third-party ``limits`` library for rate limiting; see https://github.com/alisaifee/limits
+
+        from bzfs_main.util.retry import (
+            RetryableError,
+            RetryPolicy,
+            call_with_retries,
+        )
+
+        limiter = limits.strategies.MovingWindowRateLimiter(limits.storage.MemoryStorage())
+        limit = limits.parse("5/second")
+        _T = TypeVar("_T")
+
+        def unreliable_operation(retry: Retry) -> str:
+            try:
+                # return run_some_ssh_cmd(retry)  # may raise TimeoutError, CalledProcessError, etc.
+                if retry.count < 100:
+                    raise ValueError("temporary failure connecting to foo.example.com")
+                return "ok"
+            except (TimeoutError, subprocess.CalledProcessError, OSError) as exc:
+                raise RetryableError(display_msg=type(exc).__name__) from exc
+
+        def rate_limited(
+            fn: Callable[[Retry], _T], limiter: limits.strategies.RateLimiter, limit: limits.RateLimitItem, *identifiers: str
+        ) -> Callable[[Retry], _T]:
+            def _fn(retry: Retry) -> _T:
+                if limiter.test(limit, *identifiers) and limiter.hit(limit, *identifiers):
+                    return fn(retry)  # rate limit not yet reached
+                window = limiter.get_window_stats(limit, *identifiers)
+                retry_after_nanos = int(1_000_000_000 * (window.reset_time - time.time()))  # relative delay in nanoseconds
+                retryable_error = RetryableError(display_msg="rate limited")
+                setattr(retryable_error, "retry_after_nanos", retry_after_nanos)  # noqa: B010
+                raise retryable_error
+
+            return _fn
+
+        retry_policy = RetryPolicy(
+            max_elapsed_secs=600, backoff_strategy=TestMiscBackoffStrategies().retry_after_or_fallback_strategy()
+        )
+        _result: str = call_with_retries(
+            fn=rate_limited(unreliable_operation, limiter, limit, "ssh", "host1.example.com"),
+            policy=retry_policy,
+        )
+
+
+#############################################################################
 class TestRetryPolicyCopy(unittest.TestCase):
 
     def test_copy_returns_distinct_but_equal_policy(self) -> None:
