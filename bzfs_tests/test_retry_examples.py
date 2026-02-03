@@ -34,6 +34,7 @@ from typing import (
     Callable,
     Final,
     TypeVar,
+    cast,
 )
 from unittest.mock import (
     AsyncMock,
@@ -224,6 +225,8 @@ def retry_after_or_fallback_strategy(
     [0, max_jitter_nanos] as jitter. honor_max_elapsed_secs clamps the final result.
 
     Interprets RetryableError.retry_after_nanos as a relative sleep duration (in nanoseconds) before the next attempt.
+
+    For example, this can be used to handle the Retry-After header of HTTP 429 "Too Many Requests" responses.
     """
     max_jitter_nanos = max(0, max_jitter_nanos)
 
@@ -280,6 +283,34 @@ def retry_after_backoff_strategy(
     return _strategy
 
 
+def jitter_backoff_strategy(
+    delegate: BackoffStrategy = full_jitter_backoff_strategy,
+    *,
+    max_jitter_nanos: int = 0,
+) -> BackoffStrategy:
+    """Returns a BackoffStrategy that adds random jitter to another strategy."""
+    max_jitter_nanos = max(0, max_jitter_nanos)
+
+    def _strategy(context: BackoffContext) -> tuple[int, int]:
+        sleep_nanos, curr_max_sleep_nanos = delegate(context)
+        sleep_nanos += context.rng.randint(0, max_jitter_nanos)
+        return sleep_nanos, curr_max_sleep_nanos
+
+    return _strategy
+
+
+def max_elapsed_backoff_strategy(delegate: BackoffStrategy = full_jitter_backoff_strategy) -> BackoffStrategy:
+    """Returns a BackoffStrategy that delegates to another strategy, and honors retry.policy.max_elapsed_secs."""
+
+    def _strategy(context: BackoffContext) -> tuple[int, int]:
+        sleep_nanos, curr_max_sleep_nanos = delegate(context)
+        remaining_nanos: int = max(0, context.retry.policy.max_elapsed_nanos - context.elapsed_nanos)
+        sleep_nanos = min(sleep_nanos, remaining_nanos)
+        return sleep_nanos, curr_max_sleep_nanos
+
+    return _strategy
+
+
 def random_backoff_strategy(context: BackoffContext) -> tuple[int, int]:
     policy: RetryPolicy = context.retry.policy
     sleep_nanos: int = context.rng.randint(policy.min_sleep_nanos, policy.max_sleep_nanos)
@@ -293,18 +324,6 @@ def no_jitter_exponential_backoff_strategy(context: BackoffContext) -> tuple[int
     curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
     curr_max_sleep_nanos = min(curr_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap for next attempt
     return sleep_nanos, curr_max_sleep_nanos
-
-
-def max_elapsed_backoff_strategy(delegate: BackoffStrategy = full_jitter_backoff_strategy) -> BackoffStrategy:
-    """Returns a backoff_strategy that delegates to another strategy, and honors retry.policy.max_elapsed_secs."""
-
-    def _strategy(context: BackoffContext) -> tuple[int, int]:
-        sleep_nanos, curr_max_sleep_nanos = delegate(context)
-        remaining_nanos: int = max(0, context.retry.policy.max_elapsed_nanos - context.elapsed_nanos)
-        sleep_nanos = min(sleep_nanos, remaining_nanos)
-        return sleep_nanos, curr_max_sleep_nanos
-
-    return _strategy
 
 
 def fixed_backoff_strategy(sleep_nanos: int) -> BackoffStrategy:
@@ -333,7 +352,7 @@ def linear_backoff_strategy(
 
 
 def chained_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffStrategy:
-    """Returns a strategy that walks a list of other strategies by retry count, then sticks to the last strategy."""
+    """Returns a BackoffStrategy that walks a list of other strategies by retry count, then sticks to the last strategy."""
     strategies = tuple(strategies)
     if not strategies:
         raise ValueError("chained_backoff_strategy requires at least one strategy")
@@ -346,7 +365,7 @@ def chained_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffSt
 
 
 def sum_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffStrategy:
-    """Returns a strategy that sums the sleeps of multiple other strategies."""
+    """Returns a BackoffStrategy that sums the sleeps of multiple other strategies."""
     strategies = tuple(strategies)
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:
@@ -735,6 +754,32 @@ class TestMiscBackoffStrategies(unittest.TestCase):
                 self.assertIs(rng, delegate_context.rng)
                 self.assertEqual(elapsed_nanos, delegate_context.elapsed_nanos)
                 self.assertIs(err, delegate_context.retryable_error)
+
+    def test_jitter_backoff_strategy_adds_jitter_and_preserves_curr_max_sleep_nanos(self) -> None:
+        policy = RetryPolicy(max_retries=0, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=10)
+        retry = Retry(
+            count=0,
+            start_time_nanos=0,
+            attempt_start_time_nanos=0,
+            policy=policy,
+            config=RetryConfig(),
+            log=None,
+            previous_outcomes=(),
+        )
+        err = RetryableError("fail")
+
+        for max_jitter_nanos, expected_jitter_nanos in [(10, 7), (-5, 0)]:
+            with self.subTest(max_jitter_nanos=max_jitter_nanos):
+                rng = cast(random.Random, SequenceRandom([expected_jitter_nanos]))
+                delegate = MagicMock(return_value=(100, 222))
+                backoff_strategy: BackoffStrategy = jitter_backoff_strategy(
+                    delegate=delegate, max_jitter_nanos=max_jitter_nanos
+                )
+                context = BackoffContext(retry, 123, rng, 0, err)
+                sleep_nanos, next_curr_max = backoff_strategy(context)
+                self.assertEqual(100 + expected_jitter_nanos, sleep_nanos)
+                self.assertEqual(222, next_curr_max)
+                delegate.assert_called_once_with(context)
 
     def test_honor_max_elapsed_backoff_strategy_clamps_sleep_to_remaining_time_budget(self) -> None:
         policy = RetryPolicy(
