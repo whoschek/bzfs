@@ -611,7 +611,7 @@ class RetryPolicy:
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> RetryPolicy:
         """Factory that reads the policy from argparse.ArgumentParser via args."""
-        return RetryPolicy(
+        return cls(
             max_retries=getattr(args, "max_retries", INFINITY_MAX_RETRIES),
             min_sleep_secs=getattr(args, "retry_min_sleep_secs", 0),
             initial_max_sleep_secs=getattr(args, "retry_initial_max_sleep_secs", 0.125),
@@ -627,7 +627,7 @@ class RetryPolicy:
     @classmethod
     def no_retries(cls) -> RetryPolicy:
         """Returns a policy that never retries."""
-        return RetryPolicy(
+        return cls(
             max_retries=0,
             min_sleep_secs=0,
             initial_max_sleep_secs=0,
@@ -654,13 +654,13 @@ class RetryPolicy:
         self._validate_min("max_previous_outcomes", self.max_previous_outcomes, 0)
         assert 0 <= self.min_sleep_nanos <= self.initial_max_sleep_nanos <= self.max_sleep_nanos
         if not callable(self.backoff_strategy):
-            raise TypeError("RetryPolicy.backoff_strategy must be callable")
+            raise TypeError(f"{type(self).__name__}.backoff_strategy must be callable")
         if not isinstance(self.reraise, bool):
-            raise TypeError("RetryPolicy.reraise must be bool")
+            raise TypeError(f"{type(self).__name__}.reraise must be bool")
 
-    def _validate_min(self, name: str, value: float, minimum: float) -> None:
+    def _validate_min(self, attr_name: str, value: float, minimum: float) -> None:
         if value < minimum:
-            raise ValueError(f"Invalid RetryPolicy.{name}: must be >= {minimum} but got {value}")
+            raise ValueError(f"Invalid {type(self).__name__}.{attr_name}: must be >= {minimum} but got {value}")
 
     def copy(self, **override_kwargs: Any) -> RetryPolicy:
         """Creates a new policy copying an existing one with the specified fields overridden for customization; thread-safe.
