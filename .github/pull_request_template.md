@@ -26,4 +26,5 @@
 - [ ] `bzfs_test_mode='' ./test.sh` integration tests passed.
 - [ ] I have updated the documentation accordingly.
 - [ ] I have read the [**contributing** document](https://github.com/whoschek/bzfs/blob/main/CONTRIBUTING.md).
-- [ ] All commit messages are properly formatted and contain Signed-off-by.
+- [ ] All commit messages are
+  [properly formatted and contain Signed-off-by](https://github.com/whoschek/bzfs/blob/main/AGENTS.md#commit-workflow).
