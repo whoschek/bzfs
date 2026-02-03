@@ -264,8 +264,8 @@ Before committing any changes, you MUST follow this exact sequence:
 - **Add High-Value Tests:** Focus on adding meaningful tests for critical logic, happy path, edge cases, error paths and
   invariants. Tests should be specific, readable, robust (not flaky), thread-safe and deterministic.
 - **Fit In:** New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
-  `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in
-  the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
+  `bzfs_tests/itest/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included
+  in the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
 - **Place Expected before Actual value:** When calling unittest `assert*Equal()` methods, ensure that the *first*
   argument is the *expected* value, and the *second* argument is the *actual* value, not the other way round.
 

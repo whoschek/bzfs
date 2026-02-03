@@ -425,12 +425,15 @@ class RetryIntegrationExamples(unittest.TestCase):
 
         limiter = limits.strategies.MovingWindowRateLimiter(limits.storage.MemoryStorage())
         limit = limits.parse("5/second")
+        # ``limits`` library default semantics of moving-window algorithm: each key tracks timestamped hits and allows at
+        # most 5 hits per 1-second window. The limiter rejects a hit when the Nth most-recent entry is still within the
+        # window (i.e., it would exceed the limit).
 
         def unreliable_operation(retry: Retry) -> str:
             try:
                 # return run_some_ssh_cmd(retry)  # may raise TimeoutError, CalledProcessError, etc.
                 if retry.count < 100:
-                    raise ValueError("temporary failure connecting to foo.example.com")
+                    raise OSError("temporary failure connecting to foo.example.com")
                 return "ok"
             except (TimeoutError, subprocess.CalledProcessError, OSError) as exc:
                 raise RetryableError(display_msg=type(exc).__name__) from exc
