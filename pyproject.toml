@@ -347,7 +347,7 @@ python-version = "3.9"
 project-excludes = ["bzfs_tests/bzfs_job_example.py", "**/.venv/**"]
 
 [tool.codespell]  # Auto-fix typos
-skip = "bzfs_tests/test_*.py,venv*,dist*,*.egg-info*,htmlcov*"
+skip = "bzfs_tests/*.py,bzfs_tests/itest/*.py,venv*,dist*,*.egg-info*,htmlcov*"
 write-changes = true                      # let pre-commit make changes to files instead of printing diffs
 interactive = 0                           # no interactivity on making changes to files
 ignore-words-list = [                     # project-specific words that should not be treated as typos

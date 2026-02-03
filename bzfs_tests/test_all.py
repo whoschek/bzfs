@@ -86,7 +86,7 @@ def main() -> None:
     test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing
     is_unit_test = test_mode == "unit"  # run only unit tests (skip integration tests)
     if not is_unit_test:
-        from bzfs_tests import (
+        from bzfs_tests.itest import (
             test_integrations,
         )
 
