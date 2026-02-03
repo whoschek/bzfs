@@ -1430,6 +1430,20 @@ class TestRetryTemplateCall(unittest.TestCase):
         self.assertEqual([0, 1], calls)
         self.assertEqual([False, True], after_attempts)
 
+        retrying: RetryTemplate = RetryTemplate(policy=retry_policy, after_attempt=after_attempt, log=None)
+
+        def _fn(retry: Retry) -> str:
+            return "hello"
+
+        actual1: str = retrying.copy(fn=_fn)()
+        self.assertEqual("hello", actual1)
+
+        actual2: str = retrying.call_with_retries(_fn)
+        self.assertEqual("hello", actual2)
+
+        self.assertIsNotNone(str(retrying))
+        self.assertNotEqual("", str(retrying))
+
 
 #############################################################################
 class TestAttemptOutcomeCopy(unittest.TestCase):

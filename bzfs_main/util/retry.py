@@ -744,8 +744,15 @@ class RetryTemplate(Generic[_T]):
 
         Example Usage: result: str = retry_template.copy(fn=...)()
         """
+        return self.call_with_retries(self.fn)
+
+    def call_with_retries(self, fn: Callable[[Retry], _T]) -> _T:
+        """Executes ``fn`` via the call_with_retries() retry loop using the stored parameters; thread-safe.
+
+        Example Usage: result: str = retry_template.call_with_retries(fn=...)
+        """
         return call_with_retries(
-            fn=self.fn,
+            fn=fn,
             policy=self.policy,
             config=self.config,
             giveup=self.giveup,
