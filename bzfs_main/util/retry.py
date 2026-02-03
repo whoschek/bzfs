@@ -610,7 +610,7 @@ class RetryPolicy:
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> RetryPolicy:
-        """Factory that reads the policy from ArgumentParser via args."""
+        """Factory that reads the policy from argparse.ArgumentParser via args."""
         return RetryPolicy(
             max_retries=getattr(args, "max_retries", INFINITY_MAX_RETRIES),
             min_sleep_secs=getattr(args, "retry_min_sleep_secs", 0),
@@ -744,21 +744,39 @@ class RetryTemplate(Generic[_T]):
 
         Example Usage: result: str = retry_template.copy(fn=...)()
         """
-        return self.call_with_retries(self.fn)
-
-    def call_with_retries(self, fn: Callable[[Retry], _T]) -> _T:
-        """Executes ``fn`` via the call_with_retries() retry loop using the stored parameters; thread-safe.
-
-        Example Usage: result: str = retry_template.call_with_retries(fn=...)
-        """
         return call_with_retries(
-            fn=fn,
+            fn=self.fn,
             policy=self.policy,
             config=self.config,
             giveup=self.giveup,
             after_attempt=self.after_attempt,
             on_exhaustion=self.on_exhaustion,
             log=self.log,
+        )
+
+    def call_with_retries(
+        self,
+        fn: Callable[[Retry], _T],
+        policy: RetryPolicy | None = None,
+        *,
+        config: RetryConfig | None = None,
+        giveup: Callable[[AttemptOutcome], object | None] | None = None,
+        after_attempt: Callable[[AttemptOutcome], None] | None = None,
+        on_exhaustion: Callable[[AttemptOutcome], _T] | None = None,
+        log: logging.Logger | None = None,
+    ) -> _T:
+        """Executes ``fn`` via the call_with_retries() retry loop using the stored or overridden parameters; thread-safe.
+
+        Example Usage: result: str = retry_template.call_with_retries(fn=...)
+        """
+        return call_with_retries(
+            fn=fn,
+            policy=self.policy if policy is None else policy,
+            config=self.config if config is None else config,
+            giveup=self.giveup if giveup is None else giveup,
+            after_attempt=self.after_attempt if after_attempt is None else after_attempt,
+            on_exhaustion=self.on_exhaustion if on_exhaustion is None else on_exhaustion,
+            log=self.log if log is None else log,
         )
 
 

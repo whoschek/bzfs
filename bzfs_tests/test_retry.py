@@ -1441,6 +1441,12 @@ class TestRetryTemplateCall(unittest.TestCase):
         actual2: str = retrying.call_with_retries(_fn)
         self.assertEqual("hello", actual2)
 
+        actual3: str = retrying.call_with_retries(_fn, policy=retrying.policy)
+        self.assertEqual("hello", actual3)
+
+        actual4: str = retrying.call_with_retries(_fn, policy=None)
+        self.assertEqual("hello", actual4)
+
         self.assertIsNotNone(str(retrying))
         self.assertNotEqual("", str(retrying))
 
