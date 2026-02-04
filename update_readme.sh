@@ -16,6 +16,7 @@ else
     pip install -e '.[dev]'
 fi
 
+export NO_COLOR=1  # don't add color codes to generated man pages
 python3 -m bzfs_docs.update_readme bzfs_main.bzfs README.md
 python3 -m bzfs_docs.update_readme bzfs_main.bzfs_jobrunner README_bzfs_jobrunner.md
 python3 -m bash_completion_d.shell_completion_generator > ./bash_completion_d/bzfs-shell-completion
