@@ -13,7 +13,7 @@
 # limitations under the License.
 #
 """Examples demonstrating use of call_with_retries(), including call_with_retries_async(), backoff strategies, integration
-with circuit breakers, rate limiting and retry-after, etc."""
+with circuit breakers, rate limiting and retry-after, Prometheus metrics, etc."""
 
 from __future__ import (
     annotations,
@@ -478,6 +478,162 @@ class RetryIntegrationExamples(unittest.TestCase):
             fn=rate_limited(unreliable_operation, limiter, limit, "ssh", "host1.example.com"),
             policy=retry_policy,
         )
+
+    def demo_prometheus_metrics(self) -> None:
+        """Demonstrates collecting retry latency/failure metrics via an `after_attempt` Prometheus textfile exporter."""
+
+        import prometheus_client  # optional third-party library; see https://github.com/prometheus/client_python
+
+        from bzfs_main.util.retry import (
+            RetryableError,
+            RetryPolicy,
+            call_with_retries,
+            multi_after_attempt,
+        )
+
+        # Production services typically expose metrics to Prometheus via either an HTTP /metrics endpoint, or by writing a
+        # `.prom` file for the node_exporter textfile collector. This example uses the textfile approach.
+        registry = prometheus_client.CollectorRegistry()
+        service: Final[str] = "widgets-api"
+        method: Final[str] = "GET"
+        route: Final[str] = "/v1/widgets/{id}"  # keep low-cardinality labels; avoid full URLs / user ids
+
+        call_outcomes_total = prometheus_client.Counter(
+            "web_client_call_outcomes_total",
+            "Number of calls, labeled by outcome (success/exhausted/giveup/terminated).",
+            ["service", "method", "route", "outcome"],
+            registry=registry,
+        )
+        call_duration_seconds = prometheus_client.Histogram(
+            "web_client_call_duration_seconds",
+            "Total time spent in call_with_retries() until final outcome.",
+            ["service", "method", "route", "outcome"],
+            # Typical production-ish latency buckets (seconds).
+            buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+            registry=registry,
+        )
+        retries_per_call = prometheus_client.Histogram(
+            "web_client_retries_per_call",
+            "Retries per call_with_retries() invocation (retry.count on final attempt).",
+            ["service", "method", "route", "outcome"],
+            buckets=(0, 1, 2, 3, 4, 5, 8, 13),
+            registry=registry,
+        )
+
+        attempt_outcomes_total = prometheus_client.Counter(
+            "web_client_attempt_outcomes_total",
+            "Number of attempts (fn(retry) calls), labeled by outcome.",
+            ["service", "method", "route", "outcome"],
+            registry=registry,
+        )
+        attempt_duration_seconds = prometheus_client.Histogram(
+            "web_client_attempt_duration_seconds",
+            "Time spent in a single fn(retry) attempt.",
+            ["service", "method", "route", "outcome"],
+            buckets=(0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
+            registry=registry,
+        )
+        backoff_sleep_seconds = prometheus_client.Histogram(
+            "web_client_backoff_sleep_seconds",
+            "Backoff sleep duration between attempts (0 on non-sleeping outcomes).",
+            ["service", "method", "route"],
+            buckets=(0.0, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0),
+            registry=registry,
+        )
+        retryable_errors_total = prometheus_client.Counter(
+            "web_client_retryable_errors_total",
+            "Retryable failures by error type (keep low-cardinality).",
+            ["service", "method", "route", "error_type"],
+            registry=registry,
+        )
+
+        labels: dict[str, str] = {"service": service, "method": method, "route": route}
+
+        # In production you'd usually export periodically from a background task/thread, but this example keeps everything
+        # within `after_attempt` for simplicity.
+        prom_path: str = "/var/lib/node_exporter/textfile_collector/web_client_retry.prom"
+        export_interval_nanos: int = 5 * 1_000_000_000
+        last_export_time_nanos: int = 0
+
+        def after_attempt_prometheus(outcome: AttemptOutcome) -> None:
+            nonlocal last_export_time_nanos
+
+            # Outcome labels:
+            # - per-attempt: success / retryable_error / exhausted / giveup / terminated
+            # - per-call (final only): success / exhausted / giveup / terminated
+            attempt_outcome_label: str
+            if outcome.is_success:
+                attempt_outcome_label = "success"
+            elif outcome.is_exhausted:
+                if outcome.is_terminated:
+                    attempt_outcome_label = "terminated"
+                elif outcome.giveup_reason is not None:
+                    attempt_outcome_label = "giveup"
+                else:
+                    attempt_outcome_label = "exhausted"
+            else:
+                attempt_outcome_label = "retryable_error"
+
+            attempt_outcomes_total.labels(**labels, outcome=attempt_outcome_label).inc()
+            attempt_duration_seconds.labels(**labels, outcome=attempt_outcome_label).observe(
+                outcome.attempt_elapsed_nanos() / 1_000_000_000
+            )
+            backoff_sleep_seconds.labels(**labels).observe(outcome.sleep_nanos / 1_000_000_000)
+
+            if not outcome.is_success:
+                assert isinstance(outcome.result, RetryableError)
+                retryable_error: RetryableError = outcome.result
+                cause: BaseException | None = retryable_error.__cause__
+                error_type: str = type(cause).__name__ if cause is not None else type(retryable_error).__name__
+                retryable_errors_total.labels(**labels, error_type=error_type).inc()
+
+            if outcome.is_success or outcome.is_exhausted:
+                call_outcome_label: str
+                if outcome.is_success:
+                    call_outcome_label = "success"
+                elif outcome.is_terminated:
+                    call_outcome_label = "terminated"
+                elif outcome.giveup_reason is not None:
+                    call_outcome_label = "giveup"
+                else:
+                    call_outcome_label = "exhausted"
+                call_outcomes_total.labels(**labels, outcome=call_outcome_label).inc()
+                call_duration_seconds.labels(**labels, outcome=call_outcome_label).observe(
+                    outcome.elapsed_nanos / 1_000_000_000
+                )
+                retries_per_call.labels(**labels, outcome=call_outcome_label).observe(outcome.retry.count)
+
+            now_nanos: int = time.monotonic_ns()
+            if now_nanos - last_export_time_nanos >= export_interval_nanos:
+                last_export_time_nanos = now_nanos
+                # Export metrics in Prometheus text exposition format for the node_exporter textfile collector
+                prometheus_client.exposition.write_to_textfile(prom_path, registry)
+
+        def web_call(retry: Retry) -> str:
+            """Executes a single outbound request attempt; maps transient errors into RetryableError for retry."""
+            import http.client
+            import socket
+
+            try:
+                # Example only:
+                # status_code, body = http_get("https://widgets.example.com/v1/widgets/123", timeout=..., headers=...)
+                if retry.count < 2:
+                    raise socket.timeout("upstream timed out")
+                return "ok"
+            except (socket.timeout, TimeoutError, http.client.HTTPException, OSError) as exc:
+                # Keep the display_msg low-cardinality; use it for logs, not as a metric label.
+                raise RetryableError(display_msg=type(exc).__name__) from exc
+
+        retry_policy = RetryPolicy(
+            max_retries=5,
+            min_sleep_secs=0.05,
+            initial_max_sleep_secs=0.05,
+            max_sleep_secs=1,
+            max_elapsed_secs=10,
+        )
+        after_attempt = multi_after_attempt([after_attempt_log_failure, after_attempt_prometheus])
+        log = logging.getLogger(__name__)
+        _result: str = call_with_retries(fn=web_call, policy=retry_policy, after_attempt=after_attempt, log=log)
 
 
 #############################################################################
