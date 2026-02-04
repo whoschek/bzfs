@@ -218,7 +218,7 @@ def call_with_retries(
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
-    log: logging.Logger | None = None,
+    log: logging.Logger | None = None,  # set this to ``None`` to disable logging
 ) -> _T:
     """Runs the function ``fn`` and returns its result; retries on failure as indicated by policy and config; thread-safe.
 
@@ -729,7 +729,7 @@ def _make_null_logger() -> logging.Logger:
     return logger
 
 
-NO_LOGGER: Final[logging.Logger] = _make_null_logger()
+NO_LOGGER: Final[logging.Logger] = _make_null_logger()  # constant
 _R = TypeVar("_R")
 
 
@@ -744,7 +744,7 @@ class RetryTemplate(Generic[_T]):
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise  # raise error or return fallback value
-    log: logging.Logger | None = None
+    log: logging.Logger | None = None  # set this to ``None`` to disable logging
 
     def copy(self, **override_kwargs: Any) -> RetryTemplate[_T]:
         """Creates a new object copying an existing one with the specified fields overridden for customization; thread-safe.
@@ -777,7 +777,7 @@ class RetryTemplate(Generic[_T]):
         giveup: Callable[[AttemptOutcome], object | None] | None = None,
         after_attempt: Callable[[AttemptOutcome], None] | None = None,
         on_exhaustion: Callable[[AttemptOutcome], _R] | None = None,
-        log: logging.Logger | None = None,
+        log: logging.Logger | None = None,  # pass NO_LOGGER to override template logger and disable logging for this call
     ) -> _R:
         """Executes ``fn`` via the call_with_retries() retry loop using the stored or overridden parameters; thread-safe.
 
@@ -818,7 +818,7 @@ ExceptionPredicate = Union[bool, Callable[[BaseException], bool]]  # Type alias
 def call_with_exception_handlers(
     fn: Callable[[], _T],  # typically a lambda
     *,
-    continue_if_no_predicate_matches: bool = False,
+    continue_scanning_if_no_predicate_matches: bool = False,
     handlers: Mapping[type[BaseException], Sequence[tuple[ExceptionPredicate, Callable[[BaseException], _T]]]],
 ) -> _T:
     """Convenience function that calls ``fn`` and returns its result; on exception runs the first matching handler in a per-
@@ -829,7 +829,7 @@ def call_with_exception_handlers(
     ``(predicate, handler)`` where ``predicate`` is either ``True`` (always matches), ``False`` (disabled), or
     ``predicate(exc) -> bool``. The first matching handler is called with the exception and its return value is returned. If
     no predicate matches then, by default, the original exception is re-raised and no less-specific handler chains are
-    consulted. Set ``continue_if_no_predicate_matches=True`` to continue scanning exception base classes instead.
+    consulted. Set ``continue_scanning_if_no_predicate_matches=True`` to continue scanning exception base classes instead.
 
     Typically (but not necessarily) the handler raises a ``RetryableError``, via ``raise_retryable_error_from`` or similar.
     Or it may raise another exception type (which will not be retried), or even return a fallback value instead of raising.
@@ -877,7 +877,7 @@ def call_with_exception_handlers(
                 for predicate, handler in handler_chain:
                     if predicate is True or (predicate is not False and predicate(exc)):
                         return handler(exc)
-                if not continue_if_no_predicate_matches:
+                if not continue_scanning_if_no_predicate_matches:
                     raise
         raise
 

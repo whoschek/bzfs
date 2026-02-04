@@ -1775,7 +1775,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
             "base",
             call_with_exception_handlers(
                 fn,
-                continue_if_no_predicate_matches=True,
+                continue_scanning_if_no_predicate_matches=True,
                 handlers={
                     KeyError: [
                         (False, base_handler),
@@ -1792,7 +1792,7 @@ class TestCallWithExceptionHandlers(unittest.TestCase):
             "base",
             call_with_exception_handlers(
                 fn,
-                continue_if_no_predicate_matches=True,
+                continue_scanning_if_no_predicate_matches=True,
                 handlers={
                     KeyError: [],
                     Exception: [(True, base_handler)],
