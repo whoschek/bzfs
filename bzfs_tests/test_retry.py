@@ -32,6 +32,7 @@ from unittest.mock import (
 
 from bzfs_main.util.retry import (
     INFINITY_MAX_RETRIES,
+    NO_LOGGER,
     AttemptOutcome,
     BackoffContext,
     Retry,
@@ -1446,6 +1447,9 @@ class TestRetryTemplateCall(unittest.TestCase):
 
         actual4: str = retrying.call_with_retries(_fn, policy=None)
         self.assertEqual("hello", actual4)
+
+        actual5: str = retrying.call_with_retries(lambda retry: "hello", log=NO_LOGGER)
+        self.assertEqual("hello", actual5)
 
         self.assertIsNotNone(str(retrying))
         self.assertNotEqual("", str(retrying))

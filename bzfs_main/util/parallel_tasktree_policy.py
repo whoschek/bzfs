@@ -48,7 +48,6 @@ from bzfs_main.util.retry import (
     Retry,
     RetryPolicy,
     RetryTemplate,
-    call_with_retries,
 )
 from bzfs_main.util.utils import (
     dry,
@@ -104,13 +103,8 @@ def process_datasets_in_parallel_and_fault_tolerant(
         exception = None
         no_skip: bool = False
         try:
-            no_skip = call_with_retries(
+            no_skip = retry_template.call_with_retries(
                 fn=lambda retry: process_dataset(dataset, tid, retry),
-                policy=retry_template.policy,
-                config=retry_template.config,
-                giveup=retry_template.giveup,
-                after_attempt=retry_template.after_attempt,
-                on_exhaustion=retry_template.on_exhaustion,
                 log=log,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:

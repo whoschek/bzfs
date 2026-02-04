@@ -139,7 +139,7 @@ class TestSuiteCompleteness(unittest.TestCase):
                     if isinstance(testcase, unittest.TestSuite):
                         stack.append(testcase)
                     else:
-                        included_classes.add(testcase.__class__.__name__)
+                        included_classes.add(type(testcase).__name__)
 
             missing_classes = sorted(local_classes.difference(included_classes))
             if missing_classes:

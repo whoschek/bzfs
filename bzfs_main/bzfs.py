@@ -165,8 +165,6 @@ from bzfs_main.util.retry import (
     RetryableError,
     RetryConfig,
     RetryTemplate,
-    call_with_retries,
-    on_exhaustion_raise,
 )
 from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
@@ -1731,26 +1729,18 @@ class Job(MiniJob):
     def try_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str | None:
         """Convenience method that auto-retries try_ssh_command() on failure."""
         p = self.params
-        return call_with_retries(
+        return self.retry_template.call_with_retries(
             fn=lambda retry: self.try_ssh_command(*args, **kwargs),
             policy=p.retry_policy,
-            config=self.retry_template.config,
-            giveup=self.retry_template.giveup,
-            after_attempt=self.retry_template.after_attempt,
-            on_exhaustion=on_exhaustion_raise,
             log=p.log,
         )
 
     def run_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str:
         """Convenience method that auto-retries run_ssh_command() on transport failure (not on remote command failure)."""
         p = self.params
-        return call_with_retries(
+        return self.retry_template.call_with_retries(
             fn=lambda retry: self.run_ssh_command(*args, **kwargs),
             policy=p.retry_policy,
-            config=self.retry_template.config,
-            giveup=self.retry_template.giveup,
-            after_attempt=self.retry_template.after_attempt,
-            on_exhaustion=on_exhaustion_raise,
             log=p.log,
         )
 

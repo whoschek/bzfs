@@ -140,6 +140,7 @@ from typing import (
     NoReturn,
     TypeVar,
     Union,
+    cast,
     final,
 )
 
@@ -428,7 +429,7 @@ class Retry(NamedTuple):
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(count={self.count!r}, start_time_nanos={self.start_time_nanos!r}, "
+            f"{type(self).__name__}(count={self.count!r}, start_time_nanos={self.start_time_nanos!r}, "
             f"attempt_start_time_nanos={self.attempt_start_time_nanos!r})"
         )
 
@@ -478,7 +479,7 @@ class AttemptOutcome(NamedTuple):
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}("
+            f"{type(self).__name__}("
             f"retry={self.retry!r}, "
             f"is_success={self.is_success!r}, "
             f"is_exhausted={self.is_exhausted!r}, "
@@ -522,7 +523,7 @@ class BackoffContext(NamedTuple):
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}("
+            f"{type(self).__name__}("
             f"retry={self.retry!r}, "
             f"curr_max_sleep_nanos={self.curr_max_sleep_nanos!r}, "
             f"elapsed_nanos={self.elapsed_nanos!r})"
@@ -719,6 +720,19 @@ def _fn_not_implemented(_retry: Retry) -> NoReturn:
     raise NotImplementedError("Provide fn when calling RetryTemplate")
 
 
+def _make_null_logger() -> logging.Logger:
+    """Returns a logging.Logger that does nothing."""
+    logger = logging.Logger("NULL")  # noqa: LOG001 do not register dummy logger with Logger.manager
+    logger.addHandler(logging.NullHandler())  # prevents lastResort fallback
+    logger.disabled = True
+    logger.propagate = False
+    return logger
+
+
+NO_LOGGER: Final[logging.Logger] = _make_null_logger()
+_R = TypeVar("_R")
+
+
 @dataclass(frozen=True)
 @final
 class RetryTemplate(Generic[_T]):
@@ -756,15 +770,15 @@ class RetryTemplate(Generic[_T]):
 
     def call_with_retries(
         self,
-        fn: Callable[[Retry], _T],
+        fn: Callable[[Retry], _R],
         policy: RetryPolicy | None = None,
         *,
         config: RetryConfig | None = None,
         giveup: Callable[[AttemptOutcome], object | None] | None = None,
         after_attempt: Callable[[AttemptOutcome], None] | None = None,
-        on_exhaustion: Callable[[AttemptOutcome], _T] | None = None,
+        on_exhaustion: Callable[[AttemptOutcome], _R] | None = None,
         log: logging.Logger | None = None,
-    ) -> _T:
+    ) -> _R:
         """Executes ``fn`` via the call_with_retries() retry loop using the stored or overridden parameters; thread-safe.
 
         Example Usage: result: str = retry_template.call_with_retries(fn=...)
@@ -775,8 +789,10 @@ class RetryTemplate(Generic[_T]):
             config=self.config if config is None else config,
             giveup=self.giveup if giveup is None else giveup,
             after_attempt=self.after_attempt if after_attempt is None else after_attempt,
-            on_exhaustion=self.on_exhaustion if on_exhaustion is None else on_exhaustion,
-            log=self.log if log is None else log,
+            on_exhaustion=(
+                cast(Callable[[AttemptOutcome], _R], self.on_exhaustion) if on_exhaustion is None else on_exhaustion
+            ),
+            log=None if log is NO_LOGGER else self.log if log is None else log,
         )
 
 
