@@ -887,8 +887,8 @@ jobs:
 
 
   upload_website_to_github_pages:
-    # upload website only when full test suite ran (choice 'all'), on main, and no custom bzfs_test_mode_string override was used, and it's not a PR
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.event.inputs.bzfs_test_mode == 'all' && github.event.inputs.bzfs_test_mode_string == ''
+    # upload website only on nightlies or when full test suite ran (choice 'all'), on main, and no custom bzfs_test_mode_string override was used, and it's not a PR
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (github.event.schedule == '5 8 * * *' || (github.event.inputs.bzfs_test_mode == 'all' && github.event.inputs.bzfs_test_mode_string == ''))
     runs-on: ubuntu-24.04
     needs:
       - generate_website
