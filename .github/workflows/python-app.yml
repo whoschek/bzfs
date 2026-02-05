@@ -45,7 +45,7 @@ on:
         - test_almalinux_9
         - test_freebsd_15_0
         - test_freebsd_14_3
-        - test_freebsd_13_4
+        - test_freebsd_13_5
         - none
         default: "test_ubuntu_24_04_fast"
       job_names:
@@ -714,9 +714,9 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_freebsd_13_4:  # currently uses zfs-2.1.15
+  test_freebsd_13_5:  # currently uses zfs-2.1.15
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_13_4' || contains(github.event.inputs.job_names, 'test_freebsd_13_4')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_13_5' || contains(github.event.inputs.job_names, 'test_freebsd_13_5')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -729,12 +729,12 @@ jobs:
         persist-credentials: false
     - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
-      uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
+      uses: vmactions/freebsd-vm@v1.3.8  # see https://github.com/vmactions/freebsd-vm
       with:
-        release: "13.4"
+        release: "13.5"
         envs: "bzfs_test_mode bzfs_test_no_run_quietly"
         run: |
-         touch coverage_report.txt; exit 0  # ./.github-workflow-scripts/test_freebsd_13_3.sh
+         touch coverage_report.txt; ./.github-workflow-scripts/test_freebsd_13_3.sh
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/actions/coverage-upload
@@ -758,7 +758,7 @@ jobs:
       - test_almalinux_9
       - test_freebsd_15_0
       - test_freebsd_14_3
-      - test_freebsd_13_4
+      - test_freebsd_13_5
     steps:
       - uses: actions/checkout@v6
         with:
@@ -826,8 +826,8 @@ jobs:
       - name: Download coverage artifact
         uses: actions/download-artifact@v7
         with:
-          name: coverage-test_freebsd_13_4
-          path: coverage-test_freebsd_13_4
+          name: coverage-test_freebsd_13_5
+          path: coverage-test_freebsd_13_5
       - name: Run common preparation steps
         uses: ./.github/actions/common
         with:
