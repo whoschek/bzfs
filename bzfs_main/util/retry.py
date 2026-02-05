@@ -62,7 +62,7 @@ Observability:
 Expert Configuration:
 ---------------------
 - Set ``RetryPolicy.backoff_strategy(BackoffContext)`` to plug in a custom backoff algorithm (e.g., decorrelated-jitter or
-  retry-after). The default is full-jitter exponential backoff with cap (aka industry standard).
+  retry-after HTTP 429). The default is full-jitter exponential backoff with cap (aka industry standard).
 - Set ``RetryPolicy.max_previous_outcomes > 0`` to pass the N most recent AttemptOutcome objects to callbacks (default is 0).
 - If ``RetryPolicy.max_previous_outcomes > 0``, you can use ``RetryableError(..., attachment=...)`` to carry domain-specific
   state from a failed attempt to the next attempt via ``retry.previous_outcomes``. This pattern helps if attempt N+1 is a
@@ -598,7 +598,8 @@ class RetryPolicy:
 
     backoff_strategy: BackoffStrategy = dataclasses.field(default=full_jitter_backoff_strategy, repr=False)
     """Strategy that implements a backoff algorithm that reduces server load while minimizing retry latency; default is full
-    jitter; various other example backoff strategies can be found in test_retry_examples.py."""
+    jitter; various other example backoff strategies such as decorrelated-jitter or retry-after HTTP 429, etc can be found in
+    test_retry_examples.py."""
 
     reraise: bool = True
     """On exhaustion, the default (``True``) is to re-raise the underlying exception when present."""
