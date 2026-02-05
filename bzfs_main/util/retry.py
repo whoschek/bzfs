@@ -720,16 +720,10 @@ def _fn_not_implemented(_retry: Retry) -> NoReturn:
     raise NotImplementedError("Provide fn when calling RetryTemplate")
 
 
-def _make_null_logger() -> logging.Logger:
-    """Returns a logging.Logger that does nothing."""
-    logger = logging.Logger("NULL")  # noqa: LOG001 do not register dummy logger with Logger.manager
-    logger.addHandler(logging.NullHandler())  # prevents lastResort fallback
-    logger.disabled = True
-    logger.propagate = False
-    return logger
-
-
-NO_LOGGER: Final[logging.Logger] = _make_null_logger()  # constant
+NO_LOGGER: Final[logging.Logger] = logging.Logger("NULL")  # noqa: LOG001 do not register dummy logger with Logger.manager
+NO_LOGGER.addHandler(logging.NullHandler())  # prevents lastResort fallback
+NO_LOGGER.disabled = True
+NO_LOGGER.propagate = False
 _R = TypeVar("_R")
 
 
