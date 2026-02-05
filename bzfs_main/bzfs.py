@@ -1688,7 +1688,7 @@ class Job(MiniJob):
                     stderr: str = stderr_to_str(e.stderr)
                     if stderr.startswith("ssh: "):
                         assert e.returncode == 255, e.returncode  # error within SSH itself (not during the remote command)
-                        raise RetryableError("Subprocess failed", display_msg="ssh") from e
+                        raise RetryableError(display_msg="ssh") from e
                 raise
             else:
                 if is_dry:

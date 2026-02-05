@@ -82,7 +82,7 @@ async def call_with_retries_async(
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
-    log: logging.Logger | None = None,
+    log: logging.Logger | None = None,  # set this to ``None`` to disable logging
 ) -> _T:
     """Async version of call_with_retries(); awaits ``fn`` and uses non-blocking sleep."""
 

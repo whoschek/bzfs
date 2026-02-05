@@ -346,9 +346,7 @@ def _rollback_dst_dataset_if_necessary(
             stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
             retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-            raise RetryableError(
-                "Subprocess failed", display_msg="zfs rollback", retry_immediately_once=retry_immediately_once
-            ) from e
+            raise RetryableError(display_msg="zfs rollback", retry_immediately_once=retry_immediately_once) from e
 
     if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
         log.info(f"{tid} Already up-to-date: %s", dst_dataset)
@@ -719,9 +717,7 @@ def _run_zfs_send_receive(
                         job, dst_dataset, stderr_to_str(e.stderr)
                     )
                 # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-                raise RetryableError(
-                    "Subprocess failed", display_msg="zfs send/receive", retry_immediately_once=retry_immediately_once
-                ) from e
+                raise RetryableError(display_msg="zfs send/receive", retry_immediately_once=retry_immediately_once) from e
             else:
                 xprint(log, process.stdout, file=sys.stdout)
                 xprint(log, process.stderr, file=sys.stderr)
@@ -943,9 +939,7 @@ def _delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str
         stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
         retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
         # op isn't idempotent so retries regather current state from the start of delete_destination_snapshots() or similar
-        raise RetryableError(
-            "Subprocess failed", display_msg="zfs destroy snapshot", retry_immediately_once=retry_immediately_once
-        ) from e
+        raise RetryableError(display_msg="zfs destroy snapshot", retry_immediately_once=retry_immediately_once) from e
 
 
 def _delete_snapshot_cmd(p: Params, r: Remote, snapshots_to_delete: str) -> list[str]:
@@ -1209,7 +1203,7 @@ def _add_recv_property_options(
                 for propnames in user_propnames:
                     props.update(_zfs_get(job, p.src, dataset, config.sources, "property,value", propnames, False, cache))
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-                raise RetryableError("Subprocess failed", display_msg="zfs get") from e
+                raise RetryableError(display_msg="zfs get") from e
             for propname in sorted(props.keys()):
                 if config is p.zfs_recv_o_config:
                     if not (propname in ox_names or propname in x_names_set):
