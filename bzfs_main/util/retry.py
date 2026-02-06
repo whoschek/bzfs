@@ -605,6 +605,7 @@ class RetryTiming:
     """Customizable callbacks for reading the current monotonic time, sleeping and optional async termination; immutable."""
 
     monotonic_ns: Callable[[], int] = time.monotonic_ns
+    """Returns the system's current monotonic time in nanoseconds."""
 
     is_terminated: Callable[[Retry], bool] = _default_timing_is_terminated
     """Returns whether a predicate has become true; if so causes the retry loop to exit early between attempts; can be used
@@ -697,6 +698,7 @@ class RetryPolicy:
     """Pass the N=max_previous_outcomes most recent AttemptOutcome objects to callbacks."""
 
     timing: RetryTiming = dataclasses.field(default=_TIMING_DEFAULT, repr=False)
+    """Customizable callbacks for reading the current monotonic time, sleeping and optional async termination."""
 
     context: object = dataclasses.field(default=None, repr=False, compare=False)
     """Optional domain specific info."""
