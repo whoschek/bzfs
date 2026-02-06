@@ -100,6 +100,7 @@ from bzfs_main.util.utils import (
     UMASK,
     JobStats,
     Subprocesses,
+    TaskTiming,
     dry,
     format_dict,
     format_obj,
@@ -504,7 +505,8 @@ class Job:
         self.log_was_None: Final[bool] = log is None
         self.log: Final[Logger] = get_simple_logger(PROG_NAME) if log is None else log
         self.termination_event: Final[threading.Event] = termination_event
-        self.subprocesses: Final[Subprocesses] = Subprocesses(termination_event=self.termination_event)
+        self.timing: Final[TaskTiming] = TaskTiming.make_from(self.termination_event)
+        self.subprocesses: Final[Subprocesses] = Subprocesses(termination_event.is_set)
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
         self.loopback_address: Final[str] = _detect_loopback_address()
@@ -963,7 +965,7 @@ class Job:
         if jitter:  # randomize job start time to avoid potential thundering herd problems in large distributed systems
             sleep_nanos = random.SystemRandom().randint(0, interval_nanos)
             log.info("Jitter: Delaying job start time by sleeping for %s ...", human_readable_duration(sleep_nanos))
-            self.termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
+            self.timing.sleep(sleep_nanos)  # allows early wakeup on async termination
         sorted_subjobs: list[str] = sorted(subjobs.keys())
         spawn_process_per_job: bool = self.spawn_process_per_job
         log.log(LOG_TRACE, "%s: %s", "spawn_process_per_job", spawn_process_per_job)
@@ -978,7 +980,7 @@ class Job:
             skip_on_error="dataset",
             max_workers=max_workers,
             interval_nanos=lambda last_update_nanos, dataset, submit_count: interval_nanos,
-            termination_event=self.termination_event,
+            timing=self.timing,
             termination_handler=self.subprocesses.terminate_process_subtrees,
             task_name="Subjob",
             dry_run=False,

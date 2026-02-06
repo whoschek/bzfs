@@ -2360,7 +2360,8 @@ class TestSnapshotCache(AbstractTestCase):
                             "tid",
                             Retry(
                                 count=idx,
-                                start_time_nanos=0,
+                                call_start_time_nanos=0,
+                                before_attempt_start_time_nanos=0,
                                 attempt_start_time_nanos=0,
                                 policy=RetryPolicy(),
                                 config=RetryConfig(),

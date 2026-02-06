@@ -29,8 +29,6 @@ import concurrent
 import heapq
 import logging
 import os
-import threading
-import time
 from concurrent.futures import (
     FIRST_COMPLETED,
     Executor,
@@ -49,6 +47,7 @@ from bzfs_main.util.utils import (
     HashedInterner,
     SortedInterner,
     SynchronousExecutor,
+    TaskTiming,
     has_duplicates,
     has_siblings,
 )
@@ -104,7 +103,7 @@ class ParallelTaskTree:
         interval_nanos: Callable[
             [int, str, int], int
         ] = lambda last_update_nanos, dataset, submit_count: 0,  # optionally spread tasks out over time; e.g. for jitter
-        termination_event: threading.Event | None = None,  # optional event to request early async termination
+        timing: TaskTiming = TaskTiming(),  # noqa: B008
         enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
         barrier_name: str = BARRIER_CHAR,
         is_test_mode: bool = False,
@@ -177,8 +176,7 @@ class ParallelTaskTree:
         - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
         - barrier_name: Directory name that denotes a barrier within dataset/job strings (default '~'); must be non-empty and
           not contain '/'
-        - termination_event: Optional event to request early async termination; stops new submissions and cancels in-flight
-          tasks
+        - timing: Optionally request early async termination; stops new submissions and cancels in-flight tasks
         """
         assert log is not None
         assert (not is_test_mode) or datasets == sorted(datasets), "List is not sorted"
@@ -203,9 +201,7 @@ class ParallelTaskTree:
         self._priority: Final[Callable[[str], Comparable]] = priority
         self._max_workers: Final[int] = max_workers
         self._interval_nanos: Final[Callable[[int, str, int], int]] = interval_nanos
-        self._termination_event: Final[threading.Event] = (
-            threading.Event() if termination_event is None else termination_event
-        )
+        self._timing: Final[TaskTiming] = timing
         self._is_test_mode: Final[bool] = is_test_mode
         self._priority_queue: Final[list[_TreeNode]] = []
         self._tree: Final[_Tree] = _build_dataset_tree(datasets)  # tree consists of nested dictionaries and is immutable
@@ -229,7 +225,8 @@ class ParallelTaskTree:
             todo_futures: set[Future[CompletionCallback]] = set()
             future_to_node: dict[Future[CompletionCallback], _TreeNode] = {}
             submit_count: int = 0
-            next_update_nanos: int = time.monotonic_ns()
+            timing: TaskTiming = self._timing
+            next_update_nanos: int = timing.monotonic_ns()
             wait_timeout: float | None = None
             failed: bool = False
 
@@ -240,10 +237,10 @@ class ParallelTaskTree:
                 while len(self._priority_queue) > 0 and len(todo_futures) < self._max_workers:
                     # pick "smallest" dataset (wrt. sort order) available for start of processing; submit to thread pool
                     nonlocal next_update_nanos
-                    sleep_nanos: int = next_update_nanos - time.monotonic_ns()
+                    sleep_nanos: int = next_update_nanos - timing.monotonic_ns()
                     if sleep_nanos > 0:
-                        self._termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
-                    if self._termination_event.is_set():
+                        timing.sleep(sleep_nanos)  # allow early wakeup on async termination
+                    if timing.is_terminated():
                         break
                     if sleep_nanos > 0 and len(todo_futures) > 0:
                         wait_timeout = 0  # indicates to use non-blocking flavor of concurrent.futures.wait()
@@ -257,7 +254,7 @@ class ParallelTaskTree:
                     future: Future[CompletionCallback] = executor.submit(self._process_dataset, node.dataset, submit_count)
                     future_to_node[future] = node
                     todo_futures.add(future)
-                return len(todo_futures) > 0 and not self._termination_event.is_set()
+                return len(todo_futures) > 0 and not timing.is_terminated()
 
             def complete_datasets() -> None:
                 """Waits for completed futures, processes results and errors, then enqueues follow-up tasks per policy."""
@@ -278,7 +275,7 @@ class ParallelTaskTree:
             while submit_datasets():
                 complete_datasets()
 
-            if self._termination_event.is_set():
+            if timing.is_terminated():
                 for todo_future in todo_futures:
                     todo_future.cancel()
                 failed = failed or len(self._priority_queue) > 0 or len(todo_futures) > 0

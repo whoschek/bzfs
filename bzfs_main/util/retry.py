@@ -40,9 +40,8 @@ Usage:
 Advanced Configuration:
 -----------------------
 - Tune ``RetryPolicy`` parameters to control maximum retries, sleep bounds, and elapsed-time budget.
-- Use ``RetryConfig`` to control logging settings and async termination events.
+- Use ``RetryConfig`` to control logging settings.
 - Set ``log=None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
-- Pass ``termination_event`` via ``RetryConfig`` to support async cancellation between attempts.
 - Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, error/status
   codes or parsing stderr), including time-aware decisions or decisions based on the previous N most recent AttemptOutcome
   objects (via AttemptOutcome.retry.previous_outcomes)
@@ -76,6 +75,8 @@ Expert Configuration:
   raises ``RetryError`` (wrapping the last ``RetryableError``) on exhaustion, so callers now catch ``RetryError`` and can
   inspect the last underlying exception via ``err.outcome``, ``err.__cause__``, and even ``err.__cause__.__cause__`` when
   present.
+- Supply a ``before_attempt(Retry)`` callback to optionally apply internal backpressure.
+- Set ``RetryPolicy.timing`` to customize reading the current monotonic time, sleeping and optional async termination.
 
 Example Usage:
 --------------
@@ -124,6 +125,7 @@ import random
 import threading
 import time
 from collections.abc import (
+    Awaitable,
     Iterable,
     Mapping,
     Sequence,
@@ -157,6 +159,11 @@ def no_giveup(outcome: AttemptOutcome) -> object | None:
     """Default implementation of ``giveup`` callback for call_with_retries(); never gives up; returning anything other than
     ``None`` indicates to give up retrying; thread-safe."""
     return None  # don't give up retrying
+
+
+def before_attempt_noop(retry: Retry) -> int:
+    """Default implementation of ``before_attempt`` callback for call_with_retries(); does nothing; thread-safe."""
+    return 0
 
 
 def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
@@ -214,8 +221,9 @@ def call_with_retries(
     fn: Callable[[Retry], _T],  # typically a lambda; wraps work and raises RetryableError for failures that shall be retried
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
-    config: RetryConfig | None = None,  # controls logging settings and async cancellation between attempts
+    config: RetryConfig | None = None,  # controls logging settings
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
+    before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
     log: logging.Logger | None = None,  # set this to ``None`` to disable logging
@@ -237,24 +245,37 @@ def call_with_retries(
     retry_count: int = 0
     curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
-    start_time_nanos: Final[int] = time.monotonic_ns()
+    timing: RetryTiming = policy.timing
+    sleep: Callable[[int, Retry], None] = timing.sleep
+    is_terminated: Callable[[Retry], bool] = timing.is_terminated
+    mono_nanos: Callable[[], int] = timing.monotonic_ns
+    call_start_nanos: Final[int] = mono_nanos()
     while True:
-        attempt_start_time_nanos: int = time.monotonic_ns() if retry_count != 0 else start_time_nanos
-        retry: Retry = Retry(retry_count, start_time_nanos, attempt_start_time_nanos, policy, config, log, previous_outcomes)
+        before_attempt_nanos: int = mono_nanos() if retry_count != 0 else call_start_nanos
+        retry: Retry = Retry(
+            retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, policy, config, log, previous_outcomes
+        )
         try:
+            if before_attempt is not before_attempt_noop:
+                before_attempt_sleep_nanos: int = before_attempt(retry)
+                assert before_attempt_sleep_nanos >= 0, before_attempt_sleep_nanos
+                if before_attempt_sleep_nanos > 0:
+                    sleep(before_attempt_sleep_nanos, retry)
+                retry = Retry(
+                    retry_count, call_start_nanos, before_attempt_nanos, mono_nanos(), policy, config, log, previous_outcomes
+                )
+            timing.on_before_attempt(retry)
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
             if after_attempt is not after_attempt_log_failure:
-                elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
+                elapsed_nanos: int = mono_nanos() - call_start_nanos
                 outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, None, elapsed_nanos, 0, result)
                 after_attempt(outcome)
             return result
         except RetryableError as retryable_error:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+            elapsed_nanos = mono_nanos() - call_start_nanos
             giveup_reason: object | None = None
             sleep_nanos: int = 0
-            sleep: Callable[[int, Retry], None] = _sleep
-            is_terminated: Callable[[Retry], bool] = _is_terminated
-            if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
+            if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos and not is_terminated(retry):
                 if policy.max_sleep_nanos == 0 and policy.backoff_strategy is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
                 elif retry_count == 0 and retryable_error.retry_immediately_once:
@@ -289,25 +310,12 @@ def call_with_retries(
             return on_exhaustion(outcome)  # raise error or return fallback value
 
 
-def _sleep(sleep_nanos: int, retry: Retry) -> None:
-    termination_event: threading.Event | None = retry.config.termination_event
-    if termination_event is None:
-        time.sleep(sleep_nanos / 1_000_000_000)
-    else:
-        termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
-
-
-def _is_terminated(retry: Retry) -> bool:
-    termination_event: threading.Event | None = retry.config.termination_event
-    return termination_event is not None and termination_event.is_set()
-
-
 def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) -> Callable[[AttemptOutcome], None]:
     """Composes independent ``after_attempt`` handlers into one ``call_with_retries(after_attempt=...)`` callback that
     invokes each handler in order; thread-safe."""
     handlers = tuple(handlers)
-    if len(handlers) == 1 and handlers[0] is after_attempt_log_failure:
-        return after_attempt_log_failure  # perf
+    if len(handlers) == 1:
+        return handlers[0]  # perf
 
     def _after_attempt(outcome: AttemptOutcome) -> None:
         for handler in handlers:
@@ -323,8 +331,8 @@ def any_giveup(handlers: Iterable[Callable[[AttemptOutcome], object | None]]) ->
     Handlers are evaluated in order and short-circuit: On giving up returns the first handler's reason for giving up.
     """
     handlers = tuple(handlers)
-    if len(handlers) == 1 and handlers[0] is no_giveup:
-        return no_giveup  # perf
+    if len(handlers) == 1:
+        return handlers[0]  # perf
 
     def _giveup(outcome: AttemptOutcome) -> object | None:
         for handler in handlers:
@@ -343,8 +351,8 @@ def all_giveup(handlers: Iterable[Callable[[AttemptOutcome], object | None]]) ->
     Handlers are evaluated in order and short-circuit: stops at first ``None``; else returns the last non-``None`` reason.
     """
     handlers = tuple(handlers)
-    if len(handlers) == 1 and handlers[0] is no_giveup:
-        return no_giveup  # perf
+    if len(handlers) == 1:
+        return handlers[0]  # perf
 
     def _giveup(outcome: AttemptOutcome) -> object | None:
         giveup_reason: object | None = None
@@ -405,8 +413,11 @@ class Retry(NamedTuple):
     count: int  # type: ignore[assignment]
     """Attempt number; count=0 is the first attempt, count=1 is the second attempt aka first retry."""
 
-    start_time_nanos: int
+    call_start_time_nanos: int
     """Value of time.monotonic_ns() at start of call_with_retries() invocation."""
+
+    before_attempt_start_time_nanos: int
+    """Value of time.monotonic_ns() at start of before_attempt() invocation."""
 
     attempt_start_time_nanos: int
     """Value of time.monotonic_ns() at start of fn() invocation."""
@@ -427,9 +438,14 @@ class Retry(NamedTuple):
         """Creates a new object copying an existing one with the specified fields overridden for customization."""
         return self._replace(**override_kwargs)
 
+    def before_attempt_sleep_nanos(self) -> int:
+        """Returns duration between the start of before_attempt() and the start of fn() attempt."""
+        return self.attempt_start_time_nanos - self.before_attempt_start_time_nanos
+
     def __repr__(self) -> str:
         return (
-            f"{type(self).__name__}(count={self.count!r}, start_time_nanos={self.start_time_nanos!r}, "
+            f"{type(self).__name__}(count={self.count!r}, call_start_time_nanos={self.call_start_time_nanos!r}, "
+            f"before_attempt_start_time_nanos={self.before_attempt_start_time_nanos!r}, "
             f"attempt_start_time_nanos={self.attempt_start_time_nanos!r})"
         )
 
@@ -455,7 +471,7 @@ class AttemptOutcome(NamedTuple):
     """True if the loop is giving up retrying (possibly even due to is_terminated); False otherwise."""
 
     is_terminated: bool
-    """True if termination_event has become set; False otherwise."""
+    """True if the termination predicate has become true; False otherwise."""
 
     giveup_reason: object | None
     """Reason returned by giveup(); None means giveup() was not called or decided to not give up."""
@@ -471,7 +487,7 @@ class AttemptOutcome(NamedTuple):
 
     def attempt_elapsed_nanos(self) -> int:
         """Returns duration between the start of this fn() attempt and the end of this fn() attempt."""
-        return self.elapsed_nanos + self.retry.start_time_nanos - self.retry.attempt_start_time_nanos
+        return self.elapsed_nanos + self.retry.call_start_time_nanos - self.retry.attempt_start_time_nanos
 
     def copy(self, **override_kwargs: Any) -> AttemptOutcome:
         """Creates a new outcome copying an existing one with the specified fields overridden for customization."""
@@ -559,6 +575,79 @@ def full_jitter_backoff_strategy(context: BackoffContext) -> tuple[int, int]:
 
 
 #############################################################################
+def _default_timing_is_terminated(retry: Retry) -> bool:
+    return False
+
+
+def _default_timing_sleep(sleep_nanos: int, retry: Retry) -> None:
+    time.sleep(sleep_nanos / 1_000_000_000)
+
+
+async def _default_timing_sleep_async(sleep_nanos: int, retry: Retry) -> None:
+    import asyncio
+
+    await asyncio.sleep(sleep_nanos / 1_000_000_000)
+
+
+def _default_timing_on_before_attempt(retry: Retry) -> None:
+    if retry.policy.timing.is_terminated(retry):
+        raise RetryableError(display_msg="terminated before attempt") from RetryTerminationError()
+
+
+@final
+class RetryTerminationError(InterruptedError):
+    """Termination signal raised when retry loop exits before starting the next attempt."""
+
+
+@dataclass(frozen=True)
+@final
+class RetryTiming:
+    """Customizable callbacks for reading the current monotonic time, sleeping and optional async termination; immutable."""
+
+    monotonic_ns: Callable[[], int] = time.monotonic_ns
+
+    is_terminated: Callable[[Retry], bool] = _default_timing_is_terminated
+    """Returns whether a predicate has become true; if so causes the retry loop to exit early between attempts; can be used
+    to indicate system shutdown or similar cancellation conditions; default is to always return ``False``; this function
+    should complete quickly without any blocking or sleeping."""
+
+    sleep: Callable[[int, Retry], None] = _default_timing_sleep
+    """Sleeps N nanoseconds between attempts; override to inject custom sleeping or for early wake-ups; thread-safe."""
+
+    sleep_async: Callable[[int, Retry], Awaitable[None]] = _default_timing_sleep_async
+    """Sleeps N nanoseconds between attempts; override to inject custom sleeping or for early wake-ups; thread-safe."""
+
+    on_before_attempt: Callable[[Retry], None] = _default_timing_on_before_attempt
+    """Typically (but not necessarily) raises an error if ``is_terminated()`` is True; otherwise fn() will still run; this
+    function should complete quickly without any blocking or sleeping.
+
+    To disable this behavior: RetryTiming.make_from(...).copy(on_before_attempt=lambda retry: None).
+    """
+
+    def copy(self, **override_kwargs: Any) -> RetryTiming:
+        """Creates a new object copying an existing one with the specified fields overridden for customization; thread-
+        safe."""
+        return dataclasses.replace(self, **override_kwargs)
+
+    @staticmethod
+    def make_from(termination_event: threading.Event | None) -> RetryTiming:
+        """Convenience factory that creates a Timing that performs async termination when ``termination_event`` is set."""
+        if termination_event is None:
+            return RetryTiming()
+
+        def _is_terminated(retry: Retry) -> bool:
+            return termination_event.is_set()
+
+        def _sleep(sleep_nanos: int, retry: Retry) -> None:
+            termination_event.wait(sleep_nanos / 1_000_000_000)  # allow early wakeup on async termination
+
+        return RetryTiming(is_terminated=_is_terminated, sleep=_sleep)
+
+
+_TIMING_DEFAULT: Final[RetryTiming] = RetryTiming()  # constant
+
+
+#############################################################################
 @dataclass(frozen=True)
 @final
 class RetryPolicy:
@@ -598,14 +687,16 @@ class RetryPolicy:
 
     backoff_strategy: BackoffStrategy = dataclasses.field(default=full_jitter_backoff_strategy, repr=False)
     """Strategy that implements a backoff algorithm that reduces server load while minimizing retry latency; default is full
-    jitter; various other example backoff strategies such as decorrelated-jitter or retry-after HTTP 429, etc can be found in
-    test_retry_examples.py."""
+    jitter; various other example backoff strategies such as decorrelated-jitter or retry-after HTTP 429 "Too Many Requests"
+    responses, etc can be found in test_retry_examples.py."""
 
     reraise: bool = True
     """On exhaustion, the default (``True``) is to re-raise the underlying exception when present."""
 
     max_previous_outcomes: int = 0
     """Pass the N=max_previous_outcomes most recent AttemptOutcome objects to callbacks."""
+
+    timing: RetryTiming = dataclasses.field(default=_TIMING_DEFAULT, repr=False)
 
     context: object = dataclasses.field(default=None, repr=False, compare=False)
     """Optional domain specific info."""
@@ -623,6 +714,7 @@ class RetryPolicy:
             backoff_strategy=getattr(args, "retry_backoff_strategy", full_jitter_backoff_strategy),
             reraise=getattr(args, "retry_reraise", True),
             max_previous_outcomes=getattr(args, "retry_max_previous_outcomes", 0),
+            timing=getattr(args, "retry_timing", _TIMING_DEFAULT),
             context=getattr(args, "retry_context", None),
         )
 
@@ -691,9 +783,8 @@ def _format_pair(first: object, second: object) -> str:
 @dataclass(frozen=True)
 @final
 class RetryConfig:
-    """Configures termination behavior and logging for call_with_retries(); all defaults work out of the box; immutable."""
+    """Configures logging for call_with_retries(); all defaults work out of the box; immutable."""
 
-    termination_event: threading.Event | None = None  # optionally allows for async cancellation
     display_msg: str = "Retrying"  # message prefix for retry log messages
     dots: str = " ..."  # suffix appended to retry log messages
     format_msg: Callable[[str, RetryableError], str] = _format_msg  # lambda: display_msg, retryable_error
@@ -735,8 +826,9 @@ class RetryTemplate(Generic[_T]):
 
     fn: Callable[[Retry], _T] = _fn_not_implemented  # set this to make the RetryTemplate object itself callable
     policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
-    config: RetryConfig = RetryConfig()  # controls logging settings and async cancellation between attempts
+    config: RetryConfig = RetryConfig()  # controls logging settings
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic
+    before_attempt: Callable[[Retry], int] = before_attempt_noop  # e.g. wait due to internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise  # raise error or return fallback value
     log: logging.Logger | None = None  # set this to ``None`` to disable logging
@@ -758,6 +850,7 @@ class RetryTemplate(Generic[_T]):
             policy=self.policy,
             config=self.config,
             giveup=self.giveup,
+            before_attempt=self.before_attempt,
             after_attempt=self.after_attempt,
             on_exhaustion=self.on_exhaustion,
             log=self.log,
@@ -770,6 +863,7 @@ class RetryTemplate(Generic[_T]):
         *,
         config: RetryConfig | None = None,
         giveup: Callable[[AttemptOutcome], object | None] | None = None,
+        before_attempt: Callable[[Retry], int] | None = None,
         after_attempt: Callable[[AttemptOutcome], None] | None = None,
         on_exhaustion: Callable[[AttemptOutcome], _R] | None = None,
         log: logging.Logger | None = None,  # pass NO_LOGGER to override template logger and disable logging for this call
@@ -783,6 +877,7 @@ class RetryTemplate(Generic[_T]):
             policy=self.policy if policy is None else policy,
             config=self.config if config is None else config,
             giveup=self.giveup if giveup is None else giveup,
+            before_attempt=self.before_attempt if before_attempt is None else before_attempt,
             after_attempt=self.after_attempt if after_attempt is None else after_attempt,
             on_exhaustion=(
                 cast(Callable[[AttemptOutcome], _R], self.on_exhaustion) if on_exhaustion is None else on_exhaustion

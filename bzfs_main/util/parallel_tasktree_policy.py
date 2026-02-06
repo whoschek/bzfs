@@ -30,8 +30,6 @@ from __future__ import (
 import logging
 import os
 import subprocess
-import threading
-import time
 from concurrent.futures import (
     Future,
 )
@@ -48,8 +46,10 @@ from bzfs_main.util.retry import (
     Retry,
     RetryPolicy,
     RetryTemplate,
+    RetryTerminationError,
 )
 from bzfs_main.util.utils import (
+    TaskTiming,
     dry,
     human_readable_duration,
 )
@@ -68,7 +68,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     interval_nanos: Callable[
         [int, str, int], int
     ] = lambda last_update_nanos, dataset, submit_count: 0,  # optionally spread tasks out over time; e.g. for jitter
-    termination_event: threading.Event | None = None,  # optional event to request early async termination
+    timing: TaskTiming = TaskTiming(),  # noqa: B008
     termination_handler: Callable[[], None] = lambda: None,
     task_name: str = "Task",
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
@@ -90,7 +90,6 @@ def process_datasets_in_parallel_and_fault_tolerant(
     """
     assert callable(process_dataset)
     assert callable(skip_tree_on_error)
-    termination_event = threading.Event() if termination_event is None else termination_event
     assert "%" not in task_name
     assert callable(append_exception)
     len_datasets: int = len(datasets)
@@ -99,7 +98,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     def _process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
         """Wrapper around process_dataset(); adds retries plus a callback determining if to fail or skip subtree on error."""
         tid: str = f"{submit_count}/{len_datasets}"
-        start_time_nanos: int = time.monotonic_ns()
+        start_time_nanos: int = timing.monotonic_ns()
         exception = None
         no_skip: bool = False
         try:
@@ -107,11 +106,17 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 fn=lambda retry: process_dataset(dataset, tid, retry),
                 log=log,
             )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            SystemExit,
+            UnicodeDecodeError,
+            RetryTerminationError,
+        ) as e:
             exception = e  # may be reraised later
         finally:
             if is_debug:
-                elapsed_duration: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
+                elapsed_duration: str = human_readable_duration(timing.monotonic_ns() - start_time_nanos)
                 log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, elapsed_duration)
 
         def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
@@ -121,7 +126,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
             fail: bool = False
             if exception is not None:
                 fail = True
-                if skip_on_error == "fail" or termination_event.is_set():
+                if skip_on_error == "fail" or timing.is_terminated():
                     for todo_future in todo_futures:
                         todo_future.cancel()
                     termination_handler()
@@ -139,7 +144,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         process_dataset=_process_dataset,
         max_workers=max_workers,
         interval_nanos=interval_nanos,
-        termination_event=termination_event,
+        timing=timing,
         enable_barriers=enable_barriers,
         is_test_mode=is_test_mode,
     )

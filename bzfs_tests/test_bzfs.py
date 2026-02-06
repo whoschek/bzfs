@@ -82,6 +82,7 @@ from bzfs_main.util.retry import (
     Retry,
     RetryConfig,
     RetryPolicy,
+    RetryTerminationError,
 )
 from bzfs_main.util.utils import (
     DIE_STATUS,
@@ -1312,7 +1313,8 @@ class TestJobMethods(AbstractTestCase):
                 tid="1/1",
                 retry=Retry(
                     count=0,
-                    start_time_nanos=0,
+                    call_start_time_nanos=0,
+                    before_attempt_start_time_nanos=0,
                     attempt_start_time_nanos=0,
                     policy=RetryPolicy(),
                     config=RetryConfig(),
@@ -2014,6 +2016,31 @@ class TestTerminationEventBehavior(AbstractTestCase):
             job.run_tasks()
             self.assertEqual(1, len(run_calls), f"Expected exactly one task to run, got {len(run_calls)}")
             term_mock.assert_called_once()
+
+    def test_run_tasks_skip_on_error_dataset_handles_retry_termination_error(self) -> None:
+        """run_tasks() should classify retry termination as a tolerated task error when skip_on_error='dataset'."""
+        job = self.make_job(["s1", "d1", "s2", "d2"])
+        run_task_call_count = 0
+
+        def run_task_side_effect() -> None:
+            nonlocal run_task_call_count
+            run_task_call_count += 1
+            if run_task_call_count == 1:
+                raise RetryTerminationError()
+
+        with (
+            patch.object(job, "validate_once", return_value=None),
+            patch.object(bzfs, "ProgressReporter", self._DummyPR),
+            patch.object(job, "validate_task", return_value=None),
+            patch.object(job, "run_task", side_effect=run_task_side_effect),
+            patch.object(job, "append_exception") as append_exception_mock,
+            patch.object(job, "sleep_until_next_daemon_iteration", return_value=False),
+            patch.object(job, "print_replication_stats", return_value=None),
+        ):
+            job.run_tasks()
+        self.assertEqual(len(job.params.root_dataset_pairs), run_task_call_count)
+        append_exception_mock.assert_called_once()
+        self.assertIsInstance(append_exception_mock.call_args.args[0], RetryTerminationError)
 
     def test_sleep_until_next_daemon_iteration_wakes_on_termination(self) -> None:
         """sleep_until_next_daemon_iteration returns early with False when termination_event is set during wait."""

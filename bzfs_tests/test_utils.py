@@ -23,6 +23,7 @@ import errno
 import hashlib
 import logging
 import os
+import pickle
 import re
 import shutil
 import signal
@@ -88,6 +89,7 @@ from bzfs_main.util.utils import (
     SynchronizedBool,
     SynchronizedDict,
     SynchronousExecutor,
+    TaskTiming,
     _get_descendant_processes,
     append_if_absent,
     binary_search,
@@ -153,6 +155,7 @@ def suite() -> unittest.TestSuite:
         TestValidateFilePermissions,
         TestFindMatch,
         TestReplaceCapturingGroups,
+        TestTaskTiming,
         TestSubprocessRun,
         TestSubprocessRunWithSubprocesses,
         TestSubprocessRunLogging,
@@ -1364,6 +1367,66 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 
 
 #############################################################################
+class TestTaskTiming(unittest.TestCase):
+
+    def test_sleep_calls_time_sleep_by_default(self) -> None:
+        sleep_nanos = 123_000_000
+        expected_secs = sleep_nanos / 1_000_000_000
+        timing = TaskTiming()
+        with patch("bzfs_main.util.utils.time.sleep") as mock_sleep:
+            timing.sleep(sleep_nanos)
+        mock_sleep.assert_called_once()
+        self.assertAlmostEqual(expected_secs, mock_sleep.call_args.args[0])
+
+    def test_make_from_none_returns_default_timing(self) -> None:
+        sleep_nanos = 456_000_000
+        expected_secs = sleep_nanos / 1_000_000_000
+        timing = TaskTiming.make_from(None)
+        with patch("bzfs_main.util.utils.time.sleep") as mock_sleep:
+            timing.sleep(sleep_nanos)
+        mock_sleep.assert_called_once()
+        self.assertAlmostEqual(expected_secs, mock_sleep.call_args.args[0])
+        self.assertFalse(timing.is_terminated())
+
+    def test_make_from_event_sleep_calls_event_wait(self) -> None:
+        sleep_nanos = 123_000_000
+        expected_secs = sleep_nanos / 1_000_000_000
+        termination_event = MagicMock(spec=threading.Event)
+        timing = TaskTiming.make_from(termination_event)
+        with patch("bzfs_main.util.utils.time.sleep") as mock_sleep:
+            timing.sleep(sleep_nanos)
+        mock_sleep.assert_not_called()
+        termination_event.wait.assert_called_once()
+        self.assertAlmostEqual(expected_secs, termination_event.wait.call_args.args[0])
+
+    def test_make_from_event_is_terminated_delegates_to_is_set(self) -> None:
+        termination_event = MagicMock(spec=threading.Event)
+        termination_event.is_set.return_value = True
+        timing = TaskTiming.make_from(termination_event)
+        self.assertTrue(timing.is_terminated())
+        termination_event.is_set.assert_called_once()
+
+    def test_copy_overrides_fields(self) -> None:
+        original = TaskTiming(monotonic_ns=lambda: 1, is_terminated=lambda: False, sleep=lambda _sleep_nanos: None)
+        copied = original.copy(monotonic_ns=lambda: 2, is_terminated=lambda: True)
+        self.assertEqual(1, original.monotonic_ns())
+        self.assertEqual(2, copied.monotonic_ns())
+        self.assertFalse(original.is_terminated())
+        self.assertTrue(copied.is_terminated())
+
+    def test_default_task_timing_is_pickleable(self) -> None:
+        """Default TaskTiming must remain pickleable."""
+        timing = pickle.loads(pickle.dumps(TaskTiming()))
+        self.assertFalse(timing.is_terminated())
+
+    def test_make_from_none_result_is_pickleable(self) -> None:
+        """TaskTiming.make_from(None) must remain pickleable."""
+        timing = TaskTiming.make_from(None)
+        roundtripped = pickle.loads(pickle.dumps(timing))
+        self.assertFalse(roundtripped.is_terminated())
+
+
+#############################################################################
 class TestSubprocessRun(unittest.TestCase):
 
     def test_successful_command(self) -> None:
@@ -1469,7 +1532,7 @@ class TestSubprocessRunWithSubprocesses(unittest.TestCase):
     def test_termination_event_forces_timeout_and_cleanup(self) -> None:
         """When termination_event is set, subprocess_run enforces timeout=0 and cleans up tracking on TimeoutExpired."""
         termination_event = threading.Event()
-        sp = Subprocesses(termination_event=termination_event)
+        sp = Subprocesses(termination_event.is_set)
         termination_event.set()
         created_procs: list[Any] = []
 
@@ -1507,7 +1570,7 @@ class TestSubprocessRunWithSubprocesses(unittest.TestCase):
     def test_termination_event_set_during_spawn_forces_timeout(self) -> None:
         """When termination_event becomes set after spawn, subprocess_run forces timeout=0 before communicate()."""
         termination_event = threading.Event()
-        sp = Subprocesses(termination_event=termination_event)
+        sp = Subprocesses(termination_event.is_set)
         created_procs: list[Any] = []
 
         class _FakeProc:
@@ -1546,7 +1609,7 @@ class TestSubprocessRunWithSubprocesses(unittest.TestCase):
     def test_termination_event_real_sleep_exits_quickly(self) -> None:
         """Integration-style check: pre-set termination_event causes real subprocess_run to timeout promptly."""
         termination_event = threading.Event()
-        sp = Subprocesses(termination_event=termination_event)
+        sp = Subprocesses(termination_event.is_set)
         termination_event.set()
         start = time.monotonic()
         with self.assertRaises(subprocess.TimeoutExpired):

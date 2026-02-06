@@ -1098,7 +1098,9 @@ def _estimate_send_sizes_in_parallel(
 
     max_workers: int = min(len(steps_todo), job.max_workers[r.location])
     return list(
-        parallel_iterator(iterator_builder, max_workers=max_workers, ordered=True, termination_event=job.termination_event)
+        parallel_iterator(
+            iterator_builder, max_workers=max_workers, ordered=True, is_terminated=job.termination_event.is_set
+        )
     )
 
 

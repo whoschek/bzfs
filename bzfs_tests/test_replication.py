@@ -953,7 +953,8 @@ class TestReplication(AbstractTestCase):
                     tid="1/1",
                     retry=Retry(
                         count=0,
-                        start_time_nanos=0,
+                        call_start_time_nanos=0,
+                        before_attempt_start_time_nanos=0,
                         attempt_start_time_nanos=0,
                         policy=RetryPolicy(),
                         config=RetryConfig(),

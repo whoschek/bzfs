@@ -145,7 +145,7 @@ def itr_ssh_cmd_parallel(
         ),
         max_workers=job.max_workers[r.location],
         ordered=ordered,
-        termination_event=job.termination_event,
+        is_terminated=job.termination_event.is_set,
     )
 
 

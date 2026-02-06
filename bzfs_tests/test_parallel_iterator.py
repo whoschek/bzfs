@@ -94,7 +94,7 @@ class TestParallelIteratorResultsTerminationEvent(unittest.TestCase):
         term.set()
         itr = _NoConsumeIterator()
 
-        results = list(parallel_iterator_results(iterator=itr, max_workers=2, ordered=True, termination_event=term))
+        results = list(parallel_iterator_results(iterator=itr, max_workers=2, ordered=True, is_terminated=term.is_set))
 
         self.assertEqual([], results)
         self.assertFalse(itr.consumed)
@@ -111,7 +111,7 @@ class TestParallelIteratorResultsTerminationEvent(unittest.TestCase):
                 yield _done_future(v)
 
         iterator = gen()
-        it = parallel_iterator_results(iterator=iterator, max_workers=2, ordered=True, termination_event=term)
+        it = parallel_iterator_results(iterator=iterator, max_workers=2, ordered=True, is_terminated=term.is_set)
 
         first = next(it)
         term.set()  # trigger early termination before consuming the remainder
@@ -130,7 +130,7 @@ class TestParallelIteratorResultsTerminationEvent(unittest.TestCase):
                 yield _done_future(v)
 
         iterator = gen()
-        it = parallel_iterator_results(iterator=iterator, max_workers=3, ordered=False, termination_event=term)
+        it = parallel_iterator_results(iterator=iterator, max_workers=3, ordered=False, is_terminated=term.is_set)
 
         first = next(it)  # some completed value (unordered)
         term.set()  # trigger early termination

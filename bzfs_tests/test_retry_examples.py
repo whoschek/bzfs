@@ -18,9 +18,9 @@ with circuit breakers, rate limiting and retry-after, Prometheus metrics, etc.""
 from __future__ import (
     annotations,
 )
+import asyncio
 import logging
 import random
-import threading
 import time
 import unittest
 from collections.abc import (
@@ -51,9 +51,10 @@ from bzfs_main.util.retry import (
     RetryableError,
     RetryConfig,
     RetryPolicy,
-    _is_terminated,
+    RetryTiming,
     _thread_local_rng,
     after_attempt_log_failure,
+    before_attempt_noop,
     call_with_retries,
     full_jitter_backoff_strategy,
     no_giveup,
@@ -78,8 +79,9 @@ async def call_with_retries_async(
     fn: Callable[[Retry], Awaitable[_T]],  # wraps work and raises RetryableError for failures that shall be retried
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
-    config: RetryConfig | None = None,  # controls logging settings and async cancellation between attempts
+    config: RetryConfig | None = None,  # controls logging settings
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
+    before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
     log: logging.Logger | None = None,  # set this to ``None`` to disable logging
@@ -91,24 +93,37 @@ async def call_with_retries_async(
     retry_count: int = 0
     curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
-    start_time_nanos: Final[int] = time.monotonic_ns()
+    timing: RetryTiming = policy.timing
+    sleep: Callable[[int, Retry], Awaitable] = timing.sleep_async
+    is_terminated: Callable[[Retry], bool] = timing.is_terminated
+    mono_nanos: Callable[[], int] = timing.monotonic_ns
+    call_start_nanos: Final[int] = mono_nanos()
     while True:
-        attempt_start_time_nanos: int = time.monotonic_ns() if retry_count != 0 else start_time_nanos
-        retry: Retry = Retry(retry_count, start_time_nanos, attempt_start_time_nanos, policy, config, log, previous_outcomes)
+        before_attempt_nanos: int = mono_nanos() if retry_count != 0 else call_start_nanos
+        retry: Retry = Retry(
+            retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, policy, config, log, previous_outcomes
+        )
         try:
+            if before_attempt is not before_attempt_noop:
+                before_attempt_sleep_nanos: int = before_attempt(retry)
+                assert before_attempt_sleep_nanos >= 0, before_attempt_sleep_nanos
+                if before_attempt_sleep_nanos > 0:
+                    await sleep(before_attempt_sleep_nanos, retry)
+                retry = Retry(
+                    retry_count, call_start_nanos, before_attempt_nanos, mono_nanos(), policy, config, log, previous_outcomes
+                )
+            timing.on_before_attempt(retry)
             result: _T = await fn(retry)  # Call the target function and supply retry attempt number and other metadata
             if after_attempt is not after_attempt_log_failure:
-                elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
+                elapsed_nanos: int = mono_nanos() - call_start_nanos
                 outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, None, elapsed_nanos, 0, result)
                 after_attempt(outcome)
             return result
         except RetryableError as retryable_error:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+            elapsed_nanos = mono_nanos() - call_start_nanos
             giveup_reason: object | None = None
             sleep_nanos: int = 0
-            sleep: Callable[[int, Retry], Awaitable] = _sleep_async
-            is_terminated: Callable[[Retry], bool] = _is_terminated
-            if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
+            if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos and not is_terminated(retry):
                 if policy.max_sleep_nanos == 0 and policy.backoff_strategy is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
                 elif retry_count == 0 and retryable_error.retry_immediately_once:
@@ -143,18 +158,21 @@ async def call_with_retries_async(
             return on_exhaustion(outcome)  # raise error or return fallback value
 
 
-async def _sleep_async(sleep_nanos: int, retry: Retry) -> None:
-    import asyncio
-
-    termination_event = retry.config.termination_event
+def make_timing_from_async(termination_event: asyncio.Event | None) -> RetryTiming:
+    """Convenience factory that creates a Timing that performs async termination when ``termination_event`` is set."""
     if termination_event is None:
-        await asyncio.sleep(sleep_nanos / 1_000_000_000)
-    else:
-        assert isinstance(termination_event, asyncio.Event)
+        return RetryTiming()
+
+    def _is_terminated(retry: Retry) -> bool:
+        return termination_event.is_set()
+
+    async def _sleep_async(sleep_nanos: int, retry: Retry) -> None:
         try:
             await asyncio.wait_for(termination_event.wait(), timeout=sleep_nanos / 1_000_000_000)
         except asyncio.TimeoutError:
             pass  # expected
+
+    return RetryTiming(is_terminated=_is_terminated, sleep_async=_sleep_async)
 
 
 async def await_with_timeout(awaitable: Awaitable[_T], timeout_nanos: int, *, display_msg: object = "timeout") -> _T:
@@ -217,7 +235,7 @@ def retry_after_or_fallback_strategy(
         backoff_context.retryable_error, "retry_after_nanos", None
     ),
     fallback: BackoffStrategy = full_jitter_backoff_strategy,
-    max_jitter_nanos: int = 0,
+    max_jitter_nanos: int = 100 * 1_000_000,  # 100ms
     honor_max_elapsed_secs: bool = True,
 ) -> BackoffStrategy:
     """Returns a BackoffStrategy that honors RetryableError.retry_after_nanos if present (or the result of a custom
@@ -254,7 +272,7 @@ def retry_after_backoff_strategy(
         backoff_context.retryable_error, "retry_after_nanos", None
     ),
     delegate: BackoffStrategy = full_jitter_backoff_strategy,
-    max_jitter_nanos: int = 0,
+    max_jitter_nanos: int = 100 * 1_000_000,  # 100ms
     honor_max_elapsed_secs: bool = True,
 ) -> BackoffStrategy:
     """Returns a BackoffStrategy that combines RetryableError.retry_after_nanos if present (or the result of a custom
@@ -286,7 +304,7 @@ def retry_after_backoff_strategy(
 def jitter_backoff_strategy(
     delegate: BackoffStrategy = full_jitter_backoff_strategy,
     *,
-    max_jitter_nanos: int = 0,
+    max_jitter_nanos: int = 100 * 1_000_000,  # 100ms
 ) -> BackoffStrategy:
     """Returns a BackoffStrategy that adds random jitter to another strategy."""
     max_jitter_nanos = max(0, max_jitter_nanos)
@@ -404,9 +422,9 @@ class RetryIntegrationExamples(unittest.TestCase):
         # call is allowed to either close or re-open the circuit.
 
         def unreliable_operation(retry: Retry) -> str:
-            # return run_some_ssh_cmd(retry)  # may raise TimeoutError, CalledProcessError, etc.
+            # return run_some_ssh_cmd(retry)  # may raise TimeoutError, CalledProcessError, OSError, etc.
             if retry.count < 100:
-                raise ValueError("temporary failure connecting to foo.example.com")
+                raise OSError("temporary failure connecting to foo.example.com")
             return "ok"
 
         _T = TypeVar("_T")
@@ -423,16 +441,32 @@ class RetryIntegrationExamples(unittest.TestCase):
 
             return _fn
 
-        retry_policy = RetryPolicy(max_sleep_secs=60, max_elapsed_secs=600)
+        def retry_after_circuit_breaker(breaker: pybreaker.CircuitBreaker) -> Callable[[BackoffContext], int | None]:
+
+            def _retry_after(backoff_context: BackoffContext) -> int | None:
+                return (
+                    int(breaker.reset_timeout * 1_000_000_000)
+                    if isinstance(backoff_context.retryable_error.__cause__, pybreaker.CircuitBreakerError)
+                    else None
+                )
+
+            return _retry_after
+
+        retry_policy = RetryPolicy(
+            max_sleep_secs=60,
+            max_elapsed_secs=600,
+            backoff_strategy=retry_after_or_fallback_strategy(retry_after=retry_after_circuit_breaker(breaker)),
+        )
         log = logging.getLogger(__name__)
-        _result: str = call_with_retries(fn=circuit_breaker(unreliable_operation, breaker), policy=retry_policy, log=log)
+        _result: str = call_with_retries(
+            fn=circuit_breaker(unreliable_operation, breaker),
+            policy=retry_policy,
+            log=log,
+        )
 
     def demo_rate_limits_and_retry_after(self) -> None:
         """Demonstrates how to integrate rate limits and honoring a Retry-After delay."""
         import subprocess
-        from typing import (
-            TypeVar,
-        )
 
         import limits  # optional third-party ``limits`` library for rate limiting; see https://github.com/alisaifee/limits
 
@@ -451,32 +485,44 @@ class RetryIntegrationExamples(unittest.TestCase):
         def unreliable_operation(retry: Retry) -> str:
             try:
                 # return run_some_ssh_cmd(retry)  # may raise TimeoutError, CalledProcessError, etc.
+                if retry.count == 0:
+                    exc = OSError("HTTP 429 Too Many Requests")
+                    setattr(exc, "retry_after_secs", 2.0)  # noqa: B010
+                    raise exc
                 if retry.count < 100:
                     raise OSError("temporary failure connecting to foo.example.com")
                 return "ok"
             except (TimeoutError, subprocess.CalledProcessError, OSError) as exc:
                 raise RetryableError(display_msg=type(exc).__name__) from exc
 
-        _T = TypeVar("_T")
+        def retry_after(backoff_context: BackoffContext) -> int | None:
+            retry_after_secs: object = getattr(backoff_context.retryable_error.__cause__, "retry_after_secs", None)
+            if isinstance(retry_after_secs, (int, float)):
+                return max(0, int(retry_after_secs * 1_000_000_000))  # relative delay in nanoseconds
+            return None
 
         def rate_limited(
-            fn: Callable[[Retry], _T], limiter: limits.strategies.RateLimiter, limit: limits.RateLimitItem, *identifiers: str
-        ) -> Callable[[Retry], _T]:
-            def _fn(retry: Retry) -> _T:
+            limiter: limits.strategies.RateLimiter, limit: limits.RateLimitItem, *identifiers: str
+        ) -> Callable[[Retry], int]:
+
+            def _before_attempt(retry: Retry) -> int:
                 if limiter.test(limit, *identifiers) and limiter.hit(limit, *identifiers):
-                    return fn(retry)  # rate limit not yet reached
+                    return 0  # local limiter grants one send token
                 window = limiter.get_window_stats(limit, *identifiers)
-                retry_after_nanos = int(1_000_000_000 * (window.reset_time - time.time()))  # relative delay in nanoseconds
-                retryable_error = RetryableError(display_msg="rate limited")
-                setattr(retryable_error, "retry_after_nanos", retry_after_nanos)  # noqa: B010
-                raise retryable_error
+                return max(0, int(1_000_000_000 * (window.reset_time - time.time())))
 
-            return _fn
+            return _before_attempt
 
-        retry_policy = RetryPolicy(max_elapsed_secs=600, backoff_strategy=retry_after_or_fallback_strategy())
+        retry_policy = RetryPolicy(
+            max_elapsed_secs=600,
+            backoff_strategy=retry_after_or_fallback_strategy(retry_after=retry_after),
+        )
+        log = logging.getLogger(__name__)
         _result: str = call_with_retries(
-            fn=rate_limited(unreliable_operation, limiter, limit, "ssh", "host1.example.com"),
+            fn=unreliable_operation,
             policy=retry_policy,
+            before_attempt=rate_limited(limiter, limit, "ssh", "host1.example.com"),
+            log=log,
         )
 
     def demo_prometheus_metrics(self) -> None:
@@ -665,14 +711,15 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         async def fake_sleep_async(sleep_nanos: int, retry: Retry) -> None:
             sleep_calls.append((sleep_nanos, retry.count))
 
-        with patch(f"{__name__}._sleep_async", new=AsyncMock(side_effect=fake_sleep_async)) as mock_sleep_async:
-            actual = await call_with_retries_async(
-                fn,
-                policy=retry_policy,
-                config=RetryConfig(),
-                after_attempt=after_attempt,
-                log=None,
-            )
+        mock_sleep_async = AsyncMock(side_effect=fake_sleep_async)
+        retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep_async=mock_sleep_async))
+        actual = await call_with_retries_async(
+            fn,
+            policy=retry_policy,
+            config=RetryConfig(),
+            after_attempt=after_attempt,
+            log=None,
+        )
 
         self.assertEqual("ok", actual)
         self.assertEqual([0, 1, 2], calls)
@@ -716,17 +763,15 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         def after_attempt(outcome: AttemptOutcome) -> None:
             events.append(outcome)
 
-        with patch(
-            f"{__name__}._sleep_async",
-            new=AsyncMock(side_effect=AssertionError("_sleep_async must not be called")),
-        ) as mock_sleep_async:
-            actual = await call_with_retries_async(
-                fn,
-                policy=retry_policy,
-                config=RetryConfig(),
-                after_attempt=after_attempt,
-                log=None,
-            )
+        mock_sleep_async = AsyncMock(side_effect=AssertionError("_sleep_async must not be called"))
+        retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep_async=mock_sleep_async))
+        actual = await call_with_retries_async(
+            fn,
+            policy=retry_policy,
+            config=RetryConfig(),
+            after_attempt=after_attempt,
+            log=None,
+        )
 
         self.assertEqual("ok", actual)
         self.assertEqual([0, 1], calls)
@@ -821,7 +866,8 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         policy = RetryPolicy(max_retries=0, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=10)
         retry = Retry(
             count=0,
-            start_time_nanos=0,
+            call_start_time_nanos=0,
+            before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=policy,
             config=RetryConfig(),
@@ -849,7 +895,8 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         policy = RetryPolicy(max_retries=0, min_sleep_secs=10, initial_max_sleep_secs=0, max_sleep_secs=10)
         retry = Retry(
             count=0,
-            start_time_nanos=0,
+            call_start_time_nanos=0,
+            before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=policy,
             config=RetryConfig(),
@@ -863,7 +910,9 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         delegate = MagicMock(side_effect=AssertionError("delegate must not be called"))
         backoff_strategy: BackoffStrategy = retry_after_or_fallback_strategy(fallback=delegate)
         sleep_nanos, next_curr_max = backoff_strategy(BackoffContext(retry, 123, rng, 0, err))
-        self.assertEqual(policy.min_sleep_nanos, sleep_nanos)
+        max_jitter_nanos: int = 100 * 1_000_000
+        self.assertGreaterEqual(sleep_nanos, policy.min_sleep_nanos)
+        self.assertLessEqual(sleep_nanos, policy.min_sleep_nanos + max_jitter_nanos)
         self.assertEqual(123, next_curr_max)
         delegate.assert_not_called()
 
@@ -877,7 +926,8 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         )
         retry = Retry(
             count=0,
-            start_time_nanos=0,
+            call_start_time_nanos=0,
+            before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=policy,
             config=RetryConfig(),
@@ -915,7 +965,8 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         policy = RetryPolicy(max_retries=0, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=10)
         retry = Retry(
             count=0,
-            start_time_nanos=0,
+            call_start_time_nanos=0,
+            before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=policy,
             config=RetryConfig(),
@@ -947,7 +998,8 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         )
         retry = Retry(
             count=0,
-            start_time_nanos=0,
+            call_start_time_nanos=0,
+            before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=policy,
             config=RetryConfig(),
@@ -1051,12 +1103,14 @@ class TestMiscBackoffStrategies(unittest.TestCase):
                 sleep_nanos.append(outcome.sleep_nanos)
 
         rng_patch = patch("bzfs_main.util.retry._thread_local_rng", return_value=rng) if rng is not None else None
-        with patch("bzfs_main.util.retry._sleep") as mock_sleep:
-            if rng_patch is None:
-                call_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
-            else:
-                with rng_patch:
-                    call_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
+        mock_sleep = MagicMock()
+        retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep=mock_sleep))
+        config = RetryConfig()
+        if rng_patch is None:
+            call_with_retries(fn, policy=retry_policy, config=config, after_attempt=after_attempt, log=None)
+        else:
+            with rng_patch:
+                call_with_retries(fn, policy=retry_policy, config=config, after_attempt=after_attempt, log=None)
         return sleep_nanos, mock_sleep
 
     def test_call_with_retries_using_decorrelated_jitter_as_custom_backoff_strategy(self) -> None:
@@ -1099,7 +1153,7 @@ class TestMiscBackoffStrategies(unittest.TestCase):
             actual = call_with_retries(
                 fn,
                 policy=retry_policy,
-                config=RetryConfig(termination_event=threading.Event()),
+                config=RetryConfig(),
                 after_attempt=after_attempt,
                 log=None,
             )

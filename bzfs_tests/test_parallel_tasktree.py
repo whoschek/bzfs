@@ -52,6 +52,7 @@ from bzfs_main.util.parallel_tasktree import (
 from bzfs_main.util.utils import (
     Comparable,
     SynchronousExecutor,
+    TaskTiming,
 )
 
 
@@ -244,7 +245,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             datasets=datasets,
             process_dataset=process_dataset,
             max_workers=2,
-            termination_event=termination_event,
+            timing=TaskTiming.make_from(termination_event),
             enable_barriers=False,
             is_test_mode=True,
         )
@@ -291,7 +292,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             process_dataset=process_dataset,
             max_workers=2,
             interval_nanos=interval_nanos,
-            termination_event=termination_event,
+            timing=TaskTiming.make_from(termination_event),
             enable_barriers=False,
             is_test_mode=True,
         )

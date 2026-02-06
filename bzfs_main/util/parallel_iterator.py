@@ -21,7 +21,6 @@ import concurrent
 import itertools
 import os
 import sys
-import threading
 from collections import (
     deque,
 )
@@ -53,7 +52,7 @@ def parallel_iterator(
     *,
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
-    termination_event: threading.Event | None = None,  # optional event to request early async termination
+    is_terminated: Callable[[], bool] = lambda: False,  # optional predicate to request early async termination
 ) -> Iterator[_T]:
     """Executes multiple iterators in parallel/concurrently, with explicit backpressure and configurable result ordering;
     avoids pre-submitting the entire workload.
@@ -140,7 +139,7 @@ def parallel_iterator(
             iterator=itertools.chain.from_iterable(iterator_builder(executor)),
             max_workers=max_workers,
             ordered=ordered,
-            termination_event=termination_event,
+            is_terminated=is_terminated,
         )
 
 
@@ -149,13 +148,12 @@ def parallel_iterator_results(
     *,
     max_workers: int,
     ordered: bool,
-    termination_event: threading.Event | None = None,  # optional event to request early async termination
+    is_terminated: Callable[[], bool] = lambda: False,  # optional predicate to request early async termination
 ) -> Iterator[_T]:
     """Yield results from an iterator of Future[T] using bounded concurrency with optional ordered delivery."""
     assert max_workers >= 0
     max_workers = max(1, max_workers)
-    termination_event = threading.Event() if termination_event is None else termination_event
-    if termination_event.is_set():
+    if is_terminated():
         return
     # Materialize the next N=max_workers futures into a buffer, causing submission + parallel execution of their CLI calls
     fifo_buffer: deque[Future[_T]] = deque(itertools.islice(iterator, max_workers))
@@ -164,7 +162,7 @@ def parallel_iterator_results(
 
     if ordered:
         while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
-            if termination_event.is_set():
+            if is_terminated():
                 for future in fifo_buffer:
                     future.cancel()
                 return
@@ -180,7 +178,7 @@ def parallel_iterator_results(
         while todo_futures:
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
             while done_futures:  # submit the next CLI call whenever a CLI call returns
-                if termination_event.is_set():
+                if is_terminated():
                     for future in todo_futures:
                         future.cancel()
                     return

@@ -26,6 +26,7 @@ import argparse
 import base64
 import bisect
 import contextlib
+import dataclasses
 import errno
 import hashlib
 import itertools
@@ -57,6 +58,9 @@ from concurrent.futures import (
     Executor,
     Future,
     ThreadPoolExecutor,
+)
+from dataclasses import (
+    dataclass,
 )
 from datetime import (
     datetime,
@@ -652,7 +656,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
         with ctx as proc:
             try:
                 sp = subprocesses
-                if sp is not None and sp._termination_event.is_set():  # noqa: SLF001  # pylint: disable=protected-access
+                if sp is not None and sp._is_terminated():  # noqa: SLF001 pylint: disable=protected-access
                     is_cancel = True
                     timeout = 0.0
                 stdout, stderr = proc.communicate(input_value, timeout=timeout)
@@ -747,18 +751,60 @@ def termination_signal_handler(
         signal.signal(signal.SIGTERM, previous_term_handler)  # restore original signal handler
 
 
+def return_false() -> bool:
+    """Always returns ``False``; picklable."""
+    return False
+
+
+def sleep_nanos(delay_nanos: int) -> None:
+    """Same as time.sleep() but expects a relative sleep duration in nanoseconds as input value; picklable."""
+    time.sleep(delay_nanos / 1_000_000_000)
+
+
+#############################################################################
+@dataclass(frozen=True)
+@final
+class TaskTiming:
+    """Customizable callbacks for reading the current monotonic time, sleeping and optional async termination; immutable."""
+
+    monotonic_ns: Callable[[], int] = time.monotonic_ns
+
+    is_terminated: Callable[[], bool] = return_false
+    """Returns whether a predicate has become true; can be used to indicate system shutdown or similar cancellation
+    conditions; default is to always return ``False``."""
+
+    sleep: Callable[[int], None] = sleep_nanos
+    """Sleeps N nanoseconds; thread-safe."""
+
+    def copy(self, **override_kwargs: Any) -> TaskTiming:
+        """Creates a new object copying an existing one with the specified fields overridden for customization; thread-
+        safe."""
+        return dataclasses.replace(self, **override_kwargs)
+
+    @staticmethod
+    def make_from(termination_event: threading.Event | None) -> TaskTiming:
+        """Convenience factory that creates an object that performs async termination when ``termination_event`` is set."""
+        if termination_event is None:
+            return TaskTiming()
+
+        def _sleep(delay_nanos: int) -> None:
+            termination_event.wait(delay_nanos / 1_000_000_000)  # allow early wakeup on async termination
+
+        return TaskTiming(is_terminated=termination_event.is_set, sleep=_sleep)
+
+
 #############################################################################
 @final
 class Subprocesses:
     """Provides per-job tracking of child PIDs so a job can safely terminate only the subprocesses it spawned itself; used
     when multiple jobs run concurrently within the same Python process.
 
-    Optionally binds to a termination_event to enforce async cancellation by forcing immediate timeouts for newly spawned
-    subprocesses once cancellation is requested.
+    Optionally binds to an ``_is_terminated`` predicate to enforce async cancellation by forcing immediate timeouts for newly
+    spawned subprocesses once cancellation is requested.
     """
 
-    def __init__(self, termination_event: threading.Event | None = None) -> None:
-        self._termination_event: Final[threading.Event] = termination_event or threading.Event()
+    def __init__(self, is_terminated: Callable[[], bool] = return_false) -> None:
+        self._is_terminated: Final[Callable[[], bool]] = is_terminated
         self._lock: Final[threading.Lock] = threading.Lock()
         self._child_pids: Final[dict[int, None]] = {}  # a set that preserves insertion order
 

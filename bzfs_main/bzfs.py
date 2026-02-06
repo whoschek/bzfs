@@ -76,6 +76,7 @@ from subprocess import (
     DEVNULL,
     PIPE,
     CalledProcessError,
+    TimeoutExpired,
 )
 from typing import (
     Any,
@@ -163,8 +164,9 @@ from bzfs_main.util.parallel_tasktree_policy import (
 from bzfs_main.util.retry import (
     Retry,
     RetryableError,
-    RetryConfig,
     RetryTemplate,
+    RetryTerminationError,
+    RetryTiming,
 )
 from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
@@ -182,6 +184,7 @@ from bzfs_main.util.utils import (
     Subprocesses,
     SynchronizedBool,
     SynchronizedDict,
+    TaskTiming,
     append_if_absent,
     compile_regexes,
     cut,
@@ -255,10 +258,11 @@ class Job(MiniJob):
     def __init__(self, termination_event: threading.Event | None = None) -> None:
         self.params: Params
         self.termination_event: Final[threading.Event] = termination_event or threading.Event()
-        self.subprocesses: Subprocesses = Subprocesses(termination_event=self.termination_event)
-        self.retry_template: Final[RetryTemplate] = RetryTemplate(
-            config=RetryConfig(termination_event=self.termination_event)
+        self.retry_timing: Final[RetryTiming] = RetryTiming.make_from(self.termination_event).copy(
+            on_before_attempt=lambda retry: None
         )
+        self.task_timing: Final[TaskTiming] = TaskTiming.make_from(self.termination_event)
+        self.subprocesses: Subprocesses = Subprocesses(self.termination_event.is_set)
         self.all_dst_dataset_exists: Final[dict[str, dict[str, bool]]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: dict[str, DatasetProperties] = {}
@@ -303,6 +307,9 @@ class Job(MiniJob):
         """Shuts down gracefully; also terminates descendant processes, if any."""
         with xfinally(self.subprocesses.terminate_process_subtrees):
             self.shutdown()
+
+    def _retry_template(self) -> RetryTemplate:
+        return RetryTemplate(policy=self.params.retry_policy.copy(timing=self.retry_timing))
 
     def run_main(self, args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
         """Parses CLI arguments, sets up logging, and executes main job loop."""
@@ -446,7 +453,7 @@ class Job(MiniJob):
                             cause: BaseException | None = retryable_error.__cause__
                             assert cause is not None
                             raise cause.with_traceback(cause.__traceback__)  # noqa: B904 re-raise of cause without chaining
-                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                    except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError, RetryTerminationError) as e:
                         if p.skip_on_error == "fail" or (
                             isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0
                         ):
@@ -928,12 +935,12 @@ class Job(MiniJob):
                 skip_tree_on_error=lambda dataset: False,
                 skip_on_error=p.skip_on_error,
                 max_workers=max_workers,
-                termination_event=self.termination_event,
+                timing=self.task_timing,
                 termination_handler=self.terminate,
                 enable_barriers=False,
                 task_name="--delete-dst-snapshots",
                 append_exception=self.append_exception,
-                retry_template=self.retry_template.copy(policy=p.retry_policy),
+                retry_template=self._retry_template(),
                 dry_run=p.dry_run,
                 is_test_mode=self.is_test_mode,
             )
@@ -1295,12 +1302,12 @@ class Job(MiniJob):
             skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[src2dst(dataset)],
             skip_on_error=p.skip_on_error,
             max_workers=max_workers,
-            termination_event=self.termination_event,
+            timing=self.task_timing,
             termination_handler=self.terminate,
             enable_barriers=False,
             task_name="Replication",
             append_exception=self.append_exception,
-            retry_template=self.retry_template.copy(policy=p.retry_policy),
+            retry_template=self._retry_template(),
             dry_run=p.dry_run,
             is_test_mode=self.is_test_mode,
         )
@@ -1729,18 +1736,16 @@ class Job(MiniJob):
     def try_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str | None:
         """Convenience method that auto-retries try_ssh_command() on failure."""
         p = self.params
-        return self.retry_template.call_with_retries(
+        return self._retry_template().call_with_retries(
             fn=lambda retry: self.try_ssh_command(*args, **kwargs),
-            policy=p.retry_policy,
             log=p.log,
         )
 
     def run_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str:
         """Convenience method that auto-retries run_ssh_command() on transport failure (not on remote command failure)."""
         p = self.params
-        return self.retry_template.call_with_retries(
+        return self._retry_template().call_with_retries(
             fn=lambda retry: self.run_ssh_command(*args, **kwargs),
-            policy=p.retry_policy,
             log=p.log,
         )
 
