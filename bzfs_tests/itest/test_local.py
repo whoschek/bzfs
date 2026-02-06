@@ -873,9 +873,7 @@ class LocalTestCase(IntegrationTestCase):
         self.setup_basic()
         w, q = 3, 3
         threads = 4
-        maxsessions = (
-            threads if platform.platform().startswith("FreeBSD-13") else threads // 2
-        )  # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU on non-Linux
+        maxsessions = threads // 2
         self.setup_basic_woo(w=w, q=q)
         for i in range(1):
             with stop_on_failure_subtest(i=i):
