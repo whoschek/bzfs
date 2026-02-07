@@ -259,7 +259,6 @@ def call_with_retries(
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
     timing: RetryTiming = policy.timing
     sleep: Callable[[int, Retry], None] = timing.sleep
-    is_terminated: Callable[[Retry], bool] = timing.is_terminated
     mono_nanos: Callable[[], int] = timing.monotonic_ns
     call_start_nanos: Final[int] = mono_nanos()
     while True:
@@ -285,6 +284,7 @@ def call_with_retries(
             return result
         except RetryableError as retryable_error:
             elapsed_nanos = mono_nanos() - call_start_nanos
+            is_terminated: Callable[[Retry], bool] = timing.is_terminated
             giveup_reason: object | None = None
             sleep_nanos: int = 0
             if on_retryable_error is not noop:
