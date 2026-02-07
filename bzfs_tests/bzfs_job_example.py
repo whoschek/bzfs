@@ -378,6 +378,7 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 
 cmd = ["bzfs_jobrunner"]
 cmd += ["--recursive"] if recursive else []
+cmd += [f"--src-hosts={src_hosts}"]
 cmd += [f"--dst-hosts={dst_hosts}"]
 cmd += [f"--retain-dst-targets={retain_dst_targets}"]
 cmd += [f"--dst-root-datasets={dst_root_datasets}"]
@@ -392,4 +393,4 @@ cmd += [f"--worker-timeout-seconds={worker_timeout_seconds}"] if worker_timeout_
 cmd += extra_args + unknown_args
 cmd += ["--root-dataset-pairs"] + root_dataset_pairs
 # print(" ".join(cmd))
-sys.exit(subprocess.run(cmd, input=f"{src_hosts}", text=True).returncode)
+sys.exit(subprocess.run(cmd, stdin=subprocess.DEVNULL, text=True).returncode)
