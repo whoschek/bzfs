@@ -76,6 +76,7 @@ Expert Configuration:
   inspect the last underlying exception via ``err.outcome``, ``err.__cause__``, and even ``err.__cause__.__cause__`` when
   present.
 - Supply a ``before_attempt(Retry)`` callback to optionally apply internal backpressure.
+- Supply a ``on_retryable_error(AttemptOutcome)`` callback, e.g. to count failures (RetryableError) caught by the retry loop.
 - Set ``RetryPolicy.timing`` to customize reading the current monotonic time, sleeping and optional async termination.
 - The callback API is powerful enough to easily plug in advanced retry algorithms such as:
     - Google SRE Client-Side Adaptive Throttling - https://sre.google/sre-book/handling-overload/

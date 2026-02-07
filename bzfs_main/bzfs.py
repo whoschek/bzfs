@@ -309,7 +309,8 @@ class Job(MiniJob):
             self.shutdown()
 
     def _retry_template(self) -> RetryTemplate:
-        return RetryTemplate(policy=self.params.retry_policy.copy(timing=self.retry_timing))
+        p = self.params
+        return RetryTemplate(policy=p.retry_policy.copy(timing=self.retry_timing), log=p.log)
 
     def run_main(self, args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
         """Parses CLI arguments, sets up logging, and executes main job loop."""
@@ -1735,19 +1736,11 @@ class Job(MiniJob):
 
     def try_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str | None:
         """Convenience method that auto-retries try_ssh_command() on failure."""
-        p = self.params
-        return self._retry_template().call_with_retries(
-            fn=lambda retry: self.try_ssh_command(*args, **kwargs),
-            log=p.log,
-        )
+        return self._retry_template().call_with_retries(fn=lambda retry: self.try_ssh_command(*args, **kwargs))
 
     def run_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str:
         """Convenience method that auto-retries run_ssh_command() on transport failure (not on remote command failure)."""
-        p = self.params
-        return self._retry_template().call_with_retries(
-            fn=lambda retry: self.run_ssh_command(*args, **kwargs),
-            log=p.log,
-        )
+        return self._retry_template().call_with_retries(fn=lambda retry: self.run_ssh_command(*args, **kwargs))
 
     def maybe_inject_error(self, cmd: list[str], error_trigger: str | None = None) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
