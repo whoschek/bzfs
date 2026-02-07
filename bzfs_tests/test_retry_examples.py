@@ -50,6 +50,7 @@ from bzfs_main.util.retry import (
     Retry,
     RetryableError,
     RetryConfig,
+    RetryError,
     RetryPolicy,
     RetryTiming,
     _thread_local_rng,
@@ -58,6 +59,7 @@ from bzfs_main.util.retry import (
     call_with_retries,
     full_jitter_backoff_strategy,
     no_giveup,
+    noop,
     on_exhaustion_raise,
 )
 
@@ -83,6 +85,7 @@ async def call_with_retries_async(
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
     before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
+    on_retryable_error: Callable[[AttemptOutcome], None] = noop,  # e.g. count failures (RetryableError) caught by retry loop
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
     log: logging.Logger | None = None,  # set this to ``None`` to disable logging
 ) -> _T:
@@ -123,6 +126,10 @@ async def call_with_retries_async(
             elapsed_nanos = mono_nanos() - call_start_nanos
             giveup_reason: object | None = None
             sleep_nanos: int = 0
+            if on_retryable_error is not noop:
+                on_retryable_error(
+                    AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
+                )
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos and not is_terminated(retry):
                 if policy.max_sleep_nanos == 0 and policy.backoff_strategy is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
@@ -420,6 +427,7 @@ class RetryIntegrationExamples(unittest.TestCase):
         # pybreaker default semantics: Calls pass through while the circuit is "closed". After fail_max failures, the circuit
         # "opens" and subsequently fails fast with CircuitBreakerError until reset_timeout elapses, at which point a trial
         # call is allowed to either close or re-open the circuit.
+        # Also see https://martinfowler.com/bliki/CircuitBreaker.html
 
         def unreliable_operation(retry: Retry) -> str:
             # return run_some_ssh_cmd(retry)  # may raise TimeoutError, CalledProcessError, OSError, etc.
@@ -790,6 +798,38 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ValueError):
             await call_with_retries_async(fn, policy=RetryPolicy.no_retries(), config=RetryConfig(), log=None)
+
+    async def test_call_with_retries_async_on_retryable_error_called_once_per_failure(self) -> None:
+        """Ensures on_retryable_error runs once for each RetryableError raised by fn()."""
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=10,
+            reraise=False,
+        )
+        seen_counts: list[int] = []
+        seen_exhausted_flags: list[bool] = []
+
+        def on_retryable_error(outcome: AttemptOutcome) -> None:
+            seen_counts.append(outcome.retry.count)
+            seen_exhausted_flags.append(outcome.is_exhausted)
+
+        async def fn(_retry: Retry) -> str:
+            raise RetryableError("fail") from ValueError("boom")
+
+        with self.assertRaises(RetryError):
+            await call_with_retries_async(
+                fn,
+                policy=retry_policy,
+                config=RetryConfig(),
+                on_retryable_error=on_retryable_error,
+                log=None,
+            )
+
+        self.assertEqual([0, 1], seen_counts)
+        self.assertEqual([False, False], seen_exhausted_flags)
 
     async def test_await_with_timeout_success_and_timeout(self) -> None:
         import asyncio

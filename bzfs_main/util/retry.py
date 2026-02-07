@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Customizable generic retry framework using jittered exponential backoff with cap.
+"""Customizable generic retry framework; defaults to jittered exponential backoff with cap unless specified otherwise.
 
 Purpose:
 --------
@@ -77,6 +77,12 @@ Expert Configuration:
   present.
 - Supply a ``before_attempt(Retry)`` callback to optionally apply internal backpressure.
 - Set ``RetryPolicy.timing`` to customize reading the current monotonic time, sleeping and optional async termination.
+- The callback API is powerful enough to easily plug in advanced retry algorithms such as:
+    - Google SRE Client-Side Adaptive Throttling - https://sre.google/sre-book/handling-overload/
+    - gRPC retry throttling - https://grpc.io/docs/guides/retry/
+    - AWS SDK adaptive retry mode - https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html
+    - Circuit breakers - https://martinfowler.com/bliki/CircuitBreaker.html (e.g. via `pybreaker` third-party library)
+    - Rate limiting with Fixed Window, Moving Window, and Sliding Windows (e.g. via `limits` third-party library)
 
 Example Usage:
 --------------
