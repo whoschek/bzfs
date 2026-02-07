@@ -1173,6 +1173,38 @@ class TestCallWithRetries(unittest.TestCase):
             RetryPolicy(reraise="no")  # type: ignore[arg-type]
         self.assertIn("reraise", str(cm.exception))
 
+    def test_call_with_retries_on_retryable_error_called_once_per_failure(self) -> None:
+        """Ensures on_retryable_error runs once for each RetryableError raised by fn()."""
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=10,
+            reraise=False,
+        )
+        seen_counts: list[int] = []
+        seen_exhausted_flags: list[bool] = []
+
+        def on_retryable_error(outcome: AttemptOutcome) -> None:
+            seen_counts.append(outcome.retry.count)
+            seen_exhausted_flags.append(outcome.is_exhausted)
+
+        def fn(_retry: Retry) -> str:
+            raise RetryableError("fail") from ValueError("boom")
+
+        with self.assertRaises(RetryError):
+            RetryTemplate().call_with_retries(
+                fn,
+                policy=retry_policy,
+                config=RetryConfig(),
+                on_retryable_error=on_retryable_error,
+                log=None,
+            )
+
+        self.assertEqual([0, 1], seen_counts)
+        self.assertEqual([False, False], seen_exhausted_flags)
+
     def test_call_with_retries_termination_event_can_flip_between_checks(self) -> None:
         """Ensures termination_event can become set between two consecutive is_set() checks."""
         termination_event = MagicMock(spec=threading.Event)

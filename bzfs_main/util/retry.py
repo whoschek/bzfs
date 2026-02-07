@@ -201,6 +201,10 @@ def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
             )
 
 
+def noop(outcome: AttemptOutcome) -> None:
+    """Default implementation of ``on_retryable_error`` callback for call_with_retries(); does nothing; thread-safe."""
+
+
 def on_exhaustion_raise(outcome: AttemptOutcome) -> NoReturn:
     """Default implementation of ``on_exhaustion`` callback for call_with_retries(); always raises; thread-safe."""
     assert outcome.is_exhausted
@@ -225,6 +229,7 @@ def call_with_retries(
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
     before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
+    on_retryable_error: Callable[[AttemptOutcome], None] = noop,  # e.g. count failures (RetryableError) caught by retry loop
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
     log: logging.Logger | None = None,  # set this to ``None`` to disable logging
 ) -> _T:
@@ -275,6 +280,10 @@ def call_with_retries(
             elapsed_nanos = mono_nanos() - call_start_nanos
             giveup_reason: object | None = None
             sleep_nanos: int = 0
+            if on_retryable_error is not noop:
+                on_retryable_error(
+                    AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
+                )
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos and not is_terminated(retry):
                 if policy.max_sleep_nanos == 0 and policy.backoff_strategy is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
@@ -832,6 +841,7 @@ class RetryTemplate(Generic[_T]):
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic
     before_attempt: Callable[[Retry], int] = before_attempt_noop  # e.g. wait due to internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
+    on_retryable_error: Callable[[AttemptOutcome], None] = noop  # e.g. count failures (RetryableError) caught by retry loop
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise  # raise error or return fallback value
     log: logging.Logger | None = None  # set this to ``None`` to disable logging
 
@@ -854,6 +864,7 @@ class RetryTemplate(Generic[_T]):
             giveup=self.giveup,
             before_attempt=self.before_attempt,
             after_attempt=self.after_attempt,
+            on_retryable_error=self.on_retryable_error,
             on_exhaustion=self.on_exhaustion,
             log=self.log,
         )
@@ -867,6 +878,7 @@ class RetryTemplate(Generic[_T]):
         giveup: Callable[[AttemptOutcome], object | None] | None = None,
         before_attempt: Callable[[Retry], int] | None = None,
         after_attempt: Callable[[AttemptOutcome], None] | None = None,
+        on_retryable_error: Callable[[AttemptOutcome], None] | None = None,
         on_exhaustion: Callable[[AttemptOutcome], _R] | None = None,
         log: logging.Logger | None = None,  # pass NO_LOGGER to override template logger and disable logging for this call
     ) -> _R:
@@ -881,6 +893,7 @@ class RetryTemplate(Generic[_T]):
             giveup=self.giveup if giveup is None else giveup,
             before_attempt=self.before_attempt if before_attempt is None else before_attempt,
             after_attempt=self.after_attempt if after_attempt is None else after_attempt,
+            on_retryable_error=self.on_retryable_error if on_retryable_error is None else on_retryable_error,
             on_exhaustion=(
                 cast(Callable[[AttemptOutcome], _R], self.on_exhaustion) if on_exhaustion is None else on_exhaustion
             ),
