@@ -42,6 +42,7 @@ import bzfs_tests.test_period_anchors
 import bzfs_tests.test_progress_reporter
 import bzfs_tests.test_replication
 import bzfs_tests.test_retry
+import bzfs_tests.test_retry_async
 import bzfs_tests.test_retry_benchmark
 import bzfs_tests.test_retry_examples
 import bzfs_tests.test_snapshot_cache
@@ -61,6 +62,7 @@ def main() -> None:
         bzfs_tests.test_interner,
         bzfs_tests.test_loggers,
         bzfs_tests.test_retry,
+        bzfs_tests.test_retry_async,
         bzfs_tests.test_retry_benchmark,
         bzfs_tests.test_retry_examples,
         bzfs_tests.test_period_anchors,

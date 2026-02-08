@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Unit tests for call_with_retries() helper."""
+"""Unit tests for call_with_retries() and related helpers."""
 
 from __future__ import (
     annotations,
@@ -27,7 +27,6 @@ from logging import (
     Logger,
 )
 from unittest.mock import (
-    AsyncMock,
     MagicMock,
     patch,
 )
@@ -198,30 +197,6 @@ class TestRetryTiming(unittest.TestCase):
             timing.on_before_attempt(retry)
         self.assertEqual("terminated before attempt", cm.exception.display_msg_str())
         self.assertIsInstance(cm.exception.__cause__, RetryTerminationError)
-
-    def test_sleep_async_delegates_to_asyncio_sleep(self) -> None:
-        import asyncio
-
-        sleep_nanos = 456_000_000
-        expected_secs = sleep_nanos / 1_000_000_000
-        timing = RetryTiming()
-        retry = Retry(
-            count=0,
-            call_start_time_nanos=0,
-            before_attempt_start_time_nanos=0,
-            attempt_start_time_nanos=0,
-            policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
-            log=None,
-            previous_outcomes=(),
-        )
-        with patch("asyncio.sleep", new=AsyncMock()) as mock_sleep:
-
-            async def _run() -> None:
-                await timing.sleep_async(sleep_nanos, retry)
-
-            asyncio.run(_run())
-        mock_sleep.assert_awaited_once_with(expected_secs)
 
     def test_default_retry_timing_is_pickleable(self) -> None:
         """Default RetryTiming must be pickleable for cross-process use-cases."""
