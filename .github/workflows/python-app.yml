@@ -912,10 +912,13 @@ jobs:
       - name: Upload website to GitHub Pages
         uses: actions/upload-pages-artifact@v4  # see https://github.com/actions/upload-pages-artifact
         with:
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: generate_website
       - name: Deploy website to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4  # see https://github.com/actions/deploy-pages
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
       - name: "Display URL of GitHub Pages"
         run: |
           echo "Uploaded website to GitHub Pages at ${{ steps.deployment.outputs.page_url }}"
