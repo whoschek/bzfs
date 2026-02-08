@@ -63,6 +63,8 @@ Expert Configuration:
 ---------------------
 - Set ``RetryPolicy.backoff_strategy(BackoffContext)`` to plug in a custom backoff algorithm (e.g., decorrelated-jitter or
   retry-after HTTP 429). The default is full-jitter exponential backoff with cap (aka industry standard).
+- Supply a ``before_attempt(Retry)`` callback for optional rate limiting or other forms of internal backpressure.
+- Supply a ``on_retryable_error(AttemptOutcome)`` callback, e.g. to count failures (RetryableError) caught by the retry loop.
 - Set ``RetryPolicy.max_previous_outcomes > 0`` to pass the N most recent AttemptOutcome objects to callbacks (default is 0).
 - If ``RetryPolicy.max_previous_outcomes > 0``, you can use ``RetryableError(..., attachment=...)`` to carry domain-specific
   state from a failed attempt to the next attempt via ``retry.previous_outcomes``. This pattern helps if attempt N+1 is a
@@ -76,8 +78,6 @@ Expert Configuration:
   raises ``RetryError`` (wrapping the last ``RetryableError``) on exhaustion, so callers now catch ``RetryError`` and can
   inspect the last underlying exception via ``err.outcome``, ``err.__cause__``, and even ``err.__cause__.__cause__`` when
   present.
-- Supply a ``before_attempt(Retry)`` callback to optionally apply internal backpressure.
-- Supply a ``on_retryable_error(AttemptOutcome)`` callback, e.g. to count failures (RetryableError) caught by the retry loop.
 - Set ``RetryPolicy.timing`` to customize reading the current monotonic time, sleeping and optional async termination.
 - The callback API is powerful enough to easily plug in advanced retry algorithms such as:
     - Google SRE Client-Side Adaptive Throttling - https://sre.google/sre-book/handling-overload/
@@ -239,7 +239,7 @@ def call_with_retries(
     *,
     config: RetryConfig | None = None,  # controls logging settings
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
-    before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to internal backpressure
+    before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     on_retryable_error: Callable[[AttemptOutcome], None] = noop,  # e.g. count failures (RetryableError) caught by retry loop
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
@@ -337,7 +337,7 @@ async def call_with_retries_async(
     *,
     config: RetryConfig | None = None,  # controls logging settings
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
-    before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to internal backpressure
+    before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     on_retryable_error: Callable[[AttemptOutcome], None] = noop,  # e.g. count failures (RetryableError) caught by retry loop
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
@@ -755,7 +755,6 @@ class RetryTiming:
     def make_from_asyncio(termination_event: asyncio.Event | None) -> RetryTiming:
         """Convenience factory that creates a RetryTiming that performs async termination when termination_event is set;
         Write an analog version of this function if you wish to replace asyncio with Trio or AnyIO or similar."""
-
         if termination_event is None:
             return RetryTiming()
 
@@ -961,7 +960,7 @@ class RetryTemplate(Generic[_T]):
     policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
     config: RetryConfig = RetryConfig()  # controls logging settings
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic
-    before_attempt: Callable[[Retry], int] = before_attempt_noop  # e.g. wait due to internal backpressure
+    before_attempt: Callable[[Retry], int] = before_attempt_noop  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
     on_retryable_error: Callable[[AttemptOutcome], None] = noop  # e.g. count failures (RetryableError) caught by retry loop
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise  # raise error or return fallback value
