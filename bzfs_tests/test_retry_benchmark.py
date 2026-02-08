@@ -91,6 +91,7 @@ class TestCallWithRetriesBenchmark(unittest.TestCase):
             max_previous_outcomes=max_previous_outcomes,
             reraise=False,
         )
+        retry_policy = retry_policy.copy(timing=retry_policy.timing.copy(on_before_attempt=lambda retry: None))
         iters = 0
 
         def fn(retry: Retry) -> Any:

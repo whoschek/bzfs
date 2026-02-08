@@ -916,6 +916,7 @@ class Job:
     @staticmethod
     def add_ssh_opts(
         opts: list[str],
+        *,
         ssh_src_user: str | None = None,
         ssh_dst_user: str | None = None,
         ssh_src_port: int | None = None,

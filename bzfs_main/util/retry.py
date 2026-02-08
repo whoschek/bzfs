@@ -291,7 +291,7 @@ def call_with_retries(
                 on_retryable_error(
                     AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
                 )
-            if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos and not is_terminated(retry):
+            if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
                 if policy.max_sleep_nanos == 0 and policy.backoff_strategy is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
                 elif retry_count == 0 and retryable_error.retry_immediately_once:
@@ -310,7 +310,7 @@ def call_with_retries(
                         sleep(sleep_nanos, retry)
                     if not is_terminated(retry):
                         n: int = policy.max_previous_outcomes
-                        if n > 0:  #  outcome will be passed to next attempt via Retry.previous_outcomes
+                        if n > 0:  # outcome will be passed to next attempt via Retry.previous_outcomes
                             if previous_outcomes:  # detach to reduce memory footprint
                                 outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))
                             previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # imm deque
@@ -648,7 +648,7 @@ class RetryTiming:
 
     @staticmethod
     def make_from(termination_event: threading.Event | None) -> RetryTiming:
-        """Convenience factory that creates a Timing that performs async termination when ``termination_event`` is set."""
+        """Convenience factory that creates a RetryTiming that performs async termination when termination_event is set."""
         if termination_event is None:
             return RetryTiming()
 
@@ -860,7 +860,7 @@ class RetryTemplate(Generic[_T]):
         return dataclasses.replace(self, **override_kwargs)
 
     def __call__(self) -> _T:
-        """Executes ``self.fn`` via the call_with_retries() retry loop using the stored parameters; thread-safe.
+        """Invokes ``self.fn`` via the call_with_retries() retry loop using the stored parameters; thread-safe.
 
         Example Usage: result: str = retry_template.copy(fn=...)()
         """
@@ -889,7 +889,7 @@ class RetryTemplate(Generic[_T]):
         on_exhaustion: Callable[[AttemptOutcome], _R] | None = None,
         log: logging.Logger | None = None,  # pass NO_LOGGER to override template logger and disable logging for this call
     ) -> _R:
-        """Executes ``fn`` via the call_with_retries() retry loop using the stored or overridden parameters; thread-safe.
+        """Invokes ``fn`` via the call_with_retries() retry loop using the stored or overridden params; thread-safe.
 
         Example Usage: result: str = retry_template.call_with_retries(fn=...)
         """
