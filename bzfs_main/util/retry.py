@@ -40,7 +40,7 @@ Usage:
 
 Advanced Configuration:
 -----------------------
-- Tune ``RetryPolicy`` parameters to control maximum retries, sleep bounds, and elapsed-time budget.
+- Tune ``RetryPolicy`` parameters to control maximum retries, sleep bounds, elapsed-time budget, logging, etc.
 - Use ``RetryPolicy.config: RetryConfig`` to control logging settings.
 - Set ``log=None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
 - Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, error/status
@@ -61,7 +61,7 @@ Observability:
 
 Expert Configuration:
 ---------------------
-- Set ``RetryPolicy.backoff_strategy(BackoffContext)`` to plug in a custom backoff algorithm (e.g., decorrelated-jitter or
+- Supply a ``backoff(BackoffStrategy)`` callback to plug in a custom backoff algorithm (e.g., decorrelated-jitter or
   retry-after HTTP 429). The default is full-jitter exponential backoff with cap (aka industry standard).
 - Supply a ``before_attempt(Retry)`` callback for optional rate limiting or other forms of internal backpressure.
 - Supply a ``on_retryable_error(AttemptOutcome)`` callback, e.g. to count failures (RetryableError) caught by the retry loop.
@@ -167,6 +167,26 @@ INFINITY_MAX_RETRIES: Final[int] = 2**90 - 1  # a number that's essentially infi
 
 
 #############################################################################
+def full_jitter_backoff_strategy(context: BackoffContext) -> tuple[int, int]:
+    """Default implementation of ``backoff`` callback for call_with_retries(); computes delay time before next retry attempt,
+    after failure.
+
+    Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
+    exponential backoff with cap to the next attempt; thread-safe. Typically, min_sleep_nanos is 0 and exponential_base is 2.
+    Example curr_max_sleep_nanos sequence: 125ms --> 250ms --> 500ms --> 1s --> 2s --> 4s --> 8s --> 10s --> 10s...
+    Full-jitter provides optimal balance between reducing server load and minimizing retry latency.
+    """
+    policy: RetryPolicy = context.retry.policy
+    curr_max_sleep_nanos: int = context.curr_max_sleep_nanos
+    if policy.min_sleep_nanos == curr_max_sleep_nanos:
+        sleep_nanos = curr_max_sleep_nanos  # perf
+    else:
+        sleep_nanos = context.rng.randint(policy.min_sleep_nanos, curr_max_sleep_nanos)  # nanos to delay until next attempt
+    curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
+    curr_max_sleep_nanos = min(curr_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap for next attempt
+    return sleep_nanos, curr_max_sleep_nanos
+
+
 def no_giveup(outcome: AttemptOutcome) -> object | None:
     """Default implementation of ``giveup`` callback for call_with_retries(); never gives up; returning anything other than
     ``None`` indicates to give up retrying; thread-safe."""
@@ -237,6 +257,7 @@ def call_with_retries(
     fn: Callable[[Retry], _T],  # typically a lambda; wraps work and raises RetryableError for failures that shall be retried
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
+    backoff: BackoffStrategy = full_jitter_backoff_strategy,  # computes delay time before next retry attempt, after failure
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
     before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
@@ -295,13 +316,13 @@ def call_with_retries(
                     AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
                 )
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
-                if policy.max_sleep_nanos == 0 and policy.backoff_strategy is full_jitter_backoff_strategy:
+                if policy.max_sleep_nanos == 0 and backoff is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
                 elif retry_count == 0 and retryable_error.retry_immediately_once:
                     pass  # retry once immediately without backoff
                 else:  # jitter: default backoff strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
                     rng = _thread_local_rng() if rng is None else rng
-                    sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
+                    sleep_nanos, curr_max_sleep_nanos = backoff(  # compute delay before next retry attempt, after failure
                         BackoffContext(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)
                     )
                     assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, sleep_nanos
@@ -333,6 +354,7 @@ async def call_with_retries_async(
     fn: Callable[[Retry], Awaitable[_T]],  # wraps work and raises RetryableError for failures that shall be retried
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
+    backoff: BackoffStrategy = full_jitter_backoff_strategy,  # computes delay time before next retry attempt, after failure
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
     before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
@@ -380,13 +402,13 @@ async def call_with_retries_async(
                     AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
                 )
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
-                if policy.max_sleep_nanos == 0 and policy.backoff_strategy is full_jitter_backoff_strategy:
+                if policy.max_sleep_nanos == 0 and backoff is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
                 elif retry_count == 0 and retryable_error.retry_immediately_once:
                     pass  # retry once immediately without backoff
                 else:  # jitter: default backoff strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
                     rng = _thread_local_rng() if rng is None else rng
-                    sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
+                    sleep_nanos, curr_max_sleep_nanos = backoff(  # compute delay before next retry attempt, after failure
                         BackoffContext(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)
                     )
                     assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, sleep_nanos
@@ -653,25 +675,9 @@ class BackoffContext(NamedTuple):
 
 
 BackoffStrategy = Callable[[BackoffContext], tuple[int, int]]  # typealias; returns sleep_nanos:int, curr_max_sleep_nanos:int
-
-
-def full_jitter_backoff_strategy(context: BackoffContext) -> tuple[int, int]:
-    """Default implementation of ``backoff_strategy`` callback for RetryPolicy.
-
-    Full-jitter picks a random sleep_nanos duration from the range [min_sleep_nanos, curr_max_sleep_nanos] and applies
-    exponential backoff with cap to the next attempt; thread-safe. Typically, min_sleep_nanos is 0 and exponential_base is 2.
-    Example curr_max_sleep_nanos sequence: 125ms --> 250ms --> 500ms --> 1s --> 2s --> 4s --> 8s --> 10s --> 10s...
-    Full-jitter provides optimal balance between reducing server load and minimizing retry latency.
-    """
-    policy: RetryPolicy = context.retry.policy
-    curr_max_sleep_nanos: int = context.curr_max_sleep_nanos
-    if policy.min_sleep_nanos == curr_max_sleep_nanos:
-        sleep_nanos = curr_max_sleep_nanos  # perf
-    else:
-        sleep_nanos = context.rng.randint(policy.min_sleep_nanos, curr_max_sleep_nanos)  # nanos to delay until next attempt
-    curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
-    curr_max_sleep_nanos = min(curr_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap for next attempt
-    return sleep_nanos, curr_max_sleep_nanos
+"""Strategy that implements a backoff algorithm that reduces server load while minimizing retry latency; default is full
+jitter; various other example backoff strategies such as decorrelated-jitter or retry-after HTTP 429 "Too Many Requests"
+responses, etc can be found in test_retry_examples.py."""
 
 
 #############################################################################
@@ -811,7 +817,7 @@ class RetryConfig:
 @dataclass(frozen=True)
 @final
 class RetryPolicy:
-    """Configuration controlling max retry counts and backoff delays for call_with_retries(); immutable.
+    """Configuration of maximum retries, sleep bounds, elapsed-time budget, logging, etc for call_with_retries(); immutable.
 
     By default uses full jitter which works as follows: The maximum duration to sleep between attempts initially starts with
     ``initial_max_sleep_secs`` and doubles on each retry, up to the final maximum of ``max_sleep_secs``.
@@ -845,11 +851,6 @@ class RetryPolicy:
     initial_max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
     max_sleep_nanos: int = dataclasses.field(init=False, repr=False)  # derived value
 
-    backoff_strategy: BackoffStrategy = dataclasses.field(default=full_jitter_backoff_strategy, repr=False)
-    """Strategy that implements a backoff algorithm that reduces server load while minimizing retry latency; default is full
-    jitter; various other example backoff strategies such as decorrelated-jitter or retry-after HTTP 429 "Too Many Requests"
-    responses, etc can be found in test_retry_examples.py."""
-
     reraise: bool = True
     """On exhaustion, the default (``True``) is to re-raise the underlying exception when present."""
 
@@ -875,7 +876,6 @@ class RetryPolicy:
             max_sleep_secs=getattr(args, "retry_max_sleep_secs", 10),
             max_elapsed_secs=getattr(args, "retry_max_elapsed_secs", 60),
             exponential_base=getattr(args, "retry_exponential_base", 2),
-            backoff_strategy=getattr(args, "retry_backoff_strategy", full_jitter_backoff_strategy),
             reraise=getattr(args, "retry_reraise", True),
             max_previous_outcomes=getattr(args, "retry_max_previous_outcomes", 0),
             config=getattr(args, "retry_config", RetryConfig()),
@@ -912,8 +912,6 @@ class RetryPolicy:
         object.__setattr__(self, "max_sleep_nanos", max_sleep_nanos)  # derived value
         self._validate_min("max_previous_outcomes", self.max_previous_outcomes, 0)
         assert 0 <= self.min_sleep_nanos <= self.initial_max_sleep_nanos <= self.max_sleep_nanos
-        if not callable(self.backoff_strategy):
-            raise TypeError(f"{type(self).__name__}.backoff_strategy must be callable")
         if not isinstance(self.reraise, bool):
             raise TypeError(f"{type(self).__name__}.reraise must be bool")
 
@@ -949,6 +947,7 @@ class RetryTemplate(Generic[_T]):
 
     fn: Callable[[Retry], _T] = _fn_not_implemented  # set this to make the RetryTemplate object itself callable
     policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
+    backoff: BackoffStrategy = full_jitter_backoff_strategy  # computes delay time before next retry attempt, after failure
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic
     before_attempt: Callable[[Retry], int] = before_attempt_noop  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
@@ -971,6 +970,7 @@ class RetryTemplate(Generic[_T]):
         return call_with_retries(
             fn=self.fn,
             policy=self.policy,
+            backoff=self.backoff,
             giveup=self.giveup,
             before_attempt=self.before_attempt,
             after_attempt=self.after_attempt,
@@ -984,6 +984,7 @@ class RetryTemplate(Generic[_T]):
         fn: Callable[[Retry], _R],
         policy: RetryPolicy | None = None,
         *,
+        backoff: BackoffStrategy | None = None,
         giveup: Callable[[AttemptOutcome], object | None] | None = None,
         before_attempt: Callable[[Retry], int] | None = None,
         after_attempt: Callable[[AttemptOutcome], None] | None = None,
@@ -998,6 +999,7 @@ class RetryTemplate(Generic[_T]):
         return call_with_retries(
             fn=fn,
             policy=self.policy if policy is None else policy,
+            backoff=self.backoff if backoff is None else backoff,
             giveup=self.giveup if giveup is None else giveup,
             before_attempt=self.before_attempt if before_attempt is None else before_attempt,
             after_attempt=self.after_attempt if after_attempt is None else after_attempt,
@@ -1013,6 +1015,7 @@ class RetryTemplate(Generic[_T]):
         fn: Callable[[Retry], Awaitable[_R]],
         policy: RetryPolicy | None = None,
         *,
+        backoff: BackoffStrategy | None = None,
         giveup: Callable[[AttemptOutcome], object | None] | None = None,
         before_attempt: Callable[[Retry], int] | None = None,
         after_attempt: Callable[[AttemptOutcome], None] | None = None,
@@ -1027,6 +1030,7 @@ class RetryTemplate(Generic[_T]):
         return await call_with_retries_async(
             fn=fn,
             policy=self.policy if policy is None else policy,
+            backoff=self.backoff if backoff is None else backoff,
             giveup=self.giveup if giveup is None else giveup,
             before_attempt=self.before_attempt if before_attempt is None else before_attempt,
             after_attempt=self.after_attempt if after_attempt is None else after_attempt,

@@ -179,7 +179,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             initial_max_sleep_secs=0.001,
             max_sleep_secs=0.001,
             max_elapsed_secs=10,
-            backoff_strategy=backoff_strategy,
         )
         calls: list[int] = []
         events: list[AttemptOutcome] = []
@@ -202,6 +201,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         actual = await call_with_retries_async(
             fn,
             policy=retry_policy,
+            backoff=backoff_strategy,
             after_attempt=after_attempt,
             log=None,
         )
@@ -366,7 +366,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             initial_max_sleep_secs=0,
             max_sleep_secs=0,
             max_elapsed_secs=10,
-            backoff_strategy=lambda ctx: (0, ctx.curr_max_sleep_nanos),
         )
         before_attempt_calls: list[int] = []
         fn_calls: list[int] = []
@@ -393,6 +392,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             await call_with_retries_async(
                 fn,
                 policy=retry_policy,
+                backoff=lambda ctx: (0, ctx.curr_max_sleep_nanos),
                 before_attempt=before_attempt,
                 log=None,
             ),
@@ -699,7 +699,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             initial_max_sleep_secs=0,
             max_sleep_secs=0,
             max_elapsed_secs=10,
-            backoff_strategy=lambda ctx: (0, ctx.curr_max_sleep_nanos),
         )
         calls: list[int] = []
         events: list[AttemptOutcome] = []
@@ -723,6 +722,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         actual = await call_with_retries_async(
             fn,
             policy=retry_policy,
+            backoff=lambda ctx: (0, ctx.curr_max_sleep_nanos),
             after_attempt=after_attempt,
             on_exhaustion=lambda _outcome: "exhausted",
             log=None,
@@ -797,13 +797,13 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             initial_max_sleep_secs=0.001,
             max_sleep_secs=0.001,
             max_elapsed_secs=10,
-            backoff_strategy=backoff_strategy,
         ).copy(timing=RetryTiming().copy(sleep_async=mock_sleep_async))
 
         with self.assertRaises(asyncio.CancelledError):
             await call_with_retries_async(
                 fn,
                 policy=retry_policy,
+                backoff=backoff_strategy,
                 after_attempt=after_attempt,
                 on_retryable_error=on_retryable_error,
                 log=None,

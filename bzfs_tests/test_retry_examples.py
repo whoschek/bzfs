@@ -306,12 +306,12 @@ class RetryIntegrationExamples(unittest.TestCase):
         retry_policy = RetryPolicy(
             max_sleep_secs=60,
             max_elapsed_secs=600,
-            backoff_strategy=retry_after_or_fallback_strategy(retry_after=retry_after_circuit_breaker(breaker)),
         )
         log = logging.getLogger(__name__)
         _result: str = call_with_retries(
             fn=circuit_breaker(unreliable_operation, breaker),
             policy=retry_policy,
+            backoff=retry_after_or_fallback_strategy(retry_after=retry_after_circuit_breaker(breaker)),
             log=log,
         )
 
@@ -366,12 +366,12 @@ class RetryIntegrationExamples(unittest.TestCase):
 
         retry_policy = RetryPolicy(
             max_elapsed_secs=600,
-            backoff_strategy=retry_after_or_fallback_strategy(retry_after=retry_after),
         )
         log = logging.getLogger(__name__)
         _result: str = call_with_retries(
             fn=unreliable_operation,
             policy=retry_policy,
+            backoff=retry_after_or_fallback_strategy(retry_after=retry_after),
             before_attempt=rate_limited(limiter, limit, "ssh", "host1.example.com"),
             log=log,
         )
@@ -780,7 +780,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
             initial_max_sleep_secs=0,
             max_sleep_secs=0,
             max_elapsed_secs=10,
-            backoff_strategy=backoff_strategy,
         )
         sleep_nanos: list[int] = []
 
@@ -799,10 +798,10 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         mock_sleep = MagicMock()
         retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep=mock_sleep))
         if rng_patch is None:
-            call_with_retries(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
+            call_with_retries(fn, policy=retry_policy, backoff=backoff_strategy, after_attempt=after_attempt, log=None)
         else:
             with rng_patch:
-                call_with_retries(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
+                call_with_retries(fn, policy=retry_policy, backoff=backoff_strategy, after_attempt=after_attempt, log=None)
         return sleep_nanos, mock_sleep
 
     def test_call_with_retries_using_decorrelated_jitter_as_custom_backoff_strategy(self) -> None:
@@ -820,7 +819,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
             max_sleep_secs=16e-9,  # 16ns cap
             max_elapsed_secs=1,
             exponential_base=2,
-            backoff_strategy=recording_strategy,
         )
         calls: list[int] = []
         retry_sleep_nanos: list[int] = []
@@ -845,6 +843,7 @@ class TestMiscBackoffStrategies(unittest.TestCase):
             actual = call_with_retries(
                 fn,
                 policy=retry_policy,
+                backoff=recording_strategy,
                 after_attempt=after_attempt,
                 log=None,
             )

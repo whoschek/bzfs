@@ -306,7 +306,6 @@ class TestCallWithRetries(unittest.TestCase):
             initial_max_sleep_secs=1,
             max_sleep_secs=1,
             max_elapsed_secs=10,
-            backoff_strategy=backoff_strategy,
         )
         calls: list[int] = []
         events: list[AttemptOutcome] = []
@@ -325,6 +324,7 @@ class TestCallWithRetries(unittest.TestCase):
         actual = call_with_retries(
             fn,
             policy=retry_policy,
+            backoff=backoff_strategy,
             after_attempt=after_attempt,
             log=None,
         )
@@ -822,7 +822,6 @@ class TestCallWithRetries(unittest.TestCase):
             initial_max_sleep_secs=0,
             max_sleep_secs=0,
             max_elapsed_secs=10,
-            backoff_strategy=lambda ctx: (0, ctx.curr_max_sleep_nanos),
         )
         before_attempt_calls: list[int] = []
         fn_calls: list[int] = []
@@ -843,7 +842,16 @@ class TestCallWithRetries(unittest.TestCase):
             return "ok"
 
         retry_policy = retry_policy.copy(timing=RetryTiming(sleep=sleep))
-        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, before_attempt=before_attempt, log=None))
+        self.assertEqual(
+            "ok",
+            call_with_retries(
+                fn,
+                policy=retry_policy,
+                backoff=lambda ctx: (0, ctx.curr_max_sleep_nanos),
+                before_attempt=before_attempt,
+                log=None,
+            ),
+        )
         self.assertEqual([0, 1], before_attempt_calls)
         self.assertEqual([0, 1], fn_calls)
         self.assertEqual([7], sleeps)
@@ -1102,12 +1110,6 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, log=None))
         self.assertEqual([[], [0], [0, 0], [0, 0], [0, 0]], nested_history_sizes_per_attempt)
 
-    def test_retry_policy_invalid_backoff_strategy_raises_type_error(self) -> None:
-        """Ensures RetryPolicy rejects a non-callable backoff_strategy."""
-        with self.assertRaises(TypeError) as cm:
-            RetryPolicy(backoff_strategy=123)  # type: ignore[arg-type]
-        self.assertIn("backoff_strategy", str(cm.exception))
-
     def test_retry_policy_invalid_max_retries_raises_value_error(self) -> None:
         """Ensures RetryPolicy rejects invalid values via _validate()."""
         with self.assertRaises(ValueError) as cm:
@@ -1216,7 +1218,6 @@ class TestCallWithRetries(unittest.TestCase):
             initial_max_sleep_secs=0,
             max_sleep_secs=0,
             max_elapsed_secs=10,
-            backoff_strategy=lambda ctx: (0, ctx.curr_max_sleep_nanos),
         )
         calls: list[int] = []
         events: list[AttemptOutcome] = []
@@ -1240,6 +1241,7 @@ class TestCallWithRetries(unittest.TestCase):
         actual = call_with_retries(
             fn,
             policy=retry_policy,
+            backoff=lambda ctx: (0, ctx.curr_max_sleep_nanos),
             after_attempt=after_attempt,
             on_exhaustion=lambda _outcome: "exhausted",
             log=None,
@@ -1324,7 +1326,6 @@ class TestCallWithRetries(unittest.TestCase):
                 initial_max_sleep_secs=1e-9,
                 max_sleep_secs=1e-9,
                 max_elapsed_secs=10,
-                backoff_strategy=backoff_strategy,
             )
 
             sentinel_rng = MagicMock(spec=random.Random)
@@ -1338,7 +1339,7 @@ class TestCallWithRetries(unittest.TestCase):
                         raise RetryableError("fail") from ValueError("boom")
                     return "ok"
 
-                result = call_with_retries(fn, policy=retry_policy, log=None)
+                result = call_with_retries(fn, policy=retry_policy, backoff=backoff_strategy, log=None)
                 self.assertEqual([0, 1], calls)
                 return result
 
