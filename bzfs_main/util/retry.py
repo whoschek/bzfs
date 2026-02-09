@@ -273,7 +273,7 @@ def call_with_retries(
             if before_attempt is not before_attempt_noop:
                 before_attempt_sleep_nanos: int = before_attempt(retry)
                 assert before_attempt_sleep_nanos >= 0, before_attempt_sleep_nanos
-                if before_attempt_sleep_nanos > 0:
+                if before_attempt_sleep_nanos > 0:  # e.g. wait due to rate limiting or internal backpressure
                     sleep(before_attempt_sleep_nanos, retry)
                 retry = Retry(
                     retry_count, call_start_nanos, before_attempt_nanos, monotonic_ns(), policy, log, previous_outcomes
@@ -291,7 +291,7 @@ def call_with_retries(
             giveup_reason: object | None = None
             sleep_nanos: int = 0
             if on_retryable_error is not noop:
-                on_retryable_error(
+                on_retryable_error(  # e.g. count failures (RetryableError) caught by retry loop
                     AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
                 )
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
@@ -299,7 +299,7 @@ def call_with_retries(
                     pass  # perf: e.g. spin-before-block
                 elif retry_count == 0 and retryable_error.retry_immediately_once:
                     pass  # retry once immediately without backoff
-                else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
+                else:  # jitter: default backoff strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
                     rng = _thread_local_rng() if rng is None else rng
                     sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
                         BackoffContext(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)
@@ -358,7 +358,7 @@ async def call_with_retries_async(
             if before_attempt is not before_attempt_noop:
                 before_attempt_sleep_nanos: int = before_attempt(retry)
                 assert before_attempt_sleep_nanos >= 0, before_attempt_sleep_nanos
-                if before_attempt_sleep_nanos > 0:
+                if before_attempt_sleep_nanos > 0:  # e.g. wait due to rate limiting or internal backpressure
                     await sleep(before_attempt_sleep_nanos, retry)
                 retry = Retry(
                     retry_count, call_start_nanos, before_attempt_nanos, monotonic_ns(), policy, log, previous_outcomes
@@ -376,7 +376,7 @@ async def call_with_retries_async(
             giveup_reason: object | None = None
             sleep_nanos: int = 0
             if on_retryable_error is not noop:
-                on_retryable_error(
+                on_retryable_error(  # e.g. count failures (RetryableError) caught by retry loop
                     AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
                 )
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
@@ -384,7 +384,7 @@ async def call_with_retries_async(
                     pass  # perf: e.g. spin-before-block
                 elif retry_count == 0 and retryable_error.retry_immediately_once:
                     pass  # retry once immediately without backoff
-                else:  # jitter: default backoff_strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
+                else:  # jitter: default backoff strategy picks random sleep_nanos in [min_sleep_nanos, curr_max_sleep_nanos]
                     rng = _thread_local_rng() if rng is None else rng
                     sleep_nanos, curr_max_sleep_nanos = policy.backoff_strategy(
                         BackoffContext(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)
@@ -615,7 +615,7 @@ class AttemptOutcome(NamedTuple):
 #############################################################################
 @final
 class BackoffContext(NamedTuple):
-    """Captures per-backoff state for ``backoff_strategy`` callbacks."""
+    """Captures per-backoff state for ``backoff`` callbacks."""
 
     retry: Retry
     """Attempt metadata passed into fn(retry)."""

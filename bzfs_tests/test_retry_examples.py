@@ -71,7 +71,7 @@ def decorrelated_jitter_backoff_strategy(context: BackoffContext) -> tuple[int, 
 
 
 def exception_driven_backoff_strategy(retry_after: Callable[[RetryableError], int]) -> BackoffStrategy:
-    """Returns a strategy whose sleep duration is derived from RetryableError, for example RetryableError.attachment."""
+    """Returns an immutable strategy whose sleep duration is derived from RetryableError, e.g. RetryableError.attachment."""
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:
         sleep_nanos: int = max(0, retry_after(context.retryable_error))
@@ -89,9 +89,9 @@ def retry_after_or_fallback_strategy(
     max_jitter_nanos: int = 100 * 1_000_000,  # 100ms
     honor_max_elapsed_secs: bool = True,
 ) -> BackoffStrategy:
-    """Returns a BackoffStrategy that honors RetryableError.retry_after_nanos if present (or the result of a custom
-    ``retry_after`` callback), else delegates to fallback strategy. When retry_after_nanos is present, adds a random value in
-    [0, max_jitter_nanos] as jitter. honor_max_elapsed_secs clamps the final result.
+    """Returns an (immutable) BackoffStrategy that honors RetryableError.retry_after_nanos if present (or the result of a
+    custom ``retry_after`` callback), else delegates to fallback strategy. When retry_after_nanos is present, adds a random
+    value in [0, max_jitter_nanos] as jitter. honor_max_elapsed_secs clamps the final result.
 
     Interprets RetryableError.retry_after_nanos as a relative sleep duration (in nanoseconds) before the next attempt.
 
@@ -126,10 +126,10 @@ def retry_after_backoff_strategy(
     max_jitter_nanos: int = 100 * 1_000_000,  # 100ms
     honor_max_elapsed_secs: bool = True,
 ) -> BackoffStrategy:
-    """Returns a BackoffStrategy that combines RetryableError.retry_after_nanos if present (or the result of a custom
-    ``retry_after`` callback), and a delegate strategy; the combined sleep duration is the maximum of the delegate's sleep
-    duration and retry_after_nanos (after applying jitter). When retry_after_nanos is present, adds a random value in [0,
-    max_jitter_nanos] as jitter. honor_max_elapsed_secs clamps the final result.
+    """Returns an (immutable) BackoffStrategy that combines RetryableError.retry_after_nanos if present (or the result of a
+    custom ``retry_after`` callback), and a delegate strategy; the combined sleep duration is the maximum of the delegate's
+    sleep duration and retry_after_nanos (after applying jitter). When retry_after_nanos is present, adds a random value in
+    [0, max_jitter_nanos] as jitter. honor_max_elapsed_secs clamps the final result.
 
     Interprets RetryableError.retry_after_nanos as a relative sleep duration (in nanoseconds) before the next attempt.
     """
@@ -157,7 +157,7 @@ def jitter_backoff_strategy(
     *,
     max_jitter_nanos: int = 100 * 1_000_000,  # 100ms
 ) -> BackoffStrategy:
-    """Returns a BackoffStrategy that adds random jitter to another strategy."""
+    """Returns an (immutable) BackoffStrategy that adds random jitter to another strategy."""
     max_jitter_nanos = max(0, max_jitter_nanos)
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:
@@ -169,7 +169,7 @@ def jitter_backoff_strategy(
 
 
 def max_elapsed_backoff_strategy(delegate: BackoffStrategy = full_jitter_backoff_strategy) -> BackoffStrategy:
-    """Returns a BackoffStrategy that delegates to another strategy, and honors retry.policy.max_elapsed_secs."""
+    """Returns an immutable BackoffStrategy that delegates to another strategy, and honors retry.policy.max_elapsed_secs."""
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:
         sleep_nanos, curr_max_sleep_nanos = delegate(context)
@@ -196,7 +196,7 @@ def no_jitter_exponential_backoff_strategy(context: BackoffContext) -> tuple[int
 
 
 def fixed_backoff_strategy(sleep_nanos: int) -> BackoffStrategy:
-    """Returns a strategy that always sleeps a fixed number of nanoseconds."""
+    """Returns an (immutable) BackoffStrategy that always sleeps a fixed number of nanoseconds."""
     sleep_nanos = max(0, sleep_nanos)
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:
@@ -234,7 +234,7 @@ def chained_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffSt
 
 
 def sum_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffStrategy:
-    """Returns a BackoffStrategy that sums the sleeps of multiple other strategies."""
+    """Returns an (immutable) BackoffStrategy that sums the sleeps of multiple other strategies."""
     strategies = tuple(strategies)
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:
