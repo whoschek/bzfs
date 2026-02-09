@@ -262,10 +262,10 @@ def call_with_retries(
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
     timing: RetryTiming = policy.timing
     sleep: Callable[[int, Retry], None] = timing.sleep
-    mono_nanos: Callable[[], int] = timing.monotonic_ns
-    call_start_nanos: Final[int] = mono_nanos()
+    monotonic_ns: Callable[[], int] = timing.monotonic_ns
+    call_start_nanos: Final[int] = monotonic_ns()
     while True:
-        before_attempt_nanos: int = mono_nanos() if retry_count != 0 else call_start_nanos
+        before_attempt_nanos: int = monotonic_ns() if retry_count != 0 else call_start_nanos
         retry: Retry = Retry(
             retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, policy, log, previous_outcomes
         )
@@ -276,17 +276,17 @@ def call_with_retries(
                 if before_attempt_sleep_nanos > 0:
                     sleep(before_attempt_sleep_nanos, retry)
                 retry = Retry(
-                    retry_count, call_start_nanos, before_attempt_nanos, mono_nanos(), policy, log, previous_outcomes
+                    retry_count, call_start_nanos, before_attempt_nanos, monotonic_ns(), policy, log, previous_outcomes
                 )
             timing.on_before_attempt(retry)
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
             if after_attempt is not after_attempt_log_failure:
-                elapsed_nanos: int = mono_nanos() - call_start_nanos
+                elapsed_nanos: int = monotonic_ns() - call_start_nanos
                 outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, None, elapsed_nanos, 0, result)
                 after_attempt(outcome)
             return result
         except RetryableError as retryable_error:
-            elapsed_nanos = mono_nanos() - call_start_nanos
+            elapsed_nanos = monotonic_ns() - call_start_nanos
             is_terminated: Callable[[Retry], bool] = timing.is_terminated
             giveup_reason: object | None = None
             sleep_nanos: int = 0
@@ -347,10 +347,10 @@ async def call_with_retries_async(
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
     timing: RetryTiming = policy.timing
     sleep: Callable[[int, Retry], Awaitable[None]] = timing.sleep_async
-    mono_nanos: Callable[[], int] = timing.monotonic_ns
-    call_start_nanos: Final[int] = mono_nanos()
+    monotonic_ns: Callable[[], int] = timing.monotonic_ns
+    call_start_nanos: Final[int] = monotonic_ns()
     while True:
-        before_attempt_nanos: int = mono_nanos() if retry_count != 0 else call_start_nanos
+        before_attempt_nanos: int = monotonic_ns() if retry_count != 0 else call_start_nanos
         retry: Retry = Retry(
             retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, policy, log, previous_outcomes
         )
@@ -361,17 +361,17 @@ async def call_with_retries_async(
                 if before_attempt_sleep_nanos > 0:
                     await sleep(before_attempt_sleep_nanos, retry)
                 retry = Retry(
-                    retry_count, call_start_nanos, before_attempt_nanos, mono_nanos(), policy, log, previous_outcomes
+                    retry_count, call_start_nanos, before_attempt_nanos, monotonic_ns(), policy, log, previous_outcomes
                 )
             timing.on_before_attempt(retry)
             result: _T = await fn(retry)  # Call the target function and supply retry attempt number and other metadata
             if after_attempt is not after_attempt_log_failure:
-                elapsed_nanos: int = mono_nanos() - call_start_nanos
+                elapsed_nanos: int = monotonic_ns() - call_start_nanos
                 outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, None, elapsed_nanos, 0, result)
                 after_attempt(outcome)
             return result
         except RetryableError as retryable_error:
-            elapsed_nanos = mono_nanos() - call_start_nanos
+            elapsed_nanos = monotonic_ns() - call_start_nanos
             is_terminated: Callable[[Retry], bool] = timing.is_terminated
             giveup_reason: object | None = None
             sleep_nanos: int = 0
