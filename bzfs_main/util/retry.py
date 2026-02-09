@@ -16,7 +16,7 @@
 
 Purpose:
 --------
-- Provide a reusable retry helper for transient failures using customizable policy, config and callbacks.
+- Provide a reusable retry helper for transient failures using customizable policy and callbacks.
 - Centralize backoff, jitter, logging and metrics behavior while keeping call sites compact.
 - Prevent accidental retries: the loop retries only when the developer explicitly raises a ``RetryableError``, which reduces
   the risk of retrying non-idempotent operations.
@@ -41,7 +41,7 @@ Usage:
 Advanced Configuration:
 -----------------------
 - Tune ``RetryPolicy`` parameters to control maximum retries, sleep bounds, and elapsed-time budget.
-- Use ``RetryConfig`` to control logging settings.
+- Use ``RetryPolicy.config: RetryConfig`` to control logging settings.
 - Set ``log=None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
 - Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, error/status
   codes or parsing stderr), including time-aware decisions or decisions based on the previous N most recent AttemptOutcome
@@ -182,10 +182,10 @@ def after_attempt_log_failure(outcome: AttemptOutcome) -> None:
     """Default implementation of ``after_attempt`` callback for call_with_retries(); performs simple logging of retry attempt
     failures; thread-safe."""
     retry: Retry = outcome.retry
-    if outcome.is_success or retry.log is None or not retry.config.enable_logging:
-        return
     policy: RetryPolicy = retry.policy
-    config: RetryConfig = retry.config
+    config: RetryConfig = policy.config
+    if outcome.is_success or retry.log is None or not config.enable_logging:
+        return
     log: logging.Logger = retry.log
     assert isinstance(outcome.result, RetryableError)
     retryable_error: RetryableError = outcome.result
@@ -237,7 +237,6 @@ def call_with_retries(
     fn: Callable[[Retry], _T],  # typically a lambda; wraps work and raises RetryableError for failures that shall be retried
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
-    config: RetryConfig | None = None,  # controls logging settings
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
     before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
@@ -245,7 +244,7 @@ def call_with_retries(
     on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
     log: logging.Logger | None = None,  # set this to ``None`` to disable logging
 ) -> _T:
-    """Runs the function ``fn`` and returns its result; retries on failure as indicated by policy and config; thread-safe.
+    """Runs the function ``fn`` and returns its result; retries on failure as indicated by policy; thread-safe.
 
     By default on exhaustion, call_with_retries() either re-raises the last underlying ``RetryableError.__cause__``, or raises
     ``RetryError`` (wrapping the last ``RetryableError``), like so:
@@ -257,7 +256,6 @@ def call_with_retries(
     On the exhaustion path, ``on_exhaustion`` will be called exactly once (after the final after_attempt). The default
     implementation raises as described above; custom ``on_exhaustion`` impls may return a fallback value instead of an error.
     """
-    config = _DEFAULT_RETRY_CONFIG if config is None else config
     rng: random.Random | None = None
     retry_count: int = 0
     curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
@@ -269,7 +267,7 @@ def call_with_retries(
     while True:
         before_attempt_nanos: int = mono_nanos() if retry_count != 0 else call_start_nanos
         retry: Retry = Retry(
-            retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, policy, config, log, previous_outcomes
+            retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, policy, log, previous_outcomes
         )
         try:
             if before_attempt is not before_attempt_noop:
@@ -278,7 +276,7 @@ def call_with_retries(
                 if before_attempt_sleep_nanos > 0:
                     sleep(before_attempt_sleep_nanos, retry)
                 retry = Retry(
-                    retry_count, call_start_nanos, before_attempt_nanos, mono_nanos(), policy, config, log, previous_outcomes
+                    retry_count, call_start_nanos, before_attempt_nanos, mono_nanos(), policy, log, previous_outcomes
                 )
             timing.on_before_attempt(retry)
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
@@ -335,7 +333,6 @@ async def call_with_retries_async(
     fn: Callable[[Retry], Awaitable[_T]],  # wraps work and raises RetryableError for failures that shall be retried
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
-    config: RetryConfig | None = None,  # controls logging settings
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
     before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
@@ -344,7 +341,6 @@ async def call_with_retries_async(
     log: logging.Logger | None = None,  # set this to ``None`` to disable logging
 ) -> _T:
     """Async version of call_with_retries() with the same semantics except it awaits ``fn`` and uses non-blocking sleep."""
-    config = _DEFAULT_RETRY_CONFIG if config is None else config
     rng: random.Random | None = None
     retry_count: int = 0
     curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
@@ -356,7 +352,7 @@ async def call_with_retries_async(
     while True:
         before_attempt_nanos: int = mono_nanos() if retry_count != 0 else call_start_nanos
         retry: Retry = Retry(
-            retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, policy, config, log, previous_outcomes
+            retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, policy, log, previous_outcomes
         )
         try:
             if before_attempt is not before_attempt_noop:
@@ -365,7 +361,7 @@ async def call_with_retries_async(
                 if before_attempt_sleep_nanos > 0:
                     await sleep(before_attempt_sleep_nanos, retry)
                 retry = Retry(
-                    retry_count, call_start_nanos, before_attempt_nanos, mono_nanos(), policy, config, log, previous_outcomes
+                    retry_count, call_start_nanos, before_attempt_nanos, mono_nanos(), policy, log, previous_outcomes
                 )
             timing.on_before_attempt(retry)
             result: _T = await fn(retry)  # Call the target function and supply retry attempt number and other metadata
@@ -531,9 +527,6 @@ class Retry(NamedTuple):
 
     policy: RetryPolicy
     """Policy that was passed into call_with_retries()."""
-
-    config: RetryConfig
-    """Config that is used by call_with_retries()."""
 
     log: logging.Logger | None
     """Logger that was passed into call_with_retries()."""
@@ -775,7 +768,43 @@ class RetryTiming:
         return RetryTiming(is_terminated=_is_terminated, sleep_async=_sleep_async)
 
 
-_TIMING_DEFAULT: Final[RetryTiming] = RetryTiming()  # constant
+#############################################################################
+def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:
+    """Default implementation of ``format_msg`` callback for RetryConfig; creates simple log message; thread-safe."""
+    msg = display_msg + " " if display_msg else ""
+    errmsg: str = retryable_error.display_msg_str()
+    msg = msg + errmsg + " " if errmsg else msg
+    msg = msg if msg else "Retrying "
+    return msg
+
+
+def _format_pair(first: object, second: object) -> str:
+    """Default implementation of ``format_pair`` callback for RetryConfig; creates simple log message part; thread-safe."""
+    second = "∞" if INFINITY_MAX_RETRIES == second else second  # noqa: SIM300
+    return f"[{first}/{second}]"
+
+
+@dataclass(frozen=True)
+@final
+class RetryConfig:
+    """Configures logging for call_with_retries(); all defaults work out of the box; immutable."""
+
+    display_msg: str = "Retrying"  # message prefix for retry log messages
+    dots: str = " ..."  # suffix appended to retry log messages
+    format_msg: Callable[[str, RetryableError], str] = _format_msg  # lambda: display_msg, retryable_error
+    format_pair: Callable[[object, object], str] = _format_pair  # lambda: first, second
+    format_duration: Callable[[int], str] = human_readable_duration  # lambda: nanos
+    info_loglevel: int = logging.INFO  # loglevel used when not giving up
+    warning_loglevel: int = logging.WARNING  # loglevel used when giving up
+    enable_logging: bool = True  # set to False to disable logging
+    exc_info: bool = False  # passed into Logger.log()
+    stack_info: bool = False  # passed into Logger.log()
+    extra: Mapping[str, object] | None = dataclasses.field(default=None, repr=False, compare=False)  # passed to Logger.log()
+    context: object = dataclasses.field(default=None, repr=False, compare=False)  # optional domain specific info
+
+    def copy(self, **override_kwargs: Any) -> RetryConfig:
+        """Creates a new config copying an existing one with the specified fields overridden for customization."""
+        return dataclasses.replace(self, **override_kwargs)
 
 
 #############################################################################
@@ -827,7 +856,10 @@ class RetryPolicy:
     max_previous_outcomes: int = 0
     """Pass the N=max_previous_outcomes most recent AttemptOutcome objects to callbacks."""
 
-    timing: RetryTiming = dataclasses.field(default=_TIMING_DEFAULT, repr=False)
+    config: RetryConfig = dataclasses.field(default=RetryConfig(), repr=False, compare=False)
+    """Configures logging behavior."""
+
+    timing: RetryTiming = dataclasses.field(default=RetryTiming(), repr=False)
     """Customizable callbacks for reading the current monotonic time, sleeping and optional async termination."""
 
     context: object = dataclasses.field(default=None, repr=False, compare=False)
@@ -846,7 +878,8 @@ class RetryPolicy:
             backoff_strategy=getattr(args, "retry_backoff_strategy", full_jitter_backoff_strategy),
             reraise=getattr(args, "retry_reraise", True),
             max_previous_outcomes=getattr(args, "retry_max_previous_outcomes", 0),
-            timing=getattr(args, "retry_timing", _TIMING_DEFAULT),
+            config=getattr(args, "retry_config", RetryConfig()),
+            timing=getattr(args, "retry_timing", RetryTiming()),
             context=getattr(args, "retry_context", None),
         )
 
@@ -897,48 +930,6 @@ class RetryPolicy:
 
 
 #############################################################################
-def _format_msg(display_msg: str, retryable_error: RetryableError) -> str:
-    """Default implementation of ``format_msg`` callback for RetryConfig; creates simple log message; thread-safe."""
-    msg = display_msg + " " if display_msg else ""
-    errmsg: str = retryable_error.display_msg_str()
-    msg = msg + errmsg + " " if errmsg else msg
-    msg = msg if msg else "Retrying "
-    return msg
-
-
-def _format_pair(first: object, second: object) -> str:
-    """Default implementation of ``format_pair`` callback for RetryConfig; creates simple log message part; thread-safe."""
-    second = "∞" if INFINITY_MAX_RETRIES == second else second  # noqa: SIM300
-    return f"[{first}/{second}]"
-
-
-@dataclass(frozen=True)
-@final
-class RetryConfig:
-    """Configures logging for call_with_retries(); all defaults work out of the box; immutable."""
-
-    display_msg: str = "Retrying"  # message prefix for retry log messages
-    dots: str = " ..."  # suffix appended to retry log messages
-    format_msg: Callable[[str, RetryableError], str] = _format_msg  # lambda: display_msg, retryable_error
-    format_pair: Callable[[object, object], str] = _format_pair  # lambda: first, second
-    format_duration: Callable[[int], str] = human_readable_duration  # lambda: nanos
-    info_loglevel: int = logging.INFO  # loglevel used when not giving up
-    warning_loglevel: int = logging.WARNING  # loglevel used when giving up
-    enable_logging: bool = True  # set to False to disable logging
-    exc_info: bool = False  # passed into Logger.log()
-    stack_info: bool = False  # passed into Logger.log()
-    extra: Mapping[str, object] | None = dataclasses.field(default=None, repr=False, compare=False)  # passed to Logger.log()
-    context: object = dataclasses.field(default=None, repr=False, compare=False)  # optional domain specific info
-
-    def copy(self, **override_kwargs: Any) -> RetryConfig:
-        """Creates a new config copying an existing one with the specified fields overridden for customization."""
-        return dataclasses.replace(self, **override_kwargs)
-
-
-_DEFAULT_RETRY_CONFIG: Final[RetryConfig] = RetryConfig()  # constant
-
-
-#############################################################################
 def _fn_not_implemented(_retry: Retry) -> NoReturn:
     """Default implementation of ``fn`` callback for RetryTemplate; always raises."""
     raise NotImplementedError("Provide fn when calling RetryTemplate")
@@ -958,7 +949,6 @@ class RetryTemplate(Generic[_T]):
 
     fn: Callable[[Retry], _T] = _fn_not_implemented  # set this to make the RetryTemplate object itself callable
     policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
-    config: RetryConfig = RetryConfig()  # controls logging settings
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic
     before_attempt: Callable[[Retry], int] = before_attempt_noop  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
@@ -981,7 +971,6 @@ class RetryTemplate(Generic[_T]):
         return call_with_retries(
             fn=self.fn,
             policy=self.policy,
-            config=self.config,
             giveup=self.giveup,
             before_attempt=self.before_attempt,
             after_attempt=self.after_attempt,
@@ -995,7 +984,6 @@ class RetryTemplate(Generic[_T]):
         fn: Callable[[Retry], _R],
         policy: RetryPolicy | None = None,
         *,
-        config: RetryConfig | None = None,
         giveup: Callable[[AttemptOutcome], object | None] | None = None,
         before_attempt: Callable[[Retry], int] | None = None,
         after_attempt: Callable[[AttemptOutcome], None] | None = None,
@@ -1010,7 +998,6 @@ class RetryTemplate(Generic[_T]):
         return call_with_retries(
             fn=fn,
             policy=self.policy if policy is None else policy,
-            config=self.config if config is None else config,
             giveup=self.giveup if giveup is None else giveup,
             before_attempt=self.before_attempt if before_attempt is None else before_attempt,
             after_attempt=self.after_attempt if after_attempt is None else after_attempt,
@@ -1026,7 +1013,6 @@ class RetryTemplate(Generic[_T]):
         fn: Callable[[Retry], Awaitable[_R]],
         policy: RetryPolicy | None = None,
         *,
-        config: RetryConfig | None = None,
         giveup: Callable[[AttemptOutcome], object | None] | None = None,
         before_attempt: Callable[[Retry], int] | None = None,
         after_attempt: Callable[[AttemptOutcome], None] | None = None,
@@ -1041,7 +1027,6 @@ class RetryTemplate(Generic[_T]):
         return await call_with_retries_async(
             fn=fn,
             policy=self.policy if policy is None else policy,
-            config=self.config if config is None else config,
             giveup=self.giveup if giveup is None else giveup,
             before_attempt=self.before_attempt if before_attempt is None else before_attempt,
             after_attempt=self.after_attempt if after_attempt is None else after_attempt,

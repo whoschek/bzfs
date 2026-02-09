@@ -42,7 +42,6 @@ from bzfs_main.util.retry import (
     BackoffStrategy,
     Retry,
     RetryableError,
-    RetryConfig,
     RetryPolicy,
     RetryTiming,
     after_attempt_log_failure,
@@ -569,7 +568,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=policy,
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -598,7 +596,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=policy,
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -629,7 +626,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=policy,
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -668,7 +664,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=policy,
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -701,7 +696,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=policy,
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -804,12 +798,11 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         rng_patch = patch("bzfs_main.util.retry._thread_local_rng", return_value=rng) if rng is not None else None
         mock_sleep = MagicMock()
         retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep=mock_sleep))
-        config = RetryConfig()
         if rng_patch is None:
-            call_with_retries(fn, policy=retry_policy, config=config, after_attempt=after_attempt, log=None)
+            call_with_retries(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
         else:
             with rng_patch:
-                call_with_retries(fn, policy=retry_policy, config=config, after_attempt=after_attempt, log=None)
+                call_with_retries(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
         return sleep_nanos, mock_sleep
 
     def test_call_with_retries_using_decorrelated_jitter_as_custom_backoff_strategy(self) -> None:
@@ -852,7 +845,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
             actual = call_with_retries(
                 fn,
                 policy=retry_policy,
-                config=RetryConfig(),
                 after_attempt=after_attempt,
                 log=None,
             )

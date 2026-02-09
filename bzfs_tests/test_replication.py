@@ -63,7 +63,6 @@ from bzfs_main.replication import (
 from bzfs_main.util.retry import (
     Retry,
     RetryableError,
-    RetryConfig,
     RetryPolicy,
 )
 from bzfs_main.util.utils import (
@@ -957,7 +956,6 @@ class TestReplication(AbstractTestCase):
                         before_attempt_start_time_nanos=0,
                         attempt_start_time_nanos=0,
                         policy=RetryPolicy(),
-                        config=RetryConfig(),
                         log=None,
                         previous_outcomes=(),
                     ),

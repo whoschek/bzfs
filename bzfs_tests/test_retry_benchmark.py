@@ -103,7 +103,7 @@ class TestCallWithRetriesBenchmark(unittest.TestCase):
 
         config = RetryConfig()
         try:  # warmup
-            call_with_retries(fn, policy=retry_policy.copy(max_retries=100), config=config, log=None)
+            call_with_retries(fn, policy=retry_policy.copy(max_retries=100, config=config), log=None)
         except RetryError:
             pass
 
@@ -120,7 +120,7 @@ class TestCallWithRetriesBenchmark(unittest.TestCase):
         start = time.perf_counter()
         for _ in range(runs):
             try:
-                call_with_retries(fn, policy=retry_policy, config=config, log=None)
+                call_with_retries(fn, policy=retry_policy.copy(config=config), log=None)
             except RetryError:
                 pass
 

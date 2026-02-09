@@ -110,7 +110,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -148,7 +147,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         actual = await call_with_retries_async(
             fn,
             policy=retry_policy,
-            config=RetryConfig(),
             after_attempt=after_attempt,
             log=None,
         )
@@ -204,7 +202,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         actual = await call_with_retries_async(
             fn,
             policy=retry_policy,
-            config=RetryConfig(),
             after_attempt=after_attempt,
             log=None,
         )
@@ -239,9 +236,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
                 raised_once = True
                 raise RetryableError("retry from after_attempt")
 
-        actual = await call_with_retries_async(
-            fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None
-        )
+        actual = await call_with_retries_async(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
         self.assertTrue(raised_once)
         self.assertEqual("ok", actual)
         self.assertEqual([0, 1], fn_calls)
@@ -265,9 +260,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         mock_sleep_async = AsyncMock()
         retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep_async=mock_sleep_async))
         with self.assertRaises(RetryableError):
-            await call_with_retries_async(
-                fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None
-            )
+            await call_with_retries_async(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
 
         self.assertEqual([0], fn_calls)
         self.assertEqual([0], after_attempt_calls)
@@ -313,7 +306,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             await call_with_retries_async(
                 fn,
                 policy=retry_policy,
-                config=RetryConfig(),
                 giveup=giveup,
                 after_attempt=after_attempt,
                 log=mock_log,
@@ -353,13 +345,11 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             return "ok"
 
         retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep_async=sleep_async))
-        config = RetryConfig()
         self.assertEqual(
             "ok",
             await call_with_retries_async(
                 fn,
                 policy=retry_policy,
-                config=config,
                 before_attempt=before_attempt,
                 log=None,
             ),
@@ -398,13 +388,11 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             return "ok"
 
         retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep_async=sleep_async))
-        config = RetryConfig()
         self.assertEqual(
             "ok",
             await call_with_retries_async(
                 fn,
                 policy=retry_policy,
-                config=config,
                 before_attempt=before_attempt,
                 log=None,
             ),
@@ -428,7 +416,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
 
         monotonic_ns = MagicMock(side_effect=[1_000, 1_234])
         retry_policy = retry_policy.copy(timing=RetryTiming(monotonic_ns=monotonic_ns).copy(sleep_async=sleep_async))
-        config = RetryConfig()
 
         async def fn(retry: Retry) -> str:
             self.assertEqual(1_000, retry.call_start_time_nanos)
@@ -442,7 +429,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             await call_with_retries_async(
                 fn,
                 policy=retry_policy,
-                config=config,
                 before_attempt=before_attempt_wrapper,
                 log=None,
             ),
@@ -463,12 +449,10 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             sleeps.append(sleep_nanos)
 
         retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep_async=sleep_async))
-        config = RetryConfig()
         with self.assertRaises(AssertionError):
             await call_with_retries_async(
                 lambda _retry: asyncio.sleep(0, result="ok"),
                 policy=retry_policy,
-                config=config,
                 before_attempt=before_attempt,
                 log=None,
             )
@@ -483,7 +467,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
 
         monotonic_ns = MagicMock(side_effect=[1_000, 1_000])
         retry_policy = retry_policy.copy(timing=RetryTiming(monotonic_ns=monotonic_ns).copy(sleep_async=AsyncMock()))
-        config = RetryConfig()
 
         async def fn(retry: Retry) -> int:
             self.assertEqual(1_000, retry.call_start_time_nanos)
@@ -497,7 +480,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             await call_with_retries_async(
                 fn,
                 policy=retry_policy,
-                config=config,
                 before_attempt=before_attempt,
                 log=None,
             ),
@@ -513,7 +495,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
 
         monotonic_ns = MagicMock(side_effect=[1_000, 2_000])
         retry_policy = retry_policy.copy(timing=RetryTiming(monotonic_ns=monotonic_ns).copy(sleep_async=AsyncMock()))
-        config = RetryConfig()
 
         async def fn(retry: Retry) -> int:
             self.assertEqual(1_000, retry.call_start_time_nanos)
@@ -527,7 +508,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             await call_with_retries_async(
                 fn,
                 policy=retry_policy,
-                config=config,
                 before_attempt=before_attempt,
                 log=None,
             ),
@@ -562,7 +542,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
                 raise RetryableError("fail", retry_immediately_once=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", await call_with_retries_async(fn, policy=retry_policy, config=RetryConfig(), log=None))
+        self.assertEqual("ok", await call_with_retries_async(fn, policy=retry_policy, log=None))
         self.assertEqual([[], [0], [1]], history_counts_per_attempt)
         self.assertEqual([[], [0], [0]], nested_history_sizes_per_attempt)
 
@@ -589,7 +569,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
                 raise RetryableError("fail", retry_immediately_once=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", await call_with_retries_async(fn, policy=retry_policy, config=RetryConfig(), log=None))
+        self.assertEqual("ok", await call_with_retries_async(fn, policy=retry_policy, log=None))
         self.assertEqual([[], [0], [0, 1], [1, 2]], history_counts_per_attempt)
 
     async def test_call_with_retries_async_previous_outcomes_are_detached(self) -> None:
@@ -619,7 +599,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
                 raise RetryableError("fail", retry_immediately_once=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", await call_with_retries_async(fn, policy=retry_policy, config=RetryConfig(), log=None))
+        self.assertEqual("ok", await call_with_retries_async(fn, policy=retry_policy, log=None))
         self.assertEqual([[], [0], [0, 0], [0, 0], [0, 0]], nested_history_sizes_per_attempt)
 
     async def test_call_with_retries_async_after_attempt_success(self) -> None:
@@ -648,7 +628,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         final_result = await call_with_retries_async(
             fn,
             policy=retry_policy,
-            config=RetryConfig(),
             after_attempt=after_attempt,
             log=None,
         )
@@ -698,9 +677,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(outcome.retry.log)
 
         with self.assertRaises(ValueError):
-            await call_with_retries_async(
-                fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None
-            )
+            await call_with_retries_async(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
 
         # There must be at least one event and the last one must indicate exhaustion.
         self.assertGreaterEqual(len(events), 1)
@@ -746,7 +723,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         actual = await call_with_retries_async(
             fn,
             policy=retry_policy,
-            config=RetryConfig(),
             after_attempt=after_attempt,
             on_exhaustion=lambda _outcome: "exhausted",
             log=None,
@@ -766,7 +742,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             raise RetryableError("fail") from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            await call_with_retries_async(fn, policy=RetryPolicy.no_retries(), config=RetryConfig(), log=None)
+            await call_with_retries_async(fn, policy=RetryPolicy.no_retries(), log=None)
 
     async def test_call_with_retries_async_on_retryable_error_called_once_per_failure(self) -> None:
         """Ensures on_retryable_error runs once for each RetryableError raised by fn()."""
@@ -792,7 +768,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             await call_with_retries_async(
                 fn,
                 policy=retry_policy,
-                config=RetryConfig(),
                 on_retryable_error=on_retryable_error,
                 log=None,
             )
@@ -829,7 +804,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             await call_with_retries_async(
                 fn,
                 policy=retry_policy,
-                config=RetryConfig(),
                 after_attempt=after_attempt,
                 on_retryable_error=on_retryable_error,
                 log=None,
@@ -848,6 +822,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         outcomes: list[AttemptOutcome] = []
         retry_policy = RetryPolicy.no_retries()
         retry_config = RetryConfig(display_msg="template")
+        retry_policy = retry_policy.copy(config=retry_config)
         template_log = MagicMock(spec=logging.Logger)
 
         def before_attempt(retry: Retry) -> int:
@@ -859,7 +834,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
 
         template: RetryTemplate[str] = RetryTemplate(
             policy=retry_policy,
-            config=retry_config,
             before_attempt=before_attempt,
             after_attempt=after_attempt,
             log=template_log,
@@ -868,7 +842,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         async def fn(retry: Retry) -> str:
             calls.append(retry.count)
             self.assertIs(retry_policy, retry.policy)
-            self.assertIs(retry_config, retry.config)
+            self.assertIs(retry_config, retry.policy.config)
             return "hello"
 
         with self.subTest("default_logger_from_template"):
@@ -946,7 +920,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -964,7 +937,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -986,7 +958,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -1008,7 +979,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -1043,7 +1013,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -1071,7 +1040,6 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=roundtripped),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )

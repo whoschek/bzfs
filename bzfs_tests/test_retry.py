@@ -85,7 +85,6 @@ class TestSleep(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -109,7 +108,6 @@ class TestSleep(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -134,7 +132,6 @@ class TestRetryTiming(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -158,7 +155,6 @@ class TestRetryTiming(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -174,7 +170,6 @@ class TestRetryTiming(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -189,7 +184,6 @@ class TestRetryTiming(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -207,7 +201,6 @@ class TestRetryTiming(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -223,7 +216,6 @@ class TestRetryTiming(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=roundtripped),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -233,6 +225,13 @@ class TestRetryTiming(unittest.TestCase):
         """Default RetryPolicy must remain pickleable."""
         retry_policy = pickle.loads(pickle.dumps(RetryPolicy()))
         self.assertEqual(RetryPolicy(), retry_policy)
+
+    def test_retry_policy_with_non_default_config_is_pickleable(self) -> None:
+        """RetryPolicy pickling should preserve RetryConfig payload fields."""
+        original = RetryPolicy(config=RetryConfig(display_msg="pickle-me", enable_logging=False))
+        roundtripped = pickle.loads(pickle.dumps(original))
+        self.assertEqual("pickle-me", roundtripped.config.display_msg)
+        self.assertEqual(False, roundtripped.config.enable_logging)
 
 
 #############################################################################
@@ -284,7 +283,7 @@ class TestCallWithRetries(unittest.TestCase):
 
         mock_log = MagicMock(spec=Logger)
         self.assertEqual(
-            "ok", call_with_retries(fn, policy=retry_policy, config=RetryConfig(display_msg="foo"), log=mock_log)
+            "ok", call_with_retries(fn, policy=retry_policy.copy(config=RetryConfig(display_msg="foo")), log=mock_log)
         )
         self.assertEqual([0, 1, 2], calls)
         self.assertEqual(2, len(mock_log.log.call_args_list))
@@ -293,7 +292,7 @@ class TestCallWithRetries(unittest.TestCase):
         mock_log = MagicMock(spec=Logger)
         mock_log.isEnabledFor = lambda level: level >= logging.ERROR
         self.assertEqual(
-            "ok", call_with_retries(fn, policy=retry_policy, config=RetryConfig(display_msg="foo"), log=mock_log)
+            "ok", call_with_retries(fn, policy=retry_policy.copy(config=RetryConfig(display_msg="foo")), log=mock_log)
         )
         self.assertEqual([0, 1, 2], calls)
         self.assertEqual(0, len(mock_log.log.call_args_list))
@@ -326,7 +325,6 @@ class TestCallWithRetries(unittest.TestCase):
         actual = call_with_retries(
             fn,
             policy=retry_policy,
-            config=RetryConfig(),
             after_attempt=after_attempt,
             log=None,
         )
@@ -362,7 +360,9 @@ class TestCallWithRetries(unittest.TestCase):
             return "ok"
 
         # log=None should skip all logging but still perform retries and return successfully
-        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, config=RetryConfig(display_msg="foo"), log=None))
+        self.assertEqual(
+            "ok", call_with_retries(fn, policy=retry_policy.copy(config=RetryConfig(display_msg="foo")), log=None)
+        )
         self.assertEqual([0, 1], calls)
 
     def test_call_with_retries_gives_up(self) -> None:
@@ -379,7 +379,7 @@ class TestCallWithRetries(unittest.TestCase):
             raise RetryableError("fail", retry_immediately_once=True) from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=MagicMock(spec=Logger))
+            call_with_retries(fn, policy=retry_policy, log=MagicMock(spec=Logger))
 
     def test_call_with_retries_retryable_without_cause_raises_retry_error(self) -> None:
         """Ensures that if RetryableError has no __cause__, exhaustion raises RetryError with the RetryableError as the
@@ -397,7 +397,7 @@ class TestCallWithRetries(unittest.TestCase):
             raise RetryableError("fail", retry_immediately_once=True)
 
         with self.assertRaises(RetryError) as cm:
-            call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=None)
+            call_with_retries(fn, policy=retry_policy, log=None)
         retry_error = cm.exception
         cause = retry_error.__cause__
         self.assertIsNotNone(cause)
@@ -422,7 +422,7 @@ class TestCallWithRetries(unittest.TestCase):
             raise RetryableError("fail", retry_immediately_once=True) from ValueError("boom")
 
         with self.assertRaises(RetryError) as cm:
-            call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=None)
+            call_with_retries(fn, policy=retry_policy, log=None)
         retry_error = cm.exception
         self.assertIsInstance(retry_error.__cause__, RetryableError)
         assert isinstance(retry_error.__cause__, RetryableError)
@@ -447,7 +447,7 @@ class TestCallWithRetries(unittest.TestCase):
                 raised_once = True
                 raise RetryableError("retry from after_attempt")
 
-        actual = call_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
+        actual = call_with_retries(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
         self.assertTrue(raised_once)
         self.assertEqual("ok", actual)
         self.assertEqual([0, 1], fn_calls)
@@ -471,7 +471,7 @@ class TestCallWithRetries(unittest.TestCase):
         mock_sleep = MagicMock()
         retry_policy = retry_policy.copy(timing=RetryTiming(sleep=mock_sleep))
         with self.assertRaises(RetryableError):
-            call_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
+            call_with_retries(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
 
         self.assertEqual([0], fn_calls)
         self.assertEqual([0], after_attempt_calls)
@@ -514,9 +514,7 @@ class TestCallWithRetries(unittest.TestCase):
         monotonic_ns = MagicMock(side_effect=[0, 1234])
         retry_policy = retry_policy.copy(timing=RetryTiming(monotonic_ns=monotonic_ns))
         with self.assertRaises(ValueError):
-            call_with_retries(
-                fn, policy=retry_policy, config=RetryConfig(), giveup=giveup, after_attempt=after_attempt, log=mock_log
-            )
+            call_with_retries(fn, policy=retry_policy, giveup=giveup, after_attempt=after_attempt, log=mock_log)
 
         # giveup() must prevent additional retries
         self.assertEqual([0], calls)
@@ -554,7 +552,7 @@ class TestCallWithRetries(unittest.TestCase):
             return "circuit breaker triggered"
 
         with self.assertRaises(RetryError) as cm:
-            call_with_retries(fn, policy=retry_policy, config=RetryConfig(), giveup=giveup, log=mock_log)
+            call_with_retries(fn, policy=retry_policy, giveup=giveup, log=mock_log)
 
         err = cm.exception
         self.assertEqual("circuit breaker triggered", err.outcome.giveup_reason)
@@ -585,7 +583,6 @@ class TestCallWithRetries(unittest.TestCase):
         actual = call_with_retries(
             fn,
             policy=retry_policy,
-            config=RetryConfig(),
             after_attempt=after_attempt,
             on_exhaustion=on_exhaustion,
             log=None,
@@ -616,7 +613,6 @@ class TestCallWithRetries(unittest.TestCase):
         actual = call_with_retries(
             fn,
             policy=retry_policy,
-            config=RetryConfig(),
             after_attempt=after_attempt,
             on_exhaustion=on_exhaustion,
             log=None,
@@ -646,7 +642,6 @@ class TestCallWithRetries(unittest.TestCase):
         actual = call_with_retries(
             fn,
             policy=retry_policy,
-            config=RetryConfig(),
             giveup=giveup,
             on_exhaustion=on_exhaustion,
             log=None,
@@ -671,7 +666,7 @@ class TestCallWithRetries(unittest.TestCase):
             on_exhaustion_calls.append(outcome)
             return "fallback"
 
-        actual = call_with_retries(fn, policy=retry_policy, config=RetryConfig(), on_exhaustion=on_exhaustion, log=None)
+        actual = call_with_retries(fn, policy=retry_policy, on_exhaustion=on_exhaustion, log=None)
         self.assertEqual("ok", actual)
         self.assertEqual([0, 1], calls)
         self.assertEqual([], on_exhaustion_calls)
@@ -685,7 +680,7 @@ class TestCallWithRetries(unittest.TestCase):
             raise RetryableError("fail") from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=mock_log)
+            call_with_retries(fn, policy=retry_policy, log=mock_log)
         mock_log.log.assert_not_called()
 
     def test_call_with_retries_elapsed_time(self) -> None:
@@ -708,7 +703,7 @@ class TestCallWithRetries(unittest.TestCase):
             raise RetryableError("fail", retry_immediately_once=True) from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=mock_log)
+            call_with_retries(fn, policy=retry_policy, log=mock_log)
         mock_log.log.assert_called_once()
         warning_call_args = mock_log.log.call_args[0]
         self.assertEqual(logging.WARNING, warning_call_args[0])
@@ -728,7 +723,7 @@ class TestCallWithRetries(unittest.TestCase):
             raise RetryableError("fail", retry_immediately_once=True) from ValueError("boom")
 
         with self.assertRaises(ValueError):
-            call_with_retries(fn, policy=retry_policy, config=RetryConfig(display_msg=""), log=mock_log)
+            call_with_retries(fn, policy=retry_policy.copy(config=RetryConfig(display_msg="")), log=mock_log)
 
         self.assertEqual(mock_log.log.call_count, 2)
         warning_call_args = mock_log.log.call_args_list[-1][0]
@@ -753,8 +748,7 @@ class TestCallWithRetries(unittest.TestCase):
         with self.assertRaises(ValueError):
             call_with_retries(
                 fn,
-                policy=retry_policy,
-                config=RetryConfig(info_loglevel=logging.DEBUG, warning_loglevel=logging.ERROR),
+                policy=retry_policy.copy(config=RetryConfig(info_loglevel=logging.DEBUG, warning_loglevel=logging.ERROR)),
                 log=mock_log,
             )
 
@@ -784,7 +778,7 @@ class TestCallWithRetries(unittest.TestCase):
                 raise RetryableError("fail", retry_immediately_once=True) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=mock_log))
+        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, log=mock_log))
         self.assertEqual(1, mock_log.log.call_count)
         info_call_args = mock_log.log.call_args_list[0][0]
         self.assertEqual(logging.INFO, info_call_args[0])
@@ -815,10 +809,7 @@ class TestCallWithRetries(unittest.TestCase):
             return "ok"
 
         retry_policy = retry_policy.copy(timing=RetryTiming(sleep=sleep))
-        config = RetryConfig()
-        self.assertEqual(
-            "ok", call_with_retries(fn, policy=retry_policy, config=config, before_attempt=before_attempt, log=None)
-        )
+        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, before_attempt=before_attempt, log=None))
         self.assertEqual([0], before_attempt_calls)
         self.assertEqual([0], fn_calls)
         self.assertEqual([(123, 0)], sleeps)
@@ -852,10 +843,7 @@ class TestCallWithRetries(unittest.TestCase):
             return "ok"
 
         retry_policy = retry_policy.copy(timing=RetryTiming(sleep=sleep))
-        config = RetryConfig()
-        self.assertEqual(
-            "ok", call_with_retries(fn, policy=retry_policy, config=config, before_attempt=before_attempt, log=None)
-        )
+        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, before_attempt=before_attempt, log=None))
         self.assertEqual([0, 1], before_attempt_calls)
         self.assertEqual([0, 1], fn_calls)
         self.assertEqual([7], sleeps)
@@ -874,7 +862,6 @@ class TestCallWithRetries(unittest.TestCase):
         retry_policy = retry_policy.copy(
             timing=RetryTiming(monotonic_ns=monotonic_ns, sleep=lambda sleep_nanos, _retry: sleeps.append(sleep_nanos))
         )
-        config = RetryConfig()
 
         def fn(retry: Retry) -> str:
             self.assertEqual(1_000, retry.call_start_time_nanos)
@@ -888,7 +875,6 @@ class TestCallWithRetries(unittest.TestCase):
             call_with_retries(
                 fn,
                 policy=retry_policy,
-                config=config,
                 before_attempt=before_attempt_wrapper,
                 log=None,
             ),
@@ -909,11 +895,8 @@ class TestCallWithRetries(unittest.TestCase):
             sleeps.append(sleep_nanos)
 
         retry_policy = retry_policy.copy(timing=RetryTiming(sleep=sleep))
-        config = RetryConfig()
         with self.assertRaises(AssertionError):
-            call_with_retries(
-                lambda _retry: "ok", policy=retry_policy, config=config, before_attempt=before_attempt, log=None
-            )
+            call_with_retries(lambda _retry: "ok", policy=retry_policy, before_attempt=before_attempt, log=None)
         self.assertEqual([], sleeps)
 
     def test_retry_before_attempt_time_nanos_matches_attempt_start_without_sleep(self) -> None:
@@ -925,7 +908,6 @@ class TestCallWithRetries(unittest.TestCase):
 
         monotonic_ns = MagicMock(side_effect=[1_000, 1_000])
         retry_policy = retry_policy.copy(timing=RetryTiming(monotonic_ns=monotonic_ns, sleep=lambda _nanos, _retry: None))
-        config = RetryConfig()
 
         def fn(retry: Retry) -> int:
             self.assertEqual(1_000, retry.call_start_time_nanos)
@@ -936,7 +918,7 @@ class TestCallWithRetries(unittest.TestCase):
 
         self.assertEqual(
             123,
-            call_with_retries(fn, policy=retry_policy, config=config, before_attempt=before_attempt, log=None),
+            call_with_retries(fn, policy=retry_policy, before_attempt=before_attempt, log=None),
         )
         self.assertEqual(2, monotonic_ns.call_count)
 
@@ -949,7 +931,6 @@ class TestCallWithRetries(unittest.TestCase):
 
         monotonic_ns = MagicMock(side_effect=[1_000, 2_000])
         retry_policy = retry_policy.copy(timing=RetryTiming(monotonic_ns=monotonic_ns, sleep=lambda _nanos, _retry: None))
-        config = RetryConfig()
 
         def fn(retry: Retry) -> int:
             self.assertEqual(1_000, retry.call_start_time_nanos)
@@ -960,7 +941,7 @@ class TestCallWithRetries(unittest.TestCase):
 
         self.assertEqual(
             456,
-            call_with_retries(fn, policy=retry_policy, config=config, before_attempt=before_attempt, log=None),
+            call_with_retries(fn, policy=retry_policy, before_attempt=before_attempt, log=None),
         )
 
     def test_call_with_retries_after_attempt_success(self) -> None:
@@ -986,9 +967,7 @@ class TestCallWithRetries(unittest.TestCase):
             self.assertIsNone(outcome.giveup_reason)
             self.assertIsNone(outcome.retry.log)
 
-        final_result = call_with_retries(
-            fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None
-        )
+        final_result = call_with_retries(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
         self.assertEqual("ok", final_result)
 
         # We expect two failed attempts (counts 0 and 1) and one success (count 2).
@@ -1035,7 +1014,7 @@ class TestCallWithRetries(unittest.TestCase):
             self.assertIsNone(outcome.retry.log)
 
         with self.assertRaises(ValueError):
-            call_with_retries(fn, policy=retry_policy, config=RetryConfig(), after_attempt=after_attempt, log=None)
+            call_with_retries(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
 
         # There must be at least one event and the last one must indicate exhaustion.
         self.assertGreaterEqual(len(events), 1)
@@ -1073,7 +1052,7 @@ class TestCallWithRetries(unittest.TestCase):
                 raise RetryableError("fail", retry_immediately_once=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=None))
+        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, log=None))
         self.assertEqual([[], [0], [1]], history_counts_per_attempt)
         self.assertEqual([[], [0], [0]], nested_history_sizes_per_attempt)
 
@@ -1095,7 +1074,7 @@ class TestCallWithRetries(unittest.TestCase):
                 raise RetryableError("fail", retry_immediately_once=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=None))
+        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, log=None))
         self.assertEqual([[], [0], [0, 1], [1, 2]], history_counts_per_attempt)
 
     def test_call_with_retries_previous_outcomes_are_detached(self) -> None:
@@ -1120,7 +1099,7 @@ class TestCallWithRetries(unittest.TestCase):
                 raise RetryableError("fail", retry_immediately_once=(retry.count == 0)) from ValueError("boom")
             return "ok"
 
-        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=None))
+        self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, log=None))
         self.assertEqual([[], [0], [0, 0], [0, 0], [0, 0]], nested_history_sizes_per_attempt)
 
     def test_retry_policy_invalid_backoff_strategy_raises_type_error(self) -> None:
@@ -1172,7 +1151,6 @@ class TestCallWithRetries(unittest.TestCase):
             RetryTemplate().call_with_retries(
                 fn,
                 policy=retry_policy,
-                config=RetryConfig(),
                 on_retryable_error=on_retryable_error,
                 log=None,
             )
@@ -1217,7 +1195,6 @@ class TestCallWithRetries(unittest.TestCase):
             call_with_retries(
                 fn,
                 policy=retry_policy,
-                config=RetryConfig(),
                 after_attempt=after_attempt,
                 log=None,
             )
@@ -1263,7 +1240,6 @@ class TestCallWithRetries(unittest.TestCase):
         actual = call_with_retries(
             fn,
             policy=retry_policy,
-            config=RetryConfig(),
             after_attempt=after_attempt,
             on_exhaustion=lambda _outcome: "exhausted",
             log=None,
@@ -1307,8 +1283,7 @@ class TestCallWithRetries(unittest.TestCase):
         with patch("bzfs_main.util.retry._thread_local_rng", return_value=rng):
             actual = call_with_retries(
                 fn,
-                policy=retry_policy,
-                config=config,
+                policy=retry_policy.copy(config=config),
                 after_attempt=after_attempt,
                 log=None,
             )
@@ -1326,7 +1301,7 @@ class TestCallWithRetries(unittest.TestCase):
         mock_sleep.assert_called_once()
         self.assertEqual(retry_policy.initial_max_sleep_nanos, mock_sleep.call_args.args[0])
         self.assertIs(events[0].retry, mock_sleep.call_args.args[1])
-        self.assertIs(config, mock_sleep.call_args.args[1].config)
+        self.assertIs(config, mock_sleep.call_args.args[1].policy.config)
         rng.randint.assert_not_called()
 
     def test_thread_local_rng_is_cached_after_first_initialization(self) -> None:
@@ -1363,7 +1338,7 @@ class TestCallWithRetries(unittest.TestCase):
                         raise RetryableError("fail") from ValueError("boom")
                     return "ok"
 
-                result = call_with_retries(fn, policy=retry_policy, config=RetryConfig(), log=None)
+                result = call_with_retries(fn, policy=retry_policy, log=None)
                 self.assertEqual([0, 1], calls)
                 return result
 
@@ -1383,7 +1358,6 @@ class TestCallWithRetries(unittest.TestCase):
             before_attempt_start_time_nanos=123,
             attempt_start_time_nanos=123,
             policy=RetryPolicy(max_retries=1),
-            config=RetryConfig(display_msg="a"),
             log=None,
             previous_outcomes=(),
         )
@@ -1393,7 +1367,6 @@ class TestCallWithRetries(unittest.TestCase):
             before_attempt_start_time_nanos=123,
             attempt_start_time_nanos=123,
             policy=RetryPolicy(max_retries=999),
-            config=RetryConfig(display_msg="b"),
             log=MagicMock(spec=Logger),
             previous_outcomes=(MagicMock(spec=AttemptOutcome),),
         )
@@ -1403,7 +1376,6 @@ class TestCallWithRetries(unittest.TestCase):
             before_attempt_start_time_nanos=123,
             attempt_start_time_nanos=123,
             policy=RetryPolicy(max_retries=1),
-            config=RetryConfig(display_msg="a"),
             log=None,
             previous_outcomes=(),
         )
@@ -1475,7 +1447,6 @@ class TestCallWithRetries(unittest.TestCase):
             call_with_retries(
                 fn,
                 policy=retry_policy,
-                config=RetryConfig(),
                 after_attempt=multi_after_attempt([handler1, handler2]),
                 log=None,
             ),
@@ -1495,7 +1466,6 @@ class TestCallWithRetries(unittest.TestCase):
             before_attempt_start_time_nanos=1,
             attempt_start_time_nanos=1,
             policy=RetryPolicy(max_retries=0),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -1542,7 +1512,6 @@ class TestCallWithRetries(unittest.TestCase):
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
             policy=RetryPolicy(max_retries=0),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )
@@ -1611,7 +1580,6 @@ class TestCallWithRetries(unittest.TestCase):
             before_attempt_start_time_nanos=123,
             attempt_start_time_nanos=123,
             policy=RetryPolicy(max_retries=1),
-            config=RetryConfig(display_msg="a"),
             log=None,
             previous_outcomes=(),
         )
@@ -1760,8 +1728,7 @@ class TestRetryTemplateCopy(unittest.TestCase):
 
         log = MagicMock(spec=Logger)
         original: RetryTemplate = RetryTemplate(
-            policy=original_policy,
-            config=original_config,
+            policy=original_policy.copy(config=original_config),
             giveup=giveup,
             after_attempt=after_attempt,
             log=log,
@@ -1769,13 +1736,13 @@ class TestRetryTemplateCopy(unittest.TestCase):
 
         new_policy = RetryPolicy(max_retries=2)
         new_config = RetryConfig(display_msg="copy")
-        copied = original.copy(policy=new_policy, config=new_config)
+        copied = original.copy(policy=new_policy.copy(config=new_config))
 
         self.assertIsNot(original, copied)
         self.assertEqual(1, original.policy.max_retries)
         self.assertEqual(2, copied.policy.max_retries)
-        self.assertEqual("orig", original.config.display_msg)
-        self.assertEqual("copy", copied.config.display_msg)
+        self.assertEqual("orig", original.policy.config.display_msg)
+        self.assertEqual("copy", copied.policy.config.display_msg)
         self.assertIs(original.giveup, copied.giveup)
         self.assertIs(original.after_attempt, copied.after_attempt)
         self.assertIs(original.log, copied.log)
@@ -1851,7 +1818,6 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             before_attempt_start_time_nanos=100,
             attempt_start_time_nanos=100,
             policy=RetryPolicy(max_retries=1),
-            config=RetryConfig(display_msg="orig"),
             log=original_log,
             previous_outcomes=(),
         )
@@ -1872,7 +1838,6 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             before_attempt_start_time_nanos=200,
             attempt_start_time_nanos=200,
             policy=RetryPolicy(max_retries=2),
-            config=RetryConfig(display_msg="copy"),
             log=None,
             previous_outcomes=(),
         )
@@ -1914,7 +1879,6 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             before_attempt_start_time_nanos=150,
             attempt_start_time_nanos=150,
             policy=RetryPolicy(max_retries=0),
-            config=RetryConfig(),
             log=None,
             previous_outcomes=(),
         )

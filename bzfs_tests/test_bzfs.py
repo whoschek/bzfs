@@ -80,7 +80,6 @@ from bzfs_main.util.connection import (
 )
 from bzfs_main.util.retry import (
     Retry,
-    RetryConfig,
     RetryPolicy,
     RetryTerminationError,
 )
@@ -1317,7 +1316,6 @@ class TestJobMethods(AbstractTestCase):
                     before_attempt_start_time_nanos=0,
                     attempt_start_time_nanos=0,
                     policy=RetryPolicy(),
-                    config=RetryConfig(),
                     log=None,
                     previous_outcomes=(),
                 ),
