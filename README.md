@@ -1601,20 +1601,20 @@ usage: bzfs [-h] [--recursive]
 
     Example output with `--verbose`:
 
-    --monitor_snapshots: OK. Latest snapshot for tank/foo@prod_<timestamp>_daily is 4.18h
-    old: @prod_2025-01-10_08:30:05_daily
+    `--monitor_snapshots: OK. Latest snapshot for tank/foo@prod_<timestamp>_daily is 4.18h
+    old: @prod_2025-01-10_08:30:05_daily`
 
-    --monitor_snapshots: OK. Latest snapshot for tank/bar@prod_<timestamp>_daily is 4.18h
-    old: @prod_2025-01-10_08:30:05_daily
+    `--monitor_snapshots: OK. Latest snapshot for tank/bar@prod_<timestamp>_daily is 4.18h
+    old: @prod_2025-01-10_08:30:05_daily`
 
-    --monitor_snapshots: Latest snapshot for tank/baz@prod_<timestamp>_daily is 1.2d old but
-    should be at most 1.1d old: @prod_2025-01-09_08:30:05_daily
+    `--monitor_snapshots: Latest snapshot for tank/baz@prod_<timestamp>_daily is 1.2d old
+    but should be at most 1.1d old: @prod_2025-01-09_08:30:05_daily`
 
     ...
 
-    ERROR: Exiting bzfs with status code 2. Cause: --monitor_snapshots: Latest snapshot for
+    `ERROR: Exiting bzfs with status code 2. Cause: --monitor_snapshots: Latest snapshot for
     tank/baz@prod_<timestamp>_daily is 1.2d old but should be at most 1.1d old:
-    @prod_2025-01-09_08:30:05_daily
+    @prod_2025-01-09_08:30:05_daily`
 
 <!-- -->
 
