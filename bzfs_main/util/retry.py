@@ -294,8 +294,8 @@ def call_with_retries(
             if before_attempt is not before_attempt_noop:
                 before_attempt_sleep_nanos: int = before_attempt(retry)
                 assert before_attempt_sleep_nanos >= 0, before_attempt_sleep_nanos
-                if before_attempt_sleep_nanos > 0:  # e.g. wait due to rate limiting or internal backpressure
-                    sleep(before_attempt_sleep_nanos, retry)
+                if before_attempt_sleep_nanos > 0:
+                    sleep(before_attempt_sleep_nanos, retry)  # e.g. wait due to rate limiting or internal backpressure
                 retry = Retry(
                     retry_count, call_start_nanos, before_attempt_nanos, monotonic_ns(), policy, log, previous_outcomes
                 )
@@ -378,8 +378,8 @@ async def call_with_retries_async(
             if before_attempt is not before_attempt_noop:
                 before_attempt_sleep_nanos: int = before_attempt(retry)
                 assert before_attempt_sleep_nanos >= 0, before_attempt_sleep_nanos
-                if before_attempt_sleep_nanos > 0:  # e.g. wait due to rate limiting or internal backpressure
-                    await sleep(before_attempt_sleep_nanos, retry)
+                if before_attempt_sleep_nanos > 0:
+                    await sleep(before_attempt_sleep_nanos, retry)  # e.g. wait due to rate limiting or internal backpressure
                 retry = Retry(
                     retry_count, call_start_nanos, before_attempt_nanos, monotonic_ns(), policy, log, previous_outcomes
                 )

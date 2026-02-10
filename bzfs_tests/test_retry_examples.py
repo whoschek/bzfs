@@ -70,12 +70,12 @@ def decorrelated_jitter_backoff_strategy(context: BackoffContext) -> tuple[int, 
     return sleep_nanos, sleep_nanos
 
 
-def exception_driven_backoff_strategy(retry_after: Callable[[RetryableError], int]) -> BackoffStrategy:
+def backoff_from_retryable_error(retry_after: Callable[[RetryableError], int]) -> BackoffStrategy:
     """Returns an immutable strategy whose sleep duration is derived from RetryableError, e.g. RetryableError.attachment."""
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:
-        sleep_nanos: int = max(0, retry_after(context.retryable_error))
-        return sleep_nanos, context.curr_max_sleep_nanos
+        sleep_nanos: int = retry_after(context.retryable_error)
+        return max(0, sleep_nanos), context.curr_max_sleep_nanos
 
     return _strategy
 
@@ -188,7 +188,7 @@ def random_backoff_strategy(context: BackoffContext) -> tuple[int, int]:
 
 def no_jitter_exponential_backoff_strategy(context: BackoffContext) -> tuple[int, int]:
     policy: RetryPolicy = context.retry.policy
-    curr_max_sleep_nanos = context.curr_max_sleep_nanos
+    curr_max_sleep_nanos: int = context.curr_max_sleep_nanos
     sleep_nanos: int = curr_max_sleep_nanos
     curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
     curr_max_sleep_nanos = min(curr_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap for next attempt
@@ -207,14 +207,17 @@ def fixed_backoff_strategy(sleep_nanos: int) -> BackoffStrategy:
 
 def linear_backoff_strategy(
     *,
-    start_sleep_nanos: int = 0,
-    increment_sleep_nanos: int = 10 * 1_000_000_000,
-    max_sleep_nanos: int = 60 * 1_000_000_000,
+    start_sleep_nanos: int = 85 * 1_000_000,  # 85ms
+    increment_sleep_nanos: int = 1 * 1_111_000_000,  # ~1.1s
+    max_sleep_nanos: int = 11 * 1_000_000_000,  # 11s
 ) -> BackoffStrategy:
+    start_sleep_nanos = max(0, start_sleep_nanos)
+    increment_sleep_nanos = max(0, increment_sleep_nanos)
+    max_sleep_nanos = max(0, max_sleep_nanos)
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:
-        sleep_nanos = start_sleep_nanos + (increment_sleep_nanos * context.retry.count)
-        sleep_nanos = max(0, min(sleep_nanos, max_sleep_nanos))
+        sleep_nanos = start_sleep_nanos + increment_sleep_nanos * context.retry.count
+        sleep_nanos = min(sleep_nanos, max_sleep_nanos)
         return sleep_nanos, context.curr_max_sleep_nanos
 
     return _strategy
@@ -229,21 +232,6 @@ def chained_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffSt
     def _strategy(context: BackoffContext) -> tuple[int, int]:
         strategy = strategies[min(context.retry.count, len(strategies) - 1)]
         return strategy(context)
-
-    return _strategy
-
-
-def sum_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffStrategy:
-    """Returns an (immutable) BackoffStrategy that sums the sleeps of multiple other strategies."""
-    strategies = tuple(strategies)
-
-    def _strategy(context: BackoffContext) -> tuple[int, int]:
-        sleep_nanos_sum = 0
-        curr_max_sleep_nanos = context.curr_max_sleep_nanos
-        for strategy in strategies:
-            sleep_nanos, curr_max_sleep_nanos = strategy(context.copy(curr_max_sleep_nanos=curr_max_sleep_nanos))
-            sleep_nanos_sum += sleep_nanos
-        return sleep_nanos_sum, curr_max_sleep_nanos
 
     return _strategy
 
@@ -544,16 +532,16 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         self.assertEqual([1_000_000_000, 3_000_000_000, 5_000_000_000, 5_000_000_000], sleeps)
         self.assertEqual(4, mock_sleep.call_count)
 
-    def test_exception_driven_backoff_strategy_receives_retryable_error_with_cause(self) -> None:
-        strategy = exception_driven_backoff_strategy(
+    def test_backoff_from_retryable_error_receives_retryable_error_with_cause(self) -> None:
+        strategy = backoff_from_retryable_error(
             lambda err: 7_000_000_000 if isinstance(err.__cause__, ValueError) else 11_000_000_000
         )
         sleeps, mock_sleep = self._run_and_collect_sleep_nanos(backoff_strategy=strategy, failures=1, with_cause=True)
         self.assertEqual([7_000_000_000], sleeps)
         self.assertEqual(1, mock_sleep.call_count)
 
-    def test_exception_driven_backoff_strategy_receives_retryable_error_without_cause(self) -> None:
-        strategy = exception_driven_backoff_strategy(
+    def test_backoff_from_retryable_error_receives_retryable_error_without_cause(self) -> None:
+        strategy = backoff_from_retryable_error(
             lambda err: 7_000_000_000 if isinstance(err.__cause__, ValueError) else 11_000_000_000
         )
         sleeps, mock_sleep = self._run_and_collect_sleep_nanos(backoff_strategy=strategy, failures=1, with_cause=False)
@@ -758,12 +746,6 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         sleeps, mock_sleep = self._run_and_collect_sleep_nanos(backoff_strategy=chained, failures=4)
         self.assertEqual([1_000_000_000, 2_000_000_000, 3_000_000_000, 3_000_000_000], sleeps)
         self.assertEqual(4, mock_sleep.call_count)
-
-    def test_sum_backoff_strategy(self) -> None:
-        combined = sum_backoff_strategy([fixed_backoff_strategy(1_000_000_000), fixed_backoff_strategy(2_000_000_000)])
-        sleeps, mock_sleep = self._run_and_collect_sleep_nanos(backoff_strategy=combined, failures=2)
-        self.assertEqual([3_000_000_000, 3_000_000_000], sleeps)
-        self.assertEqual(2, mock_sleep.call_count)
 
     def _run_and_collect_sleep_nanos(
         self,
