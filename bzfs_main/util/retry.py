@@ -311,10 +311,8 @@ def call_with_retries(
             is_terminated: Callable[[Retry], bool] = timing.is_terminated
             giveup_reason: object | None = None
             sleep_nanos: int = 0
-            if on_retryable_error is not noop:
-                on_retryable_error(  # e.g. count failures (RetryableError) caught by retry loop
-                    AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
-                )
+            outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
+            on_retryable_error(outcome)  # e.g. count failures (RetryableError) caught by retry loop
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
                 if policy.max_sleep_nanos == 0 and backoff is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
@@ -327,7 +325,8 @@ def call_with_retries(
                     )
                     assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, sleep_nanos
 
-                outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
+                if sleep_nanos > 0:
+                    outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
                 if (not is_terminated(retry)) and (giveup_reason := giveup(outcome)) is None:
                     after_attempt(outcome)
                     if sleep_nanos > 0:
@@ -397,10 +396,8 @@ async def call_with_retries_async(
             is_terminated: Callable[[Retry], bool] = timing.is_terminated
             giveup_reason: object | None = None
             sleep_nanos: int = 0
-            if on_retryable_error is not noop:
-                on_retryable_error(  # e.g. count failures (RetryableError) caught by retry loop
-                    AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
-                )
+            outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
+            on_retryable_error(outcome)  # e.g. count failures (RetryableError) caught by retry loop
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
                 if policy.max_sleep_nanos == 0 and backoff is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
@@ -413,7 +410,8 @@ async def call_with_retries_async(
                     )
                     assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, sleep_nanos
 
-                outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
+                if sleep_nanos > 0:
+                    outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
                 if (not is_terminated(retry)) and (giveup_reason := giveup(outcome)) is None:
                     after_attempt(outcome)
                     await sleep(sleep_nanos, retry)
