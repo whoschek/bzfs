@@ -329,8 +329,7 @@ def call_with_retries(
                     outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
                 if (not is_terminated(retry)) and (giveup_reason := giveup(outcome)) is None:
                     after_attempt(outcome)
-                    if sleep_nanos > 0:
-                        sleep(sleep_nanos, retry)
+                    sleep(sleep_nanos, retry)
                     if not is_terminated(retry):
                         n: int = policy.max_previous_outcomes
                         if n > 0:  # outcome will be passed to next attempt via Retry.previous_outcomes

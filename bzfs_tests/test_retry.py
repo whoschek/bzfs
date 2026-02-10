@@ -297,8 +297,8 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertEqual([0, 1, 2], calls)
         self.assertEqual(0, len(mock_log.log.call_args_list))
 
-    def test_call_with_retries_retry_immediately_once_skips_backoff_and_sleep(self) -> None:
-        """Ensures retry_immediately_once triggers an immediate retry without computing backoff or sleeping."""
+    def test_call_with_retries_retry_immediately_once_skips_backoff_and_sleeps_zero(self) -> None:
+        """Ensures retry_immediately_once skips backoff and invokes sleep() with zero nanos once."""
         backoff_strategy = MagicMock(side_effect=AssertionError("backoff_strategy must not be called"))
         retry_policy = RetryPolicy(
             max_retries=1,
@@ -339,7 +339,9 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertTrue(events[1].is_success)
         self.assertEqual(1, events[1].retry.count)
         self.assertEqual(0, events[1].sleep_nanos)
-        mock_sleep.assert_not_called()
+        mock_sleep.assert_called_once()
+        self.assertEqual(0, mock_sleep.call_args.args[0])
+        self.assertIs(events[0].retry, mock_sleep.call_args.args[1])
         backoff_strategy.assert_not_called()
 
     def test_call_with_retries_log_none(self) -> None:
@@ -854,7 +856,7 @@ class TestCallWithRetries(unittest.TestCase):
         )
         self.assertEqual([0, 1], before_attempt_calls)
         self.assertEqual([0, 1], fn_calls)
-        self.assertEqual([7], sleeps)
+        self.assertEqual([0, 7], sleeps)
 
     def test_call_with_retries_before_attempt_wrapper_around_noop_reaches_before_attempt_path(self) -> None:
         """Ensures wrapping before_attempt_noop still executes the before_attempt callback path."""
