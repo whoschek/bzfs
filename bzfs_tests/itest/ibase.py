@@ -114,7 +114,6 @@ KEYLOCATION: Final[str] = f"file://{ZFS_ENCRYPTION_KEY}"
 
 SSH_CONFIG_FILE: Final[str] = os.path.join(get_home_directory(), ".ssh", "test_bzfs_ssh_config")
 RNG: Final[random.Random] = random.Random(12345)
-HAS_NETCAT_PROG: Final[bool] = shutil.which("nc") is not None
 
 SSH_PROGRAM: Final[str] = cast(str, getenv_any("test_ssh_program", "ssh"))  # also works with "hpnssh"
 SUDO_CMD: Final[list[str]] = ["sudo", "-n"] if getenv_bool("test_enable_sudo", True) and os.getuid() != 0 else []

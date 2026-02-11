@@ -186,15 +186,6 @@ def random_backoff_strategy(context: BackoffContext) -> tuple[int, int]:
     return sleep_nanos, context.curr_max_sleep_nanos
 
 
-def no_jitter_exponential_backoff_strategy(context: BackoffContext) -> tuple[int, int]:
-    policy: RetryPolicy = context.retry.policy
-    curr_max_sleep_nanos: int = context.curr_max_sleep_nanos
-    sleep_nanos: int = curr_max_sleep_nanos
-    curr_max_sleep_nanos = round(curr_max_sleep_nanos * policy.exponential_base)  # exponential backoff
-    curr_max_sleep_nanos = min(curr_max_sleep_nanos, policy.max_sleep_nanos)  # ... with cap for next attempt
-    return sleep_nanos, curr_max_sleep_nanos
-
-
 def fixed_backoff_strategy(sleep_nanos: int) -> BackoffStrategy:
     """Returns an (immutable) BackoffStrategy that always sleeps a fixed number of nanoseconds."""
     sleep_nanos = max(0, sleep_nanos)

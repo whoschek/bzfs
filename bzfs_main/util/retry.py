@@ -853,7 +853,7 @@ class RetryPolicy:
     """On exhaustion, the default (``True``) is to re-raise the underlying exception when present."""
 
     max_previous_outcomes: int = 0
-    """Pass the N=max_previous_outcomes most recent AttemptOutcome objects to callbacks."""
+    """Pass the N=max_previous_outcomes most recent AttemptOutcome objects to callbacks via Retry.previous_outcomes."""
 
     config: RetryConfig = dataclasses.field(default=RetryConfig(), repr=False, compare=False)
     """Configures logging behavior."""
