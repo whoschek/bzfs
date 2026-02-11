@@ -18,6 +18,7 @@ from __future__ import (
     annotations,
 )
 import asyncio
+import functools
 import logging
 import pickle
 import unittest
@@ -28,6 +29,7 @@ from contextlib import (
     suppress,
 )
 from typing import (
+    Callable,
     TypeVar,
 )
 from unittest.mock import (
@@ -55,6 +57,7 @@ from bzfs_main.util.retry import (
 def suite() -> unittest.TestSuite:
     test_cases = [
         TestCallWithRetriesAsync,
+        TestRetryTemplateWrapsAsync,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -1044,3 +1047,122 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             previous_outcomes=(),
         )
         self.assertFalse(roundtripped.is_terminated(retry))
+
+
+#############################################################################
+class TestRetryTemplateWrapsAsync(unittest.IsolatedAsyncioTestCase):
+
+    async def test_wraps_async_function_retries_and_passes_args(self) -> None:
+        calls: list[tuple[int, int]] = []
+        retry_count = 0
+
+        async def fn(x: int) -> int:
+            nonlocal retry_count
+            calls.append((retry_count, x))
+            retry_count += 1
+            if retry_count == 1:
+                raise RetryableError("fail")
+            return x * 2
+
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+        template: RetryTemplate = RetryTemplate(policy=retry_policy, log=None)
+        wrapped: Callable[[int], Awaitable[int]] = template.wraps(fn)
+
+        actual: int = await wrapped(5)
+        self.assertEqual(10, actual)
+        self.assertEqual([(0, 5), (1, 5)], calls)
+
+    async def test_wraps_async_callable_object_retries_and_passes_args(self) -> None:
+        """Ensures wraps() treats async __call__ objects as async retry targets."""
+        calls: list[tuple[int, int]] = []
+
+        class MyAsyncCallable:
+            """Async callable that fails once, then succeeds."""
+
+            retry_count = 0
+
+            async def __call__(self, x: int) -> int:
+                """Raises RetryableError on first call and returns x*2 thereafter."""
+                calls.append((self.retry_count, x))
+                self.retry_count += 1
+                if self.retry_count == 1:
+                    raise RetryableError("fail")
+                return x * 2
+
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+        template: RetryTemplate[int] = RetryTemplate(policy=retry_policy, log=None)
+        wrapped: Callable[[int], Awaitable[int]] = template.wraps(MyAsyncCallable())
+
+        actual: int = await wrapped(5)
+        self.assertEqual(10, actual)
+        self.assertEqual([(0, 5), (1, 5)], calls)
+
+    async def test_wraps_partial_of_async_callable_object_retries_and_passes_args(self) -> None:
+        """Ensures wraps() handles functools.partial(async_callable_obj, ...) correctly."""
+        calls: list[tuple[int, int]] = []
+
+        class MyAsyncCallable:
+            """Async callable that fails once, then succeeds."""
+
+            retry_count = 0
+
+            async def __call__(self, x: int) -> int:
+                """Raises RetryableError on first call and returns x*2 thereafter."""
+                calls.append((self.retry_count, x))
+                self.retry_count += 1
+                if self.retry_count == 1:
+                    raise RetryableError("fail")
+                return x * 2
+
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+        template: RetryTemplate = RetryTemplate(policy=retry_policy, log=None)
+        wrapped: Callable[[], Awaitable[int]] = template.wraps(functools.partial(MyAsyncCallable(), 5))
+
+        actual: int = await wrapped()
+        self.assertEqual(10, actual)
+        self.assertEqual([(0, 5), (1, 5)], calls)
+
+    async def test_wraps_partial_of_async_function_retries_and_passes_args(self) -> None:
+        """Ensures wraps() handles functools.partial(async_fn, ...) correctly."""
+        calls: list[tuple[int, int]] = []
+        retry_count = 0
+
+        async def fn(x: int) -> int:
+            nonlocal retry_count
+            calls.append((retry_count, x))
+            retry_count += 1
+            if retry_count == 1:
+                raise RetryableError("fail")
+            return x * 2
+
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+        template: RetryTemplate = RetryTemplate(policy=retry_policy, log=None)
+        wrapped: Callable[[], Awaitable[int]] = template.wraps(functools.partial(fn, 5))
+
+        actual: int = await wrapped()
+        self.assertEqual(10, actual)
+        self.assertEqual([(0, 5), (1, 5)], calls)

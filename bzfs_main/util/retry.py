@@ -153,6 +153,7 @@ from typing import (
     Union,
     cast,
     final,
+    overload,
 )
 
 if TYPE_CHECKING:
@@ -1037,6 +1038,40 @@ class RetryTemplate(Generic[_T]):
             ),
             log=None if log is NO_LOGGER else self.log if log is None else log,
         )
+
+    @overload
+    def wraps(self, fn: Callable[..., Awaitable[_R]]) -> Callable[..., Awaitable[_R]]: ...
+
+    @overload
+    def wraps(self, fn: Callable[..., _R]) -> Callable[..., _R]: ...
+
+    def wraps(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+        """Returns a wrapper function that forwards all arguments to ``fn`` and retries it using this template; thread-safe.
+
+        Example Usage:
+            def fn(x: int) -> int:
+                return x * 2
+            func: Callable[[int], int] = retry_template.wraps(fn)
+            y: int = func(5)  # returns 10
+        """
+        import functools
+        import inspect
+
+        target_fn: Callable[..., Any] = fn.func if isinstance(fn, functools.partial) else fn
+        if inspect.iscoroutinefunction(target_fn) or inspect.iscoroutinefunction(type(target_fn).__call__):
+
+            @functools.wraps(fn)
+            async def wrapped_async(*args: Any, **kwargs: Any) -> Any:
+                return await self.call_with_retries_async(fn=lambda _retry: fn(*args, **kwargs))
+
+            return wrapped_async
+        else:
+
+            @functools.wraps(fn)
+            def wrapped(*args: Any, **kwargs: Any) -> Any:
+                return self.call_with_retries(fn=lambda _retry: fn(*args, **kwargs))
+
+            return wrapped
 
 
 #############################################################################

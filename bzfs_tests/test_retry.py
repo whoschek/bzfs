@@ -26,6 +26,9 @@ import unittest
 from logging import (
     Logger,
 )
+from typing import (
+    Callable,
+)
 from unittest.mock import (
     MagicMock,
     patch,
@@ -66,6 +69,7 @@ def suite() -> unittest.TestSuite:
         TestRetryConfigCopy,
         TestRetryTemplateCopy,
         TestRetryTemplateCall,
+        TestRetryTemplateWraps,
         TestAttemptOutcomeCopy,
         TestCallWithExceptionHandlers,
     ]
@@ -1807,6 +1811,67 @@ class TestRetryTemplateCall(unittest.TestCase):
 
         self.assertIsNotNone(str(retrying))
         self.assertNotEqual("", str(retrying))
+
+
+#############################################################################
+class TestRetryTemplateWraps(unittest.TestCase):
+
+    def test_wraps_sync_function_retries_and_passes_args(self) -> None:
+        calls: list[tuple[int, int]] = []
+        retry_count = 0
+
+        def fn(x: int) -> int:
+            nonlocal retry_count
+            calls.append((retry_count, x))
+            retry_count += 1
+            if retry_count == 1:
+                raise RetryableError("fail")
+            return x * 2
+
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+        template: RetryTemplate = RetryTemplate(policy=retry_policy, log=None)
+        wrapped: Callable[[int], int] = template.wraps(fn)
+
+        actual: int = wrapped(5)
+        self.assertEqual(10, actual)
+        self.assertEqual([(0, 5), (1, 5)], calls)
+
+    def test_wraps_sync_callable_object_retries_and_passes_args(self) -> None:
+        """Ensures wraps() handles sync callable objects with __call__()."""
+        calls: list[tuple[int, int]] = []
+
+        class MySyncCallable:
+            """Sync callable that fails once, then succeeds."""
+
+            retry_count = 0
+
+            def __call__(self, x: int) -> int:
+                """Raises RetryableError on first call and returns x*2 thereafter."""
+                calls.append((self.retry_count, x))
+                self.retry_count += 1
+                if self.retry_count == 1:
+                    raise RetryableError("fail")
+                return x * 2
+
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+        template: RetryTemplate = RetryTemplate(policy=retry_policy, log=None)
+        wrapped: Callable[[int], int] = template.wraps(MySyncCallable())
+
+        actual: int = wrapped(5)
+        self.assertEqual(10, actual)
+        self.assertEqual([(0, 5), (1, 5)], calls)
 
 
 #############################################################################
