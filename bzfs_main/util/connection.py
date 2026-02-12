@@ -410,7 +410,7 @@ class Connection:
             else:  # ssh master is not alive; start a new master:
                 log.log(LOG_TRACE, "ssh connection is not yet alive: %s", list_formatter(ssh_sock_cmd))
                 ssh_control_persist_secs: int = max(1, remote.ssh_control_persist_secs)
-                if "-v" in remote.ssh_extra_opts:
+                if any(opt.startswith("-v") and all(char == "v" for char in opt[1:]) for opt in remote.ssh_extra_opts):
                     # Unfortunately, with `ssh -v` (debug mode), the ssh master won't background; instead it stays in the
                     # foreground and blocks until the ControlPersist timer expires (90 secs). To make progress earlier we ...
                     ssh_control_persist_secs = min(1, ssh_control_persist_secs)  # tell ssh block as briefly as possible (1s)
