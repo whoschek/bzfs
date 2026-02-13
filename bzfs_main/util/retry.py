@@ -61,7 +61,7 @@ Observability:
 
 Expert Configuration:
 ---------------------
-- Supply a ``backoff(BackoffStrategy)`` callback to plug in a custom backoff algorithm (e.g., decorrelated-jitter or
+- Supply a ``backoff(BackoffContext)`` callback to plug in a custom backoff algorithm (e.g., decorrelated-jitter or
   retry-after HTTP 429). The default is full-jitter exponential backoff with cap (aka industry standard).
 - Supply a ``before_attempt(Retry)`` callback for optional rate limiting or other forms of internal backpressure.
 - Supply a ``on_retryable_error(AttemptOutcome)`` callback, e.g. to count failures (RetryableError) caught by the retry loop.
@@ -837,7 +837,7 @@ class RetryPolicy:
     """The final max duration to sleep between any two attempts; 0 <= min_sleep_secs <= initial_max_sleep_secs <=
     max_sleep_secs."""
 
-    max_elapsed_secs: float = 60
+    max_elapsed_secs: float = 47
     """``fn`` will not be retried (or not retried anymore) once this much time has elapsed since the initial start of
     call_with_retries(); set this to 365 * 86400 seconds or similar to effectively disable the time limit."""
 
@@ -872,7 +872,7 @@ class RetryPolicy:
             min_sleep_secs=getattr(args, "retry_min_sleep_secs", 0),
             initial_max_sleep_secs=getattr(args, "retry_initial_max_sleep_secs", 0.125),
             max_sleep_secs=getattr(args, "retry_max_sleep_secs", 10),
-            max_elapsed_secs=getattr(args, "retry_max_elapsed_secs", 60),
+            max_elapsed_secs=getattr(args, "retry_max_elapsed_secs", 47),
             exponential_base=getattr(args, "retry_exponential_base", 2),
             reraise=getattr(args, "retry_reraise", True),
             max_previous_outcomes=getattr(args, "retry_max_previous_outcomes", 0),
