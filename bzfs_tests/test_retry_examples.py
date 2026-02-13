@@ -13,7 +13,7 @@
 # limitations under the License.
 #
 """Examples demonstrating use of call_with_retries(), backoff strategies, integration with circuit breakers, rate limiting
-and retry-after, Prometheus metrics, etc."""
+and retry-after, backoff based on error classification, Prometheus metrics, etc."""
 
 from __future__ import (
     annotations,
@@ -24,6 +24,11 @@ import time
 import unittest
 from collections.abc import (
     Iterable,
+    Mapping,
+)
+from enum import (
+    Enum,
+    auto,
 )
 from typing import (
     Callable,
@@ -225,6 +230,41 @@ def chained_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffSt
         return strategy(context)
 
     return _strategy
+
+
+def backoff_from_classifier(
+    *,
+    classifier: Callable[[BackoffContext], object] = lambda backoff_context: type(
+        backoff_context.retryable_error.__cause__ or backoff_context.retryable_error
+    ),
+    strategies: Mapping[object, BackoffStrategy] | None = None,
+    fallback: BackoffStrategy = full_jitter_backoff_strategy,
+) -> BackoffStrategy:
+    """Returns a BackoffStrategy that uses the underlying strategy that corresponds to the retryable error category derived
+    by the classifier.
+
+    Assumes ``classifier(context)`` returns a stable category and ``strategies`` maps categories to BackoffStrategy values.
+    The default classifier uses the underlying exception type (``retryable_error.__cause__`` when present).
+    If ``strategies`` is ``None`` it behaves like an empty map; missing categories use ``fallback``. This keeps retry
+    classification separate from backoff policy selection, making category-specific behavior declarative and easy to extend.
+    """
+
+    def _strategy(context: BackoffContext) -> tuple[int, int]:
+        error_category: object = classifier(context)
+        strategy: BackoffStrategy = strategies.get(error_category, fallback) if strategies is not None else fallback
+        return strategy(context)
+
+    return _strategy
+
+
+class RetryableErrorCategory(Enum):
+    """Example RetryableError categories."""
+
+    CONCURRENCY = auto()
+    SERVER_ISSUE = auto()
+    THROTTLING = auto()
+    TRANSIENT = auto()
+    OTHER = auto()
 
 
 #############################################################################
@@ -737,6 +777,143 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         sleeps, mock_sleep = self._run_and_collect_sleep_nanos(backoff_strategy=chained, failures=4)
         self.assertEqual([1_000_000_000, 2_000_000_000, 3_000_000_000, 3_000_000_000], sleeps)
         self.assertEqual(4, mock_sleep.call_count)
+
+    def test_backoff_from_classifier_selects_category_strategy(self) -> None:
+        policy = RetryPolicy(max_retries=0, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=10)
+        retry = Retry(
+            count=0,
+            call_start_time_nanos=0,
+            before_attempt_start_time_nanos=0,
+            attempt_start_time_nanos=0,
+            policy=policy,
+            log=None,
+            previous_outcomes=(),
+        )
+        err = RetryableError("fail")
+        rng = random.Random(0)
+        context = BackoffContext(retry, 123, rng, 50, err)
+
+        classifier = MagicMock(return_value=RetryableErrorCategory.THROTTLING)
+        category_strategy = MagicMock(return_value=(111, 222))
+        fallback = MagicMock(return_value=(333, 444))
+
+        strategy = backoff_from_classifier(
+            classifier=classifier,
+            strategies={RetryableErrorCategory.THROTTLING: category_strategy},
+            fallback=fallback,
+        )
+        sleep_nanos, next_curr_max = strategy(context)
+        self.assertEqual(111, sleep_nanos)
+        self.assertEqual(222, next_curr_max)
+        classifier.assert_called_once_with(context)
+        category_strategy.assert_called_once_with(context)
+        fallback.assert_not_called()
+
+    def test_backoff_from_classifier_uses_fallback_when_category_is_missing(self) -> None:
+        policy = RetryPolicy(max_retries=0, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=10)
+        retry = Retry(
+            count=0,
+            call_start_time_nanos=0,
+            before_attempt_start_time_nanos=0,
+            attempt_start_time_nanos=0,
+            policy=policy,
+            log=None,
+            previous_outcomes=(),
+        )
+        err = RetryableError("fail")
+        rng = random.Random(0)
+        context = BackoffContext(retry, 123, rng, 50, err)
+
+        classifier = MagicMock(return_value=RetryableErrorCategory.OTHER)
+        mapped_strategy = MagicMock(return_value=(111, 222))
+        fallback = MagicMock(return_value=(333, 444))
+
+        strategy = backoff_from_classifier(
+            classifier=classifier,
+            strategies={RetryableErrorCategory.THROTTLING: mapped_strategy},
+            fallback=fallback,
+        )
+        sleep_nanos, next_curr_max = strategy(context)
+        self.assertEqual(333, sleep_nanos)
+        self.assertEqual(444, next_curr_max)
+        classifier.assert_called_once_with(context)
+        mapped_strategy.assert_not_called()
+        fallback.assert_called_once_with(context)
+
+    def test_backoff_from_classifier_treats_none_strategies_as_empty_map(self) -> None:
+        policy = RetryPolicy(max_retries=0, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=10)
+        retry = Retry(
+            count=0,
+            call_start_time_nanos=0,
+            before_attempt_start_time_nanos=0,
+            attempt_start_time_nanos=0,
+            policy=policy,
+            log=None,
+            previous_outcomes=(),
+        )
+        err = RetryableError("fail")
+        rng = random.Random(0)
+        context = BackoffContext(retry, 123, rng, 50, err)
+
+        classifier = MagicMock(return_value=RetryableErrorCategory.OTHER)
+        fallback = MagicMock(return_value=(555, 666))
+        strategy = backoff_from_classifier(
+            classifier=classifier,
+            fallback=fallback,
+        )
+        sleep_nanos, next_curr_max = strategy(context)
+        self.assertEqual(555, sleep_nanos)
+        self.assertEqual(666, next_curr_max)
+        classifier.assert_called_once_with(context)
+        fallback.assert_called_once_with(context)
+
+    def test_backoff_from_classifier_default_classifier_prefers_underlying_cause_type(self) -> None:
+        policy = RetryPolicy(max_retries=0, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=10)
+        retry = Retry(
+            count=0,
+            call_start_time_nanos=0,
+            before_attempt_start_time_nanos=0,
+            attempt_start_time_nanos=0,
+            policy=policy,
+            log=None,
+            previous_outcomes=(),
+        )
+        try:
+            raise RetryableError("fail") from ValueError("boom")
+        except RetryableError as err:
+            context = BackoffContext(retry, 123, random.Random(0), 50, err)
+
+        category_strategy = MagicMock(return_value=(111, 222))
+        fallback = MagicMock(return_value=(333, 444))
+        strategy = backoff_from_classifier(strategies={ValueError: category_strategy}, fallback=fallback)
+        sleep_nanos, next_curr_max = strategy(context)
+        self.assertEqual(111, sleep_nanos)
+        self.assertEqual(222, next_curr_max)
+        category_strategy.assert_called_once_with(context)
+        fallback.assert_not_called()
+
+    def test_backoff_from_classifier_default_classifier_uses_retryable_error_type_without_cause(self) -> None:
+        policy = RetryPolicy(max_retries=0, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=10)
+        retry = Retry(
+            count=0,
+            call_start_time_nanos=0,
+            before_attempt_start_time_nanos=0,
+            attempt_start_time_nanos=0,
+            policy=policy,
+            log=None,
+            previous_outcomes=(),
+        )
+        err = RetryableError("fail")
+        context = BackoffContext(retry, 123, random.Random(0), 50, err)
+
+        category_strategy = MagicMock(return_value=(555, 666))
+        fallback = MagicMock(return_value=(333, 444))
+        strategy = backoff_from_classifier(strategies={RetryableError: category_strategy}, fallback=fallback)
+        sleep_nanos, next_curr_max = strategy(context)
+        self.assertEqual(555, sleep_nanos)
+        self.assertEqual(666, next_curr_max)
+        category_strategy.assert_called_once_with(context)
+        fallback.assert_not_called()
 
     def _run_and_collect_sleep_nanos(
         self,
