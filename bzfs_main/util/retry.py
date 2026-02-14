@@ -43,9 +43,8 @@ Advanced Configuration:
 - Tune ``RetryPolicy`` parameters to control maximum retries, sleep bounds, elapsed-time budget, logging, etc.
 - Use ``RetryPolicy.config: RetryConfig`` to control logging settings.
 - Set ``log=None`` to disable logging, or customize ``info_loglevel`` / ``warning_loglevel`` for structured logs.
-- Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, error/status
-  codes or parsing stderr), including time-aware decisions or decisions based on the previous N most recent AttemptOutcome
-  objects (via AttemptOutcome.retry.previous_outcomes)
+- Supply a ``giveup(AttemptOutcome)`` callback to stop retrying based on domain-specific logic (for example, decisions based
+  on time budget/quota or the previous N most recent AttemptOutcome objects (via AttemptOutcome.retry.previous_outcomes).
 - Use the ``any_giveup()`` / ``all_giveup()`` helper to consult more than one callback handler in ``giveup(AttemptOutcome)``.
 - Supply an ``on_exhaustion(AttemptOutcome)`` callback to customize behavior when giving up; it may raise an error or return
   a fallback value.
@@ -259,7 +258,7 @@ def call_with_retries(
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
     backoff: BackoffStrategy = full_jitter_backoff_strategy,  # computes delay time before next retry attempt, after failure
-    giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
+    giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic, e.g. time
     before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     on_retryable_error: Callable[[AttemptOutcome], None] = noop,  # e.g. count failures (RetryableError) caught by retry loop
@@ -354,7 +353,7 @@ async def call_with_retries_async(
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
     backoff: BackoffStrategy = full_jitter_backoff_strategy,  # computes delay time before next retry attempt, after failure
-    giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic
+    giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic, e.g. time
     before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
     on_retryable_error: Callable[[AttemptOutcome], None] = noop,  # e.g. count failures (RetryableError) caught by retry loop
@@ -946,7 +945,7 @@ class RetryTemplate(Generic[_T]):
     fn: Callable[[Retry], _T] = _fn_not_implemented  # set this to make the RetryTemplate object itself callable
     policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
     backoff: BackoffStrategy = full_jitter_backoff_strategy  # computes delay time before next retry attempt, after failure
-    giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic
+    giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic, e.g. time
     before_attempt: Callable[[Retry], int] = before_attempt_noop  # e.g. wait due to rate limiting or internal backpressure
     after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure  # e.g. record metrics and/or custom logging
     on_retryable_error: Callable[[AttemptOutcome], None] = noop  # e.g. count failures (RetryableError) caught by retry loop
