@@ -15,6 +15,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Make `call_with_retries()` more widely applicable.
 - [bzfs] Also run nightly tests on AlmaLinux-10.1 and AlmaLinux-9.7.
 - [bzfs] Also run nightly tests on FreeBSD-13.5.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.17.0...v1.18.0
 
 ## [1.17.0] - January 18, 2026
 
