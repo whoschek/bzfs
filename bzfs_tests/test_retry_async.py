@@ -112,6 +112,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -425,6 +426,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(1_000, retry.before_attempt_start_time_nanos)
             self.assertEqual(1_234, retry.attempt_start_time_nanos)
             self.assertEqual(234, retry.before_attempt_sleep_nanos())
+            self.assertEqual(234, retry.idle_nanos)
             return "ok"
 
         self.assertEqual(
@@ -476,6 +478,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(1_000, retry.before_attempt_start_time_nanos)
             self.assertEqual(1_000, retry.attempt_start_time_nanos)
             self.assertEqual(0, retry.before_attempt_sleep_nanos())
+            self.assertEqual(0, retry.idle_nanos)
             return 123
 
         self.assertEqual(
@@ -504,6 +507,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(1_000, retry.before_attempt_start_time_nanos)
             self.assertEqual(2_000, retry.attempt_start_time_nanos)
             self.assertEqual(1_000, retry.before_attempt_sleep_nanos())
+            self.assertEqual(1_000, retry.idle_nanos)
             return 456
 
         self.assertEqual(
@@ -515,6 +519,41 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
                 log=None,
             ),
         )
+
+    async def test_retry_async_idle_nanos_includes_retry_sleep_nanos(self) -> None:
+        """Ensures Retry.idle_nanos includes retry-loop sleep_nanos on subsequent async attempts."""
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=10,
+        )
+        sleeps: list[tuple[int, int]] = []
+        retry_idle_nanos: list[tuple[int, int]] = []
+
+        async def sleep_async(sleep_nanos: int, retry: Retry) -> None:
+            sleeps.append((sleep_nanos, retry.count))
+
+        retry_policy = retry_policy.copy(timing=RetryTiming(monotonic_ns=lambda: 0).copy(sleep_async=sleep_async))
+
+        async def fn(retry: Retry) -> str:
+            retry_idle_nanos.append((retry.count, retry.idle_nanos))
+            if retry.count == 0:
+                raise RetryableError("fail") from ValueError("boom")
+            return "ok"
+
+        self.assertEqual(
+            "ok",
+            await call_with_retries_async(
+                fn,
+                policy=retry_policy,
+                backoff=lambda ctx: (11, ctx.curr_max_sleep_nanos),
+                log=None,
+            ),
+        )
+        self.assertEqual([(11, 0)], sleeps)
+        self.assertEqual([(0, 0), (1, 11)], retry_idle_nanos)
 
     async def test_call_with_retries_async_max_previous_outcomes_1(self) -> None:
         """Ensures Retry.previous_outcomes retains only the most recent AttemptOutcome object."""
@@ -922,6 +961,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -939,6 +979,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -960,6 +1001,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -981,6 +1023,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -1015,6 +1058,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -1042,6 +1086,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=roundtripped),
             log=None,
             previous_outcomes=(),

@@ -1315,6 +1315,7 @@ class TestJobMethods(AbstractTestCase):
                     call_start_time_nanos=0,
                     before_attempt_start_time_nanos=0,
                     attempt_start_time_nanos=0,
+                    idle_nanos=0,
                     policy=RetryPolicy(),
                     log=None,
                     previous_outcomes=(),

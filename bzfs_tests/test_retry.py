@@ -88,6 +88,7 @@ class TestSleep(unittest.TestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -111,6 +112,7 @@ class TestSleep(unittest.TestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -135,6 +137,7 @@ class TestRetryTiming(unittest.TestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -158,6 +161,7 @@ class TestRetryTiming(unittest.TestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -173,6 +177,7 @@ class TestRetryTiming(unittest.TestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -187,6 +192,7 @@ class TestRetryTiming(unittest.TestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -204,6 +210,7 @@ class TestRetryTiming(unittest.TestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=timing),
             log=None,
             previous_outcomes=(),
@@ -219,6 +226,7 @@ class TestRetryTiming(unittest.TestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy.no_retries().copy(timing=roundtripped),
             log=None,
             previous_outcomes=(),
@@ -882,6 +890,7 @@ class TestCallWithRetries(unittest.TestCase):
             self.assertEqual(1_000, retry.before_attempt_start_time_nanos)
             self.assertEqual(1_234, retry.attempt_start_time_nanos)
             self.assertEqual(234, retry.before_attempt_sleep_nanos())
+            self.assertEqual(234, retry.idle_nanos)
             return "ok"
 
         self.assertEqual(
@@ -928,6 +937,7 @@ class TestCallWithRetries(unittest.TestCase):
             self.assertEqual(1_000, retry.before_attempt_start_time_nanos)
             self.assertEqual(1_000, retry.attempt_start_time_nanos)
             self.assertEqual(0, retry.before_attempt_sleep_nanos())
+            self.assertEqual(0, retry.idle_nanos)
             return 123
 
         self.assertEqual(
@@ -951,12 +961,48 @@ class TestCallWithRetries(unittest.TestCase):
             self.assertEqual(1_000, retry.before_attempt_start_time_nanos)
             self.assertEqual(2_000, retry.attempt_start_time_nanos)
             self.assertEqual(1_000, retry.before_attempt_sleep_nanos())
+            self.assertEqual(1_000, retry.idle_nanos)
             return 456
 
         self.assertEqual(
             456,
             call_with_retries(fn, policy=retry_policy, before_attempt=before_attempt, log=None),
         )
+
+    def test_retry_idle_nanos_includes_retry_sleep_nanos(self) -> None:
+        """Ensures Retry.idle_nanos includes retry-loop sleep_nanos on subsequent attempts."""
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=10,
+        )
+        sleeps: list[tuple[int, int]] = []
+        retry_idle_nanos: list[tuple[int, int]] = []
+
+        def sleep(sleep_nanos: int, retry: Retry) -> None:
+            sleeps.append((sleep_nanos, retry.count))
+
+        retry_policy = retry_policy.copy(timing=RetryTiming(monotonic_ns=lambda: 0, sleep=sleep))
+
+        def fn(retry: Retry) -> str:
+            retry_idle_nanos.append((retry.count, retry.idle_nanos))
+            if retry.count == 0:
+                raise RetryableError("fail") from ValueError("boom")
+            return "ok"
+
+        self.assertEqual(
+            "ok",
+            call_with_retries(
+                fn,
+                policy=retry_policy,
+                backoff=lambda ctx: (11, ctx.curr_max_sleep_nanos),
+                log=None,
+            ),
+        )
+        self.assertEqual([(11, 0)], sleeps)
+        self.assertEqual([(0, 0), (1, 11)], retry_idle_nanos)
 
     def test_call_with_retries_after_attempt_success(self) -> None:
         """Ensures after_attempt is invoked for both retries and final success with correct flags."""
@@ -1364,6 +1410,7 @@ class TestCallWithRetries(unittest.TestCase):
             call_start_time_nanos=123,
             before_attempt_start_time_nanos=123,
             attempt_start_time_nanos=123,
+            idle_nanos=0,
             policy=RetryPolicy(max_retries=1),
             log=None,
             previous_outcomes=(),
@@ -1373,6 +1420,7 @@ class TestCallWithRetries(unittest.TestCase):
             call_start_time_nanos=123,
             before_attempt_start_time_nanos=123,
             attempt_start_time_nanos=123,
+            idle_nanos=0,
             policy=RetryPolicy(max_retries=999),
             log=MagicMock(spec=Logger),
             previous_outcomes=(MagicMock(spec=AttemptOutcome),),
@@ -1382,6 +1430,7 @@ class TestCallWithRetries(unittest.TestCase):
             call_start_time_nanos=123,
             before_attempt_start_time_nanos=123,
             attempt_start_time_nanos=123,
+            idle_nanos=0,
             policy=RetryPolicy(max_retries=1),
             log=None,
             previous_outcomes=(),
@@ -1472,6 +1521,7 @@ class TestCallWithRetries(unittest.TestCase):
             call_start_time_nanos=1,
             before_attempt_start_time_nanos=1,
             attempt_start_time_nanos=1,
+            idle_nanos=0,
             policy=RetryPolicy(max_retries=0),
             log=None,
             previous_outcomes=(),
@@ -1518,6 +1568,7 @@ class TestCallWithRetries(unittest.TestCase):
             call_start_time_nanos=0,
             before_attempt_start_time_nanos=0,
             attempt_start_time_nanos=0,
+            idle_nanos=0,
             policy=RetryPolicy(max_retries=0),
             log=None,
             previous_outcomes=(),
@@ -1586,6 +1637,7 @@ class TestCallWithRetries(unittest.TestCase):
             call_start_time_nanos=123,
             before_attempt_start_time_nanos=123,
             attempt_start_time_nanos=123,
+            idle_nanos=0,
             policy=RetryPolicy(max_retries=1),
             log=None,
             previous_outcomes=(),
@@ -1599,7 +1651,7 @@ class TestCallWithRetries(unittest.TestCase):
 
         expected = (
             "BackoffContext(retry=Retry(count=0, call_start_time_nanos=123, before_attempt_start_time_nanos=123, "
-            "attempt_start_time_nanos=123), "
+            "attempt_start_time_nanos=123, idle_nanos=0), "
             "curr_max_sleep_nanos=123, elapsed_nanos=5)"
         )
         self.assertEqual(expected, str(context_a))
@@ -1885,6 +1937,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             call_start_time_nanos=100,
             before_attempt_start_time_nanos=100,
             attempt_start_time_nanos=100,
+            idle_nanos=0,
             policy=RetryPolicy(max_retries=1),
             log=original_log,
             previous_outcomes=(),
@@ -1905,6 +1958,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             call_start_time_nanos=200,
             before_attempt_start_time_nanos=200,
             attempt_start_time_nanos=200,
+            idle_nanos=0,
             policy=RetryPolicy(max_retries=2),
             log=None,
             previous_outcomes=(),
@@ -1946,6 +2000,7 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
             call_start_time_nanos=100,
             before_attempt_start_time_nanos=150,
             attempt_start_time_nanos=150,
+            idle_nanos=0,
             policy=RetryPolicy(max_retries=0),
             log=None,
             previous_outcomes=(),

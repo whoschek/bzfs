@@ -279,6 +279,7 @@ def call_with_retries(
     """
     rng: random.Random | None = None
     retry_count: int = 0
+    idle_nanos: int = 0
     curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
     timing: RetryTiming = policy.timing
@@ -287,8 +288,9 @@ def call_with_retries(
     call_start_nanos: Final[int] = monotonic_ns()
     while True:
         before_attempt_nanos: int = monotonic_ns() if retry_count != 0 else call_start_nanos
+        prev: tuple[AttemptOutcome, ...] = previous_outcomes
         retry: Retry = Retry(
-            retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, policy, log, previous_outcomes
+            retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, idle_nanos, policy, log, prev
         )
         try:
             if before_attempt is not before_attempt_noop:
@@ -296,8 +298,10 @@ def call_with_retries(
                 assert before_attempt_sleep_nanos >= 0, before_attempt_sleep_nanos
                 if before_attempt_sleep_nanos > 0:
                     sleep(before_attempt_sleep_nanos, retry)  # e.g. wait due to rate limiting or internal backpressure
+                attempt_start_nanos: int = monotonic_ns()
+                idle_nanos += attempt_start_nanos - before_attempt_nanos
                 retry = Retry(
-                    retry_count, call_start_nanos, before_attempt_nanos, monotonic_ns(), policy, log, previous_outcomes
+                    retry_count, call_start_nanos, before_attempt_nanos, attempt_start_nanos, idle_nanos, policy, log, prev
                 )
             timing.on_before_attempt(retry)
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
@@ -330,6 +334,7 @@ def call_with_retries(
                 if (not is_terminated(retry)) and (giveup_reason := giveup(outcome)) is None:
                     after_attempt(outcome)
                     sleep(sleep_nanos, retry)
+                    idle_nanos += sleep_nanos
                     if not is_terminated(retry):
                         n: int = policy.max_previous_outcomes
                         if n > 0:  # outcome will be passed to next attempt via Retry.previous_outcomes
@@ -363,6 +368,7 @@ async def call_with_retries_async(
     """Async version of call_with_retries() with the same semantics except it awaits ``fn`` and uses non-blocking sleep."""
     rng: random.Random | None = None
     retry_count: int = 0
+    idle_nanos: int = 0
     curr_max_sleep_nanos: int = policy.initial_max_sleep_nanos
     previous_outcomes: tuple[AttemptOutcome, ...] = ()  # for safety pass *immutable* deque to callbacks
     timing: RetryTiming = policy.timing
@@ -371,8 +377,9 @@ async def call_with_retries_async(
     call_start_nanos: Final[int] = monotonic_ns()
     while True:
         before_attempt_nanos: int = monotonic_ns() if retry_count != 0 else call_start_nanos
+        prev: tuple[AttemptOutcome, ...] = previous_outcomes
         retry: Retry = Retry(
-            retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, policy, log, previous_outcomes
+            retry_count, call_start_nanos, before_attempt_nanos, before_attempt_nanos, idle_nanos, policy, log, prev
         )
         try:
             if before_attempt is not before_attempt_noop:
@@ -380,8 +387,10 @@ async def call_with_retries_async(
                 assert before_attempt_sleep_nanos >= 0, before_attempt_sleep_nanos
                 if before_attempt_sleep_nanos > 0:
                     await sleep(before_attempt_sleep_nanos, retry)  # e.g. wait due to rate limiting or internal backpressure
+                attempt_start_nanos: int = monotonic_ns()
+                idle_nanos += attempt_start_nanos - before_attempt_nanos
                 retry = Retry(
-                    retry_count, call_start_nanos, before_attempt_nanos, monotonic_ns(), policy, log, previous_outcomes
+                    retry_count, call_start_nanos, before_attempt_nanos, attempt_start_nanos, idle_nanos, policy, log, prev
                 )
             timing.on_before_attempt(retry)
             result: _T = await fn(retry)  # Call the target function and supply retry attempt number and other metadata
@@ -414,6 +423,7 @@ async def call_with_retries_async(
                 if (not is_terminated(retry)) and (giveup_reason := giveup(outcome)) is None:
                     after_attempt(outcome)
                     await sleep(sleep_nanos, retry)
+                    idle_nanos += sleep_nanos
                     if not is_terminated(retry):
                         n: int = policy.max_previous_outcomes
                         if n > 0:  # outcome will be passed to next attempt via Retry.previous_outcomes
@@ -544,6 +554,10 @@ class Retry(NamedTuple):
     attempt_start_time_nanos: int
     """Value of time.monotonic_ns() at start of fn() invocation."""
 
+    idle_nanos: int
+    """Sum of all before_attempt_sleep_nanos() plus AttemptOutcome.sleep_nanos across this call_with_retries() invocation, at
+    the start of fn() invocation."""
+
     policy: RetryPolicy
     """Policy that was passed into call_with_retries()."""
 
@@ -565,7 +579,7 @@ class Retry(NamedTuple):
         return (
             f"{type(self).__name__}(count={self.count!r}, call_start_time_nanos={self.call_start_time_nanos!r}, "
             f"before_attempt_start_time_nanos={self.before_attempt_start_time_nanos!r}, "
-            f"attempt_start_time_nanos={self.attempt_start_time_nanos!r})"
+            f"attempt_start_time_nanos={self.attempt_start_time_nanos!r}, idle_nanos={self.idle_nanos!r})"
         )
 
     def __eq__(self, other: object) -> bool:
