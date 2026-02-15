@@ -43,10 +43,34 @@ fi
 sudo dnf install -y https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval '%{dist}').noarch.rpm
 sudo dnf repolist all | grep -i zfs
 sudo dnf config-manager --disable 'zfs*'
-# sudo dnf config-manager --enable zfs-2.2-kmod   # or zfs-kmod on some setups
-sudo dnf config-manager --enable "$ZFS_VERSION"
 sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
-sudo dnf install -y zfs --enablerepo=epel
+# sudo dnf config-manager --enable zfs-2.2-kmod   # or zfs-kmod on some setups
+if ! sudo dnf install -y zfs --enablerepo="epel,$ZFS_VERSION"; then
+    arch="$(rpm --eval '%{_arch}')"
+    if [[ "$arch" != "aarch64" ]]; then
+        echo "ERROR: Failed to install zfs from repo '$ZFS_VERSION' on arch '$arch'." >&2
+        exit 1
+    fi
+    # make it also work on aarch64, including guest VMs hosted by Apple Silicon
+    zfs_source_repo="${ZFS_VERSION}-source"
+    build_dir="$(mktemp -d)"
+    trap 'rm -rf "$build_dir"' EXIT
+    echo "Falling back to source build from repo '$zfs_source_repo' on '$arch' ..."
+    sudo dnf config-manager --set-enabled crb
+    sudo dnf install -y rpm-build
+    sudo dnf install -y dkms --enablerepo=epel
+    dnf -y download --source --disablerepo='*' --enablerepo="$zfs_source_repo" --destdir "$build_dir" zfs-dkms zfs
+    sudo dnf -y builddep "$build_dir"/zfs-dkms-[0-9]*.src.rpm "$build_dir"/zfs-[0-9]*.src.rpm
+    rpmbuild --rebuild "$build_dir"/zfs-dkms-[0-9]*.src.rpm "$build_dir"/zfs-[0-9]*.src.rpm
+    sudo dnf -y install "$HOME"/rpmbuild/RPMS/noarch/zfs-dkms-*.rpm
+    sudo dnf -y install \
+        "$HOME"/rpmbuild/RPMS/"$arch"/libnvpair[0-9]-[0-9]*.rpm \
+        "$HOME"/rpmbuild/RPMS/"$arch"/libuutil[0-9]-[0-9]*.rpm \
+        "$HOME"/rpmbuild/RPMS/"$arch"/libzpool[0-9]-[0-9]*.rpm \
+        "$HOME"/rpmbuild/RPMS/"$arch"/libzfs[0-9]-[0-9]*.rpm \
+        "$HOME"/rpmbuild/RPMS/"$arch"/zfs-[0-9]*.rpm \
+        "$HOME"/rpmbuild/RPMS/noarch/zfs-dracut-*.rpm
+fi
 sudo modprobe zfs
 zfs --version
 
