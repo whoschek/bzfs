@@ -36,11 +36,11 @@ on:
         - test_ubuntu_24_04_hpnssh
         - test_ubuntu_24_04_zfs_2_4
         - test_ubuntu_24_04_zfs_2_4_latest
-        - test_ubuntu_24_04_zfs_2_3_latest
-        - test_ubuntu_24_04_zfs_2_2_latest
+        - test_ubuntu_24_04_zfs_2_3
+        - test_ubuntu_24_04_zfs_2_2
         - test_ubuntu_24_04
         - test_ubuntu_22_04
-        - test_ubuntu_22_04_zfs_0_8_x
+        - test_ubuntu_22_04_zfs_0_8
         - test_almalinux_10_zfs_2_4
         - test_almalinux_10_zfs_2_3
         - test_almalinux_9_zfs_2_2
@@ -305,9 +305,9 @@ jobs:
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/actions/coverage-upload
 
-  test_ubuntu_24_04_zfs_2_3_latest:  # currently uses zfs-2.3.4
+  test_ubuntu_24_04_zfs_2_3:  # currently uses zfs-2.3.4
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_3_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_3_latest')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_3' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_3')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -354,9 +354,9 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.9
+  test_ubuntu_24_04_zfs_2_2:  # currently uses zfs-2.2.9
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_2_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_2_latest')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_2' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_2')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -494,9 +494,9 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_ubuntu_22_04_zfs_0_8_x:  # currently uses zfs-0.8.3
+  test_ubuntu_22_04_zfs_0_8:  # currently uses zfs-0.8.3
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_22_04_zfs_0_8_x' || contains(github.event.inputs.job_names, 'test_ubuntu_22_04_zfs_0_8_x')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_22_04_zfs_0_8' || contains(github.event.inputs.job_names, 'test_ubuntu_22_04_zfs_0_8')
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -695,11 +695,11 @@ jobs:
       - test_ubuntu_24_04_hpnssh
       - test_ubuntu_24_04_zfs_2_4
       - test_ubuntu_24_04_zfs_2_4_latest
-      - test_ubuntu_24_04_zfs_2_3_latest
-      - test_ubuntu_24_04_zfs_2_2_latest
+      - test_ubuntu_24_04_zfs_2_3
+      - test_ubuntu_24_04_zfs_2_2
       - test_ubuntu_24_04
       - test_ubuntu_22_04
-      - test_ubuntu_22_04_zfs_0_8_x
+      - test_ubuntu_22_04_zfs_0_8
       - test_almalinux_10_zfs_2_4
       - test_almalinux_10_zfs_2_3
       - test_almalinux_9_zfs_2_2
@@ -728,13 +728,13 @@ jobs:
       - name: Download coverage artifact
         uses: actions/download-artifact@v7
         with:
-          name: coverage-test_ubuntu_24_04_zfs_2_3_latest
-          path: coverage-test_ubuntu_24_04_zfs_2_3_latest
+          name: coverage-test_ubuntu_24_04_zfs_2_3
+          path: coverage-test_ubuntu_24_04_zfs_2_3
       - name: Download coverage artifact
         uses: actions/download-artifact@v7
         with:
-          name: coverage-test_ubuntu_24_04_zfs_2_2_latest
-          path: coverage-test_ubuntu_24_04_zfs_2_2_latest
+          name: coverage-test_ubuntu_24_04_zfs_2_2
+          path: coverage-test_ubuntu_24_04_zfs_2_2
       - name: Download coverage artifact
         uses: actions/download-artifact@v7
         with:
@@ -748,8 +748,8 @@ jobs:
       - name: Download coverage artifact
         uses: actions/download-artifact@v7
         with:
-          name: coverage-test_ubuntu_22_04_zfs_0_8_x
-          path: coverage-test_ubuntu_22_04_zfs_0_8_x
+          name: coverage-test_ubuntu_22_04_zfs_0_8
+          path: coverage-test_ubuntu_22_04_zfs_0_8
       - name: Download coverage artifact
         uses: actions/download-artifact@v7
         with:
