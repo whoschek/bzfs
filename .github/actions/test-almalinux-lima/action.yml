@@ -1,0 +1,86 @@
+# Copyright 2024 Wolfgang Hoschek AT mac DOT com
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Test on AlmaLinux via Lima
+description: Run tests via Lima in an AlmaLinux VM with a chosen ZFS repo version
+
+inputs:
+  alma_major_version:
+    description: AlmaLinux major version (for example "9" or "10")
+    required: true
+  zfs_version:
+    description: ZFS repo name (for example "zfs-2.2", "zfs-2.3", "zfs-2.4")
+    required: true
+
+runs:
+  using: composite
+  steps:
+  - name: Set up Lima
+    uses: lima-vm/lima-actions/setup@v1  # see https://github.com/lima-vm/lima-actions
+    with:
+      version: "v2.0.3"
+  - name: Start VM via Lima
+    shell: bash
+    run: |
+      GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-$(pwd)}"
+      arch="$(uname -m)"
+      if [[ "$(uname -s)" == "Darwin" && "$arch" == "arm64" ]]; then
+        arch="aarch64"
+      fi
+      image_location="https://repo.almalinux.org/almalinux/${{ inputs.alma_major_version }}/cloud/$arch/images/AlmaLinux-${{ inputs.alma_major_version }}-GenericCloud-latest.$arch.qcow2"
+      # image_location="https://repo.almalinux.org/almalinux/10.1/cloud/$arch/images/AlmaLinux-10-GenericCloud-10.1-20251125.0.$arch.qcow2"
+      # image_location="https://repo.almalinux.org/almalinux/9.7/cloud/$arch/images/AlmaLinux-9-GenericCloud-9.7-20251118.$arch.qcow2"
+      cat > mylimavm.yaml <<EOF
+      arch: "$arch"
+      disk: "10GiB"
+      mountType: "reverse-sshfs"
+      images:
+      - location: "$image_location"
+        arch: "$arch"
+      mounts:
+      - location: "${GITHUB_WORKSPACE}"
+        mountPoint: "/testworkspace"
+        writable: true
+      EOF
+      limactl --version
+      limactl start --name=mylimavm --tty=false mylimavm.yaml
+  - name: Install ZFS and other dependencies
+    shell: bash
+    run: |
+      limactl shell --workdir=/testworkspace mylimavm -- bash -lc './.github-workflow-scripts/install_almalinux_9.sh ${{ inputs.zfs_version }}'
+  - name: Display ZFS version and Python version
+    shell: bash
+    run: |
+      limactl shell --workdir=/testworkspace mylimavm -- bash -s <<'EOF'
+      set -euo pipefail
+      id -u -n
+      uname -a
+      cat /etc/redhat-release
+      zfs --version
+      python3 --version
+      ssh -V
+      zstd --version
+      pv --version | head -n 1
+      mbuffer --version |& head -n 1
+      command -v sh | xargs ls -l
+      df -h
+      EOF
+  - name: Run tests inside VM
+    shell: bash
+    run: |
+      limactl shell --workdir=/testworkspace mylimavm -- env \
+        bzfs_test_mode="$bzfs_test_mode" \
+        bzfs_test_no_run_quietly="$bzfs_test_no_run_quietly" \
+        bash -lc './test.sh && PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate'
+      echo "bzfs-testrun-success"
