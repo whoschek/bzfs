@@ -41,9 +41,10 @@ on:
         - test_ubuntu_24_04
         - test_ubuntu_22_04
         - test_ubuntu_22_04_zfs_0_8
-        - test_almalinux_10_zfs_2_4
+        - test_almalinux_10_zfs_2_4_hpnssh
         - test_almalinux_10_zfs_2_3
         - test_almalinux_9_zfs_2_2
+        - test_almalinux_9_zfs_2_2_hpnssh
         - test_freebsd_15_0
         - test_freebsd_14_3
         - test_freebsd_13_5
@@ -539,9 +540,9 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_almalinux_10_zfs_2_4:  # currently uses almalinux-10.1, zfs-2.4.0, python-3.12
+  test_almalinux_10_zfs_2_4_hpnssh:  # currently uses almalinux-10.1, zfs-2.4.0, python-3.12
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_10_zfs_2_4' || contains(github.event.inputs.job_names, 'test_almalinux_10_zfs_2_4')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_10_zfs_2_4_hpnssh' || contains(github.event.inputs.job_names, 'test_almalinux_10_zfs_2_4_hpnssh')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -606,6 +607,30 @@ jobs:
         alma_major_version: "9"
         zfs_version: "zfs-2.2"
         ssh_program: "ssh"
+    - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+      uses: ./.github/actions/coverage-upload
+
+
+  test_almalinux_9_zfs_2_2_hpnssh:  # currently uses almalinux-9.7, zfs-2.2.9, python-3.9
+    needs: create_iteration_test_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_9_zfs_2_2_hpnssh' || contains(github.event.inputs.job_names, 'test_almalinux_9_zfs_2_2_hpnssh')
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
+      fail-fast: false
+    timeout-minutes: 110
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - name: Run tests via Lima
+      uses: ./.github/actions/test-almalinux-lima
+      with:
+        alma_major_version: "9"
+        zfs_version: "zfs-2.2"
+        ssh_program: "hpnssh"
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/actions/coverage-upload
@@ -703,9 +728,10 @@ jobs:
       - test_ubuntu_24_04
       - test_ubuntu_22_04
       - test_ubuntu_22_04_zfs_0_8
-      - test_almalinux_10_zfs_2_4
+      - test_almalinux_10_zfs_2_4_hpnssh
       - test_almalinux_10_zfs_2_3
       - test_almalinux_9_zfs_2_2
+      - test_almalinux_9_zfs_2_2_hpnssh
       - test_freebsd_15_0
       - test_freebsd_14_3
       - test_freebsd_13_5
@@ -756,8 +782,8 @@ jobs:
       - name: Download coverage artifact
         uses: actions/download-artifact@v7
         with:
-          name: coverage-test_almalinux_10_zfs_2_4
-          path: coverage-test_almalinux_10_zfs_2_4
+          name: coverage-test_almalinux_10_zfs_2_4_hpnssh
+          path: coverage-test_almalinux_10_zfs_2_4_hpnssh
       - name: Download coverage artifact
         uses: actions/download-artifact@v7
         with:
@@ -768,6 +794,11 @@ jobs:
         with:
           name: coverage-test_almalinux_9_zfs_2_2
           path: coverage-test_almalinux_9_zfs_2_2
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage-test_almalinux_9_zfs_2_2_hpnssh
+          path: coverage-test_almalinux_9_zfs_2_2_hpnssh
       - name: Download coverage artifact
         uses: actions/download-artifact@v7
         with:
@@ -787,6 +818,7 @@ jobs:
         uses: ./.github/actions/common
         with:
           python-version: "3.12"
+          install-zfs: false
       - name: Merge coverage reports
         run: |
           find . -name '.coverage*' -print0 | xargs -0 coverage combine
