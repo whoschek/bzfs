@@ -35,6 +35,7 @@ from typing import (
     Final,
     TypeVar,
     cast,
+    final,
 )
 from unittest.mock import (
     MagicMock,
@@ -257,6 +258,7 @@ def backoff_from_classifier(
     return _strategy
 
 
+@final
 class RetryableErrorCategory(Enum):
     """Example RetryableError categories."""
 

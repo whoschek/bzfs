@@ -13,7 +13,7 @@
 # limitations under the License.
 
 name: Test on AlmaLinux via Lima
-description: Run tests via Lima in an AlmaLinux VM with a chosen ZFS repo version
+description: Run tests via Lima in an AlmaLinux VM with a chosen ZFS version
 
 inputs:
   alma_major_version:

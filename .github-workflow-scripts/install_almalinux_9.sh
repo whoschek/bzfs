@@ -16,7 +16,7 @@
 
 set -euo pipefail
 ZFS_VERSION="$1"  # e.g. 'zfs-2.2' or 'zfs-2.3' or 'zfs-2.4'
-SSH_PROGRAM="$2"  # e.g. 'ssh' or 'hpnssh'
+SSH_PROGRAM="$2"  # 'ssh' or 'hpnssh'
 
 cat /etc/redhat-release
 # sudo dnf -y upgrade --refresh
@@ -29,7 +29,7 @@ sudo systemctl enable --now sshd
 if [[ "$SSH_PROGRAM" == "hpnssh" ]]; then  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
     sudo dnf -y copr enable rapier1/hpnssh  # see https://copr.fedorainfracloud.org/coprs/rapier1/hpnssh/
     sudo dnf -y install hpnssh-clients hpnssh-server
-    hpnssh -V
+    hpnssh -V  # print version number
     sudo systemctl disable --now hpnsshd.socket || true  # disable hpnsshd service listening on port 22
     sudo systemctl disable --now hpnsshd || true         # disable hpnsshd service listening on port 2222
     sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' /etc/hpnssh/sshd_config  # remove existing ports
@@ -63,14 +63,13 @@ sudo dnf install -y https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval '%{d
 sudo dnf repolist all | grep -i zfs
 sudo dnf config-manager --disable 'zfs*'
 sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
-# sudo dnf config-manager --enable zfs-2.2-kmod   # or zfs-kmod on some setups
 if ! sudo dnf install -y zfs --enablerepo="epel,$ZFS_VERSION"; then
     arch="$(rpm --eval '%{_arch}')"
     if [[ "$arch" != "aarch64" ]]; then
         echo "ERROR: Failed to install zfs from repo '$ZFS_VERSION' on arch '$arch'." >&2
         exit 1
     fi
-    # make it also work on aarch64, including guest VMs hosted by Apple Silicon
+    # make it also work on aarch64, including guest VMs hosted by MacOS on Apple Silicon
     zfs_source_repo="${ZFS_VERSION}-source"
     build_dir="$(mktemp -d)"
     trap 'rm -rf "$build_dir"' EXIT
