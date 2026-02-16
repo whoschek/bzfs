@@ -414,6 +414,8 @@ $ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive \
 # Installation
 
 ```
+# AlmaLinux, FreeBSD, etc: See https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml
+
 # Ubuntu / Debian:
 sudo apt-get -y install zfsutils-linux python3  # ensure zfs and python are installed
 sudo apt-get -y install zstd pv mbuffer  # auxiliary helpers are optional
