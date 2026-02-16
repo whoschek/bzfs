@@ -161,7 +161,7 @@ def zfs_list_snapshots_in_parallel(
     max_batch_items: int = min(
         job.max_datasets_per_minibatch_on_list_snaps[r.location],
         max(
-            len(datasets) // (max_workers * 8),
+            len(datasets) // (max_workers * 8 if max_workers > 1 else 1),
             4 if r.ssh_user_host else 1,
         ),
     )
