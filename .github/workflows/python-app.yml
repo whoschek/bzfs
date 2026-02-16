@@ -312,7 +312,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.11", "3.14", "3.14t"]
+        python-version: ["3.14", "3.14t"]
       fail-fast: false
     timeout-minutes: 110
     steps:
@@ -350,7 +350,7 @@ jobs:
         ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
-      if: ${{ matrix.python-version == '3.11' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
+      if: ${{ matrix.python-version == '3.14' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
       uses: ./.github/actions/coverage-upload
 
 
@@ -409,7 +409,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.12", "pypy3.11"]
+        python-version: ["3.12"]
       fail-fast: false
     timeout-minutes: 110
     steps:
@@ -436,7 +436,7 @@ jobs:
         ./test.sh
     - name: Run tests and generate code coverage
       run: |
-        python3 --version 2>&1 | grep -q PyPy || ./coverage.sh
+        ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
