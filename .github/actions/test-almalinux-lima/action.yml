@@ -22,6 +22,9 @@ inputs:
   zfs_version:
     description: ZFS repo name (for example "zfs-2.2", "zfs-2.3", "zfs-2.4")
     required: true
+  ssh_program:
+    description: SSH binary name to test with ("ssh" or "hpnssh")
+    required: true
 
 runs:
   using: composite
@@ -60,7 +63,8 @@ runs:
     shell: bash
     run: |
       zfs_version=${{ inputs.zfs_version }}
-      limactl shell --workdir=/testworkspace mylimavm -- bash -lc "./.github-workflow-scripts/install_almalinux_9.sh $zfs_version"
+      ssh_program=${{ inputs.ssh_program }}
+      limactl shell --workdir=/testworkspace mylimavm -- bash -lc "./.github-workflow-scripts/install_almalinux_9.sh $zfs_version $ssh_program"
   - name: Display ZFS version and Python version
     shell: bash
     run: |
@@ -81,8 +85,10 @@ runs:
   - name: Run tests inside VM
     shell: bash
     run: |
+      ssh_program=${{ inputs.ssh_program }}
       limactl shell --workdir=/testworkspace mylimavm -- env \
         bzfs_test_mode="$bzfs_test_mode" \
         bzfs_test_no_run_quietly="$bzfs_test_no_run_quietly" \
+        bzfs_test_ssh_program="$ssh_program" \
         bash -lc './test.sh && PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate'
       echo "bzfs-testrun-success"

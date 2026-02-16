@@ -16,14 +16,33 @@
 
 set -euo pipefail
 ZFS_VERSION="$1"  # e.g. 'zfs-2.2' or 'zfs-2.3' or 'zfs-2.4'
+SSH_PROGRAM="$2"  # e.g. 'ssh' or 'hpnssh'
 
 cat /etc/redhat-release
 # sudo dnf -y upgrade --refresh
 cat /etc/redhat-release
 sudo dnf -y install dnf-plugins-core
 # sudo dnf config-manager --set-enabled crb
+
 sudo dnf -y install openssh-clients openssh-server zstd coreutils
 sudo systemctl enable --now sshd
+if [[ "$SSH_PROGRAM" == "hpnssh" ]]; then  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
+    sudo dnf -y copr enable rapier1/hpnssh  # see https://copr.fedorainfracloud.org/coprs/rapier1/hpnssh/
+    sudo dnf -y install hpnssh-clients hpnssh-server
+    hpnssh -V
+    sudo systemctl disable --now hpnsshd.socket || true  # disable hpnsshd service listening on port 22
+    sudo systemctl disable --now hpnsshd || true         # disable hpnsshd service listening on port 2222
+    sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' /etc/hpnssh/sshd_config  # remove existing ports
+    printf '%s\n' "Port 2222" | sudo tee -a /etc/hpnssh/sshd_config > /dev/null  # add port 2222
+    sudo pkill -x hpnsshd || true
+    hpnsshd_bin="$(command -v hpnsshd)"
+    sudo "$hpnsshd_bin" -f /etc/hpnssh/sshd_config
+    if ! pgrep -x hpnsshd > /dev/null; then
+        echo "ERROR: hpnsshd daemon failed to start." >&2
+        exit 1
+    fi
+fi
+
 sudo dnf -y install epel-release
 sudo dnf repoinfo epel
 sudo dnf -y install pv --enablerepo=epel

@@ -557,6 +557,7 @@ jobs:
       with:
         alma_major_version: "10"
         zfs_version: "zfs-2.4"
+        ssh_program: "hpnssh"
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/actions/coverage-upload
@@ -580,6 +581,7 @@ jobs:
       with:
         alma_major_version: "10"
         zfs_version: "zfs-2.3"
+        ssh_program: "ssh"
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/actions/coverage-upload
@@ -603,6 +605,7 @@ jobs:
       with:
         alma_major_version: "9"
         zfs_version: "zfs-2.2"
+        ssh_program: "ssh"
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/actions/coverage-upload

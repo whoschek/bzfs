@@ -20,7 +20,7 @@ ballpark 3-5ms total time for running `/bin/echo hello` end-to-end over SSH on L
 round trips (one for CHANNEL_OPEN, plus a subsequent one for CHANNEL_REQUEST).
 Has zero dependencies beyond the standard OpenSSH client CLI (`ssh`); also works with `hpnssh`. The latter uses larger TCP
 window sizes for best throughput over high speed long distance networks, aka paths with large bandwidth-delay product. Also
-see https://gist.github.com/rapier1/325de17bbb85f1ce663ccb866ce22639
+see https://youtu.be/fcHXOgl3dis?t=473 and https://gist.github.com/rapier1/325de17bbb85f1ce663ccb866ce22639
 
 Example usage:
 

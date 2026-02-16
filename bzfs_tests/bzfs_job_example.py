@@ -372,7 +372,7 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 # extra_args += ["--compression-program=lz4"]  # use less CPU for compression-on-the-wire
 # extra_args += ["--threads=200%"]  # use more CPU cores when operating on many datasets
 # extra_args += ["--ssh-program=hpnssh"]  # use larger TCP window size over high speed long distance networks. Example
-# hpnssh perf: https://gist.github.com/rapier1/325de17bbb85f1ce663ccb866ce22639
+# hpnssh perf: https://youtu.be/fcHXOgl3dis?t=473 and https://gist.github.com/rapier1/325de17bbb85f1ce663ccb866ce22639
 # os.environ["bzfs_name_of_a_unix_env_var"] = "true"  # toggle example tuning knob
 
 
