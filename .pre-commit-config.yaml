@@ -56,7 +56,6 @@ repos:
     rev: v0.11.0.1
     hooks:
       - id: shellcheck                  # Validate syntax of shell scripts
-        exclude: '^\.github-workflow-scripts'
   - repo: https://github.com/python-jsonschema/check-jsonschema
     rev: 0.36.2
     hooks:

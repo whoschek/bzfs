@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# shellcheck disable=SC2154
 set -e # Exit immediately if a cmd returns a non-zero status
 pkg install -y python3 sudo zstd pv mbuffer bash netcat devel/py-coverage
 id -u -n
@@ -25,13 +26,13 @@ zstd --version
 pv --version | head -n 1
 mbuffer --version | head -n 1
 command -v sh | xargs ls -l
-sudo command -v sh | xargs ls -l
+sudo sh -c 'command -v sh | xargs ls -l'
 
-mkdir -p $HOME/.ssh
-rm -f $HOME/.ssh/testid_rsa $HOME/.ssh/testid_rsa.pub
-ssh-keygen -t rsa -f $HOME/.ssh/testid_rsa -q -N ""  # create private key and public key
-cat $HOME/.ssh/testid_rsa.pub >> $HOME/.ssh/authorized_keys
-ls -al $HOME $HOME/.ssh/testid_rsa
+mkdir -p "$HOME/.ssh"
+rm -f "$HOME/.ssh/testid_rsa" "$HOME/.ssh/testid_rsa.pub"
+ssh-keygen -t rsa -f "$HOME/.ssh/testid_rsa" -q -N ""  # create private key and public key
+cat "$HOME/.ssh/testid_rsa.pub" >> "$HOME/.ssh/authorized_keys"
+ls -al "$HOME" "$HOME/.ssh/testid_rsa"
 
 # change shell as default shell on freebsd <= 13 is csh instead of sh
 cat /etc/shells
@@ -49,14 +50,14 @@ echo "Now running tests as root user"; ./test.sh
 echo "Now running coverage"; ./coverage.sh
 
 echo "Now running tests as non-root user:"
-tuser=test
-thome=/home/$tuser
-pw userdel -n $tuser || true
-pw useradd $tuser -d $thome -m
+tuser="test"
+thome="/home/$tuser"
+pw userdel -n "$tuser" || true
+pw useradd "$tuser" -d "$thome" -m
 echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool),$(command -v dd)" >> /usr/local/etc/sudoers
 
-mkdir -p $thome/.ssh
-cp -p $HOME/.ssh/testid_rsa $HOME/.ssh/testid_rsa.pub $HOME/.ssh/authorized_keys $thome/.ssh/
+mkdir -p "$thome/.ssh"
+cp -p "$HOME/.ssh/testid_rsa" "$HOME/.ssh/testid_rsa.pub" "$HOME/.ssh/authorized_keys" "$thome/.ssh/"
 chmod go-rwx "$thome/.ssh/authorized_keys"
 chown -R "$tuser" "$thome/.ssh"
 cp -R . "$thome/bzfs"

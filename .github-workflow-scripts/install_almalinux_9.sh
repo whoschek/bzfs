@@ -52,14 +52,14 @@ if ! sudo dnf -y install mbuffer --enablerepo=epel; then
     # guardrail: includepkgs=mbuffer prevents accidentally pulling a bunch of other EL9 packages into EL10
     sudo rpm --import https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
     sudo dnf -y install mbuffer \
-        --repofrompath=epel9,https://dl.fedoraproject.org/pub/epel/9/Everything/$(rpm --eval '%{_arch}')/ \
+        --repofrompath="epel9,https://dl.fedoraproject.org/pub/epel/9/Everything/$(rpm --eval '%{_arch}')/" \
         --setopt=epel9.gpgcheck=1 \
         --setopt=epel9.includepkgs=mbuffer \
         --enablerepo=epel9
 fi
 
 # Install ZFS:
-sudo dnf install -y https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval '%{dist}').noarch.rpm
+sudo dnf install -y "https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval '%{dist}').noarch.rpm"
 sudo dnf repolist all | grep -i zfs
 sudo dnf config-manager --disable 'zfs*'
 sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
