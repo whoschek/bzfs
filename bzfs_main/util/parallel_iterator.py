@@ -155,6 +155,7 @@ def parallel_iterator_results(
     max_workers = max(1, max_workers)
     if is_terminated():
         return
+
     # Materialize the next N=max_workers futures into a buffer, causing submission + parallel execution of their CLI calls
     fifo_buffer: deque[Future[_T]] = deque(itertools.islice(iterator, max_workers))
     sentinel: Future[_T] = Future()

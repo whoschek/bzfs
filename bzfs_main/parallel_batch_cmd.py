@@ -29,17 +29,19 @@ zfs list -t snapshot d1
 zfs list -t snapshot d2
 zfs list -t snapshot d3
 zfs list -t snapshot d4
+zfs list -t snapshot d5
 ```
 
 - max_batch_items=2 (seq or par):
 ```
 zfs list -t snapshot d1 d2
 zfs list -t snapshot d3 d4
+zfs list -t snapshot d5
 ```
 
 - max_batch_items=N (seq or par):
 ```
-zfs list -t snapshot d1 d2 d3 d4
+zfs list -t snapshot d1 d2 d3 d4 d5
 ```
 """
 
@@ -150,7 +152,12 @@ def itr_ssh_cmd_parallel(
 
 
 def zfs_list_snapshots_in_parallel(
-    job: Job, r: MiniRemote, cmd: list[str], datasets: list[str], *, ordered: bool = True
+    job: Job,
+    r: MiniRemote,
+    cmd: list[str],
+    datasets: list[str],
+    *,
+    ordered: bool = True,
 ) -> Iterator[list[str]]:
     """Runs 'zfs list -t snapshot' on multiple datasets at the same time.
 

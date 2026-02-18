@@ -52,7 +52,7 @@ on:
         - none
         default: "test_ubuntu_24_04_fast"
       job_names:
-        description: "Names of jobs to run, e.g. 'test_ubuntu_24_04,test_ubuntu_22_04'"
+        description: "Names of jobs to run, e.g. 'test_ubuntu_24_04,test_almalinux_10_zfs_2_3,test_freebsd_15_0'"
         type: string
         default: ""
       bzfs_test_mode:

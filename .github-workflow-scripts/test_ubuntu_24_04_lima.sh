@@ -17,6 +17,7 @@
 # This script can run on MacOS on Apple Silicon, or on Linux on any arch.
 # The script uses Lima to locally create a guest Ubuntu VM, then runs tests inside of the guest VM.
 # Currently uses ubuntu-24.04, python-3.12, and zfs-2.4 or zfs-2.2 depending on the value of $LIMA_ZFS_VERSION.
+
 # shellcheck disable=SC2154
 set -eo pipefail
 LIMA_VM_TEMPLATE="${LIMA_VM_TEMPLATE:-ubuntu-24.04}"
@@ -137,7 +138,7 @@ if false; then
     export bzfs_test_ssh_port="$LIMA_SSH_PORT"  # 127.0.0.1:$LIMA_SSH_PORT is the Ubuntu guest VM
     export bzfs_test_remote_private_key=~/.ssh/id_rsa_mylimavm  # change this to your preferred key
     export bzfs_test_mode=smoke
-    export bzfs_test_no_run_quietly=true   # for humans; print all test output even during successful tests
     export bzfs_test_no_run_quietly=false  # for AI agents; print test output only for failed tests; prevent polluting the context window with token noise
+    # export bzfs_test_no_run_quietly=true # for humans; print all test output even during successful tests
     ./test.sh
 fi
