@@ -15,6 +15,7 @@
 # This workflow will run automated unit tests and integration tests on a matrix
 # of various old and new versions of ZFS/Python/Linux/FreeBSD.
 # It will also generate code coverage reports.
+# Results of nightly CI test runs: https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule
 name: Tests
 
 on:
