@@ -24,6 +24,7 @@ LIMA_VM_TEMPLATE="${LIMA_VM_TEMPLATE:-ubuntu-24.04}"
 LIMA_VM_NAME="${LIMA_VM_NAME:-mylimavm}"
 LIMA_VM_DISK="${LIMA_VM_DISK:-10}"  # GiB
 LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(4, #cores)
+LIMA_VM_MEMORY="${LIMA_VM_MEMORY:-4}"  # GiB
 LIMA_VM_RESET="${LIMA_VM_RESET:-false}"  # to init VM from scratch
 LIMA_SSH_PORT="${LIMA_SSH_PORT:-40998}"  # host machine: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM. guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM.
 LIMA_COPY_BASHRC="${LIMA_COPY_BASHRC:-false}"  # opt-in: copy host ~/.bashrc into guest ~/.bashrc
@@ -49,6 +50,7 @@ if ! limactl list --yes --format '{{.Name}}' | grep -Fx "$LIMA_VM_NAME" >/dev/nu
         --name="$LIMA_VM_NAME" \
         --disk="$LIMA_VM_DISK" \
         --cpus="$LIMA_VM_CPUS" \
+        --memory="$LIMA_VM_MEMORY" \
         --set=".ssh.loadDotSSHPubKeys=true" \
         --set=".mounts = []" \
         --set=".mounts += [{\"location\":\"$LIMA_HOST_WORKDIR\",\"mountPoint\":\"$LIMA_WORKDIR\",\"writable\":true}]" \
