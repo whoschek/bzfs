@@ -85,8 +85,8 @@ fi
 zfs --version
 
 # Run common preparation steps
-sudo apt-get -y install python3 zstd mbuffer pv rsync
-# sudo apt-get -y install pandoc python3-pip python3-venv git nano mosh curl wget rclone jq net-tools ripgrep tree
+sudo apt-get -y install python3 zstd mbuffer pv rsync ripgrep
+# sudo apt-get -y install pandoc python3-pip python3-venv git nano mosh curl wget rclone jq net-tools tree
 
 mkdir -p "$HOME/.ssh"
 rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
@@ -137,6 +137,7 @@ if false; then
     export bzfs_test_ssh_port="$LIMA_SSH_PORT"  # 127.0.0.1:$LIMA_SSH_PORT is the Ubuntu guest VM
     export bzfs_test_remote_private_key=~/.ssh/id_rsa_mylimavm  # change this to your preferred key
     export bzfs_test_mode=smoke
-    export bzfs_test_no_run_quietly=true
+    export bzfs_test_no_run_quietly=true   # for humans; print all test output even during successful tests
+    export bzfs_test_no_run_quietly=false  # for AI agents; print test output only for failed tests; prevent polluting the context window with token noise
     ./test.sh
 fi

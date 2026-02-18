@@ -24,7 +24,7 @@ subject="$1"
 shift
 tmpfile=$(mktemp -t bzfs_test_run_quietly."$(date '+%Y-%m-%d_%H-%M-%S')".XXXXXX)
 ${1+"$@"} 2>&1 | tee "$tmpfile" | while IFS= read -r currline; do
-    if [ "$bzfs_test_no_run_quietly" != "" ]; then
+    if [[ "$bzfs_test_no_run_quietly" != "" && "$bzfs_test_no_run_quietly" != "false" ]]; then
         printf '%s\n' "$currline"
     else
         printf '.'  # print progress bar
@@ -37,7 +37,7 @@ if [ "$exitcode" = "0" ]; then
     echo "✓ $subject PASSED"
 else
     echo "✗ $subject FAILED"
-    if [ "$bzfs_test_no_run_quietly" = "" ]; then
+    if [[ ! ( "$bzfs_test_no_run_quietly" != "" && "$bzfs_test_no_run_quietly" != "false" ) ]]; then
         grep -v ') ... ok$' "$tmpfile" || [ $? -eq 1 ]  # ignore grep exitcode 1 aka "no matches"
     fi
 fi
