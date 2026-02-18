@@ -155,15 +155,15 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         @dataclass
         @final
         class SnapshotStats:
-            snapshot_count: int = field(default=0)
-            sum_written: int = field(default=0)
-            snapshot_count_since: int = field(default=0)
-            sum_written_since: int = field(default=0)
-            latest_snapshot_idx: int | None = field(default=None)
-            latest_snapshot_row_str: str | None = field(default=None)
-            latest_snapshot_creation: str | None = field(default=None)
-            oldest_snapshot_row_str: str | None = field(default=None)
-            oldest_snapshot_creation: str | None = field(default=None)
+            snapshot_count: int = 0
+            sum_written: int = 0
+            snapshot_count_since: int = 0
+            sum_written_since: int = 0
+            latest_snapshot_idx: int | None = None
+            latest_snapshot_row_str: str | None = None
+            latest_snapshot_creation: str | None = None
+            oldest_snapshot_row_str: str | None = None
+            oldest_snapshot_creation: str | None = None
 
         # print metadata of snapshots of current dataset to TSV file; custom stats can later be computed from there
         stats: defaultdict[str, SnapshotStats] = defaultdict(SnapshotStats)

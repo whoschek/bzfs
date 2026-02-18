@@ -69,7 +69,7 @@ if ! sudo dnf install -y zfs --enablerepo="epel,$ZFS_VERSION"; then
         echo "ERROR: Failed to install zfs from repo '$ZFS_VERSION' on arch '$arch'." >&2
         exit 1
     fi
-    # make it also work on aarch64, including guest VMs hosted by MacOS on Apple Silicon
+    # make it also work on aarch64, including guest VMs hosted by macOS on Apple Silicon
     zfs_source_repo="${ZFS_VERSION}-source"
     build_dir="$(mktemp -d)"
     trap 'rm -rf "$build_dir"' EXIT

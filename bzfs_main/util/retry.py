@@ -84,6 +84,8 @@ Expert Configuration:
     - AWS SDK adaptive retry mode - https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html
     - Circuit breakers - https://martinfowler.com/bliki/CircuitBreaker.html (e.g. via `pybreaker` third-party library)
     - Rate limiting with Fixed Window, Moving Window, and Sliding Windows (e.g. via `limits` third-party library)
+    - Various example backoff strategies such as decorrelated-jitter or retry-after HTTP 429 "Too Many Requests" responses,
+      etc can be found in test_retry_examples.py.
 
 Example Usage:
 --------------

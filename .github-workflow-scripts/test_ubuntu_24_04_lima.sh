@@ -21,7 +21,7 @@
 
 # shellcheck disable=SC2154
 set -eo pipefail
-LIMA_VM_TEMPLATE="${LIMA_VM_TEMPLATE:-ubuntu-24.04}"
+LIMA_VM_TEMPLATE="${LIMA_VM_TEMPLATE:-ubuntu-24.04}"  # see `limactl create --list-templates` for available options
 LIMA_VM_NAME="${LIMA_VM_NAME:-mylimavm}"
 LIMA_VM_DISK="${LIMA_VM_DISK:-10}"  # GiB
 LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(4, #cores)
@@ -85,6 +85,7 @@ export DEBIAN_FRONTEND=noninteractive
 if [[ ! -f ~/.bzfs_apt_update_done ]]; then
     echo "Now running 'apt-get update' ..."
     sudo apt-get -y -qq update
+    # sudo apt-get -y full-upgrade
     touch ~/.bzfs_apt_update_done
 fi
 

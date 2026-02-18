@@ -163,8 +163,8 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
        - If said `spec.md` does not exist, you MUST stop and ask the User how to proceed.
        - Else, transform the requirements/specifications in said `spec.md` into an implementation plan that is effective
          and safe to execute for an AI agent. To do so, analyze the current repo + code, and consider using tools such
-         as skills, subagents, background terminals, and `request_user_input` tool, if available. Write the resulting
-         plan into `<path/to/plan.md>`.
+         as skills, subagents, background terminals, and `request_user_input` tool, if available. NEVER write any code
+         in this phase. Write the resulting plan into `<path/to/plan.md>`.
      - To understand what needs to be done read `<path/to/plan.md>`.
      - Update `<path/to/plan.md>` whenever any of these change: plan, goals, constraints/assumptions, key decisions,
        lessons, steps, progress state (Done/Now/Next). `<path/to/plan.md>` is the canonical source of truth for the plan
