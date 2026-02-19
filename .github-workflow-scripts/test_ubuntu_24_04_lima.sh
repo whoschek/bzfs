@@ -17,7 +17,7 @@
 # This script can run on MacOS on Apple Silicon, or on Linux on any arch.
 # The script uses Lima to locally create a guest Ubuntu server VM, then runs tests inside of the guest VM.
 # Currently uses ubuntu-24.04, python-3.12, and zfs-2.4 or zfs-2.2 depending on the value of $LIMA_ZFS_VERSION.
-# Cold start of the guest VM takes ~45 seconds with defaults; warm start takes ~1.5 seconds.
+# Cold start of the guest VM takes ~25 seconds with defaults; warm start takes ~1.5 seconds.
 
 # shellcheck disable=SC2154
 set -eo pipefail
@@ -27,7 +27,7 @@ LIMA_VM_DISK="${LIMA_VM_DISK:-10}"  # GiB
 LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(4, #cores)
 LIMA_VM_MEMORY="${LIMA_VM_MEMORY:-4}"  # GiB
 LIMA_VM_RESET="${LIMA_VM_RESET:-false}"  # to init VM from scratch
-LIMA_SSH_PORT="${LIMA_SSH_PORT:-40998}"  # host machine: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM. guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM.
+LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0=random port; host machine: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM. guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM.
 LIMA_COPY_BASHRC="${LIMA_COPY_BASHRC:-false}"  # opt-in: copy host ~/.bashrc into guest ~/.bashrc
 LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-false}"  # to skip running tests
 LIMA_HOST_WORKDIR="$(dirname "$(dirname "$(realpath "$0")")")"  # aka git repo root dir
@@ -56,6 +56,7 @@ if ! limactl list --yes --format '{{.Name}}' | grep -Fx "$LIMA_VM_NAME" >/dev/nu
         --set=".ssh.loadDotSSHPubKeys=true" \
         --set=".mounts = []" \
         --set=".mounts += [{\"location\":\"$LIMA_HOST_WORKDIR\",\"mountPoint\":\"$LIMA_WORKDIR\",\"writable\":$LIMA_WORKDIR_WRITABLE}]" \
+        --containerd=none \
         template:"$LIMA_VM_TEMPLATE"
         # Note: ".ssh.loadDotSSHPubKeys=true" imports ~/.ssh/*.pub from host into the guest VM ~/.ssh/authorized_keys
 fi
@@ -64,6 +65,7 @@ fi
 if ! limactl list --yes --format '{{.Name}} {{.Status}}' | grep -E "^${LIMA_VM_NAME}[[:space:]]+Running$" >/dev/null; then
     limactl start --yes --name="$LIMA_VM_NAME" --ssh-port "$LIMA_SSH_PORT"
 fi
+LIMA_SSH_PORT="$(limactl list --format "{{if eq .Name \"$LIMA_VM_NAME\"}}{{.SSHLocalPort}}{{end}}" | tr -d '[:space:]')"
 
 # Prepare VM
 limactl shell --yes --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
@@ -128,6 +130,7 @@ EOF
 if [[ "$LIMA_COPY_BASHRC" == "true" && -f "$HOME/.bashrc" ]]; then
     limactl shell --yes --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -lc 'cat > ~/.bashrc' < "$HOME/.bashrc"
 fi
+echo "LIMA_SSH_PORT: $LIMA_SSH_PORT"
 
 # Run tests inside VM
 if [[ "$LIMA_NO_RUN_TESTS" == "false" ]]; then
