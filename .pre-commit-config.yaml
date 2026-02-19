@@ -86,12 +86,12 @@ repos:
         stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
       # config options like `force_grid_wrap` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.1
+    rev: v0.15.2
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
   - repo: https://github.com/pycqa/pylint
-    rev: v4.0.4
+    rev: v4.0.5
     hooks:
       - id: pylint                      # Run `pylint` linter to check if there are problems in the Python source code
         name: pylint (cyclic imports, etc)
@@ -105,7 +105,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.52.0']
+        additional_dependencies: ['pyrefly==0.53.0']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1
