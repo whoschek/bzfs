@@ -15,8 +15,9 @@
 # limitations under the License.
 
 # This script can run on MacOS on Apple Silicon, or on Linux on any arch.
-# The script uses Lima to locally create a guest Ubuntu VM, then runs tests inside of the guest VM.
+# The script uses Lima to locally create a guest Ubuntu server VM, then runs tests inside of the guest VM.
 # Currently uses ubuntu-24.04, python-3.12, and zfs-2.4 or zfs-2.2 depending on the value of $LIMA_ZFS_VERSION.
+# Cold start of the guest VM takes ~45 seconds with defaults; warm start takes ~1.5 seconds.
 
 # shellcheck disable=SC2154
 set -eo pipefail
@@ -31,6 +32,7 @@ LIMA_COPY_BASHRC="${LIMA_COPY_BASHRC:-false}"  # opt-in: copy host ~/.bashrc int
 LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-false}"  # to skip running tests
 LIMA_HOST_WORKDIR="$(dirname "$(dirname "$(realpath "$0")")")"  # aka git repo root dir
 LIMA_WORKDIR=/bzfs  # this is also the dir where $LIMA_HOST_WORKDIR is mounted within the guest VM
+LIMA_WORKDIR_WRITABLE="${LIMA_WORKDIR_WRITABLE:-false}"  # false=read-only, true=read-write shared with host
 LIMA_ZFS_VERSION="${LIMA_ZFS_VERSION:-}"  # can be empty or "zfs-2.4"
 
 # Install Lima if it isn't already installed
@@ -40,7 +42,7 @@ fi
 
 # Delete prior state; init VM from scratch
 if [[ "$LIMA_VM_RESET" == "true" ]]; then
-    limactl stop --yes "$LIMA_VM_NAME" || true
+    limactl stop --yes --force "$LIMA_VM_NAME" || true
     limactl delete --yes "$LIMA_VM_NAME"
 fi
 
@@ -53,7 +55,7 @@ if ! limactl list --yes --format '{{.Name}}' | grep -Fx "$LIMA_VM_NAME" >/dev/nu
         --memory="$LIMA_VM_MEMORY" \
         --set=".ssh.loadDotSSHPubKeys=true" \
         --set=".mounts = []" \
-        --set=".mounts += [{\"location\":\"$LIMA_HOST_WORKDIR\",\"mountPoint\":\"$LIMA_WORKDIR\",\"writable\":true}]" \
+        --set=".mounts += [{\"location\":\"$LIMA_HOST_WORKDIR\",\"mountPoint\":\"$LIMA_WORKDIR\",\"writable\":$LIMA_WORKDIR_WRITABLE}]" \
         template:"$LIMA_VM_TEMPLATE"
         # Note: ".ssh.loadDotSSHPubKeys=true" imports ~/.ssh/*.pub from host into the guest VM ~/.ssh/authorized_keys
 fi
@@ -71,7 +73,10 @@ limactl shell --yes --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
 
 set -eo pipefail
 export DEBIAN_FRONTEND=noninteractive
-sudo apt-get -y update
+if [[ ! -f ~/.bzfs_apt_update_done ]]; then
+    sudo apt-get -y update
+    touch ~/.bzfs_apt_update_done
+fi
 
 # Upgrade zfs kernel + userland to specific upstream zfs version
 if [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then
@@ -117,7 +122,6 @@ zstd --version
 pv --version | head -n 1
 mbuffer --version |& head -n 1
 command -v sh | xargs ls -l
-df -h
 EOF
 
 # Optionally copy host ~/.bashrc into guest ~/.bashrc
