@@ -15,9 +15,9 @@
 # limitations under the License.
 
 # This script can run on MacOS on Apple Silicon, or on Linux on any arch.
-# The script uses Lima to locally create a guest Ubuntu server VM, then runs tests inside of the guest VM.
+# The script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of the guest VM.
 # Currently uses ubuntu-24.04, python-3.12, and zfs-2.4 or zfs-2.2 depending on the value of $LIMA_ZFS_VERSION.
-# Cold start of the guest VM takes ~25 seconds with defaults; warm start takes ~1.5 seconds.
+# Cold start of the guest VM takes ~30 seconds with defaults; warm start takes ~1.5 seconds.
 
 # shellcheck disable=SC2154
 set -eo pipefail
@@ -26,8 +26,10 @@ LIMA_VM_NAME="${LIMA_VM_NAME:-mylimavm}"
 LIMA_VM_DISK="${LIMA_VM_DISK:-10}"  # GiB
 LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(4, #cores)
 LIMA_VM_MEMORY="${LIMA_VM_MEMORY:-4}"  # GiB
-LIMA_VM_RESET="${LIMA_VM_RESET:-false}"  # to init VM from scratch
-LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0=random port; host machine: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM. guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM.
+LIMA_VM_RECREATE="${LIMA_VM_RECREATE:-false}"  # to init VM from scratch
+LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0 picks random unused port;
+                                     # host box: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM
+                                     # guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM loopback
 LIMA_COPY_BASHRC="${LIMA_COPY_BASHRC:-false}"  # opt-in: copy host ~/.bashrc into guest ~/.bashrc
 LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-false}"  # to skip running tests
 LIMA_HOST_WORKDIR="$(dirname "$(dirname "$(realpath "$0")")")"  # aka git repo root dir
@@ -41,14 +43,14 @@ if ! command -v limactl >/dev/null 2>&1; then
 fi
 
 # Delete prior state; init VM from scratch
-if [[ "$LIMA_VM_RESET" == "true" ]]; then
-    limactl stop --yes --force "$LIMA_VM_NAME" || true
-    limactl delete --yes "$LIMA_VM_NAME"
+if [[ "$LIMA_VM_RECREATE" == "true" ]]; then
+    limactl stop --tty=false --force "$LIMA_VM_NAME" || true
+    limactl delete --tty=false --force "$LIMA_VM_NAME"
 fi
 
 # Create VM if it doesn't already exist
-if ! limactl list --yes --format '{{.Name}}' | grep -Fx "$LIMA_VM_NAME" >/dev/null; then
-    limactl create --yes \
+if ! limactl list --tty=false --format='{{.Name}}' | grep -Fqx -- "$LIMA_VM_NAME"; then
+    limactl create --tty=false \
         --name="$LIMA_VM_NAME" \
         --disk="$LIMA_VM_DISK" \
         --cpus="$LIMA_VM_CPUS" \
@@ -62,13 +64,13 @@ if ! limactl list --yes --format '{{.Name}}' | grep -Fx "$LIMA_VM_NAME" >/dev/nu
 fi
 
 # Start VM if it isn't already running
-if ! limactl list --yes --format '{{.Name}} {{.Status}}' | grep -E "^${LIMA_VM_NAME}[[:space:]]+Running$" >/dev/null; then
-    limactl start --yes --name="$LIMA_VM_NAME" --ssh-port "$LIMA_SSH_PORT"
+if ! limactl list --tty=false --format='{{.Name}} {{.Status}}' | grep -Fqx -- "${LIMA_VM_NAME} Running"; then
+    limactl start --tty=false --name="$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-2m}" --progress="${LIMA_START_PROGRESS:-false}"
 fi
-LIMA_SSH_PORT="$(limactl list --format "{{if eq .Name \"$LIMA_VM_NAME\"}}{{.SSHLocalPort}}{{end}}" | tr -d '[:space:]')"
+LIMA_SSH_PORT="$(limactl list --tty=false --format="{{if eq .Name \"$LIMA_VM_NAME\"}}{{.SSHLocalPort}}{{end}}" | tr -d '[:space:]')"
 
 # Prepare VM
-limactl shell --yes --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
+limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
     LIMA_SSH_PORT="$LIMA_SSH_PORT" \
     LIMA_ZFS_VERSION="$LIMA_ZFS_VERSION" \
     bash -s <<'EOF'
@@ -76,7 +78,8 @@ limactl shell --yes --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
 set -eo pipefail
 export DEBIAN_FRONTEND=noninteractive
 if [[ ! -f ~/.bzfs_apt_update_done ]]; then
-    sudo apt-get -y update
+    echo "Now running 'apt-get update' ..."
+    sudo apt-get -y -qq update
     touch ~/.bzfs_apt_update_done
 fi
 
@@ -128,19 +131,19 @@ EOF
 
 # Optionally copy host ~/.bashrc into guest ~/.bashrc
 if [[ "$LIMA_COPY_BASHRC" == "true" && -f "$HOME/.bashrc" ]]; then
-    limactl shell --yes --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -lc 'cat > ~/.bashrc' < "$HOME/.bashrc"
+    limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -lc 'cat > ~/.bashrc' < "$HOME/.bashrc"
 fi
 echo "LIMA_SSH_PORT: $LIMA_SSH_PORT"
 
-# Run tests inside VM
+# Run test suite inside VM
 if [[ "$LIMA_NO_RUN_TESTS" == "false" ]]; then
-    limactl shell --yes --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
+    limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
         bzfs_test_mode="$bzfs_test_mode" \
         bzfs_test_no_run_quietly="$bzfs_test_no_run_quietly" \
         bash -lc './test.sh'
 fi
 
-# Alternatively, you can now run tests in a more flexible way by setting env vars for test.sh like so:
+# Alternatively (or subsequently), you can now run tests in a more flexible way by setting env vars for test.sh like so:
 if false; then
     export bzfs_test_remote_userhost=127.0.0.1  # 127.0.0.1:$LIMA_SSH_PORT is the Ubuntu guest VM
     export bzfs_test_remote_path=mybzfs
