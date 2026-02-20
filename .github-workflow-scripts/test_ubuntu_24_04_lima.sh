@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This script can run on MacOS on Apple Silicon, or on Linux on any arch.
+# This script can run on macOS on Apple Silicon, or on Linux on any arch.
 # The script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of the guest VM.
 # Currently uses ubuntu-24.04, python-3.12, and zfs-2.4 or zfs-2.2 depending on the value of $LIMA_ZFS_VERSION.
 # Cold start of the guest VM takes ~30 seconds with defaults; warm start takes ~1.5 seconds.

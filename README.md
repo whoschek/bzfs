@@ -551,6 +551,11 @@ coverage report that merges all jobs of the run.
 
 
 # Testing Locally
+
+For reproducible local testing on Ubuntu, consider using
+[`test_ubuntu_24_04_lima.sh`](.github-workflow-scripts/test_ubuntu_24_04_lima.sh). On macOS or Linux, this script uses
+Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of the guest VM.
+
 ```bash
 # Check prerequisites
 zfs --version                      # verify ZFS is installed
