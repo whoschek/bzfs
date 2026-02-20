@@ -29,8 +29,8 @@
 - [Installation](#Installation)
 - [Design Aspects](#Design-Aspects)
 - [Continuous Integration Testing](#Continuous-Integration-Testing)
-- [Testing on GitHub Runners](#Testing-on-GitHub-Runners)
 - [Testing Locally](#Testing-Locally)
+- [Testing on GitHub Runners](#Testing-on-GitHub-Runners)
 - [Man Page](#Man-Page)
 # Introduction
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
@@ -525,31 +525,6 @@ The gist is that it should work on any platform, with python (3.9 or higher, no 
 only needed on the initiator host.
 
 
-# Testing on GitHub Runners
-
-* First, on the GitHub page of this repo, click on "Fork/Create a new fork".
-* Click the 'Actions' menu on your repo, and then enable GitHub Actions on your fork.
-* Then select 'All workflows' -> 'Tests' on the left side.
-* Then click the 'Run workflow' dropdown menu on the right side, which looks something like
-[this screenshot](https://raw.githubusercontent.com/whoschek/bzfs/main/bzfs_docs/run_workflow_dialog.jpg).
-* Select the name of the job to run (e.g. 'test_ubuntu_24_04' or 'test_freebsd_14_1', etc) or
-select 'Run all jobs' to test all supported platforms, plus select the git branch to run with (typically the branch
-containing your changes).
-* Then click the 'Run workflow' button which kicks off the job.
-* Click on the job to watch job progress.
-* Once the run completes, you can click on the wheel on the top right to select 'Download log archive', which is
-a zip file containing the output of all jobs of the run. This is useful for debugging.
-* Once the job completes, also a coverage report appears on the bottom of the run page, which you can download by
-clicking on it. Unzip and browse the HTML coverage report to see if the code you added or changed is actually executed
-by a test. Experience shows that code that isn't executed likely contains bugs, so all changes (code lines and
-branch conditions) should be covered by a test before a merge is considered. In practice, this means to watch out
-for coverage report lines that aren't colored green.
-* FYI, example test runs with coverage reports are
-[here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule).
-Click on any run and browse to the bottom of the resulting run page to find the coverage reports, including a combined
-coverage report that merges all jobs of the run.
-
-
 # Testing Locally
 
 For reproducible local testing on Ubuntu, consider using
@@ -589,6 +564,31 @@ ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 mbuffer --version # enables buffering
 # or
 bzfs-test        # when installed via pip
 ```
+
+
+# Testing on GitHub Runners
+
+* First, on the GitHub page of this repo, click on "Fork/Create a new fork".
+* Click the 'Actions' menu on your repo, and then enable GitHub Actions on your fork.
+* Then select 'All workflows' -> 'Tests' on the left side.
+* Then click the 'Run workflow' dropdown menu on the right side, which looks something like
+[this screenshot](https://raw.githubusercontent.com/whoschek/bzfs/main/bzfs_docs/run_workflow_dialog.jpg).
+* Select the name of the job to run (e.g. 'test_ubuntu_24_04' or 'test_freebsd_14_1', etc) or
+select 'Run all jobs' to test all supported platforms, plus select the git branch to run with (typically the branch
+containing your changes).
+* Then click the 'Run workflow' button which kicks off the job.
+* Click on the job to watch job progress.
+* Once the run completes, you can click on the wheel on the top right to select 'Download log archive', which is
+a zip file containing the output of all jobs of the run. This is useful for debugging.
+* Once the job completes, also a coverage report appears on the bottom of the run page, which you can download by
+clicking on it. Unzip and browse the HTML coverage report to see if the code you added or changed is actually executed
+by a test. Experience shows that code that isn't executed likely contains bugs, so all changes (code lines and
+branch conditions) should be covered by a test before a merge is considered. In practice, this means to watch out
+for coverage report lines that aren't colored green.
+* FYI, example test runs with coverage reports are
+[here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule).
+Click on any run and browse to the bottom of the resulting run page to find the coverage reports, including a combined
+coverage report that merges all jobs of the run.
 
 
 # Man Page
