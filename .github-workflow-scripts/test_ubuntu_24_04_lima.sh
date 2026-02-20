@@ -39,7 +39,12 @@ LIMA_ZFS_VERSION="${LIMA_ZFS_VERSION:-}"  # can be empty or "zfs-2.4"
 
 # Install Lima if it isn't already installed
 if ! command -v limactl >/dev/null 2>&1; then
-    brew install lima
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        HOMEBREW_NO_AUTO_UPDATE=1 brew install lima
+    else
+        echo "Please install Lima manually before running this script. See https://lima-vm.io/docs/installation/"
+        exit 1
+    fi
 fi
 
 # Delete prior state; init VM from scratch
@@ -86,7 +91,7 @@ fi
 # Upgrade zfs kernel + userland to specific upstream zfs version
 if [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then
     # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
-    sudo add-apt-repository ppa:patrickdk/zfs; sudo apt update
+    sudo add-apt-repository ppa:patrickdk/zfs; sudo apt-get -y update
     sudo apt-get -y install zfs-dkms
     # Ensure the just-installed DKMS module is actually the loaded kernel module, and userland has same ZFS version as kernel
     sudo systemctl stop zfs-zed.service || true
