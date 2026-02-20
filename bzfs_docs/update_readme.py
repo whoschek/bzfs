@@ -139,7 +139,7 @@ def main() -> None:
         start=begin_help_overview_idx,
         raises=f"{end_help_overview_tag} not found in {readme_file}",
     )
-    os.environ["COLUMNS"] = "72"
+    os.environ["COLUMNS"] = "18"
     help_msg_str = (
         bzfs.argument_parser().format_usage()
         if "_jobrunner" not in bzfs_module
