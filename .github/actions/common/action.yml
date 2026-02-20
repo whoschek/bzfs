@@ -46,7 +46,7 @@ runs:
     shell: bash
     run: |
       sudo apt-get -y update
-      sudo apt-get -y install zstd mbuffer netcat-openbsd
+      sudo apt-get -y install zstd mbuffer
       mkdir -p $HOME/.ssh
       rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
       ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N "" # create private key and public key

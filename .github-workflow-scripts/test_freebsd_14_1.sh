@@ -16,7 +16,7 @@
 
 # shellcheck disable=SC2154
 set -e # Exit immediately if a cmd returns a non-zero status
-pkg install -y python3 sudo zstd pv mbuffer bash netcat devel/py-coverage
+pkg install -y python3 sudo zstd pv mbuffer bash devel/py-coverage
 id -u -n
 uname -a
 zfs --version || true
