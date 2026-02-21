@@ -27,7 +27,7 @@ runs:
     if: ${{ !contains(fromJson('["3.8", "3.9"]'), inputs.python-version) }}
     shell: bash
     run: |
-      python -m pip install --upgrade pip
+      python3 -m pip install --upgrade pip
       pip install -e '.[dev]'
       # In CI, disable pre-commit fail_fast so all hooks run and report.
       # This keeps local developer experience unchanged (fail_fast remains true in the repo config).
