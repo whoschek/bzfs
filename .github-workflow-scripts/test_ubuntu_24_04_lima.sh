@@ -40,7 +40,7 @@ LIMA_ZFS_VERSION="${LIMA_ZFS_VERSION:-}"  # can be empty or "zfs-2.4"
 # Install Lima if it isn't already installed
 if ! command -v limactl >/dev/null 2>&1; then
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        HOMEBREW_NO_AUTO_UPDATE=1 brew install lima
+        HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 brew install lima
     else
         echo "Please install Lima manually before running this script. See https://lima-vm.io/docs/installation/"
         exit 1
@@ -104,8 +104,8 @@ fi
 zfs --version
 
 # Run common preparation steps
-sudo apt-get -y install python3 zstd mbuffer pv rsync ripgrep
-# sudo apt-get -y install pandoc python3-pip python3-venv git nano mosh curl wget rclone jq net-tools tree
+sudo apt-get -y install python3 zstd mbuffer pv rsync ripgrep python3-venv
+# sudo apt-get -y install pandoc git nano mosh curl wget rclone jq net-tools tree
 
 mkdir -p "$HOME/.ssh"
 rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
