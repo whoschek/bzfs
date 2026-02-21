@@ -40,7 +40,7 @@ LIMA_ZFS_VERSION="${LIMA_ZFS_VERSION:-}"  # can be empty or "zfs-2.4"
 # Install Lima if it isn't already installed
 if ! command -v limactl >/dev/null 2>&1; then
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        HOMEBREW_NO_AUTO_UPDATE=1 brew install lima
+        HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 brew install lima
     else
         echo "Please install Lima manually before running this script. See https://lima-vm.io/docs/installation/"
         exit 1
