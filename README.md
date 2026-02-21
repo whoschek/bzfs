@@ -418,13 +418,13 @@ $ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive \
 
 # Ubuntu / Debian:
 sudo apt-get -y install zfsutils-linux python3  # ensure zfs and python are installed
-sudo apt-get -y install zstd pv mbuffer  # auxiliary helpers are optional
+sudo apt-get -y install zstd pv mbuffer         # auxiliary helpers are optional
 
 git clone https://github.com/whoschek/bzfs.git
 cd bzfs/bzfs_main
 ./bzfs --help  # Run the CLI
 ./bzfs_jobrunner --help
-sudo ln -sf $(pwd)/bzfs /usr/local/bin/bzfs  # Optional system installation
+sudo ln -sf $(pwd)/bzfs /usr/local/bin/bzfs                     # Optional system installation
 sudo ln -sf $(pwd)/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner # Optional system installation
 
 # Alternatively, install a release via pip:
@@ -439,6 +439,7 @@ python3 -m venv venv                      # Create a Python virtual environment
 source venv/bin/activate                  # Activate the venv
 pip install -e '.[dev]'                   # Install all development dependencies
 pre-commit install --install-hooks        # Set up linters/formatters to run on every commit
+pre-commit run --all-files                # Manually run linters/formatters
 ```
 
 
@@ -518,18 +519,14 @@ Results of continuous integration test runs on a matrix of various old and new v
 [here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
 by [this script](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml).
 The script also demonstrates functioning installation steps on Ubuntu and FreeBSD, etc.
-The script also generates code coverage reports which are published
-[here](https://whoschek.github.io/bzfs/coverage).
-
-The gist is that it should work on any platform, with python (3.9 or higher, no additional python packages required)
-only needed on the initiator host.
+It also generates code coverage reports which are published [here](https://whoschek.github.io/bzfs/coverage).
 
 
 # Testing Locally
 
 For reproducible local testing on Ubuntu, consider using
 [`test_ubuntu_24_04_lima.sh`](.github-workflow-scripts/test_ubuntu_24_04_lima.sh). On macOS or Linux, this script uses
-Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of the guest VM.
+Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of that VM.
 
 ```bash
 # Check prerequisites

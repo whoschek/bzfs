@@ -74,7 +74,7 @@ dev = [  # for development only
 # source venv/bin/activate                  # Activate the venv
 # pip install -e '.[dev]'                   # Install all development dependencies
 # pre-commit install --install-hooks        # Set up linters/formatters to run on every commit
-# pip list --not-required
+# pre-commit run --all-files                # Manually run linters/formatters
 
 [project.scripts]
 bzfs = "bzfs_main.bzfs:main"
