@@ -235,19 +235,22 @@ def chained_backoff_strategy(strategies: Iterable[BackoffStrategy]) -> BackoffSt
 
 def backoff_from_classifier(
     *,
-    classifier: Callable[[BackoffContext], object] = lambda backoff_context: type(
-        backoff_context.retryable_error.__cause__ or backoff_context.retryable_error
+    classifier: Callable[[BackoffContext], object] = lambda backoff_context: (
+        backoff_context.retryable_error.category
+        if backoff_context.retryable_error.category is not None
+        else type(backoff_context.retryable_error.__cause__ or backoff_context.retryable_error)
     ),
     strategies: Mapping[object, BackoffStrategy] | None = None,
     fallback: BackoffStrategy = full_jitter_backoff_strategy,
 ) -> BackoffStrategy:
     """Returns a BackoffStrategy that uses the underlying strategy that corresponds to the retryable error category derived
-    by the classifier.
+    by the classifier. This keeps retry classification separate from backoff policy selection, making category-specific
+    behavior declarative and easy to extend.
 
     Assumes ``classifier(context)`` returns a stable category and ``strategies`` maps categories to BackoffStrategy values.
-    The default classifier uses the underlying exception type (``retryable_error.__cause__`` when present).
-    If ``strategies`` is ``None`` it behaves like an empty map; missing categories use ``fallback``. This keeps retry
-    classification separate from backoff policy selection, making category-specific behavior declarative and easy to extend.
+    The default classifier uses the underlying exception ``retryable_error.category`` or type (``retryable_error.__cause__``
+    when present).
+    If ``strategies`` is ``None`` it behaves like an empty map; missing categories use ``fallback``.
     """
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:

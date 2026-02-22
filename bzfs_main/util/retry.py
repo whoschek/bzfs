@@ -509,6 +509,7 @@ class RetryableError(Exception):
         *exc_args: object,  # optional args passed into super().__init__()
         display_msg: object = None,  # for logging
         retry_immediately_once: bool = False,  # retry once immediately without backoff?
+        category: object = None,  # optional classification e.g. "CONCURRENCY, "SERVER_ISSUE", "THROTTLING", "TRANSIENT", ...
         attachment: object = None,  # optional domain specific info passed to next attempt via Retry.previous_outcomes if
         # RetryPolicy.max_previous_outcomes > 0. This helps when retrying is not just 'try again later', but
         # 'try again differently based on what just happened'.
@@ -519,6 +520,7 @@ class RetryableError(Exception):
         super().__init__(*exc_args)
         self.display_msg: object = display_msg
         self.retry_immediately_once: bool = retry_immediately_once
+        self.category: object = category
         self.attachment: object = attachment
 
     def display_msg_str(self) -> str:
@@ -1095,12 +1097,14 @@ def raise_retryable_error_from(
     *,
     display_msg: object = None,
     retry_immediately_once: bool = False,
+    category: object = None,
     attachment: object = None,
 ) -> NoReturn:
     """Convenience function that raises a generic RetryableError that wraps the given underlying exception."""
     raise RetryableError(
         display_msg=type(exc).__name__ if display_msg is None else display_msg,
         retry_immediately_once=retry_immediately_once,
+        category=category,
         attachment=attachment,
     ) from exc
 
