@@ -163,7 +163,7 @@ repos:
           - mdformat-toc                   # auto-generate Table-of-Contents via this directive: <!-- mdformat-toc start -->
           - mdformat-shfmt                 # format embedded bash, sh
           - mdformat-black                 # format embedded python
-          # - mdformat-config              # format embedded json, toml, yaml  # disabled b/c taplo install currently fails on aarch64 Linux per https://github.com/hukkin/mdformat-config/issues/8 and https://github.com/tamasfe/taplo/issues/791
+          - "mdformat-config; platform_system != 'Linux' or platform_machine != 'aarch64'"  # taplo install currently fails on aarch64 Linux per https://github.com/hukkin/mdformat-config/issues/8 and https://github.com/tamasfe/taplo/issues/791
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
     hooks:
