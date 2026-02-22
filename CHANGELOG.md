@@ -2,7 +2,14 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.18.0] - Not yet released
+## [1.19.0] - Not yet released
+
+- [bzfs] [perf] Use better heuristic for `zfs list -t snapshot` minibatch size if parallelism is disabled.
+- [bzfs] Add test script that uses Lima to locally create a guest Ubuntu VM, then runs the bzfs test suite inside of
+  that VM.
+- [bzfs] Also run nightly tests on AlmaLinux-10 with zfs-2.4 and `hpnssh`.
+
+## [1.18.0] - February 14, 2026
 
 - [bzfs_jobrunner] Also reject explicit CLI input opts `--include-snapshot-regex`, `--exclude-snapshot-regex`,
   `--include-snapshot-times-and-ranks`.
