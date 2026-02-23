@@ -27,6 +27,7 @@ LIMA_VM_DISK="${LIMA_VM_DISK:-10}"  # GiB
 LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(4, #cores)
 LIMA_VM_MEMORY="${LIMA_VM_MEMORY:-4}"  # GiB
 LIMA_VM_RECREATE="${LIMA_VM_RECREATE:-false}"  # to init VM from scratch
+LIMA_VM_PROTECT="${LIMA_VM_PROTECT:-false}"  # 'true' prohibits accidental deletion of this VM
 LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0 picks random unused port;
                                      # host box: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM
                                      # guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM loopback
@@ -51,7 +52,7 @@ fi
 # Delete prior state; init VM from scratch
 if [[ "$LIMA_VM_RECREATE" == "true" ]]; then
     limactl stop --tty=false --force "$LIMA_VM_NAME" || true
-    limactl delete --tty=false --force "$LIMA_VM_NAME"
+    limactl delete --tty=false --force "$LIMA_VM_NAME"  # fails with non-zero exit code if the VM is "protected"
 fi
 
 # Create VM if it doesn't already exist
@@ -68,7 +69,12 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<<"$lima_vm_names"; then
         --containerd=none \
         template:"$LIMA_VM_TEMPLATE"
         # Note: ".ssh.loadDotSSHPubKeys=true" imports ~/.ssh/*.pub from host into the guest VM ~/.ssh/authorized_keys
-    # limactl protect --tty=false "$LIMA_VM_NAME"  # prohibit accidental deletion of this VM
+fi
+
+# Prohibit accidental deletion of this VM
+if [[ "$LIMA_VM_PROTECT" == "true" ]]; then
+    limactl protect --tty=false "$LIMA_VM_NAME"
+    limactl list --tty=false --format='{{.Name}} {{.Protected}}' "$LIMA_VM_NAME"
 fi
 
 # Start VM if it isn't already running
