@@ -115,9 +115,12 @@ sudo apt-get -y install python3 zstd mbuffer pv rsync ripgrep python3-venv
 # sudo apt-get -y install pandoc git nano mosh curl wget rclone jq net-tools tree
 
 mkdir -p "$HOME/.ssh"
-rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
-ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N ""  # create private key and public key
-cat "$HOME/.ssh/id_rsa.pub" >> "$HOME/.ssh/authorized_keys"
+if [[ ! -f ~/.bzfs_keys_done ]]; then
+    rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
+    ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N ""  # create private key and public key
+    cat "$HOME/.ssh/id_rsa.pub" >> "$HOME/.ssh/authorized_keys"
+    touch ~/.bzfs_keys_done
+fi
 
 # Keep default SSH port 22 semantics untouched, and add LIMA_SSH_PORT to socket-activated SSH service
 if [[ "$LIMA_SSH_PORT" == "22" ]]; then
