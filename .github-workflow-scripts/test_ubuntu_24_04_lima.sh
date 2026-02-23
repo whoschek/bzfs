@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # This script can run on macOS on Apple Silicon, or on Linux on any arch.
-# The script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of the guest VM.
+# The script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of that VM.
 # Currently uses ubuntu-24.04, python-3.12, and zfs-2.4 or zfs-2.2 depending on the value of $LIMA_ZFS_VERSION.
 # Cold start of the guest VM takes ~30 seconds with defaults; warm start takes ~1.5 seconds.
 
@@ -54,7 +54,8 @@ if [[ "$LIMA_VM_RECREATE" == "true" ]]; then
 fi
 
 # Create VM if it doesn't already exist
-if ! limactl list --tty=false --format='{{.Name}}' | grep -Fqx -- "$LIMA_VM_NAME"; then
+lima_vm_names="$(limactl list --tty=false --format='{{.Name}}')"
+if ! grep -Fqx -- "$LIMA_VM_NAME" <<<"$lima_vm_names"; then
     limactl create --tty=false \
         --name="$LIMA_VM_NAME" \
         --disk="$LIMA_VM_DISK" \
@@ -69,10 +70,12 @@ if ! limactl list --tty=false --format='{{.Name}}' | grep -Fqx -- "$LIMA_VM_NAME
 fi
 
 # Start VM if it isn't already running
-if ! limactl list --tty=false --format='{{.Name}} {{.Status}}' | grep -Fqx -- "${LIMA_VM_NAME} Running"; then
+lima_vm_statuses="$(limactl list --tty=false --format='{{.Name}} {{.Status}}')"
+if ! grep -Fqx -- "${LIMA_VM_NAME} Running" <<<"$lima_vm_statuses"; then
     limactl start --tty=false --name="$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-2m}" --progress="${LIMA_START_PROGRESS:-false}"
 fi
-LIMA_SSH_PORT="$(limactl list --tty=false --format="{{if eq .Name \"$LIMA_VM_NAME\"}}{{.SSHLocalPort}}{{end}}" | tr -d '[:space:]')"
+LIMA_SSH_PORT="$(limactl list --tty=false --format="{{if eq .Name \"$LIMA_VM_NAME\"}}{{.SSHLocalPort}}{{end}}")"
+LIMA_SSH_PORT="$(tr -d '[:space:]' <<<"$LIMA_SSH_PORT")"
 
 # Prepare VM
 limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
