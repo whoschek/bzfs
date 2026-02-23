@@ -163,8 +163,8 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
        - If said `spec.md` does not exist, you MUST stop and ask the User how to proceed.
        - Else, transform the requirements/specifications in said `spec.md` into an implementation plan that is effective
          and safe to execute for an AI agent. To do so, analyze the current repo + code, and consider using tools such
-         as skills, subagents, background terminals, and `request_user_input` tool, if available. NEVER write any code
-         in this phase. Write the resulting plan into `<path/to/plan.md>`.
+         as skills, subagents, and `request_user_input` tool, if available. NEVER write any code in this phase. Write
+         the resulting plan into `<path/to/plan.md>`.
      - To understand what needs to be done read `<path/to/plan.md>`.
      - Update `<path/to/plan.md>` whenever any of these change: plan, goals, constraints/assumptions, key decisions,
        lessons, steps, progress state (Done/Now/Next). `<path/to/plan.md>` is the canonical source of truth for the plan
@@ -245,8 +245,9 @@ Before committing any changes, you MUST follow this exact sequence:
 
 ## How to Find and Fix Bugs
 
-- **Analyze:** If you are tasked to identify or fix a bug, collect, combine and analyze related issues, bug reports,
-  recent changes, git diffs, and external data. Think hard to understand *why* the bug occurs, not just *what* it does.
+- **Analyze:** If you are tasked to identify or fix a bug, collect, combine and analyze error logs, related issues, bug
+  reports, recent changes, git diffs, and external data. Think hard to understand *why* the bug occurs, not just *what*
+  it does.
 - **Analyze Complex Bugs:** Before claiming a complex bug, meticulously cross-check and validate it against the existing
   unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug" covered by a
   passing test indicates a flawed analysis.
@@ -254,8 +255,8 @@ Before committing any changes, you MUST follow this exact sequence:
   promising approaches (use subagents aka `spawn_agent` tool liberally if available-specifically, spawn 5 subagents to
   independently explore the 5 approaches), and include their corresponding numeric probabilities in your response,
   sampled from the full distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver
-  success, and explain your choice. **Perform a thorough root cause analysis (no band-aids).**. You have plenty of time;
-  go slow and make sure everything is correct.
+  success, and explain your choice. **Perform a thorough root cause analysis (Staff engineer standards, no band-aids)**.
+  You have plenty of time; go slow and make sure everything is correct.
 - **Test First, Then Fix:** Use TDD: You MUST follow the sequence of steps described above in
   [Core Software Development Workflow](#core-software-development-workflow).
 
