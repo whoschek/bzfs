@@ -72,13 +72,11 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<<"$lima_vm_names"; then
 fi
 
 # Start VM if it isn't already running
-lima_vm_statuses="$(limactl list --tty=false --format='{{.Name}} {{.Status}}')"
-if ! grep -Fqx -- "${LIMA_VM_NAME} Running" <<<"$lima_vm_statuses"; then
+if [[ "$(limactl list --tty=false --format='{{.Status}}' "$LIMA_VM_NAME")" != "Running" ]]; then
     # limactl edit --tty=false "$LIMA_VM_NAME" --set=".mounts += [{\"location\":\"$HOME/repos\",\"mountPoint\":\"/repos\",\"writable\":false}]"
-    limactl start --tty=false --name="$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-2m}" --progress="${LIMA_START_PROGRESS:-false}"
+    limactl start --tty=false "$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-2m}" --progress="${LIMA_START_PROGRESS:-false}"
 fi
-LIMA_SSH_PORT="$(limactl list --tty=false --format="{{if eq .Name \"$LIMA_VM_NAME\"}}{{.SSHLocalPort}}{{end}}")"
-LIMA_SSH_PORT="$(tr -d '[:space:]' <<<"$LIMA_SSH_PORT")"
+LIMA_SSH_PORT="$(limactl list --tty=false --format="{{.SSHLocalPort}}" "$LIMA_VM_NAME")"
 mkdir -p "$LIMA_HOST_WORKDIR/venv"  # makes `mount` later succeed in guest VM even in read-only mode
 
 # Prepare VM
