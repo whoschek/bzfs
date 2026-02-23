@@ -35,6 +35,7 @@ LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-false}"  # to skip running tests
 LIMA_HOST_WORKDIR="$(dirname "$(dirname "$(realpath "$0")")")"  # aka git repo root dir
 LIMA_WORKDIR=/bzfs  # this is also the dir where $LIMA_HOST_WORKDIR is mounted within the guest VM
 LIMA_WORKDIR_WRITABLE="${LIMA_WORKDIR_WRITABLE:-false}"  # false=read-only, true=read-write shared with host
+  # 'false' is for running tests only. 'true' enables repo file changes, e.g. for limited sharing with a sandboxed AI agent.
 LIMA_ZFS_VERSION="${LIMA_ZFS_VERSION:-}"  # can be empty or "zfs-2.4"
 
 # Install Lima if it isn't already installed
@@ -76,6 +77,7 @@ if ! grep -Fqx -- "${LIMA_VM_NAME} Running" <<<"$lima_vm_statuses"; then
 fi
 LIMA_SSH_PORT="$(limactl list --tty=false --format="{{if eq .Name \"$LIMA_VM_NAME\"}}{{.SSHLocalPort}}{{end}}")"
 LIMA_SSH_PORT="$(tr -d '[:space:]' <<<"$LIMA_SSH_PORT")"
+mkdir -p "$LIMA_HOST_WORKDIR/venv"  # makes `mount` later succeed in guest VM even in read-only mode
 
 # Prepare VM
 limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
@@ -125,6 +127,22 @@ sudo systemctl daemon-reload
 sudo systemctl restart ssh.socket
 ssh -n -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oConnectTimeout=5 -p "$LIMA_SSH_PORT" 127.0.0.1 echo hello1  # verify
 ssh -n -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oConnectTimeout=5 -p "$LIMA_SSH_PORT" 127.0.0.2 echo hello2  # verify
+
+setup_bind_mount() {  # also ensures mount persists across reboot and restart of guest VM
+    local source_dir="$1"
+    local target_dir="$2"
+    local fstab_entry="$source_dir $target_dir none bind,nofail 0 0"
+    mkdir -p "$source_dir" "$target_dir"
+    if ! grep -Fqx -- "$fstab_entry" /etc/fstab; then
+        printf '%s\n' "$fstab_entry" | sudo tee -a /etc/fstab > /dev/null
+    fi
+    if ! mountpoint -q "$target_dir"; then
+        sudo mount "$target_dir"
+    fi
+}
+# Enable guest VM to have its own venv and git hooks
+setup_bind_mount "$HOME/.bzfs-lima/venv" "$(pwd)/venv"
+setup_bind_mount "$HOME/.bzfs-lima/git-hooks" "$(pwd)/.git/hooks"
 
 # Display ZFS version and Python version
 id -u -n
