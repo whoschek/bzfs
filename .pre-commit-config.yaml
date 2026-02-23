@@ -86,7 +86,7 @@ repos:
         stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
       # config options like `force_grid_wrap` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.2
+    rev: v0.15.4
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
@@ -105,7 +105,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.53.0']
+        additional_dependencies: ['pyrefly==0.54.0']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1
@@ -154,7 +154,7 @@ repos:
   - repo: https://github.com/hukkin/mdformat
     rev: 1.0.0
     hooks:
-      - id: mdformat                       # Auto-format Markdown files - see https://github.com/hukkin/mdformat
+      - id: mdformat                       # Auto-format Markdown files
         args: [--wrap=120, --number, --compact-tables]
         exclude: '^(README.*|prd|\.agents/skills/.*)\.md$'
         additional_dependencies:           # see https://mdformat.readthedocs.io/en/stable/users/plugins.html
