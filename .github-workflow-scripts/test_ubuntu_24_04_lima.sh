@@ -68,11 +68,13 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<<"$lima_vm_names"; then
         --containerd=none \
         template:"$LIMA_VM_TEMPLATE"
         # Note: ".ssh.loadDotSSHPubKeys=true" imports ~/.ssh/*.pub from host into the guest VM ~/.ssh/authorized_keys
+    # limactl protect --tty=false "$LIMA_VM_NAME"  # prohibit accidental deletion of this VM
 fi
 
 # Start VM if it isn't already running
 lima_vm_statuses="$(limactl list --tty=false --format='{{.Name}} {{.Status}}')"
 if ! grep -Fqx -- "${LIMA_VM_NAME} Running" <<<"$lima_vm_statuses"; then
+    # limactl edit --tty=false "$LIMA_VM_NAME" --set=".mounts += [{\"location\":\"$HOME/repos\",\"mountPoint\":\"/repos\",\"writable\":false}]"
     limactl start --tty=false --name="$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-2m}" --progress="${LIMA_START_PROGRESS:-false}"
 fi
 LIMA_SSH_PORT="$(limactl list --tty=false --format="{{if eq .Name \"$LIMA_VM_NAME\"}}{{.SSHLocalPort}}{{end}}")"
