@@ -2846,14 +2846,15 @@ class LocalTestCase(IntegrationTestCase):
             take_snapshot(ibase.SRC_ROOT_DATASET, fix(f"s{j}"))
         run_cmd(f"sudo -n zfs unmount {ibase.SRC_ROOT_DATASET}".split())
 
-    def test_snapshots_are_all_fully_replicated_even_though_every_recv_is_interrupted_and_resumed(self) -> None:
+    def test_snapshots_are_all_eventually_fully_replicated_even_though_every_recv_is_interrupted_and_resumed(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
         n = 4
         self.create_resumable_snapshots(1, n)
         prev_token = None
         max_iters = 20
-        for _ in range(max_iters):
+        k = 0
+        for k in range(max_iters):  # noqa: B007
             self.run_bzfs(
                 ibase.SRC_ROOT_DATASET,
                 ibase.DST_ROOT_DATASET,
@@ -2867,10 +2868,11 @@ class LocalTestCase(IntegrationTestCase):
             self.assertIsNotNone(curr_token)  # assert clear_resumable_recv_state() didn't get called
             self.assertNotEqual(prev_token, curr_token)  # assert send/recv transfers are making progress
             prev_token = curr_token
-        logging.getLogger(__name__).warning(f"iterations to fully replicate all snapshots: {max_iters}")
+        logging.getLogger(__name__).warning(f"iterations to fully replicate all snapshots: {k}")
         self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
         self.assert_snapshots(ibase.DST_ROOT_DATASET, n - 1, "s")
         self.assertGreater(max_iters, 2)
+        self.assertGreater(k, 2)
 
     def test_send_full_no_resume_recv_with_resume_token_present(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
