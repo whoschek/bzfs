@@ -16,7 +16,7 @@
 #
 """Quickstart for local replication: Edit this script. Replace all occurrences of the word "nas" with the real output of the
 `hostname` CLI on your machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets. Make sure `bzfs` and
-`bzfs_jobrunner` CLIs are on the PATH. Run the final script like so:
+`bzfs_jobrunner` CLIs are on the PATH, e.g. export PATH=$PATH:/bzfs/bzfs_main. Run the final script like so:
 
 /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks --prune-dst-
 snapshots --monitor-src-snapshots --monitor-dst-snapshots

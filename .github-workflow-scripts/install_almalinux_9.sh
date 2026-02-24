@@ -71,9 +71,9 @@ if ! sudo dnf install -y zfs --enablerepo="epel,$ZFS_VERSION"; then
     fi
     # make it also work on aarch64, including guest VMs hosted by macOS on Apple Silicon
     zfs_source_repo="${ZFS_VERSION}-source"
+    echo "Falling back to source build from repo '$zfs_source_repo' on '$arch' ..."
     build_dir="$(mktemp -d)"
     trap 'rm -rf "$build_dir"' EXIT
-    echo "Falling back to source build from repo '$zfs_source_repo' on '$arch' ..."
     sudo dnf config-manager --set-enabled crb
     sudo dnf install -y rpm-build
     sudo dnf install -y dkms --enablerepo=epel

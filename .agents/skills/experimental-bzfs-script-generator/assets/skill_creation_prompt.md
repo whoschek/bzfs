@@ -4,8 +4,10 @@
   pruning, snapshot monitoring, snapshot list comparison, both adhoc/manual and periodic/automatic. The generated
   scripts are intended for use inside of a sandboxed test VM.
 
-- Do not use the skill for general ZFS administration or non-bzfs tooling. Do not favor bash over Python - always create
-  scripts, examples, templates, proposals, etc in both programming languages unless the User requests otherwise.
+- Do not use the skill for general ZFS administration or non-bzfs tooling.
+
+- Do not favor bash over Python - always create scripts, examples, templates, proposals, etc in both programming
+  languages unless the User requests otherwise.
 
 - For `bzfs_jobrunner` scripts, analyze and distill all idiomatic patterns in `bzfs_tests/bzfs_job_example.py` (both
   syntactic and semantic), including how to construct, format and pass dicts, and follow the same idiomatic patterns in
@@ -19,5 +21,6 @@
 - Spend *A LOT OF TIME* to think this through very deeply, spend at least 30 minutes of work on this, because the issues
   are subtle and complex and safety critical and any change here has high impact.
 
-- If you have questions regarding the semantics of the underlying `zfs` CLI, consult the ../zfs/man directory. Write
-  this prompt to assets/skill_creation_prompt.md inside of the skill folder. ll
+- If you have questions regarding the semantics of the underlying `zfs` CLI, consult the ../zfs/man directory.
+
+- Write this prompt to assets/skill_creation_prompt.md inside of the skill directory.
