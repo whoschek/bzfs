@@ -156,7 +156,7 @@ repos:
     hooks:
       - id: mdformat                       # Auto-format Markdown files - see https://github.com/hukkin/mdformat
         args: [--wrap=120, --number, --compact-tables]
-        exclude: '^(README.*|prd)\.md$'
+        exclude: '^(README.*|prd|\.agents/skills/.*)\.md$'
         additional_dependencies:           # see https://mdformat.readthedocs.io/en/stable/users/plugins.html
           - mdformat-gfm                   # GitHub-Flavored Markdown support - see https://github.github.com/gfm
           - mdformat-front-matters==2.0.0  # YAML frontmatter support via https://github.com/KyleKing/mdformat-front-matters
