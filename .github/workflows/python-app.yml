@@ -210,7 +210,7 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_4:  # currently uses zfs-2.4.0
+  test_ubuntu_24_04_zfs_2_4:  # currently uses zfs-2.4.1
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_4' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_4')
     runs-on: ubuntu-24.04
@@ -259,7 +259,7 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_4_latest:  # currently uses zfs-2.4.0
+  test_ubuntu_24_04_zfs_2_4_latest:  # currently uses zfs-2.4.1
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_4_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_4_latest')
     runs-on: ubuntu-24.04
@@ -541,7 +541,7 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_almalinux_10_zfs_2_4_hpnssh:  # currently uses almalinux-10.1, zfs-2.4.0, python-3.12
+  test_almalinux_10_zfs_2_4_hpnssh:  # currently uses almalinux-10.1, zfs-2.4.1, python-3.12
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_10_zfs_2_4_hpnssh' || contains(github.event.inputs.job_names, 'test_almalinux_10_zfs_2_4_hpnssh')
     runs-on: ubuntu-24.04
@@ -565,7 +565,7 @@ jobs:
       uses: ./.github/actions/coverage-upload
 
 
-  test_almalinux_10_zfs_2_3:  # currently uses almalinux-10.1, zfs-2.3.5, python-3.12
+  test_almalinux_10_zfs_2_3:  # currently uses almalinux-10.1, zfs-2.3.6, python-3.12
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_10_zfs_2_3' || contains(github.event.inputs.job_names, 'test_almalinux_10_zfs_2_3')
     runs-on: ubuntu-24.04
