@@ -269,6 +269,7 @@ Before committing any changes, you MUST follow this exact sequence:
   in the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
 - **Place Expected before Actual value:** When calling unittest `assert*Equal()` methods, ensure that the *first*
   argument is the *expected* value, and the *second* argument is the *actual* value, not the other way round.
+- Integration tests should not use mocking or stubbing; use the real unmodified APIs/CLIs instead.
 
 ## How to Write Code
 

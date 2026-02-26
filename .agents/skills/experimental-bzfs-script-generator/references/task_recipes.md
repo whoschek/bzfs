@@ -1,6 +1,8 @@
 # Task Recipes (Canonical Patterns)
 
-Use these as starting points. Keep dry-run on by default for mutating tasks.
+Use these as starting points. Keep dry-run on by default for mutating tasks. These command patterns are
+language-agnostic; when turning them into scripts, provide Bash and Python variants unless the user requests one
+language.
 
 Read-only tasks (monitoring, compare, inventory) do not require `--dryrun`.
 
@@ -86,6 +88,11 @@ Optional conflict handling flags (keep disabled by default):
 
 ## 8) Periodic orchestration with bzfs_jobrunner
 
+Follow `bzfs_tests/bzfs_job_example.py` conventions: source actions (`create/prune/monitor` on source) use `--src-host`;
+destination actions (`replicate/prune/monitor` on destination) use `--dst-host`. When emitting full fleet orchestration
+commands, pass dict/list values using `--flag={value}` style that matches `bzfs_job_example.py`. Carry over the same
+semantics as the example (action-to-host scope, plan intent, and retention meaning), not just syntax.
+
 Source-host periodic tasks:
 
 ```bash
@@ -117,6 +124,17 @@ Monitoring:
   --monitor-src-snapshots \
   --jobrunner-dryrun \
   --dryrun
+```
+
+Fleet mapping and plan arguments (shape only):
+
+```bash
+bzfs_jobrunner \
+  "--src-hosts=['nas']" \
+  "--dst-hosts={'nas': ['', 'onsite']}" \
+  "--retain-dst-targets={'nas': ['', 'onsite']}" \
+  "--dst-root-datasets={'nas': ''}" \
+  "--src-snapshot-plan={'prod': {'onsite': {'hourly': 36, 'daily': 31}}}"
 ```
 
 ## 9) Read-only inventory command (allowed execution during skill use)

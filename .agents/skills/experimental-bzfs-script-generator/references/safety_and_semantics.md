@@ -3,10 +3,17 @@
 ## Non-Negotiable Defaults
 
 - Generate scripts only. Do not execute generated scripts.
+- Keep scope on bzfs and bzfs_jobrunner snapshot management workflows only.
+- Decline general ZFS administration and non-bzfs tooling requests.
+- Do not favor Bash over Python; default to paired language outputs.
+- For `bzfs_jobrunner` scripts, follow `bzfs_tests/bzfs_job_example.py` action and host-routing idioms.
+- For `bzfs_jobrunner` dict/list CLI args, follow `bzfs_job_example.py` style: build native Python objects, then pass
+  them as `--flag={value}` strings.
+- Mirror `bzfs_job_example.py` at both syntactic and semantic levels.
 - While using this skill, do not run commands except optional read-only `zfs list` queries.
 - For state-changing workflows, keep dry-run enabled by default:
   - `bzfs ... --dryrun`
-  - `bzfs_jobrunner ... --jobrunner-dryrun --dryrun`
+  - `bzfs_jobrunner ... --dryrun` (usually with `--jobrunner-dryrun`)
 - Keep real-run transitions explicit and operator-controlled.
 
 ## bzfs Safety-Critical Semantics
@@ -39,6 +46,7 @@
 ## Pre-Output Checklist
 
 - Script stays minimal and uses idiomatic Bash/Python.
+- Output includes Bash and Python variants unless user requested otherwise.
 - Dry-run is enabled by default for any mutating workflow.
 - Risky flags are commented and disabled unless explicitly requested.
 - Placeholder values are explicit and listed after the script.

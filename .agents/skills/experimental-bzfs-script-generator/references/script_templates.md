@@ -1,6 +1,9 @@
 # Script Templates
 
 Use these templates to generate minimal scripts. Keep dry-run enabled unless a human explicitly changes the toggle.
+Default to returning both Bash and Python variants unless the user requests only one language. For `bzfs_jobrunner`
+templates, align action and host-routing with `bzfs_tests/bzfs_job_example.py`. For `bzfs_jobrunner` dict/list options,
+align with `bzfs_job_example.py`: pass values as `--flag={value}`.
 
 ## Bash Template: One-Off bzfs Task
 
@@ -77,6 +80,7 @@ DRYRUN="${DRYRUN:-1}"  # keep 1 for safety
 
 cmd=("$JOBCONFIG")
 
+# Match bzfs_job_example.py: source actions run with --src-host; destination actions run with --dst-host.
 case "$ACTION" in
   create-src-snapshots|prune-src-snapshots|prune-src-bookmarks|monitor-src-snapshots)
     cmd+=(--src-host="$HOSTNAME_VALUE" "--$ACTION")
@@ -91,6 +95,7 @@ case "$ACTION" in
 esac
 
 if [[ "$DRYRUN" == "1" ]]; then
+  # --dryrun protects bzfs subcommands; --jobrunner-dryrun suppresses side effects in jobrunner itself.
   cmd+=(--jobrunner-dryrun --dryrun)
 fi
 
@@ -98,6 +103,91 @@ printf 'Review command before run:\n'
 printf '  %q' "${cmd[@]}"
 printf '\n'
 "${cmd[@]}"
+```
+
+## Python Template: Periodic bzfs_jobrunner Invocation
+
+```python
+#!/usr/bin/env python3
+"""Run one periodic bzfs_jobrunner action with dry-run enabled by default."""
+
+from __future__ import annotations
+
+import os
+import shlex
+import socket
+import subprocess
+import sys
+
+
+def main() -> None:
+    jobconfig = "/etc/bzfs/bzfs_job_example.py"
+    hostname_value = socket.gethostname()
+    action = sys.argv[1] if len(sys.argv) > 1 else "replicate"
+    dryrun = os.getenv("DRYRUN", "1") == "1"
+
+    cmd: list[str] = [jobconfig]
+
+    # Match bzfs_job_example.py: source actions use --src-host.
+    if action in {
+        "create-src-snapshots",
+        "prune-src-snapshots",
+        "prune-src-bookmarks",
+        "monitor-src-snapshots",
+    }:
+        cmd += [f"--src-host={hostname_value}", f"--{action}"]
+    # Match bzfs_job_example.py: destination actions use --dst-host.
+    elif action in {"replicate", "prune-dst-snapshots", "monitor-dst-snapshots"}:
+        cmd += [f"--dst-host={hostname_value}", f"--{action}"]
+    else:
+        raise SystemExit(f"Unsupported action: {action}")
+
+    if dryrun:
+        # --dryrun protects bzfs subcommands; --jobrunner-dryrun suppresses side effects in jobrunner itself.
+        cmd += ["--jobrunner-dryrun", "--dryrun"]
+
+    print("Review command before run:")
+    print("  " + shlex.join(cmd))
+    subprocess.run(cmd, check=True)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+## Dict/List Argument Pattern for bzfs_jobrunner
+
+Use this pattern when the script needs fleet mappings or plans (`--src-hosts`, `--dst-hosts`, `--retain-dst-targets`,
+`--dst-root-datasets`, `--src-snapshot-plan`, `--src-bookmark-plan`, `--dst-snapshot-plan`, `--monitor-snapshot-plan`).
+
+### Bash
+
+```bash
+SRC_HOSTS="['nas']"
+DST_HOSTS="{'nas': ['', 'onsite']}"
+SRC_SNAPSHOT_PLAN="{'prod': {'onsite': {'hourly': 36, 'daily': 31}}}"
+
+cmd=(
+  bzfs_jobrunner
+  "--src-hosts=$SRC_HOSTS"
+  "--dst-hosts=$DST_HOSTS"
+  "--src-snapshot-plan=$SRC_SNAPSHOT_PLAN"
+)
+```
+
+### Python
+
+```python
+src_hosts = ["nas"]
+dst_hosts = {"nas": ["", "onsite"]}
+src_snapshot_plan = {"prod": {"onsite": {"hourly": 36, "daily": 31}}}
+
+cmd = [
+    "bzfs_jobrunner",
+    f"--src-hosts={src_hosts}",
+    f"--dst-hosts={dst_hosts}",
+    f"--src-snapshot-plan={src_snapshot_plan}",
+]
 ```
 
 ## Minimal Cron Examples
