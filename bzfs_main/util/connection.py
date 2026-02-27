@@ -325,7 +325,7 @@ class Connection:
         self._capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
         self._free: int = max_concurrent_ssh_sessions_per_tcp_connection
         self._last_modified: int = 0  # monotonically increasing
-        self._last_refresh_time: int = 0
+        self._last_refresh_time: int = 1 - (1 << 150)  # negative infinity for all practical purposes
         self._lock: Final[threading.Lock] = threading.Lock()
         self._reuse_ssh_connection: Final[bool] = remote.reuse_ssh_connection
         self._connection_lease: Final[ConnectionLease | None] = lease

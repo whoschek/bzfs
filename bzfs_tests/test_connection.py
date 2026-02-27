@@ -926,7 +926,6 @@ class TestRefreshSshConnection(AbstractTestCase):
         )
         self.remote.ssh_control_persist_margin_secs = 1
         self.conn = connection.Connection(self.remote, 1)
-        self.conn._last_refresh_time = 0
 
     @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_local_mode_returns_immediately(self, mock_run: MagicMock) -> None:
@@ -1005,7 +1004,6 @@ class TestRefreshSshConnection(AbstractTestCase):
             cpool = ConnectionPool(remote, SHARED, 1)
             conn = cpool.get_connection()
             try:
-                conn._last_refresh_time = 0  # avoid fast return
                 conn.refresh_ssh_connection_if_necessary(self.job)
                 self.assertTrue(mock_utime.called)
                 self.assertIsNotNone(conn._connection_lease)
@@ -1018,11 +1016,21 @@ class TestRefreshSshConnection(AbstractTestCase):
     def test_mtime_now_not_invoked_when_no_connection_lease(self, mock_run: MagicMock, mock_utime: MagicMock) -> None:
         """Ensures set_socket_mtime_to_now() is not called when a Connection has no lease (lease is None)."""
         mock_run.return_value = MagicMock(returncode=0)
-        self.conn._last_refresh_time = 0  # avoid fast return
         # In setUp, ssh_exit_on_shutdown=True ensures no lease is acquired.
         self.assertIsNone(self.conn._connection_lease)
         self.conn.refresh_ssh_connection_if_necessary(self.job)
         mock_utime.assert_not_called()
+
+    @patch("bzfs_main.util.connection.time.monotonic_ns", return_value=-(2**64))
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
+    def test_fresh_boot_does_not_skip_first_refresh(self, mock_run: MagicMock, _mock_time: MagicMock) -> None:
+        """Always perform the first connection refresh even when monotonic clock is tiny after operating system reboot."""
+        mock_run.return_value = MagicMock(returncode=0)
+        self.conn.refresh_ssh_connection_if_necessary(self.job)
+        mock_run.assert_called_once()
+        argv = mock_run.call_args[0][0]
+        self.assertIn("-O", argv)
+        self.assertIn("check", argv)
 
 
 #############################################################################
