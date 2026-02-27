@@ -528,6 +528,10 @@ For reproducible local testing on Ubuntu, consider using
 [`test_ubuntu_24_04_lima.sh`](.github-workflow-scripts/test_ubuntu_24_04_lima.sh). On macOS or Linux, this script uses
 Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of that VM.
 
+Also consider running the [`lima_testbed.sh`](.github-workflow-scripts/lima_testbed.sh) script that uses this to create/delete a local Lima testbed with N source VMs and M destination VMs for testing.
+
+Then consider running the example replication jobconfig script [`bzfs_job_testbed.py`](bzfs_tests/bzfs_job_testbed.py) on the testbed.
+
 ```bash
 # Check prerequisites
 zfs --version                      # verify ZFS is installed

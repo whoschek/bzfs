@@ -44,11 +44,15 @@ from bzfs_tests.itest.test_ssh import (
     TestSSHLatency,
     TestSSHMasterIntermittentFailure,
 )
+from bzfs_tests.itest.test_test_ubuntu_24_04_lima_sh import (
+    TestUbuntuLimaScript,
+)
 
 
 def suite() -> unittest.TestSuite:
     ttype = AbstractTestCase()
     suite = unittest.TestSuite()
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestUbuntuLimaScript))
     if not (ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))

@@ -28,11 +28,13 @@ LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(
 LIMA_VM_MEMORY="${LIMA_VM_MEMORY:-4}"  # GiB
 LIMA_VM_RECREATE="${LIMA_VM_RECREATE:-false}"  # to init VM from scratch
 LIMA_VM_PROTECT="${LIMA_VM_PROTECT:-false}"  # 'true' prohibits accidental deletion of this VM
+LIMA_VM_NETWORK="${LIMA_VM_NETWORK:-lima:user-v2}"  # lima:user-v2 network enables VM-to-VM connectivity
 LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0 picks random unused port;
                                      # host box: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM
                                      # guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM loopback
 LIMA_COPY_BASHRC="${LIMA_COPY_BASHRC:-false}"  # opt-in: copy host ~/.bashrc into guest ~/.bashrc
 LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-false}"  # to skip running tests
+LIMA_MESH_VMS="${LIMA_MESH_VMS:-}"  # optional `grep -E` regex to select VMs for mutual SSH trust in a mesh network
 LIMA_HOST_WORKDIR="$(dirname "$(dirname "$(realpath "$0")")")"  # aka git repo root dir
 LIMA_WORKDIR=/bzfs  # this is also the dir where $LIMA_HOST_WORKDIR is mounted within the guest VM
 LIMA_WORKDIR_WRITABLE="${LIMA_WORKDIR_WRITABLE:-false}"  # false=read-only, true=read-write shared with host
@@ -63,6 +65,7 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<<"$lima_vm_names"; then
         --disk="$LIMA_VM_DISK" \
         --cpus="$LIMA_VM_CPUS" \
         --memory="$LIMA_VM_MEMORY" \
+        --network="$LIMA_VM_NETWORK" \
         --set=".ssh.loadDotSSHPubKeys=true" \
         --set=".mounts = []" \
         --set=".mounts += [{\"location\":\"$LIMA_HOST_WORKDIR\",\"mountPoint\":\"$LIMA_WORKDIR\",\"writable\":$LIMA_WORKDIR_WRITABLE}]" \
@@ -168,7 +171,12 @@ mbuffer --version |& head -n 1
 command -v sh | xargs ls -l
 EOF
 
-# Optionally copy host ~/.bashrc into guest ~/.bashrc
+# Optionally, configure a basic mesh network where each VM can talk via ssh to each other VM.
+export LIMA_MESH_VMS
+mydir="$(dirname "$(realpath "$0")")"
+"$mydir/lima_mesh_setup.sh"
+
+# Optionally, copy host ~/.bashrc into guest ~/.bashrc
 if [[ "$LIMA_COPY_BASHRC" == "true" && -f "$HOME/.bashrc" ]]; then
     limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -lc 'cat > ~/.bashrc' < "$HOME/.bashrc"
 fi
