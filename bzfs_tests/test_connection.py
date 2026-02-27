@@ -24,6 +24,7 @@ import os
 import platform
 import random
 import shlex
+import socket
 import subprocess
 import sys
 import tempfile
@@ -177,8 +178,8 @@ class TestConnectionPool(AbstractTestCase):
         counter1a = itertools.count()
         counter2a = itertools.count()
         counter1b = itertools.count()
-        self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: [str(next(counter))]  # type: ignore
-        self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: [str(next(counter))]  # type: ignore
+        self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: ([str(next(counter))], None)  # type: ignore
+        self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: ([str(next(counter))], None)  # type: ignore
 
         with self.assertRaises(AssertionError):
             ConnectionPool(self.src, SHARED, 0)
@@ -360,8 +361,8 @@ class TestConnectionPool(AbstractTestCase):
             for items in range(64 + 1):
                 counter1a = itertools.count()
                 counter1b = itertools.count()
-                self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: [str(next(counter))]  # type: ignore
-                self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: [str(next(counter))]  # type: ignore
+                self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: ([str(next(counter))], None)  # type: ignore
+                self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: ([str(next(counter))], None)  # type: ignore
                 cpool = ConnectionPool(self.src, SHARED, maxsessions)
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
                 # dpool = ConnectionPool(self.src2, SHARED, maxsessions)
@@ -427,7 +428,7 @@ class TestSimpleMiniRemote(AbstractTestCase):
         # SimpleMiniRemote always disables immediate master exit on shutdown
         self.assertFalse(r.ssh_exit_on_shutdown)
         self.assertEqual("-", r.cache_namespace())  # local mode
-        self.assertEqual([], r.local_ssh_command(socket_file=None))
+        self.assertEqual(([], None), r.local_ssh_command(socket_file=None))
 
     def test_init_with_all_extras_and_port(self) -> None:
         with get_tmpdir() as tmpdir:
@@ -463,13 +464,15 @@ class TestSimpleMiniRemote(AbstractTestCase):
             expected_hash = sha256_urlsafe_base64(os.path.abspath(cfg_path), padding=False)
             self.assertEqual(f"user@host#2222#{expected_hash}", r.cache_namespace())
             # local_ssh_command includes -S only when socket provided
-            cmd_no_sock = r.local_ssh_command(socket_file=None)
+            cmd_no_sock, socket_path = r.local_ssh_command(socket_file=None)
             self.assertEqual([r.params.ssh_program] + expected_prefix + ["user@host"], cmd_no_sock)
-            cmd_with_sock = r.local_ssh_command(socket_file="/tmp/sock")
+            self.assertIsNone(socket_path)
+            cmd_with_sock, socket_path = r.local_ssh_command(socket_file="/tmp/sock")
             self.assertEqual(
                 [r.params.ssh_program] + expected_prefix + ["-S", "/tmp/sock", "user@host"],
                 cmd_with_sock,
             )
+            self.assertEqual("/tmp/sock", socket_path)
 
     def test_init_with_custom_extra_opts_is_copied(self) -> None:
         custom = ["-K"]
@@ -520,7 +523,10 @@ class TestSimpleMiniRemote(AbstractTestCase):
     def test_local_ssh_command_branching(self) -> None:
         r = connection.create_simple_miniremote(log=self.log, ssh_user_host="user@h", reuse_ssh_connection=False)
         # No -S because reuse is False
-        self.assertEqual([r.params.ssh_program] + list(r.ssh_extra_opts) + ["user@h"], r.local_ssh_command("/tmp/s"))
+        self.assertEqual(
+            ([r.params.ssh_program] + list(r.ssh_extra_opts) + ["user@h"], None),
+            r.local_ssh_command("/tmp/s"),
+        )
 
     def test_factory_method_round_trips_arguments(self) -> None:
         r = connection.create_simple_miniremote(
@@ -731,8 +737,8 @@ class _FakeRemote(SimpleNamespace):
         if not hasattr(self, "pool"):
             self.pool = SHARED
 
-    def local_ssh_command(self, socket_path: str | None = None) -> list[str]:
-        return ["ssh", self.ssh_user_host or "localhost"]
+    def local_ssh_command(self, socket_path: str | None = None) -> tuple[list[str], str | None]:
+        return ["ssh", self.ssh_user_host or "localhost"], socket_path
 
     def is_ssh_available(self) -> bool:
         return True
@@ -1031,6 +1037,113 @@ class TestRefreshSshConnection(AbstractTestCase):
         argv = mock_run.call_args[0][0]
         self.assertIn("-O", argv)
         self.assertIn("check", argv)
+
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
+    def test_missing_control_socket_rechecks_even_in_fast_path(self, mock_run: MagicMock) -> None:
+        """Recheck immediately when the expected control socket path is missing.
+
+        Purpose: avoid waiting almost the full ControlPersist window after a transient master loss.
+        Assumption: Connection has a lease-backed socket path.
+        Rationale: missing socket is a cheap local signal that the fast path should be bypassed.
+        """
+        mock_run.return_value = MagicMock(returncode=0)
+        with get_tmpdir() as ssh_socket_dir:
+            remote = connection.create_simple_miniremote(
+                log=self.job.params.log,
+                ssh_user_host="host",
+                reuse_ssh_connection=True,
+                ssh_control_persist_secs=4,
+                ssh_control_persist_margin_secs=1,
+                ssh_socket_dir=ssh_socket_dir,
+            )
+            cpool = ConnectionPool(remote, SHARED, 1)
+            conn = cpool.get_connection()
+            try:
+                lease = conn._connection_lease
+                self.assertIsNotNone(lease)
+                assert lease is not None
+                conn._last_refresh_time = time.monotonic_ns()  # force old fast-path condition
+                self.assertFalse(os.path.exists(lease.socket_path))
+                conn.refresh_ssh_connection_if_necessary(self.job)
+                mock_run.assert_called_once()
+                argv = mock_run.call_args[0][0]
+                self.assertIn("-O", argv)
+                self.assertIn("check", argv)
+            finally:
+                conn.shutdown("test")
+
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
+    def test_stale_control_socket_rechecks_even_in_fast_path(self, mock_run: MagicMock) -> None:
+        """Recheck immediately when the control socket path exists but is stale.
+
+        Purpose: avoid long slow-path periods when socket inode exists without a listening master.
+        Assumption: stale sockets can survive abnormal process termination.
+        Rationale: socket connectability is a stronger liveness signal than mere path existence.
+        """
+        mock_run.return_value = MagicMock(returncode=0)
+        with get_tmpdir() as ssh_socket_dir:
+            remote = connection.create_simple_miniremote(
+                log=self.job.params.log,
+                ssh_user_host="host",
+                reuse_ssh_connection=True,
+                ssh_control_persist_secs=4,
+                ssh_control_persist_margin_secs=1,
+                ssh_socket_dir=ssh_socket_dir,
+            )
+            cpool = ConnectionPool(remote, SHARED, 1)
+            conn = cpool.get_connection()
+            try:
+                lease = conn._connection_lease
+                self.assertIsNotNone(lease)
+                assert lease is not None
+                stale_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                stale_sock.bind(lease.socket_path)
+                stale_sock.close()  # leaves behind a stale socket path without a listener
+                conn._last_refresh_time = time.monotonic_ns()  # force old fast-path condition
+                self.assertTrue(os.path.exists(lease.socket_path))
+                conn.refresh_ssh_connection_if_necessary(self.job)
+                mock_run.assert_called_once()
+                argv = mock_run.call_args[0][0]
+                self.assertIn("-O", argv)
+                self.assertIn("check", argv)
+            finally:
+                conn.shutdown("test")
+
+    @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
+    def test_stale_control_socket_is_removed_before_master_restart(self, mock_run: MagicMock) -> None:
+        """Remove stale control socket path before starting a new SSH master.
+
+        Purpose: prevent OpenSSH from disabling multiplexing when path exists but listener is gone.
+        Assumption: stale socket path can remain after abnormal termination.
+        Rationale: unlinking stale path lets `ssh -M -S` create a fresh listening control socket.
+        """
+        mock_run.side_effect = [MagicMock(returncode=1), MagicMock(returncode=0)]
+        with get_tmpdir() as ssh_socket_dir:
+            remote = connection.create_simple_miniremote(
+                log=self.job.params.log,
+                ssh_user_host="host",
+                reuse_ssh_connection=True,
+                ssh_control_persist_secs=4,
+                ssh_control_persist_margin_secs=1,
+                ssh_socket_dir=ssh_socket_dir,
+            )
+            cpool = ConnectionPool(remote, SHARED, 1)
+            conn = cpool.get_connection()
+            try:
+                lease = conn._connection_lease
+                self.assertIsNotNone(lease)
+                assert lease is not None
+                stale_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                stale_sock.bind(lease.socket_path)
+                stale_sock.close()
+                conn._last_refresh_time = time.monotonic_ns()  # force fast-window condition
+                conn.refresh_ssh_connection_if_necessary(self.job)
+                self.assertFalse(os.path.exists(lease.socket_path))
+                self.assertEqual(2, mock_run.call_count)
+                start_argv = mock_run.call_args_list[1][0][0]
+                self.assertIn("-M", start_argv)
+            finally:
+                conn.shutdown("test")
 
 
 #############################################################################

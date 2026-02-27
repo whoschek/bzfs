@@ -63,6 +63,8 @@ import copy
 import logging
 import os
 import shlex
+import socket
+import stat
 import subprocess
 import threading
 import time
@@ -145,9 +147,10 @@ class MiniRemote(Protocol):
     def is_ssh_available(self) -> bool:
         """Return True if the ssh client program required for this remote is available on the local host."""
 
-    def local_ssh_command(self, socket_file: str | None) -> list[str]:
+    def local_ssh_command(self, socket_file: str | None) -> tuple[list[str], str | None]:
         """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
-        command to run on the remote host, which will be appended later."""
+        command to run on the remote host, which will be appended later; also returns the effective ControlPath used by the
+        ssh CLI command, or ``None`` when SSH multiplexing is not active."""
 
     def cache_namespace(self) -> str:
         """Returns cache namespace string which is a stable, unique directory component for caches that distinguishes
@@ -200,16 +203,18 @@ def create_simple_miniremote(
         def is_ssh_available(self) -> bool:
             return True
 
-        def local_ssh_command(self, socket_file: str | None) -> list[str]:
+        def local_ssh_command(self, socket_file: str | None) -> tuple[list[str], str | None]:
             if not self.ssh_user_host:
-                return []  # local mode
+                return [], None  # local mode
             ssh_cmd: list[str] = [self.params.ssh_program]
             ssh_cmd.extend(self.ssh_extra_opts)
+            socket_path: str | None = None
             if self.reuse_ssh_connection and socket_file:
                 ssh_cmd.append("-S")
                 ssh_cmd.append(socket_file)
+                socket_path = socket_file
             ssh_cmd.append(self.ssh_user_host)
-            return ssh_cmd
+            return ssh_cmd, socket_path
 
         def cache_namespace(self) -> str:
             if not self.ssh_user_host:
@@ -329,9 +334,11 @@ class Connection:
         self._lock: Final[threading.Lock] = threading.Lock()
         self._reuse_ssh_connection: Final[bool] = remote.reuse_ssh_connection
         self._connection_lease: Final[ConnectionLease | None] = lease
-        self._ssh_cmd: Final[list[str]] = remote.local_ssh_command(
+        ssh_cmd, ssh_socket_path = remote.local_ssh_command(
             None if self._connection_lease is None else self._connection_lease.socket_path
         )
+        self._ssh_socket_path: Final[str | None] = ssh_socket_path
+        self._ssh_cmd: Final[list[str]] = ssh_cmd
         self._ssh_cmd_quoted: Final[list[str]] = [shlex.quote(item) for item in self._ssh_cmd]
 
     @property
@@ -357,7 +364,7 @@ class Connection:
         """Runs the given CLI cmd via ssh on the given remote, and returns CompletedProcess including stdout and stderr.
 
         The full command is the concatenation of both the command to run on the localhost in order to talk to the remote host
-        ($remote.local_ssh_command()) and the command to run on the given remote host ($cmd).
+        (``remote.local_ssh_command(...)[0]``) and the command to run on the given remote host (``cmd``).
 
         Note: When executing on a remote host (remote.ssh_user_host is set), cmd arguments are pre-quoted with shlex.quote to
         safely traverse the ssh "remote shell" boundary, as ssh concatenates argv into a single remote shell string. In local
@@ -395,8 +402,10 @@ class Connection:
         # 'ssh -S -M -oControlPersist=90s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
         # and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
         control_limit_nanos: int = (remote.ssh_control_persist_secs - remote.ssh_control_persist_margin_secs) * 1_000_000_000
+        socket_path: str | None = self._ssh_socket_path
+        is_socket_usable: bool = socket_path is None or self._is_ssh_control_socket_usable(socket_path)
         with self._lock:
-            if time.monotonic_ns() < self._last_refresh_time + control_limit_nanos:
+            if is_socket_usable and time.monotonic_ns() < self._last_refresh_time + control_limit_nanos:
                 return  # ssh master is alive, reuse its TCP connection (this is the common case and the ultra-fast path)
             ssh_cmd: list[str] = self._ssh_cmd
             ssh_sock_cmd: list[str] = ssh_cmd[0:-1]  # omit trailing ssh_user_host
@@ -409,6 +418,9 @@ class Connection:
                 log.log(LOG_TRACE, "ssh connection is alive: %s", list_formatter(ssh_sock_cmd))
             else:  # ssh master is not alive; start a new master:
                 log.log(LOG_TRACE, "ssh connection is not yet alive: %s", list_formatter(ssh_sock_cmd))
+                if socket_path is not None and not self._is_ssh_control_socket_usable(socket_path):
+                    with contextlib.suppress(OSError):
+                        os.unlink(socket_path)  # if present, remove stale ssh control socket path before master restart
                 ssh_control_persist_secs: int = max(1, remote.ssh_control_persist_secs)
                 if any(opt.startswith("-v") and all(char == "v" for char in opt[1:]) for opt in remote.ssh_extra_opts):
                     # Unfortunately, with `ssh -v` (debug mode), the ssh master won't background; instead it stays in the
@@ -430,6 +442,24 @@ class Connection:
             self._last_refresh_time = time.monotonic_ns()
             if self._connection_lease is not None:
                 self._connection_lease.set_socket_mtime_to_now()
+
+    def _is_ssh_control_socket_usable(self, socket_path: str) -> bool:
+        """To improve ssh perf, check whether a control socket path is a live Unix-domain listener; this helps detect stale
+        socket files that still exist after master crashes.
+
+        _is_ssh_control_socket_usable() is ~300x faster than `ssh ... -O check`: ~5 microseconds vs ~1-2 milliseconds.
+        """
+        try:
+            st_mode: int = os.stat(socket_path, follow_symlinks=False).st_mode
+            if not stat.S_ISSOCK(st_mode):
+                return False
+        except OSError:
+            return False
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                return sock.connect_ex(socket_path) == 0
+        except OSError:
+            return False
 
     def _increment_free(self, value: int) -> None:
         """Adjusts the count of available SSH slots."""

@@ -788,7 +788,7 @@ class TestAdditionalHelpers(AbstractTestCase):
             r.ssh_user_host = "user@host"
             r.ssh_user = "user"
             r.ssh_host = "host"
-            cmd = r.local_ssh_command(None)
+            cmd, socket_path = r.local_ssh_command(None)
             self.assertEqual(cmd[0], p.ssh_program)
             self.assertIn("-F", cmd)
             self.assertIn(cfg, cmd)
@@ -796,10 +796,12 @@ class TestAdditionalHelpers(AbstractTestCase):
             self.assertIn("2222", cmd)
             self.assertIn("-S", cmd)
             self.assertEqual("user@host", cmd[-1])
+            self.assertIsNotNone(socket_path)
 
             r.reuse_ssh_connection = False
-            cmd = r.local_ssh_command(None)
+            cmd, socket_path = r.local_ssh_command(None)
             self.assertNotIn("-S", cmd)
+            self.assertIsNone(socket_path)
 
             args = self.argparser_parse_args(["src", "dst", "--ssh-program", "-"])
             p = self.make_params(args=args)
@@ -808,7 +810,7 @@ class TestAdditionalHelpers(AbstractTestCase):
             with self.assertRaises(SystemExit):
                 r.local_ssh_command(None)  # Cannot talk to remote host because ssh CLI is disabled
             r.ssh_user_host = ""
-            self.assertEqual([], r.local_ssh_command(None))
+            self.assertEqual(([], None), r.local_ssh_command(None))
 
     def test_params_zfs_recv_program_opt(self) -> None:
         args = self.argparser_parse_args(

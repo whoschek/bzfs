@@ -545,11 +545,12 @@ class Remote(MiniRemote):
         self.ssh_user_host: str = ""
         self.is_nonlocal: bool = False
 
-    def local_ssh_command(self, socket_file: str | None) -> list[str]:
+    def local_ssh_command(self, socket_file: str | None) -> tuple[list[str], str | None]:
         """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
-        command to run on the remote host, which will be appended later."""
+        command to run on the remote host, which will be appended later; also returns the effective ControlPath used by the
+        ssh CLI command, or ``None`` when SSH multiplexing is not active."""
         if not self.ssh_user_host:
-            return []  # dataset is on local host - don't use ssh
+            return [], None  # dataset is on local host - don't use ssh
 
         # dataset is on remote host
         p: Params = self.params
@@ -562,10 +563,14 @@ class Remote(MiniRemote):
             ssh_cmd += ["-c", self.ssh_cipher]
         if self.ssh_port:
             ssh_cmd += ["-p", str(self.ssh_port)]
+
+        socket_path: str | None = None
         if self.reuse_ssh_connection:
             # Performance: reuse ssh connection for low latency startup of frequent ssh invocations via the 'ssh -S' and
             # 'ssh -S -M -oControlPersist=60s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
-            if not socket_file:
+            if socket_file:
+                socket_path = socket_file
+            else:
                 # Generate unique private Unix domain socket file name in user's home dir and pass it to 'ssh -S /path/to/socket'
                 def sanitize(name: str) -> str:
                     name = self.sanitize1_regex.sub("~", name)  # replace whitespace, /, $, \, @ with a ~ tilde char
@@ -578,13 +583,13 @@ class Remote(MiniRemote):
                 unique: str = f"{os.getpid()}@{curr_time}@{rand_str}"
                 optional: str = f"@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
                 socket_name: str = f"{self.socket_prefix}{unique}{optional}"
-                socket_file = os.path.join(self.ssh_exit_on_shutdown_socket_dir, socket_name)
-                socket_file = socket_file[: max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(socket_file) - len(optional))]
+                socket_path = os.path.join(self.ssh_exit_on_shutdown_socket_dir, socket_name)
+                socket_path = socket_path[: max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(socket_path) - len(optional))]
                 # `ssh` will error out later if the max OS Unix domain socket path limit cannot be met reasonably as the
                 # home directory path is too long, typically because the Unix user name is unreasonably long.
-            ssh_cmd += ["-S", socket_file]
+            ssh_cmd += ["-S", socket_path]
         ssh_cmd += [self.ssh_user_host]
-        return ssh_cmd
+        return ssh_cmd, socket_path
 
     def cache_key(self) -> tuple[str, str, int | None, str | None]:
         """Returns tuple uniquely identifying this Remote for caching."""

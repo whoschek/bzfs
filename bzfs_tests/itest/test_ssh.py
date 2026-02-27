@@ -30,6 +30,9 @@ from typing import (
     cast,
     final,
 )
+from unittest.mock import (
+    patch,
+)
 
 import bzfs_main.replication
 from bzfs_main import (
@@ -177,15 +180,18 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
     * While the master is alive, ``Connection.run_ssh_command`` calls ``refresh_ssh_connection_if_necessary()``, which
       periodically extends the master lifetime by running ``ssh -O check`` and, if needed, starting a new master via
       ``ssh -M -oControlPersist=... exit``. The timestamp ``_last_refresh_time`` records successful refreshes.
-    * If the master dies shortly after a refresh, subsequent ``run_ssh_command`` calls initially take the fast path:
-      they skip the ``-O check`` and directly invoke ``ssh -S <socket> ...``.  OpenSSH then automatically falls back to
-      a fresh direct TCP connection when the control socket is missing, so commands continue to succeed, albeit with
-      higher latency per call.
-    * Once the refresh window has elapsed (ssh_control_persist_secs=90 secs by default), the next
-      ``refresh_ssh_connection_if_necessary()`` invocation leaves the fast path, detects that ``-O check`` fails, and
-      recreates a new ControlMaster.  From that point on, commands are again multiplexed over a hot TCP connection with
-      low startup latency.
-    This test method verifies that the actual behavior is as described above.
+    * If the master dies after a refresh, the next ``run_ssh_command`` call detects this and recreates a new ControlMaster.
+      From that point on, commands are again multiplexed over a hot TCP connection with low startup latency.
+    * If said detection logic would somehow fail (no known case for this exists), then ...
+        * subsequent ``run_ssh_command`` calls initially take the fast path:
+          they skip the ``-O check`` and directly invoke ``ssh -S <socket> ...``.  OpenSSH then automatically falls back to
+          a fresh direct TCP connection when the control socket is missing, so commands continue to succeed, albeit with
+          higher latency per call.
+        * Once the refresh window has elapsed (ssh_control_persist_secs=600 secs by default), the next
+          ``refresh_ssh_connection_if_necessary()`` invocation leaves the fast path, detects that ``-O check`` fails, and
+          recreates a new ControlMaster.  From that point on, commands are again multiplexed over a hot TCP connection with
+          low startup latency.
+    This test method verifies that the actual behavior is as described above even if said detection logic would fail.
     """
 
     def test_master_dies_then_recovers_via_refresh(self) -> None:
@@ -203,7 +209,7 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
             ssh_config_file=SSH_CONFIG_FILE,
             ssh_program=SSH_PROGRAM,
             reuse_ssh_connection=True,
-            ssh_control_persist_secs=4,  # to speed up the test, reduce 90 sec refresh window down to a few secs
+            ssh_control_persist_secs=4,  # to speed up the test, reduce 600 sec refresh window down to a few secs
             ssh_control_persist_margin_secs=1,
         )
         pool = ConnectionPool(remote, SHARED)
@@ -232,21 +238,36 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
             self.assertIn("Control socket connect", check_proc2.stderr)
 
             last_refresh_before = conn._last_refresh_time
+            with patch.object(conn, "_is_ssh_control_socket_usable", return_value=True):
+                # Simulate a detection failure: refresh takes the fast path, ssh falls back to direct connection and succeeds.
+                proc2 = conn.run_ssh_command(["echo", "two"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
+                self.assertEqual("two\n", proc2.stdout)
+                check_proc3 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+                self.assertNotEqual(0, check_proc3.returncode)  # assert master is not running
 
-            # Immediately run a command: refresh takes the fast path, ssh falls back to a direct connection and succeeds
-            proc2 = conn.run_ssh_command(["echo", "two"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
-            self.assertEqual("two\n", proc2.stdout)
-            check_proc3 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
-            self.assertNotEqual(0, check_proc3.returncode)  # assert master is not running
+                # Wait long enough so that a subsequent refresh performs -O check and recreates the master.
+                time.sleep(remote.ssh_control_persist_secs - remote.ssh_control_persist_margin_secs + 1)
 
-            # Wait long enough so that a subsequent refresh will perform -O check and recreate the master.
-            time.sleep(remote.ssh_control_persist_secs - remote.ssh_control_persist_margin_secs + 1)
-
-            proc3 = conn.run_ssh_command(["echo", "three"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
-            self.assertEqual("three\n", proc3.stdout)
+                proc3 = conn.run_ssh_command(["echo", "three"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
+                self.assertEqual("three\n", proc3.stdout)
             check_proc4 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
             self.assertEqual(0, check_proc4.returncode, check_proc4.stderr)
             self.assertIn("Master running", check_proc4.stderr)
             self.assertGreater(conn._last_refresh_time, last_refresh_before)
+
+            # Replace the Unix domain socket file with a regular empty file, which will make _is_ssh_control_socket_usable()
+            # return False and trigger the stale socket unlinking logic.
+            socket_path = conn._ssh_socket_path
+            self.assertIsNotNone(socket_path)
+            socket_path = cast(str, socket_path)
+            os.unlink(socket_path)
+            with open(socket_path, "w", encoding="utf-8"):
+                pass
+            proc4 = conn.run_ssh_command(
+                ["echo", "four-after-stale-socket-file"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True
+            )
+            self.assertEqual("four-after-stale-socket-file\n", proc4.stdout)
+            check_proc5 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            self.assertEqual(0, check_proc5.returncode, check_proc5.stderr)
         finally:
             pool.shutdown()

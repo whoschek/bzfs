@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - [bzfs] [perf] Use better heuristic for `zfs list -t snapshot` minibatch size if parallelism is disabled.
 - [bzfs] [perf] Reuse ssh connection even immediately after reboot of operating system.
+- [bzfs] [perf] Refresh ssh connection immediately when the expected control socket path is missing or stale, and remove
+  stale control socket paths.
 - [bzfs] Add test script that uses Lima to locally create a guest Ubuntu VM, then runs the bzfs test suite inside of
   that VM.
 - [bzfs] Also run nightly tests on AlmaLinux-10 with zfs-2.4 and `hpnssh`.
