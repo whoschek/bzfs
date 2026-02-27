@@ -87,6 +87,7 @@ mkdir -p "$LIMA_HOST_WORKDIR/venv"  # makes `mount` later succeed in guest VM ev
 
 # Prepare VM
 limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
+    LIMA_VM_NAME="$LIMA_VM_NAME" \
     LIMA_SSH_PORT="$LIMA_SSH_PORT" \
     LIMA_ZFS_VERSION="$LIMA_ZFS_VERSION" \
     bash -s <<'EOF'
@@ -136,6 +137,8 @@ sudo systemctl daemon-reload
 sudo systemctl restart ssh.socket
 ssh -n -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oConnectTimeout=5 -p "$LIMA_SSH_PORT" 127.0.0.1 echo hello1  # verify
 ssh -n -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oConnectTimeout=5 -p "$LIMA_SSH_PORT" 127.0.0.2 echo hello2  # verify
+sudo hostnamectl set-hostname "$LIMA_VM_NAME"  # use hostname without synthetic "lima-" prefix for ease-of-use
+ssh -n -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oConnectTimeout=5 "$LIMA_VM_NAME" echo hello3  # verify
 
 setup_bind_mount() {  # also ensures mount persists across reboot and restart of guest VM
     local source_dir="$1"
