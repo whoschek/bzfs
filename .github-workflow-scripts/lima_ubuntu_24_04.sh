@@ -174,7 +174,7 @@ EOF
 # Optionally, configure a basic mesh network where each VM can talk via ssh to each other VM.
 export LIMA_MESH_VMS
 mydir="$(dirname "$(realpath "$0")")"
-"$mydir/lima_mesh_setup.sh"
+"$mydir/lima_mesh.sh"
 
 # Optionally, copy host ~/.bashrc into guest ~/.bashrc
 if [[ "$LIMA_COPY_BASHRC" == "true" && -f "$HOME/.bashrc" ]]; then

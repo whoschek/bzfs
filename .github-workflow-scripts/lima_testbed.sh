@@ -45,7 +45,7 @@ create_vm_group() {
         printf -v padded_i "%02d" "$i"
         export LIMA_VM_NAME="${TESTBED_HOSTNAME_PREFIX}${group}${padded_i}"
         export LIMA_SSH_PORT=0
-        "$mydir/test_ubuntu_24_04_lima.sh"
+        "$mydir/lima_ubuntu_24_04.sh"
         limactl shell --tty=false --workdir=/ "$LIMA_VM_NAME" -- env \
             pool="$group" \
             zpool_capacity_mb="$TESTBED_ZPOOL_CAPACITY_MB" \

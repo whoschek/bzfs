@@ -8,8 +8,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] [perf] Reuse ssh connection even immediately after reboot of operating system.
 - [bzfs] [perf] Refresh ssh connection immediately when the expected control socket path is missing or stale, and remove
   stale control socket paths.
-- [bzfs] Add [`test_ubuntu_24_04_lima.sh`](.github-workflow-scripts/test_ubuntu_24_04_lima.sh) script that uses Lima to
-  locally create a guest Ubuntu VM, then runs the bzfs test suite inside of that VM.
+- [bzfs] Add [`lima_ubuntu_24_04.sh`](.github-workflow-scripts/lima_ubuntu_24_04.sh) script that uses Lima to locally
+  create a guest Ubuntu VM, then runs the bzfs test suite inside of that VM.
 - [bzfs] Add [`lima_testbed.sh`](.github-workflow-scripts/lima_testbed.sh) script that uses this to create/delete a
   local Lima testbed with N source VMs and M destination VMs for testing. Also add example replication jobconfig script
   [`bzfs_job_testbed.py`](bzfs_tests/bzfs_job_testbed.py) for use after running `lima_testbed.sh`.

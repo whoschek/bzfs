@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Integration tests for `test_ubuntu_24_04_lima.sh` using real `limactl` without mocks or stubs.
+"""Integration tests for `lima_ubuntu_24_04.sh` using real `limactl` without mocks or stubs.
 
 The test exercises scenarios with zero, one, and two test VMs. Assumes a local Lima installation and explicit opt-in via
 environment variable flag.
@@ -46,7 +46,7 @@ from typing import (
 def suite() -> unittest.TestSuite:
     """Returns the test suite for this module."""
     test_cases = [
-        TestUbuntuLimaScript,
+        TestLimaUbuntuScript,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -70,12 +70,12 @@ class ScriptRunResult:
     os.getenv("bzfs_test_enable_lima_tests", "false") != "true", "Requires bzfs_test_enable_lima_tests=true (opt-in)"
 )
 @final
-class TestUbuntuLimaScript(unittest.TestCase):
+class TestLimaUbuntuScript(unittest.TestCase):
 
     def setUp(self) -> None:
         """Resolves repository paths used by the Lima workflow script tests."""
         self.repo_root: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-        self.script_path: str = os.path.join(self.repo_root, ".github-workflow-scripts", "test_ubuntu_24_04_lima.sh")
+        self.script_path: str = os.path.join(self.repo_root, ".github-workflow-scripts", "lima_ubuntu_24_04.sh")
 
     def test_a_zero_one_two_existing_test_vms(self) -> None:
         """Validates script behavior across 0/1/2 existing test VM scenarios."""
