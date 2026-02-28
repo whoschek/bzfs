@@ -343,7 +343,7 @@ disable_error_code = [  # toggles to exclude overly strict `mypy` checks in deve
 python-version = "3.9"
 #untyped-def-behavior = "check-and-infer-return-type"
 #project-includes = ["**/bzfs_*/**"]
-project-excludes = ["bzfs_tests/bzfs_job_example.py", "**/.venv/**"]
+project-excludes = ["bzfs_testbed/bzfs_job_testbed.py", "**/.venv/**"]
 
 [tool.codespell]  # Auto-fix typos
 skip = "bzfs_tests/*.py,bzfs_tests/itest/*.py,venv*,dist*,*.egg-info*,htmlcov*"

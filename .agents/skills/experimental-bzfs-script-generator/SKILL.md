@@ -10,7 +10,7 @@ description: 'Generate or adapt idiomatic minimal Bash and Python scripts that u
 Generate reviewable snapshot management scripts, not command transcripts. Keep scripts minimal, idiomatic, and explicit
 about safety knobs and assumptions. Enforce safety-first dry-run defaults for mutating flows (`bzfs --dryrun`;
 `bzfs_jobrunner --dryrun`, typically with `--jobrunner-dryrun`) and do not execute non-read-only CLIs. For
-bzfs_jobrunner outputs, fit all idiomatic patterns from bzfs_tests/bzfs_job_example.py (both syntactic and semantic),
+bzfs_jobrunner outputs, fit all idiomatic patterns from bzfs_testbed/bzfs_job_testbed.py (both syntactic and semantic),
 including action/host routing and dict construction/format/passing.
 
 ## Hard Safety Rules
@@ -29,11 +29,11 @@ including action/host routing and dict construction/format/passing.
 08. Keep scope limited to bzfs and bzfs_jobrunner snapshot management workflows; decline general ZFS administration or
     non-bzfs tooling requests.
 09. Do not favor Bash over Python; provide both Bash and Python script outputs unless the user asks for one language.
-10. For `bzfs_jobrunner` scripts, mirror the action set and host routing style from `bzfs_tests/bzfs_job_example.py`
+10. For `bzfs_jobrunner` scripts, mirror the action set and host routing style from `bzfs_testbed/bzfs_job_testbed.py`
     (`--src-host` for source actions, `--dst-host` for destination actions).
-11. For `bzfs_jobrunner` scripts, mirror dict handling from `bzfs_tests/bzfs_job_example.py`: build native dict/list
+11. For `bzfs_jobrunner` scripts, mirror dict handling from `bzfs_testbed/bzfs_job_testbed.py`: build native dict/list
     objects in Python and pass them via `--flag={value}` formatting; in Bash, keep explicit quoted dict literals.
-12. Distill and apply `bzfs_job_example.py` idioms at both syntactic and semantic levels.
+12. Distill and apply `bzfs_job_testbed.py` idioms at both syntactic and semantic levels.
 
 ## Script Generation Workflow
 
@@ -43,7 +43,7 @@ including action/host routing and dict construction/format/passing.
 2. Choose the CLI:
    - Use `bzfs` for ad hoc/manual workflows.
    - Use `bzfs_jobrunner` for periodic or fleet-wide orchestration.
-   - For `bzfs_jobrunner`, model command shape after `bzfs_tests/bzfs_job_example.py` action conventions.
+   - For `bzfs_jobrunner`, model command shape after `bzfs_testbed/bzfs_job_testbed.py` action conventions.
    - If the request is outside bzfs/bzfs_jobrunner snapshot management, state that it is out of scope and ask for a
      bzfs-focused target.
 3. Gather required inputs:
@@ -53,7 +53,7 @@ including action/host routing and dict construction/format/passing.
    - Bash: `#!/usr/bin/env bash` + `set -euo pipefail`.
    - Python: `#!/usr/bin/env python3` + `subprocess.run([...], check=True)`.
    - Build commands as arrays/lists, not unsafe concatenated shell strings.
-   - For `bzfs_jobrunner` dict args, follow `bzfs_job_example.py` style: Python dict/list objects rendered into
+   - For `bzfs_jobrunner` dict args, follow `bzfs_job_testbed.py` style: Python dict/list objects rendered into
      `--src-hosts=...`, `--dst-hosts=...`, `--src-snapshot-plan=...`, etc.
    - Return paired Bash and Python variants by default.
 5. Add operator gates:
@@ -84,5 +84,5 @@ including action/host routing and dict construction/format/passing.
 - Use [references/task_recipes.md](references/task_recipes.md) for canonical task-to-command patterns.
 - Start from [references/script_templates.md](references/script_templates.md) for minimal Bash/Python script skeletons.
 - Check [references/simulation_examples.md](references/simulation_examples.md) for calibrated examples and quality bar.
-- Match `bzfs_jobrunner` structure to [bzfs_tests/bzfs_job_example.py](../../../bzfs_tests/bzfs_job_example.py) when
+- Match `bzfs_jobrunner` structure to [bzfs_testbed/bzfs_job_testbed.py](../../../bzfs_testbed/bzfs_job_testbed.py) when
   generating periodic orchestration scripts.

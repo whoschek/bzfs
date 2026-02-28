@@ -88,15 +88,15 @@ Optional conflict handling flags (keep disabled by default):
 
 ## 8) Periodic orchestration with bzfs_jobrunner
 
-Follow `bzfs_tests/bzfs_job_example.py` conventions: source actions (`create/prune/monitor` on source) use `--src-host`;
+Follow `bzfs_testbed/bzfs_job_testbed.py` conventions: source actions (`create/prune/monitor` on source) use `--src-host`;
 destination actions (`replicate/prune/monitor` on destination) use `--dst-host`. When emitting full fleet orchestration
-commands, pass dict/list values using `--flag={value}` style that matches `bzfs_job_example.py`. Carry over the same
+commands, pass dict/list values using `--flag={value}` style that matches `bzfs_job_testbed.py`. Carry over the same
 semantics as the example (action-to-host scope, plan intent, and retention meaning), not just syntax.
 
 Source-host periodic tasks:
 
 ```bash
-/etc/bzfs/bzfs_job_example.py \
+/bzfs/bzfs_testbed/bzfs_job_testbed.py \
   --src-host="$(hostname)" \
   --create-src-snapshots \
   --prune-src-snapshots \
@@ -108,7 +108,7 @@ Source-host periodic tasks:
 Destination-host periodic tasks:
 
 ```bash
-/etc/bzfs/bzfs_job_example.py \
+/bzfs/bzfs_testbed/bzfs_job_testbed.py \
   --dst-host="$(hostname)" \
   --replicate \
   --prune-dst-snapshots \
@@ -119,7 +119,7 @@ Destination-host periodic tasks:
 Monitoring:
 
 ```bash
-/etc/bzfs/bzfs_job_example.py \
+/bzfs/bzfs_testbed/bzfs_job_testbed.py \
   --src-host="$(hostname)" \
   --monitor-src-snapshots \
   --jobrunner-dryrun \

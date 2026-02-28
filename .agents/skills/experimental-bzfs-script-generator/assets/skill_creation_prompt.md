@@ -9,7 +9,7 @@
 - Do not favor bash over Python - always create scripts, examples, templates, proposals, etc in both programming
   languages unless the User requests otherwise.
 
-- For `bzfs_jobrunner` scripts, analyze and distill all idiomatic patterns in `bzfs_tests/bzfs_job_example.py` (both
+- For `bzfs_jobrunner` scripts, analyze and distill all idiomatic patterns in `bzfs_testbed/bzfs_job_testbed.py` (both
   syntactic and semantic), including how to construct, format and pass dicts, and follow the same idiomatic patterns in
   generated scripts.
 

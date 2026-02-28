@@ -125,7 +125,7 @@ Removed CLI options that were deprecated in version ≤ 1.12.0:
 ## [1.12.0] - September 17, 2025
 
 - [bzfs_jobrunner] Added ability to [bzfs_jobrunner](README_bzfs_jobrunner.md) to replicate across a fleet of N source
-  hosts and M destination hosts, using the same single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script. For
+  hosts and M destination hosts, using the same single shared [jobconfig](bzfs_testbed/bzfs_job_testbed.py) script. For
   example, this simplifies the deployment of an efficient geo-replicated backup service where each of the M destination
   hosts is located in a separate geographic region and pulls replicas from (the same set of) N source hosts. It also
   simplifies low latency replication from a primary to a secondary or to M read replicas, or backup to removable drives,
@@ -206,15 +206,15 @@ Removed CLI options that were deprecated in version ≤ 1.12.0:
 - [bzfs_jobrunner] Added `--monitor-snapshot-plan` CLI option, which alerts the user if the ZFS 'creation' time property
   of the latest or oldest snapshot for any specified snapshot pattern within the selected datasets is too old wrt. the
   specified age limit. The purpose is to check if snapshots are successfully taken on schedule, successfully replicated
-  on schedule, and successfully pruned on schedule. See the [jobconfig](bzfs_tests/bzfs_job_example.py) script for an
+  on schedule, and successfully pruned on schedule. See the [jobconfig](bzfs_testbed/bzfs_job_testbed.py) script for an
   example.
 - [bzfs_jobrunner] Also support replicating snapshots with the same target name to multiple destination hosts. This
   changed the syntax of the `--dst-hosts` and `--retain-dst-targets` parameters to be a dictionary that maps each
   destination hostname to a list of zero or more logical replication target names (the infix portion of a snapshot
-  name). To upgrade, change your [jobconfig](bzfs_tests/bzfs_job_example.py) script from something like
+  name). To upgrade, change your [jobconfig](bzfs_testbed/bzfs_job_testbed.py) script from something like
   `dst_hosts = {"onsite": "nas", "": "nas"}` to `dst_hosts = {"nas": ["", "onsite"]}` and from
   `retain_dst_targets = {"onsite": "nas", "": "nas"}` to `retain_dst_targets = {"nas": ["", "onsite"]}`
-- [bzfs_jobrunner] The [jobconfig](bzfs_tests/bzfs_job_example.py) script has changed to now use the
+- [bzfs_jobrunner] The [jobconfig](bzfs_testbed/bzfs_job_testbed.py) script has changed to now use the
   `--root-dataset-pairs` CLI option, in order to support options of the form
   `extra_args += ["--zfs-send-program-opts=--props --raw --compressed"]`. To upgrade, change your jobconfig script from
   ` ["--"] + root_dataset_pairs` to `["--root-dataset-pairs"] + root_dataset_pairs`.
@@ -235,7 +235,7 @@ This release contains some fixes and a lot of new features, including ...
   pruning.
 - Added the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience wrapper around `bzfs`
   that simplifies periodically creating ZFS snapshots, replicating and pruning, across source host and multiple
-  destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
+  destination hosts, using a single shared [jobconfig](bzfs_testbed/bzfs_job_testbed.py) script.
 - Added `--create-src-snapshots-*` CLI options for efficiently creating periodic (and adhoc) atomic snapshots of
   datasets, including recursive snapshots.
 - Added `--delete-dst-snapshots-except-plan` CLI option to specify retention periods like sanoid, and prune snapshots

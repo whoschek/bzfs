@@ -2,8 +2,8 @@
 
 Use these templates to generate minimal scripts. Keep dry-run enabled unless a human explicitly changes the toggle.
 Default to returning both Bash and Python variants unless the user requests only one language. For `bzfs_jobrunner`
-templates, align action and host-routing with `bzfs_tests/bzfs_job_example.py`. For `bzfs_jobrunner` dict/list options,
-align with `bzfs_job_example.py`: pass values as `--flag={value}`.
+templates, align action and host-routing with `bzfs_testbed/bzfs_job_testbed.py`. For `bzfs_jobrunner` dict/list options,
+align with `bzfs_job_testbed.py`: pass values as `--flag={value}`.
 
 ## Bash Template: One-Off bzfs Task
 
@@ -73,14 +73,14 @@ if __name__ == "__main__":
 #!/usr/bin/env bash
 set -euo pipefail
 
-JOBCONFIG="/etc/bzfs/bzfs_job_example.py"
+JOBCONFIG="/bzfs/bzfs_testbed/bzfs_job_testbed.py"
 HOSTNAME_VALUE="$(hostname)"
 ACTION="${1:-replicate}"  # create-src-snapshots|replicate|prune-dst-snapshots|monitor-dst-snapshots
 DRYRUN="${DRYRUN:-1}"  # keep 1 for safety
 
 cmd=("$JOBCONFIG")
 
-# Match bzfs_job_example.py: source actions run with --src-host; destination actions run with --dst-host.
+# Match bzfs_job_testbed.py: source actions run with --src-host; destination actions run with --dst-host.
 case "$ACTION" in
   create-src-snapshots|prune-src-snapshots|prune-src-bookmarks|monitor-src-snapshots)
     cmd+=(--src-host="$HOSTNAME_VALUE" "--$ACTION")
@@ -121,14 +121,14 @@ import sys
 
 
 def main() -> None:
-    jobconfig = "/etc/bzfs/bzfs_job_example.py"
+    jobconfig = "/bzfs/bzfs_testbed/bzfs_job_testbed.py"
     hostname_value = socket.gethostname()
     action = sys.argv[1] if len(sys.argv) > 1 else "replicate"
     dryrun = os.getenv("DRYRUN", "1") == "1"
 
     cmd: list[str] = [jobconfig]
 
-    # Match bzfs_job_example.py: source actions use --src-host.
+    # Match bzfs_job_testbed.py: source actions use --src-host.
     if action in {
         "create-src-snapshots",
         "prune-src-snapshots",
@@ -136,7 +136,7 @@ def main() -> None:
         "monitor-src-snapshots",
     }:
         cmd += [f"--src-host={hostname_value}", f"--{action}"]
-    # Match bzfs_job_example.py: destination actions use --dst-host.
+    # Match bzfs_job_testbed.py: destination actions use --dst-host.
     elif action in {"replicate", "prune-dst-snapshots", "monitor-dst-snapshots"}:
         cmd += [f"--dst-host={hostname_value}", f"--{action}"]
     else:

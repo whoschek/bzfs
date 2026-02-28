@@ -41,13 +41,13 @@ The `bzfs` project consists of two primary command-line tools:
   data transfer, and snapshot management between two hosts.
 - **`bzfs_jobrunner`:** A high-level orchestrator that invokes `bzfs` as part of scheduled workflows to manage
   replication, backup, pruning and monitoring jobs across a fleet of multiple source and destination hosts. The tool is
-  driven by a simple, version-controllable, fleet-wide job configuration file (e.g., `bzfs_job_example.py`).
+  driven by a simple, version-controllable, fleet-wide job configuration file (e.g., `bzfs_job_testbed.py`).
   Understanding this distinction between `bzfs_jobrunner` and `bzfs` is critical.
 
 ## Repository Layout
 
 - `bzfs_main/` Core implementation including `bzfs.py` and `bzfs_jobrunner.py`.
-- `bzfs_tests/` All unit tests, integration tests, and the example job configuration (`bzfs_job_example.py`).
+- `bzfs_tests/` All unit tests, integration tests, and the example job configuration (`bzfs_job_testbed.py`).
 - `bzfs_docs/` and `bash_completion_d/` Documentation generation utilities used by the `update_readme.sh` script.
 
 ## Learning the Project
@@ -55,7 +55,7 @@ The `bzfs` project consists of two primary command-line tools:
 To understand the system's architecture and features, follow these steps:
 
 - **High-Level Docs:** Read `README.md` and `README_bzfs_jobrunner.md` to understand the purpose, features, and usage.
-- **Job Configuration:** Study `bzfs_tests/bzfs_job_example.py` to understand how `bzfs_jobrunner` is configured.
+- **Job Configuration:** Study `bzfs_testbed/bzfs_job_testbed.py` to understand how `bzfs_jobrunner` is configured.
 - **Code Design:** Read the overview docstrings at the top of `bzfs_main/bzfs.py` and `bzfs_main/bzfs_jobrunner.py` to
   see where key functionalities are implemented.
 

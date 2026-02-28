@@ -143,14 +143,14 @@ if __name__ == "__main__":
 
 ## Scenario 3: Periodic jobrunner replication (state-changing, dry-run default)
 
-This scenario follows `bzfs_tests/bzfs_job_example.py` conventions: destination actions use `--dst-host` (source actions
+This scenario follows `bzfs_testbed/bzfs_job_testbed.py` conventions: destination actions use `--dst-host` (source actions
 would use `--src-host`).
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-JOBCONFIG="/etc/bzfs/bzfs_job_example.py"
+JOBCONFIG="/bzfs/bzfs_testbed/bzfs_job_testbed.py"
 THIS_HOST="$(hostname)"
 DRYRUN="${DRYRUN:-1}"  # keep 1 for safety
 
@@ -179,7 +179,7 @@ import subprocess
 
 
 def main() -> None:
-    jobconfig = "/etc/bzfs/bzfs_job_example.py"
+    jobconfig = "/bzfs/bzfs_testbed/bzfs_job_testbed.py"
     this_host = socket.gethostname()
     dryrun = os.getenv("DRYRUN", "1") == "1"
 
@@ -204,4 +204,4 @@ if __name__ == "__main__":
 3. Read-only tasks do not require `--dryrun`; state-changing tasks do.
 4. Optional read-only preflight `zfs list` checks reduce operator mistakes.
 5. Python command previews should use `shlex.join(cmd)` for correct quoting.
-6. For `bzfs_jobrunner` dict/list args, mirror `bzfs_job_example.py` and pass `--flag={value}`.
+6. For `bzfs_jobrunner` dict/list args, mirror `bzfs_job_testbed.py` and pass `--flag={value}`.

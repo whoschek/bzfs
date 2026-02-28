@@ -21,7 +21,7 @@
 """
 * High-level orchestrator that calls `bzfs` as part of complex, periodic workflows to manage backup, replication, and pruning
   jobs across a fleet of multiple source and destination hosts; driven by a fleet-wide job config file
-  (e.g., `bzfs_job_example.py`).
+  (e.g., `bzfs_job_testbed.py`).
 * Overview of the bzfs_jobrunner.py codebase:
 * The codebase starts with docs, definition of input data and associated argument parsing of CLI options/parameters.
 * Control flow starts in main(), far below ..., which kicks off a "Job".
@@ -132,7 +132,7 @@ def argument_parser() -> argparse.ArgumentParser:
         description=f"""
 This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS snapshot creation, replication,
 pruning, and monitoring, across a fleet of N source hosts and M destination hosts, using a single fleet-wide shared
-[jobconfig](bzfs_tests/bzfs_job_example.py) script.
+[jobconfig](bzfs_testbed/bzfs_job_testbed.py) script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service where each of the M destination
 hosts is located in a separate geographic region and receives replicas from (the same set of) N source hosts. It also
 simplifies low latency replication from a primary to a secondary or to M read replicas, or backup to removable drives, etc.
@@ -166,16 +166,16 @@ lines:
 
 * crontab on source hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)" --create-src-snapshots --prune-src-snapshots --prune-src-bookmarks`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)" --create-src-snapshots --prune-src-snapshots --prune-src-bookmarks`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)" --monitor-src-snapshots`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)" --monitor-src-snapshots`
 
 
 * crontab on destination hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)" --replicate --prune-dst-snapshots`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --dst-host="$(hostname)" --replicate --prune-dst-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)" --monitor-dst-snapshots`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --dst-host="$(hostname)" --monitor-dst-snapshots`
 
 
 ### Applying Actions to a Subset of Hosts
@@ -200,22 +200,22 @@ along these lines:
 
 * crontab on source hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)" --dst-host="foo" --create-src-snapshots`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)" --dst-host="foo" --create-src-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)" --dst-host="foo" --prune-src-snapshots`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)" --dst-host="foo" --prune-src-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)" --dst-host="foo" --prune-src-bookmarks`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)" --dst-host="foo" --prune-src-bookmarks`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)" --dst-host="foo" --monitor-src-snapshots`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)" --dst-host="foo" --monitor-src-snapshots`
 
 
 * crontab on destination hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar" --dst-host="$(hostname)" --replicate`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="bar" --dst-host="$(hostname)" --replicate`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar" --dst-host="$(hostname)" --prune-dst-snapshots`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="bar" --dst-host="$(hostname)" --prune-dst-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar" --dst-host="$(hostname)" --monitor-dst-snapshots`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="bar" --dst-host="$(hostname)" --monitor-dst-snapshots`
 
 The daemon processes work like non-daemon processes except that they loop, handle time events and sleep between events, and
 finally exit after, say, 86400 seconds (whatever you specify via `--daemon-lifetime`). The daemons will subsequently be

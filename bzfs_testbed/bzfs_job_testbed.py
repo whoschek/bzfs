@@ -22,6 +22,11 @@ Run the script like so:
 
 Add this command to your crontab file (or systemd or monit or similar), such that the command runs every minute, or every
 hour, or every day, or similar.
+
+Once this example is working as expected, adapt the script to your own needs:
+- Edit root_dataset_pairs and dst_root_datasets to specify datasets.
+- Replace occurrences of the words "nas", "testsrc01", "testdst01" with the real output of the `hostname` CLI on your
+  machines.
 """
 
 import argparse

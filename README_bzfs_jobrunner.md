@@ -21,11 +21,12 @@
 <!-- BEGIN DESCRIPTION SECTION -->
 This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS
 snapshot creation, replication, pruning, and monitoring, across a fleet of N source hosts and M
-destination hosts, using a single fleet-wide shared [jobconfig](bzfs_tests/bzfs_job_example.py)
-script. For example, this simplifies the deployment of an efficient geo-replicated backup service
-where each of the M destination hosts is located in a separate geographic region and receives
-replicas from (the same set of) N source hosts. It also simplifies low latency replication from a
-primary to a secondary or to M read replicas, or backup to removable drives, etc.
+destination hosts, using a single fleet-wide shared
+[jobconfig](bzfs_testbed/bzfs_job_testbed.py) script. For example, this simplifies the
+deployment of an efficient geo-replicated backup service where each of the M destination hosts is
+located in a separate geographic region and receives replicas from (the same set of) N source
+hosts. It also simplifies low latency replication from a primary to a secondary or to M read
+replicas, or backup to removable drives, etc.
 
 This program can be used to efficiently replicate ...
 
@@ -58,18 +59,18 @@ systemd timers or Monit entries or similar), along these lines:
 
 * crontab on source hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)"
 --create-src-snapshots --prune-src-snapshots --prune-src-bookmarks`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)"
 --monitor-src-snapshots`
 
 * crontab on destination hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)" --replicate
---prune-dst-snapshots`
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --dst-host="$(hostname)"
+--replicate --prune-dst-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)"
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --dst-host="$(hostname)"
 --monitor-dst-snapshots`
 
 ### Applying Actions to a Subset of Hosts
@@ -97,27 +98,27 @@ from a single source host to a single destination host, along these lines:
 
 * crontab on source hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)"
 --dst-host="foo" --create-src-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)"
 --dst-host="foo" --prune-src-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)"
 --dst-host="foo" --prune-src-bookmarks`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="$(hostname)"
 --dst-host="foo" --monitor-src-snapshots`
 
 * crontab on destination hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar"
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="bar"
 --dst-host="$(hostname)" --replicate`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar"
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="bar"
 --dst-host="$(hostname)" --prune-dst-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar"
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="bar"
 --dst-host="$(hostname)" --monitor-dst-snapshots`
 
 The daemon processes work like non-daemon processes except that they loop, handle time events and
