@@ -54,7 +54,7 @@ create_vm_group() {
             bash -s <<'EOF'
 set -eo pipefail
 if ! zpool list -H "$pool" >/dev/null 2>&1; then
-    dd if=/dev/zero of=~/test_pool_"$pool" bs=1M count="$zpool_capacity_mb" status=none  # create empty test file
+    dd if=/dev/zero of=~/test_pool_"$pool" bs=1M count="$zpool_capacity_mb" status=progress  # create empty test file
     sudo zpool create "$pool" ~/test_pool_"$pool"
 fi
 if ! sudo zfs list -H "$pool/foo/bar" >/dev/null 2>&1; then
