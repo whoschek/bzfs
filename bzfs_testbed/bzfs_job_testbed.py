@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Example replication jobconfig script for use after running .github-workflow-scripts/lima_testbed.sh.
+"""Example replication jobconfig script for use after running bzfs_testbed/lima_testbed.sh.
 Quickstart: Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH, e.g. export PATH=$PATH:/bzfs/bzfs_main
 Run the script like so:
 
-/bzfs/bzfs_tests/bzfs_job_testbed.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots --monitor-src-snapshots --monitor-dst-snapshots --verbose
+/bzfs/bzfs_testbed/bzfs_job_testbed.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots --monitor-src-snapshots --monitor-dst-snapshots --verbose
 
 Add this command to your crontab file (or systemd or monit or similar), such that the command runs every minute, or every
 hour, or every day, or similar.
