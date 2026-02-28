@@ -79,7 +79,7 @@ mkdir -p "$HOME/.ssh"
 chmod 700 "$HOME/.ssh"
 touch "$HOME/.ssh/config"
 chmod 600 "$HOME/.ssh/config"
-sync_config_path="$HOME/.ssh/config.bzfs-lima-mesh"
+mesh_config_path="$HOME/.ssh/config.bzfs-lima-mesh"
 include_line="Include ~/.ssh/config.bzfs-lima-mesh"
 sed -i '\|^Include ~/.ssh/config.bzfs-lima-mesh$|d' "$HOME/.ssh/config"  # remove existing Include line before reinserting
 if [[ ! -s "$HOME/.ssh/config" ]]; then
@@ -87,14 +87,14 @@ if [[ ! -s "$HOME/.ssh/config" ]]; then
 else
     sed -i "1i$include_line" "$HOME/.ssh/config"  # prepend Include line to ensure global scope (a no-op on empty file)
 fi
-rm -f "$sync_config_path"
-touch "$sync_config_path"
-chmod 600 "$sync_config_path"
+rm -f "$mesh_config_path"
+touch "$mesh_config_path"
+chmod 600 "$mesh_config_path"
 while [[ "$#" -gt 0 ]]; do
     target_vm_name="$1"
     target_hostname="$2"
     shift 2
-    cat >> "$sync_config_path" <<CONFIG_EOF
+    cat >> "$mesh_config_path" <<CONFIG_EOF
 Host $target_vm_name
     HostName $target_hostname
     StrictHostKeyChecking no      # ok for ssh client on test VM A to connect to test VM B
