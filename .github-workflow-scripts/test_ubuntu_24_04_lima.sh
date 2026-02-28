@@ -120,7 +120,7 @@ zfs --version
 
 # Run common preparation steps
 sudo apt-get -y install python3 zstd mbuffer pv rsync ripgrep python3-venv
-# sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq net-tools tree
+# sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux net-tools traceroute sysstat iperf3 iotop iftop
 
 mkdir -p "$HOME/.ssh"
 if [[ ! -f ~/.bzfs_keys_done ]]; then

@@ -20,8 +20,9 @@ set -eo pipefail
 LIMA_HOSTNAME_PREFIX="${LIMA_HOSTNAME_PREFIX:-test}"
 export LIMA_MESH_VMS="^${LIMA_HOSTNAME_PREFIX}.*"
 export LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-true}"
-NUM_SRC="${NUM_SRC:-1}"
-NUM_DST="${NUM_DST:-1}"
+NUM_SRC_VMS="${NUM_SRC_VMS:-1}"
+NUM_DST_VMS="${NUM_DST_VMS:-1}"
+ZPOOL_CAPACITY_MB="${ZPOOL_CAPACITY_MB:-1024}"  # 1GB by default
 mydir="$(dirname "$(realpath "$0")")"
 
 usage() {
@@ -30,7 +31,7 @@ usage() {
 Usage: ${prog_name} --create|--delete
 
 Modes:
-  --create  Create/start source and destination VMs as configured by NUM_SRC/NUM_DST.
+  --create  Create/start source and destination VMs as configured by NUM_SRC_VMS/NUM_DST_VMS.
   --delete  Stop and delete all Lima VMs whose name starts with LIMA_HOSTNAME_PREFIX.
 EOF
 }
@@ -47,10 +48,11 @@ create_vm_group() {
         "$mydir/test_ubuntu_24_04_lima.sh"
         limactl shell --tty=false --workdir=/ "$LIMA_VM_NAME" -- env \
             pool="$group" \
+            zpool_capacity_mb="$ZPOOL_CAPACITY_MB" \
             bash -s <<'EOF'
 set -eo pipefail
 if ! zpool list -H "$pool" >/dev/null 2>&1; then
-    dd if=/dev/zero of=~/test_pool_"$pool" bs=1M count=1000 status=none  # create empty 1GB test file
+    dd if=/dev/zero of=~/test_pool_"$pool" bs=1M count="$zpool_capacity_mb" status=none  # create empty test file
     sudo zpool create "$pool" ~/test_pool_"$pool"
 fi
 if ! sudo zfs list -H "$pool/foo/bar" >/dev/null 2>&1; then
@@ -85,13 +87,15 @@ fi
 
 case "$1" in
     --create)
-        echo "Creating Lima testbed with $NUM_SRC source VMs and $NUM_DST destination VMs ..."
-        create_vm_group "src" "$NUM_SRC"
-        create_vm_group "dst" "$NUM_DST"
+        echo "Creating Lima testbed with $NUM_SRC_VMS source VMs and $NUM_DST_VMS destination VMs ..."
+        create_vm_group "src" "$NUM_SRC_VMS"
+        create_vm_group "dst" "$NUM_DST_VMS"
+        success_msg="Success! Recommended next manual step is login: limactl shell --workdir=/bzfs ${LIMA_HOSTNAME_PREFIX}dst01"
         ;;
     --delete)
         echo "Deleting Lima testbed with hostname prefix '$LIMA_HOSTNAME_PREFIX' ..."
         delete_matching_vms
+        success_msg="Success!"
         ;;
     -h|--help)
         usage
@@ -106,4 +110,4 @@ esac
 
 limactl list --tty=false
 echo
-echo "Success! Recommended next manual step is login: limactl shell --workdir=/bzfs ${LIMA_HOSTNAME_PREFIX}dst01"
+echo "$success_msg"
