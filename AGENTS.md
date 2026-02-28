@@ -178,12 +178,12 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
 3. **Restate and Plan (Use TDD):** Clearly restate the task's purpose, assumptions, constraints, and explicit acceptance
    criteria. Define a test plan (without writing code in this phase).
 
-4. **Split complex tasks into effective subtasks:** Before starting to implement code, estimate the size of the effort
-   including the time you'll need to get the task done, to avoid biting off too much in any given iteration. If the task
-   is complex, break it into smaller subtasks with bounded scope. Choose the scope of the first subtask such that it is
-   challenging but feasible in ~5-10 minutes. Defer the remaining tasks to the next iteration by outputting them into
-   the backlog for Step 8 ("Iterate"). Track the backlog and the chosen (first) subtask (e.g., via `update_plan` if
-   available).
+4. **Decompose complex tasks into effective subtasks:** Before starting to implement code, estimate the size of the
+   effort including the time you'll need to get the task done, to avoid biting off too much in any given iteration. If
+   the task is complex, break it into smaller subtasks with bounded scope. Choose the scope of the first subtask such
+   that it is challenging but feasible in ~5-10 minutes. Defer the remaining tasks to the next iteration by outputting
+   them into the backlog for Step 8 ("Iterate"). Track the backlog and the chosen (first) subtask (e.g., via
+   `update_plan` if available).
 
 5. **Write Tests First:** Using **TDD**, translate the chosen subtask's test specs into test code. Then run to see red
    (tests must initially fail as expected) using the [Change Validation Workflow](#change-validation-workflow) with
