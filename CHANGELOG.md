@@ -11,8 +11,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Add [`lima_ubuntu_24_04.sh`](bzfs_testbed/lima_ubuntu_24_04.sh) script that uses Lima to locally create a guest
   Ubuntu VM, then runs the bzfs test suite inside of that VM.
 - [bzfs] Add [`lima_testbed.sh`](bzfs_testbed/lima_testbed.sh) script that uses this to create/delete a local Lima
-  testbed with N source VMs and M destination VMs for testing. Also add example replication jobconfig script
-  [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py) for use after running `lima_testbed.sh`.
+  testbed with N source VMs and M destination VMs for testing, with VM-to-VM SSH networking enabled out of the box. All
+  default settings work out of the box. Also add example replication jobconfig script
+  [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py) for use after running `lima_testbed.sh`, which also works
+  out of the box.
 - [bzfs] Also run nightly tests on AlmaLinux-10 with zfs-2.4 and `hpnssh`.
 
 ## [1.18.0] - February 14, 2026

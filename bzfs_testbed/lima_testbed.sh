@@ -14,8 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Creates/deletes a local Lima testbed with N source VMs and M destination VMs for bzfs testing.
-# After running this script, consider running the example bzfs_testbed/bzfs_job_testbed.py script to replicate across the VMs.
+# Creates/deletes a local Lima testbed with N source VMs and M destination VMs for bzfs testing, with VM-to-VM SSH networking
+# enabled out of the box. All default settings work out of the box.
+# After running this script, consider running the example bzfs_testbed/bzfs_job_testbed.py script to replicate across the VMs,
+# which also works out of the box.
 set -eo pipefail
 TESTBED_HOSTNAME_PREFIX="${TESTBED_HOSTNAME_PREFIX:-test}"
 export LIMA_MESH_VMS="^${TESTBED_HOSTNAME_PREFIX}.*"

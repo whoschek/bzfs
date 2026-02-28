@@ -21,7 +21,8 @@ Linux, this script uses Lima to locally create a guest Ubuntu server VM, then ru
 VM.
 
 Also consider running the [`lima_testbed.sh`](lima_testbed.sh) script that uses this to create/delete a local Lima
-testbed with N source VMs and M destination VMs for testing.
+testbed with N source VMs and M destination VMs for testing, with VM-to-VM SSH networking enabled out of the box. All
+default settings work out of the box.
 
 Then consider running the example replication jobconfig script [`bzfs_job_testbed.py`](bzfs_job_testbed.py) on the
-testbed.
+testbed, which also works out of the box.

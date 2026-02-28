@@ -524,13 +524,16 @@ It also generates code coverage reports which are published [here](https://whosc
 
 # Testing Locally
 
-For reproducible local testing on Ubuntu, consider using
-[`lima_ubuntu_24_04.sh`](bzfs_testbed/lima_ubuntu_24_04.sh). On macOS or Linux, this script uses
-Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of that VM.
+For reproducible local testing on Ubuntu, consider using [`lima_ubuntu_24_04.sh`](bzfs_testbed/lima_ubuntu_24_04.sh).
+On macOS or Linux, this script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite
+inside of that VM.
 
-Also consider running the [`lima_testbed.sh`](bzfs_testbed/lima_testbed.sh) script that uses this to create/delete a local Lima testbed with N source VMs and M destination VMs for testing.
+Also consider running the [`lima_testbed.sh`](bzfs_testbed/lima_testbed.sh) script that uses this to create/delete a
+local Lima testbed with N source VMs and M destination VMs for testing, with VM-to-VM SSH networking enabled out of the
+box. All default settings work out of the box.
 
-Then consider running the example replication jobconfig script [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py) on the testbed.
+Then consider running the example replication jobconfig script [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py)
+on the testbed, which also works out of the box.
 
 ```bash
 # Check prerequisites
