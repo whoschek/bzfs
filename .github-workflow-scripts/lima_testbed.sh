@@ -17,12 +17,12 @@
 # Creates/deletes a local Lima testbed with N source VMs and M destination VMs for bzfs testing.
 # After running this script, consider running the example bzfs_tests/bzfs_job_testbed.py script to replicate across the VMs.
 set -eo pipefail
-LIMA_HOSTNAME_PREFIX="${LIMA_HOSTNAME_PREFIX:-test}"
-export LIMA_MESH_VMS="^${LIMA_HOSTNAME_PREFIX}.*"
+TESTBED_HOSTNAME_PREFIX="${TESTBED_HOSTNAME_PREFIX:-test}"
+export LIMA_MESH_VMS="^${TESTBED_HOSTNAME_PREFIX}.*"
 export LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-true}"
-NUM_SRC_VMS="${NUM_SRC_VMS:-1}"
-NUM_DST_VMS="${NUM_DST_VMS:-1}"
-ZPOOL_CAPACITY_MB="${ZPOOL_CAPACITY_MB:-1024}"  # 1GB by default
+TESTBED_NUM_SRC_VMS="${TESTBED_NUM_SRC_VMS:-1}"
+TESTBED_NUM_DST_VMS="${TESTBED_NUM_DST_VMS:-1}"
+TESTBED_ZPOOL_CAPACITY_MB="${TESTBED_ZPOOL_CAPACITY_MB:-1024}"  # 1GB by default
 mydir="$(dirname "$(realpath "$0")")"
 
 usage() {
@@ -31,8 +31,8 @@ usage() {
 Usage: ${prog_name} --create|--delete
 
 Modes:
-  --create  Create/start source and destination VMs as configured by NUM_SRC_VMS/NUM_DST_VMS.
-  --delete  Stop and delete all Lima VMs whose name starts with LIMA_HOSTNAME_PREFIX.
+  --create  Create/start source and destination VMs as configured by TESTBED_NUM_SRC_VMS/TESTBED_NUM_DST_VMS.
+  --delete  Stop and delete all Lima VMs whose name starts with TESTBED_HOSTNAME_PREFIX.
 EOF
 }
 
@@ -43,12 +43,12 @@ create_vm_group() {
     local padded_i
     for ((i = 1; i <= count; i++)); do
         printf -v padded_i "%02d" "$i"
-        export LIMA_VM_NAME="${LIMA_HOSTNAME_PREFIX}${group}${padded_i}"
+        export LIMA_VM_NAME="${TESTBED_HOSTNAME_PREFIX}${group}${padded_i}"
         export LIMA_SSH_PORT=0
         "$mydir/test_ubuntu_24_04_lima.sh"
         limactl shell --tty=false --workdir=/ "$LIMA_VM_NAME" -- env \
             pool="$group" \
-            zpool_capacity_mb="$ZPOOL_CAPACITY_MB" \
+            zpool_capacity_mb="$TESTBED_ZPOOL_CAPACITY_MB" \
             bash -s <<'EOF'
 set -eo pipefail
 if ! zpool list -H "$pool" >/dev/null 2>&1; then
@@ -69,7 +69,7 @@ delete_matching_vms() {
     lima_vm_names="$(limactl list --tty=false --format='{{.Name}}')"
     while IFS= read -r vm; do
         matching_vm_names+=("$vm")
-    done < <(grep -E -- "^${LIMA_HOSTNAME_PREFIX}.*" <<<"$lima_vm_names" || [[ "$?" -eq 1 ]])  # 1 means "no match"
+    done < <(grep -E -- "^${TESTBED_HOSTNAME_PREFIX}.*" <<<"$lima_vm_names" || [[ "$?" -eq 1 ]])  # 1 means "no match"
     for vm in "${matching_vm_names[@]}"; do
         echo "Stopping Lima VM: $vm"
         limactl stop --tty=false --force "$vm" || true
@@ -87,13 +87,13 @@ fi
 
 case "$1" in
     --create)
-        echo "Creating Lima testbed with $NUM_SRC_VMS source VMs and $NUM_DST_VMS destination VMs ..."
-        create_vm_group "src" "$NUM_SRC_VMS"
-        create_vm_group "dst" "$NUM_DST_VMS"
-        success_msg="Success! Recommended next manual step is login: limactl shell --workdir=/bzfs ${LIMA_HOSTNAME_PREFIX}dst01"
+        echo "Creating Lima testbed with $TESTBED_NUM_SRC_VMS source VMs and $TESTBED_NUM_DST_VMS destination VMs ..."
+        create_vm_group "src" "$TESTBED_NUM_SRC_VMS"
+        create_vm_group "dst" "$TESTBED_NUM_DST_VMS"
+        success_msg="Success! Recommended next manual step is login: limactl shell --workdir=/bzfs ${TESTBED_HOSTNAME_PREFIX}dst01"
         ;;
     --delete)
-        echo "Deleting Lima testbed with hostname prefix '$LIMA_HOSTNAME_PREFIX' ..."
+        echo "Deleting Lima testbed with hostname prefix '$TESTBED_HOSTNAME_PREFIX' ..."
         delete_matching_vms
         success_msg="Success!"
         ;;
