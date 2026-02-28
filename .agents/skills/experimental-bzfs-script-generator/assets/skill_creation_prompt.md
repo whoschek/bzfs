@@ -1,5 +1,5 @@
 - Analyze the bzfs repo and create an extremely high quality skill in .agents/skills/experimental-bzfs-script-generator
-  for generating (or adapting) idiomatic simple minimal bash or Python scripts that use the `bzfs` and `bzfs_jobrunner`
+  for generating (or changing) idiomatic simple minimal bash or Python scripts that use the `bzfs` and `bzfs_jobrunner`
   CLIs to safely perform ZFS snapshot management tasks for snapshot creation, replication/backup, restore, snapshot
   pruning, snapshot monitoring, snapshot list comparison, both adhoc/manual and periodic/automatic. The generated
   scripts are intended for use inside of a sandboxed test VM.
