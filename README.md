@@ -535,8 +535,8 @@ box. All default settings work out of the box.
 Then consider running the example replication jobconfig script [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py)
 on the testbed, which also works out of the box.
 
-Or instead, simply ask Codex or Claude something like "Run the bzfs_testbed/bzfs_job_testbed.py example replication
-script on a testbed" - it will figure out the rest, and do it.
+Or instead, simply tell Codex, Claude, or any comparable agent something like "Run the bzfs_job_testbed.py example
+replication script on a testbed." It will figure out the rest and do it.
 
 ```bash
 # Check prerequisites
