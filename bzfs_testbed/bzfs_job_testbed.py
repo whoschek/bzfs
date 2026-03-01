@@ -385,6 +385,7 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 
 
 cmd = ["bzfs_jobrunner"]
+# cmd = ["uv", "run", "--no-project", "bzfs_jobrunner"]  # alternatively launch python via `uv`
 cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-hosts={src_hosts}"]
 cmd += [f"--dst-hosts={dst_hosts}"]
