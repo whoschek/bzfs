@@ -15,7 +15,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   default settings work out of the box. Also add example replication jobconfig script
   [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py) for use after running `lima_testbed.sh`, which also works
   out of the box. With this in place, users can now simply tell Codex, Claude, or any comparable agent something like
-  "Run the bzfs_job_testbed.py example replication script on a testbed." It will figure out the rest and do it.
+  "Run the bzfs_job_testbed.py example replication script on the testbed." It will figure out the rest and do it.
 - [bzfs] Also run nightly tests on AlmaLinux-10 with zfs-2.4 and `hpnssh`.
 
 ## [1.18.0] - February 14, 2026

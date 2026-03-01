@@ -29,6 +29,7 @@
 - [Installation](#Installation)
 - [Design Aspects](#Design-Aspects)
 - [Continuous Integration Testing](#Continuous-Integration-Testing)
+- [End-to-End Testing on the Testbed](#End-to-End-Testing-on-the-Testbed)
 - [Testing Locally](#Testing-Locally)
 - [Testing on GitHub Runners](#Testing-on-GitHub-Runners)
 - [Man Page](#Man-Page)
@@ -522,7 +523,7 @@ The script also demonstrates functioning installation steps on Ubuntu and FreeBS
 It also generates code coverage reports which are published [here](https://whoschek.github.io/bzfs/coverage).
 
 
-# Testing Locally
+# End-to-End Testing on the Testbed
 
 For reproducible local testing on Ubuntu, consider using [`lima_ubuntu_24_04.sh`](bzfs_testbed/lima_ubuntu_24_04.sh).
 On macOS or Linux, this script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite
@@ -536,7 +537,10 @@ Then consider running the example replication jobconfig script [`bzfs_job_testbe
 on the testbed, which also works out of the box.
 
 Or instead, simply tell Codex, Claude, or any comparable agent something like "Run the bzfs_job_testbed.py example
-replication script on a testbed." It will figure out the rest and do it.
+replication script on the testbed." It will figure out the rest and do it.
+
+
+# Testing Locally
 
 ```bash
 # Check prerequisites

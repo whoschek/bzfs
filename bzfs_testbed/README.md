@@ -14,7 +14,7 @@
  specific language governing permissions and limitations
  under the License.-->
 
-# Testing on the Testbed
+# End-to-End Testing on the Testbed
 
 For reproducible local testing on Ubuntu, consider using [`lima_ubuntu_24_04.sh`](lima_ubuntu_24_04.sh). On macOS or
 Linux, this script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of that
@@ -28,4 +28,4 @@ Then consider running the example replication jobconfig script [`bzfs_job_testbe
 testbed, which also works out of the box.
 
 Or instead, simply tell Codex, Claude, or any comparable agent something like "Run the bzfs_job_testbed.py example
-replication script on a testbed." It will figure out the rest and do it.
+replication script on the testbed." It will figure out the rest and do it.
