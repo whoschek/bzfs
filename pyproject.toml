@@ -67,11 +67,11 @@ dev = [  # for development only
   "shellcheck-py==0.11.0.1",        # see https://github.com/shellcheck-py/shellcheck-py
   # "ast-grep-cli==0.39.9",         # see https://github.com/ast-grep/ast-grep
 ]
-# Example that installs the optional python development dependencies (see above) into a venv:
+# Example that installs the optional python development dependencies (see above) into a virtual environment:
 # cd ~/devel/bzfs
-# rm -rf venv
-# python3 -m venv venv                      # Create a Python virtual environment
-# source venv/bin/activate                  # Activate the venv
+# rm -rf .venv
+# python3 -m venv .venv                     # Create a Python virtual environment
+# source .venv/bin/activate                 # Activate the virtual environment
 # pip install -e '.[dev]'                   # Install all development dependencies
 # pre-commit install --install-hooks        # Set up linters/formatters to run on every commit
 # pre-commit run --all-files                # Manually run linters/formatters
@@ -346,7 +346,7 @@ python-version = "3.9"
 project-excludes = ["bzfs_testbed/bzfs_job_testbed.py", "**/.venv/**"]
 
 [tool.codespell]  # Auto-fix typos
-skip = "bzfs_tests/*.py,bzfs_tests/itest/*.py,venv*,dist*,*.egg-info*,htmlcov*"
+skip = "bzfs_tests/*.py,bzfs_tests/itest/*.py,.venv*,dist*,*.egg-info*,htmlcov*"
 write-changes = true                      # let pre-commit make changes to files instead of printing diffs
 interactive = 0                           # no interactivity on making changes to files
 ignore-words-list = [                     # project-specific words that should not be treated as typos

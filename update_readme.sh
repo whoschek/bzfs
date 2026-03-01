@@ -3,11 +3,11 @@
 set -e
 cd "$(dirname "$(realpath "$0")")"
 
-# bzfs_main.* must be part of a venv for `argparse-manpage` to work correctly
-tmp_venv=venv-argparse-manpage
-if [ -d venv ]; then
+# bzfs_main.* must be part of a virtual environment for `argparse-manpage` to work correctly
+tmp_venv=.venv-argparse-manpage
+if [ -d .venv ]; then
     # shellcheck disable=SC1091
-    . venv/bin/activate
+    . .venv/bin/activate
 else
     rm -rf $tmp_venv
     python3 -m venv $tmp_venv

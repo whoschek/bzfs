@@ -86,7 +86,7 @@ if [[ "$(limactl list --tty=false --format='{{.Status}}' "$LIMA_VM_NAME")" != "R
     limactl start --tty=false "$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-2m}" --progress="${LIMA_START_PROGRESS:-false}"
 fi
 LIMA_SSH_PORT="$(limactl list --tty=false --format="{{.SSHLocalPort}}" "$LIMA_VM_NAME")"
-mkdir -p "$LIMA_HOST_WORKDIR/venv"  # makes `mount` later succeed in guest VM even in read-only mode
+mkdir -p "$LIMA_HOST_WORKDIR/.venv"  # makes `mount` later succeed in guest VM even in read-only mode
 
 # Prepare VM
 limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
@@ -155,8 +155,8 @@ setup_bind_mount() {  # also ensures mount persists across reboot and restart of
         sudo mount "$target_dir"
     fi
 }
-# Enable guest VM to have its own venv and git hooks
-setup_bind_mount "$HOME/.bzfs-lima/venv" "$(pwd)/venv"
+# Enable guest VM to have its own virtual environment and git hooks
+setup_bind_mount "$HOME/.bzfs-lima/.venv" "$(pwd)/.venv"
 setup_bind_mount "$HOME/.bzfs-lima/git-hooks" "$(pwd)/.git/hooks"
 
 # Display ZFS version and Python version

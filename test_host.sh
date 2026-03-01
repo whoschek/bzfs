@@ -39,7 +39,7 @@ case "$bzfs_test_no_run_quietly" in -*|*[![:alnum:]]* ) \
     echo "error: invalid bzfs_test_no_run_quietly: $bzfs_test_no_run_quietly" >&2; exit 1;; esac
 
 flags="-oServerAliveInterval=0 -x -T"
-rsync -a --delete --exclude=venv --exclude=.git/hooks --compress-choice=zstd --compress-level=1 -e \
+rsync -a --delete --exclude=.venv --exclude=.git/hooks --compress-choice=zstd --compress-level=1 -e \
     "ssh -i $bzfs_test_remote_private_key -p $bzfs_test_ssh_port $flags" \
     ./ \
     "$bzfs_test_remote_userhost:$bzfs_test_remote_path"

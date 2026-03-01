@@ -1,5 +1,5 @@
 2026-01-31 22:08:10 [I] Log file is: /home/backup/bzfs-logs/2026-01-31/zrun_2026-01-31_22:08:10-ajtqp65j.log
-2026-01-31 22:08:10 [I] CLI arguments:                /home/backup/devel/bzfs/venv/bin/bzfs inta/pln/foo bak:inta/pln/foo --skip-replication --recursive --compare-snapshot-lists [uid: 1000, euid: 1000]
+2026-01-31 22:08:10 [I] CLI arguments:                /home/backup/devel/bzfs/.venv/bin/bzfs inta/pln/foo bak:inta/pln/foo --skip-replication --recursive --compare-snapshot-lists [uid: 1000, euid: 1000]
 2026-01-31 22:08:10 [I] Listing dst datasets:         inta/pln/foo -r --> bak:inta/pln/foo ...
 2026-01-31 22:08:10 [I] --compare-snapshot-lists:     inta/pln/foo -r --> bak:inta/pln/foo ...
 2026-01-31 22:08:10 [I] Comparing ~ of inta/pln/foo vs. bak:inta/pln/foo

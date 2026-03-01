@@ -67,7 +67,7 @@ repos:
     rev: v1.7.11
     hooks:
       - id: actionlint                  # Validate semantics (and some syntax) of GitHub Workflow YAML files
-        args: [--shellcheck=venv/bin/shellcheck]
+        args: [--shellcheck=.venv/bin/shellcheck]
   # - repo: https://github.com/woodruffw/zizmor-pre-commit  # also see https://github.com/zizmorcore/zizmor
   #   rev: v1.22.0
   #   hooks:

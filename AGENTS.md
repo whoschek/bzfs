@@ -85,11 +85,11 @@ To understand the system's architecture and features, follow these steps:
 
 # How to Set up the Environment
 
-- If the `venv` directory does not exist, create it and set it up with all development dependencies as follows:
+- If the `.venv` directory does not exist, create it and set it up with all development dependencies as follows:
 
   ```
-  python3 -m venv venv                      # Create a Python virtual environment
-  source venv/bin/activate                  # Activate the venv
+  python3 -m venv .venv                     # Create a Python virtual environment
+  source .venv/bin/activate                 # Activate the virtual environment
   pip install -e '.[dev]'                   # Install all development dependencies
   pre-commit install --install-hooks        # Set up linters/formatters to run on every commit
   ```
@@ -111,11 +111,11 @@ To understand the system's architecture and features, follow these steps:
 
 To validate your changes, you MUST follow this exact sequence:
 
-1. **Initialize Environment**: If the `venv` directory does not exist, create it and set it up with all development
+1. **Initialize Environment**: If the `.venv` directory does not exist, create it and set it up with all development
    dependencies as described in [How to Set up the Environment](#how-to-set-up-the-environment).
 
-2. **Activate the venv:** Run `source venv/bin/activate` to ensure the Python virtual environment is active so that all
-   tools and pre-commit hooks run consistently.
+2. **Activate the virtual environment:** Run `source .venv/bin/activate` to ensure the Python virtual environment is
+   active so that all tools and pre-commit hooks run consistently.
 
 3. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite.
 
