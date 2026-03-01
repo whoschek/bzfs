@@ -290,7 +290,7 @@ def _filter_snapshots_by_creation_time_and_rank(
     lo_time, hi_time = include_snapshot_times or (0, UNIX_TIME_INFINITY_SECS)
     assert isinstance(lo_time, int)
     assert isinstance(hi_time, int)
-    n = sum(1 for snapshot in snapshots if "@" in snapshot)
+    n: int = sum(1 for snapshot in snapshots if "@" in snapshot)
     for rank_range in include_snapshot_ranks:
         lo_rank, hi_rank = rank_range
         lo: int = get_idx(lo_rank, n)
