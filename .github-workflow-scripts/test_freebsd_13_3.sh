@@ -46,8 +46,10 @@ getent passwd $my_user | cut -d: -f7
 export SHELL=/bin/sh
 
 echo "Using bzfs_test_mode=$bzfs_test_mode"
-echo "Now running tests as root user"; ./test.sh
-echo "Now running coverage"; ./coverage.sh
+echo "Now running tests as root user"
+./test.sh
+echo "Now running coverage"
+./coverage.sh
 
 echo "Now running tests as non-root user:"
 tuser="test"

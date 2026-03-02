@@ -29,7 +29,7 @@ mydir="$(dirname "$(realpath "$0")")"
 
 usage() {
     prog_name="$(basename "$0")"
-    cat <<EOF
+    cat << EOF
 Usage: ${prog_name} --create|--delete
 
 Modes:
@@ -51,7 +51,7 @@ create_vm_group() {
         limactl shell --tty=false --workdir=/ "$LIMA_VM_NAME" -- env \
             pool="$group" \
             zpool_capacity_mb="$TESTBED_ZPOOL_CAPACITY_MB" \
-            bash -s <<'EOF'
+            bash -s << 'EOF'
 # prepare VM
 set -eo pipefail
 if ! zpool list -H "$pool" >/dev/null 2>&1; then
@@ -72,7 +72,7 @@ delete_matching_vms() {
     lima_vm_names="$(limactl list --tty=false --format='{{.Name}}')"
     while IFS= read -r vm; do
         matching_vm_names+=("$vm")
-    done < <(grep -E -- "^${TESTBED_HOSTNAME_PREFIX}.*" <<<"$lima_vm_names" || [[ "$?" -eq 1 ]])  # 1 means "no match"
+    done < <(grep -E -- "^${TESTBED_HOSTNAME_PREFIX}.*" <<< "$lima_vm_names" || [[ "$?" -eq 1 ]]) # 1 means "no match"
     for vm in "${matching_vm_names[@]}"; do
         echo "Stopping Lima VM: $vm"
         limactl stop --tty=false --force "$vm" || true
@@ -100,7 +100,7 @@ case "$1" in
         delete_matching_vms
         success_msg="Success!"
         ;;
-    -h|--help)
+    -h | --help)
         usage
         exit 0
         ;;

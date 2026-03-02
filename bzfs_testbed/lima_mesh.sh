@@ -27,11 +27,11 @@ LIMA_WORKDIR="/"
 lima_mesh_vm_names=()
 if [[ "$LIMA_MESH_VMS" != "" ]]; then
     lima_vm_names="$(limactl list --tty=false --format='{{.Name}}')"
-    lima_mesh_matches="$(grep -E -- "$LIMA_MESH_VMS" <<<"$lima_vm_names")" || [[ "$?" -eq 1 ]]  # 1 means "no match"
+    lima_mesh_matches="$(grep -E -- "$LIMA_MESH_VMS" <<< "$lima_vm_names")" || [[ "$?" -eq 1 ]] # 1 means "no match"
     if [[ "$lima_mesh_matches" != "" ]]; then
         while IFS= read -r vm; do
             lima_mesh_vm_names+=("$vm")
-        done <<<"$lima_mesh_matches"
+        done <<< "$lima_mesh_matches"
     fi
 fi
 echo "LIMA_MESH_VMS matches: ${lima_mesh_vm_names[*]}"
@@ -59,7 +59,7 @@ if [[ ${#lima_mesh_vm_names[@]} -gt 1 ]]; then
                 continue
             fi
             source_ssh_alias_args+=("$target_vm_name" "lima-${target_vm_name}.internal")  # lima:user-v2 network enables VM-to-VM connectivity
-            limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$target_vm_name" -- bash -s -- "$source_public_key" <<'EOF'
+            limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$target_vm_name" -- bash -s -- "$source_public_key" << 'EOF'
 set -eo pipefail
 source_public_key="$1"
 mkdir -p "$HOME/.ssh"
@@ -73,7 +73,7 @@ EOF
         done
 
         # make it so that, on each matching VM, `ssh <vm_name>` connects to that other VM, via ~/.ssh/config aliases.
-        limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$source_vm_name" -- bash -s -- "${source_ssh_alias_args[@]}" <<'EOF'
+        limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$source_vm_name" -- bash -s -- "${source_ssh_alias_args[@]}" << 'EOF'
 set -eo pipefail
 mkdir -p "$HOME/.ssh"
 chmod 700 "$HOME/.ssh"

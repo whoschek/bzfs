@@ -42,7 +42,7 @@ LIMA_WORKDIR_WRITABLE="${LIMA_WORKDIR_WRITABLE:-false}"  # false=read-only, true
 LIMA_ZFS_VERSION="${LIMA_ZFS_VERSION:-}"  # can be empty (use the default ZFS version) or "zfs-2.4"
 
 # Install Lima if it isn't already installed
-if ! command -v limactl >/dev/null 2>&1; then
+if ! command -v limactl > /dev/null 2>&1; then
     if [[ "$(uname -s)" == "Darwin" ]]; then
         HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 brew install lima
     else
@@ -59,7 +59,7 @@ fi
 
 # Create VM if it doesn't already exist
 lima_vm_names="$(limactl list --tty=false --format='{{.Name}}')"
-if ! grep -Fqx -- "$LIMA_VM_NAME" <<<"$lima_vm_names"; then
+if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
     limactl create --tty=false \
         --name="$LIMA_VM_NAME" \
         --disk="$LIMA_VM_DISK" \
@@ -93,7 +93,7 @@ limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
     LIMA_VM_NAME="$LIMA_VM_NAME" \
     LIMA_SSH_PORT="$LIMA_SSH_PORT" \
     LIMA_ZFS_VERSION="$LIMA_ZFS_VERSION" \
-    bash -s <<'EOF'
+    bash -s << 'EOF'
 
 set -eo pipefail
 export DEBIAN_FRONTEND=noninteractive

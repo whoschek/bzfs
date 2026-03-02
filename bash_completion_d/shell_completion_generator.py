@@ -72,8 +72,8 @@ for program in programs:
     safe, flag_set, val_map = _harvest(program)
     blocks.append(f"__opts_{safe}='{' '.join(sorted(flag_set))}'")
     if val_map:
-        cases = "\n".join(f"    {flag}) echo {vals} ;;" for flag, vals in sorted(val_map.items()))
-        blocks.append(f'__choices_{safe}() {{\n  case "$1" in\n{cases}\n  esac\n}}')
+        cases = "\n".join(f"        {flag}) echo {vals} ;;" for flag, vals in sorted(val_map.items()))
+        blocks.append(f'__choices_{safe}() {{\n    case "$1" in\n{cases}\n    esac\n}}')
     else:
         blocks.append(f"__choices_{safe}() {{ :; }}")
 
@@ -83,11 +83,11 @@ for program in programs:
     local cur prev lst
     COMPREPLY=()
     cur="${{COMP_WORDS[COMP_CWORD]}}"
-    prev="${{COMP_WORDS[COMP_CWORD-1]}}"
+    prev="${{COMP_WORDS[COMP_CWORD - 1]}}"
     lst=$(__choices_{safe} "$prev")
     [[ -z $lst ]] && lst="$__opts_{safe}"
     # shellcheck disable=SC2207
-    COMPREPLY=( $(compgen -W "$lst" -- "$cur") )
+    COMPREPLY=($( compgen -W "$lst" -- "$cur"))
     return 0
 }}"""
     )

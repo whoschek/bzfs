@@ -37,7 +37,7 @@ if [ "$exitcode" = "0" ]; then
     echo "✓ $subject PASSED"
 else
     echo "✗ $subject FAILED"
-    if [[ ! ( "$bzfs_test_no_run_quietly" != "" && "$bzfs_test_no_run_quietly" != "false" ) ]]; then
+    if [[ ! ("$bzfs_test_no_run_quietly" != "" && "$bzfs_test_no_run_quietly" != "false")   ]]; then
         grep -v ') ... ok$' "$tmpfile" || [ $? -eq 1 ]  # ignore grep exitcode 1 aka "no matches"
     fi
 fi

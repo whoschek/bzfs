@@ -25,18 +25,36 @@ echo "Running tests on $bzfs_test_remote_userhost:$bzfs_test_remote_path ..."
 if [ "$bzfs_test_ssh_port" = "" ]; then
     bzfs_test_ssh_port="22"
 fi
-case "$bzfs_test_remote_userhost" in ""|-*|*[![:alnum:]_.@-]* ) \
-    echo "error: invalid bzfs_test_remote_userhost: $bzfs_test_remote_userhost" >&2; exit 1;; esac
-case "$bzfs_test_remote_path" in ""|-*|/*|*[![:alnum:]/_-]* ) \
-    echo "error: invalid bzfs_test_remote_path: $bzfs_test_remote_path" >&2; exit 1;; esac
-case "$bzfs_test_ssh_port" in ""|*[![:digit:]]* ) \
-    echo "error: invalid bzfs_test_ssh_port: $bzfs_test_ssh_port" >&2; exit 1;; esac
-case "$bzfs_test_remote_private_key" in ""|-*|*[![:alnum:]/_.-]* ) \
-    echo "error: invalid bzfs_test_remote_private_key: $bzfs_test_remote_private_key" >&2; exit 1;; esac
-case "$bzfs_test_mode" in -*|*[![:alnum:]]* ) \
-    echo "error: invalid bzfs_test_mode: $bzfs_test_mode" >&2; exit 1;; esac
-case "$bzfs_test_no_run_quietly" in -*|*[![:alnum:]]* ) \
-    echo "error: invalid bzfs_test_no_run_quietly: $bzfs_test_no_run_quietly" >&2; exit 1;; esac
+case "$bzfs_test_remote_userhost" in "" | -* | *[![:alnum:]_.@-]*)
+    echo "error: invalid bzfs_test_remote_userhost: $bzfs_test_remote_userhost" >&2
+    exit 1
+    ;;
+esac
+case "$bzfs_test_remote_path" in "" | -* | /* | *[![:alnum:]/_-]*)
+    echo "error: invalid bzfs_test_remote_path: $bzfs_test_remote_path" >&2
+    exit 1
+    ;;
+esac
+case "$bzfs_test_ssh_port" in "" | *[![:digit:]]*)
+    echo "error: invalid bzfs_test_ssh_port: $bzfs_test_ssh_port" >&2
+    exit 1
+    ;;
+esac
+case "$bzfs_test_remote_private_key" in "" | -* | *[![:alnum:]/_.-]*)
+    echo "error: invalid bzfs_test_remote_private_key: $bzfs_test_remote_private_key" >&2
+    exit 1
+    ;;
+esac
+case "$bzfs_test_mode" in -* | *[![:alnum:]]*)
+    echo "error: invalid bzfs_test_mode: $bzfs_test_mode" >&2
+    exit 1
+    ;;
+esac
+case "$bzfs_test_no_run_quietly" in -* | *[![:alnum:]]*)
+    echo "error: invalid bzfs_test_no_run_quietly: $bzfs_test_no_run_quietly" >&2
+    exit 1
+    ;;
+esac
 
 flags="-oServerAliveInterval=0 -x -T"
 rsync -a --delete --exclude=.venv --exclude=.git/hooks --compress-choice=zstd --compress-level=1 -e \

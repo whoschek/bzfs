@@ -50,17 +50,17 @@ if [ "$PV_VERSION" != "-" ]; then
 
     sudo locale-gen fr_FR.UTF-8
     locale
-    dd if=/dev/zero bs=1k count=8 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
+    dd if=/dev/zero bs=1k count=8 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force > /dev/null
     export LC_ALL=fr_FR.UTF-8
-    dd if=/dev/zero bs=1k count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
-    dd if=/dev/zero bs=1k count=32 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
+    dd if=/dev/zero bs=1k count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force > /dev/null
+    dd if=/dev/zero bs=1k count=32 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force > /dev/null
     export LC_MESSAGES=fr_FR.UTF-8
-    dd if=/dev/zero bs=1k count=64 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
+    dd if=/dev/zero bs=1k count=64 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force > /dev/null
     export LANG=fr_FR.UTF-8
-    dd if=/dev/zero bs=1k count=128 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
+    dd if=/dev/zero bs=1k count=128 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force > /dev/null
     export LANGUAGE=fr_FR:fr
-    dd if=/dev/zero bs=1k count=256 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
-    dd if=/dev/zero bs=1k count=512 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
+    dd if=/dev/zero bs=1k count=256 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force > /dev/null
+    dd if=/dev/zero bs=1k count=512 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force > /dev/null
 else
     sudo locale-gen fr_FR.UTF-8
     locale

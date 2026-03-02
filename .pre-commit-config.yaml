@@ -52,6 +52,21 @@ repos:
         args: [--fix=lf]                # Replace line endings with linefeed
       - id: trailing-whitespace         # Remove whitespace from the end of lines
       - id: end-of-file-fixer           # Remove whitespace from the end of files and replace end of files with linefeed
+  - repo: local
+    hooks:
+      - id: shfmt                       # Auto-format shell scripts
+        name: shfmt
+        language: golang
+        entry: shfmt
+        types: [shell]
+        args: [                         # See https://github.com/mvdan/sh/blob/v3.12.0/cmd/shfmt/shfmt.1.scd
+          --write,                      # Change files instead of printing to stdout
+          --indent=4,                   # Use 4-space indentation for shell scripts
+          --keep-padding,               # Preserve comment padding
+          --space-redirects,            # Keep space after redirection operators
+          --case-indent,                # Indent switch cases
+        ]
+        additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@v3.12.0]
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:
