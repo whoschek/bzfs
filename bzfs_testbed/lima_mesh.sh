@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Configures a basic mesh network, i.e. mutual SSH trust and hostname aliases for matching Lima VMs.
-# This enables each matching VM to talk via ssh to each other matching VM, by appending the public key of
-# each matching VM to the ~/.ssh/authorized_keys file of each other matching VM.
+# Configures a basic mesh network, i.e. mutual SSH trust and SSH hostname aliases for matching Lima VMs.
+# This enables each matching VM to talk via ssh to each other matching VM, by appending the public key of each matching VM to
+# the ~/.ssh/authorized_keys file of each other matching VM.
 # Matching applies a `grep -E` regex to all known Lima VM names. The default is zero matching VMs.
 # Also makes it so that, on each matching VM, `ssh -p N <vm_name>` connects to that other VM, via ~/.ssh/config aliases.
 set -eo pipefail
@@ -72,7 +72,7 @@ fi
 EOF
         done
 
-        # make it so that, on each matching VM, `ssh -p N <vm_name>` connects to that other VM, via ~/.ssh/config aliases.
+        # make it so that, on each matching VM, `ssh <vm_name>` connects to that other VM, via ~/.ssh/config aliases.
         limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$source_vm_name" -- bash -s -- "${source_ssh_alias_args[@]}" <<'EOF'
 set -eo pipefail
 mkdir -p "$HOME/.ssh"

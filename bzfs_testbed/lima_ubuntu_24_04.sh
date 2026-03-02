@@ -16,7 +16,7 @@
 
 # This script can run on macOS on Apple Silicon, or on Linux on any arch.
 # The script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of that VM.
-# Currently uses ubuntu-24.04, python-3.12, and zfs-2.4 or zfs-2.2 depending on the value of $LIMA_ZFS_VERSION.
+# Currently uses ubuntu-24.04, and zfs-2.4 or zfs-2.2 depending on the value of $LIMA_ZFS_VERSION.
 # Cold start of the guest VM takes ~30 seconds with defaults; warm start takes ~1.5 seconds.
 
 # shellcheck disable=SC2154
@@ -39,7 +39,7 @@ LIMA_HOST_WORKDIR="$(dirname "$(dirname "$(realpath "$0")")")"  # aka git repo r
 LIMA_WORKDIR=/bzfs  # this is also the dir where $LIMA_HOST_WORKDIR is mounted within the guest VM
 LIMA_WORKDIR_WRITABLE="${LIMA_WORKDIR_WRITABLE:-false}"  # false=read-only, true=read-write shared with host
   # 'false' is for running tests only. 'true' enables repo file changes, e.g. for limited sharing with a sandboxed AI agent.
-LIMA_ZFS_VERSION="${LIMA_ZFS_VERSION:-}"  # can be empty or "zfs-2.4"
+LIMA_ZFS_VERSION="${LIMA_ZFS_VERSION:-}"  # can be empty (use the default ZFS version) or "zfs-2.4"
 
 # Install Lima if it isn't already installed
 if ! command -v limactl >/dev/null 2>&1; then
@@ -54,7 +54,7 @@ fi
 # Delete prior state; init VM from scratch
 if [[ "$LIMA_VM_RECREATE" == "true" ]]; then
     limactl stop --tty=false --force "$LIMA_VM_NAME" || true
-    limactl delete --tty=false --force "$LIMA_VM_NAME"  # fails with non-zero exit code if the VM is "protected"
+    limactl delete --tty=false --force "$LIMA_VM_NAME"  # by design fails with non-zero exit code if the VM is "protected"
 fi
 
 # Create VM if it doesn't already exist

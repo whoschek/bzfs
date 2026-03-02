@@ -19,12 +19,12 @@
 # After running this script, consider running the example bzfs_testbed/bzfs_job_testbed.py script to replicate across the VMs,
 # which also works out of the box.
 set -eo pipefail
-TESTBED_HOSTNAME_PREFIX="${TESTBED_HOSTNAME_PREFIX:-test}"
+TESTBED_NUM_SRC_VMS="${TESTBED_NUM_SRC_VMS:-1}"  # number of VMs acting as a replication source
+TESTBED_NUM_DST_VMS="${TESTBED_NUM_DST_VMS:-1}"  # number of VMs acting as a replication destination
+TESTBED_HOSTNAME_PREFIX="${TESTBED_HOSTNAME_PREFIX:-test}"  # VMs are named "${TESTBED_HOSTNAME_PREFIX}${GROUP}${COUNTER}"
+TESTBED_ZPOOL_CAPACITY_MB="${TESTBED_ZPOOL_CAPACITY_MB:-1024}"  # 1GB test pool size by default
 export LIMA_MESH_VMS="^${TESTBED_HOSTNAME_PREFIX}.*"
 export LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-true}"
-TESTBED_NUM_SRC_VMS="${TESTBED_NUM_SRC_VMS:-1}"
-TESTBED_NUM_DST_VMS="${TESTBED_NUM_DST_VMS:-1}"
-TESTBED_ZPOOL_CAPACITY_MB="${TESTBED_ZPOOL_CAPACITY_MB:-1024}"  # 1GB by default
 mydir="$(dirname "$(realpath "$0")")"
 
 usage() {
@@ -40,25 +40,26 @@ EOF
 
 create_vm_group() {
     local group="$1"
-    local count="$2"
+    local num_vms="$2"
     local i
     local padded_i
-    for ((i = 1; i <= count; i++)); do
+    for ((i = 1; i <= num_vms; i++)); do
         printf -v padded_i "%02d" "$i"
         export LIMA_VM_NAME="${TESTBED_HOSTNAME_PREFIX}${group}${padded_i}"
         export LIMA_SSH_PORT=0
-        "$mydir/lima_ubuntu_24_04.sh"
+        "$mydir/lima_ubuntu_24_04.sh"  # uses Lima to create and spin up a local guest VM
         limactl shell --tty=false --workdir=/ "$LIMA_VM_NAME" -- env \
             pool="$group" \
             zpool_capacity_mb="$TESTBED_ZPOOL_CAPACITY_MB" \
             bash -s <<'EOF'
+# prepare VM
 set -eo pipefail
 if ! zpool list -H "$pool" >/dev/null 2>&1; then
     dd if=/dev/zero of=~/test_pool_"$pool" bs=1M count="$zpool_capacity_mb" status=progress  # create empty test file
-    sudo zpool create "$pool" ~/test_pool_"$pool"
+    sudo zpool create "$pool" ~/test_pool_"$pool"  # create empty test pool
 fi
 if ! sudo zfs list -H "$pool/foo/bar" >/dev/null 2>&1; then
-    sudo zfs create -p "$pool/foo/bar"
+    sudo zfs create -p "$pool/foo/bar"  # create example test datasets
 fi
 EOF
     done
@@ -110,6 +111,6 @@ case "$1" in
         ;;
 esac
 
-limactl list --tty=false
+limactl list --tty=false  # list all existing VMs
 echo
 echo "$success_msg"
