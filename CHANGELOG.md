@@ -16,7 +16,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py) for use after running `lima_testbed.sh`, which also works
   out of the box. With this in place, users can now simply tell Codex, Claude, or any comparable agent something like
   "Run the bzfs_job_testbed.py example replication script on the testbed." It will figure out the rest and do it.
-- [bzfs] Also run nightly tests on AlmaLinux-10 with zfs-2.4 and `hpnssh`.
+- [bzfs] Add experimental Agent [skill](.agents/skills/experimental-bzfs-script-generator/SKILL.md) that can generate
+  Bash or Python scripts that use `bzfs` and `bzfs_jobrunner` for custom ZFS replication workflows in a sandboxed test
+  VM.
+- [bzfs] Also run nightly CI tests on zfs-2.4.1 and zfs-2.3.6.
+- [bzfs] Also run nightly CI tests on AlmaLinux-10 with zfs-2.4.1 and `hpnssh`.
 
 ## [1.18.0] - February 14, 2026
 
