@@ -33,7 +33,7 @@ LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0 picks random unused port;
                                      # host box: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM
                                      # guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM loopback
 LIMA_COPY_BASHRC="${LIMA_COPY_BASHRC:-false}"  # opt-in: copy host ~/.bashrc into guest ~/.bashrc
-LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-false}"  # to skip running tests
+LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-false}"  # to skip running the bzfs test suite
 LIMA_MESH_VMS="${LIMA_MESH_VMS:-}"  # optional `grep -E` regex to select VMs for mutual SSH trust in a mesh network
 LIMA_HOST_WORKDIR="$(dirname "$(dirname "$(realpath "$0")")")"  # aka git repo root dir
 LIMA_WORKDIR=/bzfs  # this is also the dir where $LIMA_HOST_WORKDIR is mounted within the guest VM
@@ -120,7 +120,8 @@ zfs --version
 
 # Run common preparation steps
 sudo apt-get -y install python3 zstd mbuffer pv rsync ripgrep python3-venv
-# sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux net-tools traceroute sysstat iperf3 iotop iftop
+# sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux net-tools traceroute sysstat ifstat iperf3 iotop iftop
+# sudo apt-get -y install npm && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 
 mkdir -p "$HOME/.ssh"
 if [[ ! -f ~/.bzfs_keys_done ]]; then
@@ -182,7 +183,7 @@ if [[ "$LIMA_COPY_BASHRC" == "true" && -f "$HOME/.bashrc" ]]; then
 fi
 echo "LIMA_SSH_PORT: $LIMA_SSH_PORT"
 
-# Run test suite inside VM
+# Optionally, run the bzfs test suite inside of the VM
 if [[ "$LIMA_NO_RUN_TESTS" == "false" ]]; then
     limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
         bzfs_test_mode="$bzfs_test_mode" \
