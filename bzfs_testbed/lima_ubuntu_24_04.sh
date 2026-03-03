@@ -21,7 +21,7 @@
 
 # shellcheck disable=SC2154
 set -eo pipefail
-LIMA_VM_TEMPLATE="${LIMA_VM_TEMPLATE:-ubuntu-24.04}"  # see `limactl create --list-templates` for available options
+LIMA_VM_TEMPLATE="${LIMA_VM_TEMPLATE:-template:ubuntu-24.04}"  # see `limactl create --list-templates` for available options
 LIMA_VM_NAME="${LIMA_VM_NAME:-mylimavm}"
 LIMA_VM_DISK="${LIMA_VM_DISK:-10}"  # GiB
 LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(4, #cores)
@@ -29,6 +29,7 @@ LIMA_VM_MEMORY="${LIMA_VM_MEMORY:-4}"  # GiB
 LIMA_VM_RECREATE="${LIMA_VM_RECREATE:-false}"  # to init VM from scratch
 LIMA_VM_PROTECT="${LIMA_VM_PROTECT:-false}"  # 'true' prohibits accidental deletion of this VM
 LIMA_VM_NETWORK="${LIMA_VM_NETWORK:-lima:user-v2}"  # lima:user-v2 network enables VM-to-VM connectivity
+LIMA_VM_MOUNT_TYPE="${LIMA_VM_MOUNT_TYPE:-}"  # empty (the default) lets `limactl` pick a good mount type
 LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0 picks random unused port;
                                      # host box: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM
                                      # guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM loopback
@@ -60,6 +61,10 @@ fi
 # Create VM if it doesn't already exist
 lima_vm_names="$(limactl list --tty=false --format='{{.Name}}')"
 if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
+    limactl_mount_type_arg=()
+    if [[ "$LIMA_VM_MOUNT_TYPE" != "" ]]; then
+        limactl_mount_type_arg=(--mount-type="$LIMA_VM_MOUNT_TYPE")
+    fi
     limactl create --tty=false \
         --name="$LIMA_VM_NAME" \
         --disk="$LIMA_VM_DISK" \
@@ -67,14 +72,16 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
         --memory="$LIMA_VM_MEMORY" \
         --network="$LIMA_VM_NETWORK" \
         --set=".ssh.loadDotSSHPubKeys=true" \
-        --set=".mounts = []" \
+        --set=".mounts = ${LIMA_VM_MOUNTS:-[]}" \
         --set=".mounts += [{\"location\":\"$LIMA_HOST_WORKDIR\",\"mountPoint\":\"$LIMA_WORKDIR\",\"writable\":$LIMA_WORKDIR_WRITABLE}]" \
-        --containerd=none \
-        template:"$LIMA_VM_TEMPLATE"
+        --containerd="${LIMA_VM_CONTAINERD:-none}" \
+        "${limactl_mount_type_arg[@]}" \
+        "$LIMA_VM_TEMPLATE"
         # Note: ".ssh.loadDotSSHPubKeys=true" imports ~/.ssh/*.pub from host into the guest VM ~/.ssh/authorized_keys
+        # Note: To retain mounts defined in $LIMA_VM_TEMPLATE use export LIMA_VM_MOUNTS='.mounts'
 fi
 
-# Prohibit accidental deletion of this VM
+# Optionally, prohibit accidental deletion of this VM
 if [[ "$LIMA_VM_PROTECT" == "true" ]]; then
     limactl protect --tty=false "$LIMA_VM_NAME"
     limactl list --tty=false --format='{{.Name}} {{.Protected}}' "$LIMA_VM_NAME"
@@ -83,7 +90,8 @@ fi
 # Start VM if it isn't already running
 if [[ "$(limactl list --tty=false --format='{{.Status}}' "$LIMA_VM_NAME")" != "Running" ]]; then
     # limactl edit --tty=false "$LIMA_VM_NAME" --set=".mounts += [{\"location\":\"$HOME/repos\",\"mountPoint\":\"/repos\",\"writable\":false}]"
-    limactl start --tty=false "$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-2m}" --progress="${LIMA_START_PROGRESS:-false}"
+    limactl start --tty=false "$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-2m}" \
+        --progress="${LIMA_START_PROGRESS:-false}" --log-level="${LIMA_START_LOGLEVEL:-info}"
 fi
 LIMA_SSH_PORT="$(limactl list --tty=false --format="{{.SSHLocalPort}}" "$LIMA_VM_NAME")"
 mkdir -p "$LIMA_HOST_WORKDIR/.venv"  # makes `mount` later succeed in guest VM even in read-only mode
