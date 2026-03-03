@@ -315,30 +315,6 @@ Your goal is to improve quality with zero functional regressions.
 - **Keep Tests Green:** Run the test suite after each small batch of changes to ensure everything stays green at each
   step.
 
-## How to Improve Code Coverage
-
-If asked to improve coverage:
-
-- **Measure:** Run coverage analysis before and after your changes.
-
-  ```
-  # First, run the tests to gather coverage data
-  bzfs_test_mode=unit python3 -m coverage run -m bzfs_tests.test_all
-
-  # Then, generate an XML coverage report
-  python3 -m coverage xml
-
-  # View the XML report to identify uncovered lines/branches
-  cat coverage.xml
-  ```
-
-- **Target Critical Gaps:** Use the XML coverage report to identify key logic branches or functions that lack tests, and
-  prioritize adding tests for those areas rather than chasing minor unused lines.
-
-- **Focus on adding meaningful high-value tests:** Do not add low-value tests just to increase a coverage percentage.
-
-- **Report:** In your response, state the **before vs. after** coverage percentage so the impact is clear.
-
 ## How to Add Dependencies
 
 - Do not add any new external Python packages or third-party CLI dependencies. The project is designed to have zero
