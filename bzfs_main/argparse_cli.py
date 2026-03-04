@@ -93,7 +93,7 @@ def argument_parser() -> argparse.ArgumentParser:
     delete_dst_snapshots_except_plan_example1: str = str(
         {
             "prod": {
-                "onsite": {
+                "us-west": {
                     "secondly": 40,
                     "minutely": 40,
                     "hourly": 36,

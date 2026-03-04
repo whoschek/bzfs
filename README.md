@@ -265,7 +265,7 @@ snapshots, and 5 yearly snapshots:
 ```
 $ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication \
 --delete-dst-snapshots --delete-dst-snapshots-except-plan \
-"{'prod':{'onsite':{'secondly':40,'minutely':40,'hourly':36,'daily':31,'weekly':12,'monthly':18,'yearly':5}}}"
+"{'prod':{'us-west':{'secondly':40,'minutely':40,'hourly':36,'daily':31,'weekly':12,'monthly':18,'yearly':5}}}"
 ```
 
 
@@ -315,11 +315,11 @@ $ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-dst-dat
 # Installation
 
 ```
-# AlmaLinux, FreeBSD, etc: See https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml
-
 # Ubuntu / Debian:
 sudo apt-get -y install zfsutils-linux python3  # ensure zfs and python are installed
 sudo apt-get -y install zstd pv mbuffer         # auxiliary helpers are optional
+
+# AlmaLinux, RHEL, FreeBSD, etc: See https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml
 
 git clone https://github.com/whoschek/bzfs.git
 cd bzfs/bzfs_main
@@ -372,7 +372,7 @@ pre-commit run --all-files                # Manually run linters/formatters
 * Implemented with efficient, reliable low latency mechanisms throughout.
 * Implemented in straightforward Python to make maintenance easy.
 * Unit and integration tests are about 2x runtime code size, with >99% coverage.
-* CI runs continuously on multiple Linux and FreeBSD versions via GitHub Hosted Runners.
+* CI runs continuously on old and new ZFS versions, and multiple Linux and FreeBSD versions, via GitHub Hosted Runners.
 * Includes a script that spins up a local testbed sandbox with N source VMs and M destination VMs for end-to-end
   testing.
 * Includes effective instructions for AI agents, pre-commit guardrails, and automated verification/test loops for
