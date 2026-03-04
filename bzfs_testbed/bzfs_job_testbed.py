@@ -39,13 +39,17 @@ import sys
 parser = argparse.ArgumentParser(
     description="""
 Jobconfig script that generates deployment specific parameters to manage periodic ZFS snapshot creation, replication,
-pruning, and monitoring, across a fleet of N source hosts and M destination hosts, using the same single shared fleet-wide
-jobconfig script.
-For example, this simplifies the deployment of an efficient geo-replicated backup service, or low latency replication
-from a primary to a secondary or to M read replicas, or backup to removable drives, etc.
+pruning, and monitoring, across a fleet of N source hosts and M destination hosts, using one shared fleet-wide jobconfig
+script.
+
+Typical use cases include geo-replicated backup where each destination host is in a different region and receives replicas
+from the same set of source hosts, low-latency replication from a primary to a secondary or to M read replicas, and backups
+to removable drives.
+
 Typically, this script should be periodically executed on each source host and each destination host, e.g. by a cron job
 (or similar). However, you can also run it on a single third-party host, in which case it will talk to all source hosts and
 destination hosts, which is convenient for basic use cases and for testing.
+
 This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the
 actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach. A plain Python script offers flexible, readable
 customization without needing a separate configuration format.
@@ -272,7 +276,7 @@ worker_timeout_seconds = None
 
 
 home_dir = pwd.getpwuid(os.getuid()).pw_dir  # returns the user's home directory without reading the $HOME Unix env var
-basename_stem = pathlib.Path(sys.argv[0]).stem  # the file's stem is the basename without file extension ("bzfs_job_example")
+basename_stem = pathlib.Path(sys.argv[0]).stem  # the file's stem is the basename without file extension ("bzfs_job_testbed")
 extra_args = []
 extra_args += [f"--job-id={basename_stem}"]
 extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-' + basename_stem)}"]

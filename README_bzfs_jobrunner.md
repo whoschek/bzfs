@@ -19,14 +19,13 @@
 # Introduction
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN DESCRIPTION SECTION -->
-This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS
-snapshot creation, replication, pruning, and monitoring, across a fleet of N source hosts and M
-destination hosts, using a single fleet-wide shared
-[jobconfig](bzfs_testbed/bzfs_job_testbed.py) script. For example, this simplifies the
-deployment of an efficient geo-replicated backup service where each of the M destination hosts is
-located in a separate geographic region and receives replicas from (the same set of) N source
-hosts. It also simplifies low latency replication from a primary to a secondary or to M read
-replicas, or backup to removable drives, etc.
+This companion program wraps [bzfs](README.md) for periodic snapshot creation, replication,
+pruning, and monitoring across N source hosts and M destination hosts, using one shared fleet-wide
+[jobconfig](bzfs_testbed/bzfs_job_testbed.py) script.
+
+Typical use cases include geo-replicated backup where each destination host is in a different
+region and receives replicas from the same set of source hosts, low-latency replication from a
+primary to a secondary or to M read replicas, and backups to removable drives.
 
 This program can be used to efficiently replicate ...
 
@@ -40,18 +39,17 @@ c) from multiple source hosts to a single destination host (pull or push or pull
 d) from N source hosts to M destination hosts (pull or push or pull-push mode, N and M can be
 large, M=2 or M=3 are typical geo-replication factors)
 
-You can run this program on a single third-party host and have that talk to all source hosts and
-destination hosts, which is convenient for basic use cases and for testing. However, typically, a
-cron job on each source host runs `bzfs_jobrunner` periodically to create new snapshots (via
+You can run this program on a single third-party host and have it talk to all source and
+destination hosts. That setup is convenient for basic use cases and testing. In many deployments,
+a cron job on each source host runs `bzfs_jobrunner` periodically to create new snapshots (via
 --create-src-snapshots) and prune outdated snapshots and bookmarks on the source (via
 --prune-src-snapshots and --prune-src-bookmarks), whereas another cron job on each destination
 host runs `bzfs_jobrunner` periodically to prune outdated destination snapshots (via
 --prune-dst-snapshots), and to replicate the recently created snapshots from the source to the
-destination (via --replicate). Yet another cron job on each source and each destination runs
+destination (via --replicate). A separate cron job on each source and each destination runs
 `bzfs_jobrunner` periodically to alert the user if the latest or oldest snapshot is somehow too
-old (via --monitor-src-snapshots and --monitor-dst-snapshots). The frequency of these periodic
-activities can vary by activity, and is typically every second, minute, hour, day, week, month
-and/or year (or multiples thereof).
+old (via --monitor-src-snapshots and --monitor-dst-snapshots). The frequency of each activity
+can differ. Typical intervals range from N milliseconds to years.
 
 Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very
 same) shared file onto all source hosts and all destination hosts, and add crontab entries (or
@@ -73,28 +71,30 @@ systemd timers or Monit entries or similar), along these lines:
 `* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --dst-host="$(hostname)"
 --monitor-dst-snapshots`
 
+Some deployments choose to move monitoring to one centralized management host, like so:
+
+`* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --monitor-src-snapshots
+--monitor-dst-snapshots`
+
 ### Applying Actions to a Subset of Hosts
 
-`--src-host` and `--dst-host` are ways to tell `bzfs_jobrunner` to only perform actions
-for a specified subset of source hosts and destination hosts, e.g. only replicate from a certain
-subset of source hosts to a certain subset of destination hosts. Each `bzfs_jobrunner`
-invocation will do all actions that apply to the final effective value of `--src-hosts` and
-`--dst-hosts`, after the subsetting step has been applied using the `--src-host` and
-`--dst-host` parameters.
+`--src-host` and `--dst-host` let you run actions on only a subset of source and destination
+hosts. For example, you can replicate from selected source hosts to selected destination hosts.
+Each `bzfs_jobrunner` invocation runs all enabled actions for the final effective values of
+`--src-hosts` and `--dst-hosts`, after applying the `--src-host` and `--dst-host`
+filters.
 
 ### High Frequency Replication (Experimental Feature)
 
-Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is
-considered high frequency. For such use cases, consider that `zfs list -t snapshot` performance
-degrades as more and more snapshots currently exist within the selected datasets, so try to keep
-the number of currently existing snapshots small, and prune them at a frequency that is
-proportional to the frequency with which snapshots are created. Consider using `--skip-parent`
-and `--exclude-dataset*` filters to limit the selected datasets only to those that require
-this level of frequency.
+Taking snapshots and/or replicating every N milliseconds to roughly every 10 seconds is considered
+high frequency. Consider that `zfs list -t snapshot` performance degrades as snapshot counts
+grow within the selected datasets. Keep the active snapshot count small, and prune at a cadence
+that matches your snapshot creation rate. Consider using `--skip-parent` and
+`--exclude-dataset*` filters so only datasets that need this frequency are selected.
 
-In addition, use the `--daemon-*` options to reduce startup overhead, in combination with
-splitting the crontab entry (or better: high frequency systemd timer) into multiple processes,
-from a single source host to a single destination host, along these lines:
+To reduce startup overhead, use the `--daemon-*` options and split the crontab entry (or,
+preferably, a high-frequency systemd timer) into multiple processes, from one source host to one
+destination host, along these lines:
 
 * crontab on source hosts:
 
@@ -121,12 +121,12 @@ from a single source host to a single destination host, along these lines:
 `* * * * * testuser /bzfs/bzfs_testbed/bzfs_job_testbed.py --src-host="bar"
 --dst-host="$(hostname)" --monitor-dst-snapshots`
 
-The daemon processes work like non-daemon processes except that they loop, handle time events and
-sleep between events, and finally exit after, say, 86400 seconds (whatever you specify via
-`--daemon-lifetime`). The daemons will subsequently be auto-restarted by 'cron', or earlier
-if they fail. While the daemons are running, 'cron' will attempt to start new (unnecessary)
-daemons but this is benign as these new processes immediately exit with a message like this:
-"Exiting as same previous periodic job is still running without completion yet"
+The daemon processes work like non-daemon processes except that they loop, handle time events, and
+sleep between events. They exit after the interval specified by `--daemon-lifetime` (for
+example, 86400 seconds). They are then restarted by `cron`, or earlier if they fail. While an
+existing daemon is still running, `cron` may attempt to start another one. This is harmless
+because that extra process exits immediately with a message like this: "Exiting as same previous
+periodic job is still running without completion yet"
 
 <!-- END DESCRIPTION SECTION -->
 <!-- FINE TO EDIT -->

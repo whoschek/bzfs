@@ -4,6 +4,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [1.19.0] - Not yet released
 
+- [bzfs] docs: Simplify READMEs.
 - [bzfs] [perf] Use better heuristic for `zfs list -t snapshot` minibatch size if parallelism is disabled.
 - [bzfs] [perf] Reuse ssh connection even immediately after reboot of operating system.
 - [bzfs] [perf] Refresh ssh connection immediately when the expected control socket path is missing or stale, and remove

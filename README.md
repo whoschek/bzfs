@@ -23,6 +23,15 @@
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/t/whoschek/bzfs?style=flat)](https://github.com/whoschek/bzfs/commits/main/)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+Why bzfs? bzfs is a CLI built for highly reliable and scalable near real-time ZFS snapshot
+replication with minimal operational complexity. It reliably replicates many local or remote ZFS
+datasets in parallel to local or remote destinations, using zfs send/receive and ssh, and can
+operate at sub-second intervals across large fleets of hosts for DR/HA. It safely supports
+disaster recovery and high availability (DR/HA), scale-out deployments, and protection against
+data loss or ransomware. It handles the many edge cases that you will eventually run into over the
+course of your deployment.
+
 - [Introduction](#Introduction)
 - [Periodic Jobs with bzfs_jobrunner](#Periodic-Jobs-with-bzfs_jobrunner)
 - [Quickstart](#Quickstart)
@@ -31,95 +40,77 @@
 - [Continuous Integration Testing](#Continuous-Integration-Testing)
 - [End-to-End Testing on the Testbed](#End-to-End-Testing-on-the-Testbed)
 - [Testing Locally](#Testing-Locally)
-- [Testing on GitHub Runners](#Testing-on-GitHub-Runners)
+- [Testing all Supported Platforms via GitHub Hosted Runners](#Testing-all-Supported-Platforms-via-GitHub-Hosted-Runners)
 - [Man Page](#Man-Page)
 # Introduction
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN DESCRIPTION SECTION -->
-*Why bzfs? It's a CLI built for reliable and scalable near real-time ZFS snapshot replication with minimal
-operational complexity. It replicates many local or remote ZFS datasets in parallel to local or remote
-destinations, using zfs send/receive and ssh, and can operate at sub-second intervals across large fleets
-of hosts for DR/HA. It supports disaster recovery and high availability (DR/HA), scale-out deployments,
-and protection against data loss or ransomware.*
+On the first run, bzfs replicates the source dataset and all its snapshots to the destination. On
+subsequent runs, it sends only changes since the previous run by incrementally replicating
+snapshots created on the source after that run. Source snapshots older than the most recent common
+snapshot on the destination are skipped automatically.
 
-It handles the many edge cases that you will eventually run into over the course of your
-deployment.
+Unless bzfs is told to create snapshots on the source, it treats the source as read-only. With
+`--dryrun`, it also treats the destination as read-only. In normal operation, the destination
+is append-only. Optional flags can delete destination snapshots and datasets if you want to manage
+storage space consumption, reconcile divergence, restore production from backup, or resync backup
+from production.
 
-When run for the first time, bzfs replicates the dataset and all its snapshots from the source to
-the destination. On subsequent runs, bzfs transfers only the data that has changed since the
-previous run, i.e. it incrementally replicates to the destination all intermediate snapshots that
-have been created on the source since the last run. Source ZFS snapshots older than the most
-recent common snapshot found on the destination are auto-skipped.
+bzfs supports include/exclude filters that can be combined to choose which datasets, snapshots,
+and properties to create, replicate, delete, or compare.
 
-Unless bzfs is explicitly told to create snapshots on the source, it treats the source as
-read-only, thus the source remains unmodified. With the --dryrun flag, bzfs also treats the
-destination as read-only. In normal operation, bzfs treats the destination as append-only.
-Optional CLI flags are available to delete destination snapshots and destination datasets as
-directed, for example to make the destination identical to the source if the two have somehow
-diverged in unforeseen ways. This easily enables (re)synchronizing the backup from the production
-state, as well as restoring the production state from backup.
+A common setup uses scheduled `cron` jobs: one to create and prune source snapshots, one to
+prune destination snapshots, and one to replicate recently created snapshots from source to
+destination. Schedules can run every N milliseconds, seconds, minutes, hours, days, weeks, months,
+or years.
 
-In the spirit of rsync, bzfs supports a variety of powerful include/exclude filters that can be
-combined to select which datasets, snapshots and properties to create, replicate, delete or
-compare.
+Snapshot creation, replication, pruning, monitoring, and comparison work with snapshots in any
+naming format, including snapshots created by third-party tools or by manual zfs snapshot
+commands. These functions can also be used independently.
 
-Typically, a `cron` job on the source host runs `bzfs` periodically to create new snapshots
-and prune outdated snapshots on the source, whereas another `cron` job on the destination host
-runs `bzfs` periodically to prune outdated destination snapshots. Yet another `cron` job runs
-`bzfs` periodically to replicate the recently created snapshots from the source to the
-destination. The frequency of these periodic activities is typically every N milliseconds, every
-second, minute, hour, day, week, month and/or year (or multiples thereof).
+The source can push to the destination, and the destination can pull from the source. bzfs runs on
+the initiator host, which can be the source host (push mode), destination host (pull mode), same
+host (local mode, no network, no ssh), or a third-party host that can SSH into source and
+destination (pull-push mode). In pull-push mode, the source `zfs send` stream is forwarded by
+the initiator directly to the destination `zfs receive`, without storing anything locally. In
+this mode, bzfs does not need to be installed on source or destination; only the `zfs` CLI is
+required there. bzfs can run as root or as a non-root user via sudo or delegated `zfs allow`
+permissions.
 
-All bzfs functions including snapshot creation, replication, deletion, monitoring, comparison,
-etc. happily work with any snapshots in any format, even created or managed by third party ZFS
-snapshot management tools, including manual zfs snapshot/destroy. All functions can also be used
-independently. That is, if you wish you can use bzfs just for creating snapshots, or just for
-replicating, or just for deleting/pruning, or just for monitoring, or just for comparing snapshot
-lists.
+bzfs is written in Python and continuously tested with unit and integration tests for old and new
+ZFS versions on multiple Linux and FreeBSD versions, and for all Python versions >= 3.9
+(including latest stable, currently python-3.14).
 
-The source 'pushes to' the destination whereas the destination 'pulls from' the source. bzfs
-is installed and executed on the 'initiator' host which can be either the host that contains the
-source dataset (push mode), or the destination dataset (pull mode), or both datasets (local mode,
-no network required, no ssh required), or any third-party (even non-ZFS OSX) host as long as that
-host is able to SSH (via standard 'ssh' OpenSSH CLI) into both the source and destination host
-(pull-push mode). In pull-push mode the source 'zfs send's the data stream to the initiator
-which immediately pipes the stream (without storing anything locally) to the destination host that
-'zfs receive's it. Pull-push mode means that bzfs need not be installed or executed on either
-source or destination host. Only the underlying 'zfs' CLI must be installed on both source and
-destination host. bzfs can run as root or non-root user, in the latter case via a) sudo or b) when
-granted corresponding ZFS permissions by administrators via 'zfs allow' delegation mechanism.
+bzfs is a stand-alone program with zero required dependencies. It is meant to run in restricted
+barebones server environments. No external Python packages are required; indeed no Python package
+management at all is required. You can symlink the program wherever you like, such as
+/usr/local/bin, and run it like a shell script or binary executable.
 
-bzfs is written in Python and continuously runs a wide set of unit tests and integration tests to
-ensure coverage and compatibility with old and new versions of ZFS on Linux and FreeBSD, on all
-Python versions ≥ 3.9 (including latest stable which is currently python-3.14).
+bzfs replicates snapshots for multiple datasets in parallel. It also deletes (or monitors or
+compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as often as
+every N milliseconds.
 
-bzfs is a stand-alone program with zero required dependencies, akin to a stand-alone shell script
-or binary executable. It is designed to be able to run in restricted barebones server
-environments. No external Python packages are required; indeed no Python package management at all
-is required. You can just symlink the program wherever you like, for example into /usr/local/bin
-or similar, and simply run it like any stand-alone shell script or binary executable.
+Replication progress (e.g. throughput and ETA) is shown aggregated across parallel replication
+tasks. Example console status line:
 
-bzfs automatically replicates the snapshots of multiple datasets in parallel for best performance.
-Similarly, it quickly deletes (or monitors or compares) snapshots of multiple datasets in
-parallel. Atomic snapshots can be created as frequently as every N milliseconds.
+`2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] 80% ETA 0:00:04
+ETA 01:23:08`
 
-Optionally, bzfs applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during
-'zfs send/receive' data transfers. When run across the network, bzfs also transparently inserts
-lightweight data compression (via 'zstd -1' CLI) and efficient data buffering (via 'mbuffer'
-CLI) into the pipeline between network endpoints during 'zfs send/receive' network transfers. If
-one of these utilities is not installed this is auto-detected, and the operation continues
-reliably without the corresponding auxiliary feature.
+Optionally, bzfs applies bandwidth rate limiting and progress monitoring (via `pv`) during `zfs
+send/receive` transfers. Over the network, it can insert lightweight compression (via `zstd`)
+and buffering (via `mbuffer`) between endpoints. If one of these tools is not installed, bzfs
+auto-detects that and continues without that auxiliary feature.
 
 # Periodic Jobs with bzfs_jobrunner
 
-The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program,
-which is a convenience wrapper around `bzfs` that simplifies efficient periodic ZFS snapshot
-creation, replication, pruning, and monitoring, across a fleet of N source hosts and M destination
-hosts, using a single shared fleet-wide [jobconfig](bzfs_testbed/bzfs_job_testbed.py) script.
-For example, this simplifies the deployment of an efficient geo-replicated backup service where
-each of the M destination hosts is located in a separate geographic region and pulls replicas from
-(the same set of) N source hosts. It also simplifies low latency replication from a primary to a
-secondary or to M read replicas, or backup to removable drives, etc.
+The project also ships with [bzfs_jobrunner](README_bzfs_jobrunner.md), a companion program that
+wraps `bzfs` for periodic snapshot creation, replication, pruning, and monitoring across N
+source hosts and M destination hosts, using one shared fleet-wide
+[jobconfig](bzfs_testbed/bzfs_job_testbed.py) script.
+
+Typical use cases include geo-replicated backup where each destination host is in a different
+region and receives replicas from the same set of source hosts, low-latency replication from a
+primary to a secondary or to M read replicas, and backups to removable drives.
 
 # Quickstart
 
@@ -139,13 +130,14 @@ tank1/foo/bar@test_2024-11-06_08:30:05_adhoc
 ```
 
 
-* Create periodic atomic snapshots on a schedule, every hour and every day, by launching this
-from a periodic `cron` job:
+* Create periodic atomic snapshots on a schedule, every minute, every hour and every day, by
+launching this from a periodic `cron` job:
 
 
 ```
 $ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots \
---create-src-snapshots-plan "{'prod':{'us-west':{'hourly':36,'daily':31}}}"
+--create-src-snapshots-plan \
+"{'prod':{'us-west':{'minutely':40,'hourly':36,'daily':31}}}"
 ```
 
 
@@ -154,6 +146,7 @@ $ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
 $ zfs list -t snapshot tank1/foo/bar
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_daily
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_hourly
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_minutely
 ```
 
 
@@ -179,6 +172,7 @@ $ bzfs tank1/foo/bar tank2/boo/bar
 $ zfs list -t snapshot tank1/foo/bar
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_daily
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_hourly
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_minutely
 ```
 
 
@@ -187,6 +181,7 @@ tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_hourly
 $ zfs list -t snapshot tank2/boo/bar
 tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_daily
 tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_hourly
+tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_minutely
 ```
 
 
@@ -219,7 +214,7 @@ and its descendant datasets to tank2/boo/bar:
 
 
 ```
-$ bzfs tank1/foo/bar tank2/boo/bar --recursive
+$ bzfs --recursive tank1/foo/bar tank2/boo/bar
 ```
 
 
@@ -228,8 +223,10 @@ $ bzfs tank1/foo/bar tank2/boo/bar --recursive
 $ zfs list -t snapshot -r tank1/foo/bar
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_daily
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_hourly
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_minutely
 tank1/foo/bar/baz@prod_us-west_2024-11-06_08:40:00_daily
 tank1/foo/bar/baz@prod_us-west_2024-11-06_08:40:00_hourly
+tank1/foo/bar/baz@prod_us-west_2024-11-06_08:40:00_minutely
 ```
 
 
@@ -238,17 +235,10 @@ tank1/foo/bar/baz@prod_us-west_2024-11-06_08:40:00_hourly
 $ zfs list -t snapshot -r tank2/boo/bar
 tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_daily
 tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_hourly
+tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_minutely
 tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_daily
 tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_hourly
-```
-
-
-* Example that makes destination identical to source even if the two have drastically diverged:
-
-
-```
-$ bzfs tank1/foo/bar tank2/boo/bar --recursive --force --delete-dst-datasets \
---delete-dst-snapshots
+tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_minutely
 ```
 
 
@@ -266,72 +256,6 @@ Note: The example above compares the specified times against the standard ZFS 'c
 property of the snapshots (which is a UTC Unix time in integer seconds), rather than against a
 timestamp that may be part of the snapshot name.
 
-* Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per
-dataset) are retained regardless of creation time:
-
-
-```
-$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication \
---delete-dst-snapshots --include-snapshot-regex '.*_daily' \
---include-snapshot-times-and-ranks notime 'all except latest 7' \
---include-snapshot-times-and-ranks 'anytime..7 days ago'
-```
-
-
-Note: This also prints how many GB of disk space in total would be freed if the command were to be
-run for real without the --dryrun flag.
-
-* Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per
-dataset) are retained regardless of creation time. Additionally, only delete a snapshot if no
-corresponding snapshot or bookmark exists in the source dataset (same as above except replace the
-'dummy' source with 'tank1/foo/bar'):
-
-
-```
-$ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication \
---delete-dst-snapshots --include-snapshot-regex '.*_daily' \
---include-snapshot-times-and-ranks notime 'all except latest 7' \
---include-snapshot-times-and-ranks '7 days ago..anytime'
-```
-
-
-* Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per
-dataset) are retained regardless of creation time. Additionally, only delete a snapshot if no
-corresponding snapshot exists in the source dataset (same as above except append
-'no-crosscheck'):
-
-
-```
-$ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication \
---delete-dst-snapshots --include-snapshot-regex '.*_daily' \
---include-snapshot-times-and-ranks notime 'all except latest 7' \
---include-snapshot-times-and-ranks 'anytime..7 days ago' \
---delete-dst-snapshots-no-crosscheck
-```
-
-
-* Delete all daily bookmarks older than 90 days, but retain the latest 200 daily bookmarks (per
-dataset) regardless of creation time:
-
-
-```
-$ bzfs dummy tank1/foo/bar --dryrun --recursive --skip-replication \
---delete-dst-snapshots=bookmarks --include-snapshot-regex '.*_daily' \
---include-snapshot-times-and-ranks notime 'all except latest 200' \
---include-snapshot-times-and-ranks 'anytime..90 days ago'
-```
-
-
-* Delete all tmp datasets within tank2/boo/bar:
-
-
-```
-$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication \
---delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex \
-'!.*'
-```
-
-
 * Retain all secondly snapshots that were created less than 40 seconds ago, and ensure that the
 latest 40 secondly snapshots (per dataset) are retained regardless of creation time. Same for 40
 minutely snapshots, 36 hourly snapshots, 31 daily snapshots, 12 weekly snapshots, 18 monthly
@@ -340,32 +264,13 @@ snapshots, and 5 yearly snapshots:
 
 ```
 $ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication \
---delete-dst-snapshots --delete-dst-snapshots-except --include-snapshot-regex '.*_secondly' \
---include-snapshot-times-and-ranks '40 seconds ago..anytime' 'latest 40' \
---new-snapshot-filter-group --include-snapshot-regex '.*_minutely' \
---include-snapshot-times-and-ranks '40 minutes ago..anytime' 'latest 40' \
---new-snapshot-filter-group --include-snapshot-regex '.*_hourly' \
---include-snapshot-times-and-ranks '36 hours ago..anytime' 'latest 36' \
---new-snapshot-filter-group --include-snapshot-regex '.*_daily' \
---include-snapshot-times-and-ranks '31 days ago..anytime' 'latest 31' \
---new-snapshot-filter-group --include-snapshot-regex '.*_weekly' \
---include-snapshot-times-and-ranks '12 weeks ago..anytime' 'latest 12' \
---new-snapshot-filter-group --include-snapshot-regex '.*_monthly' \
---include-snapshot-times-and-ranks '18 months ago..anytime' 'latest 18' \
---new-snapshot-filter-group --include-snapshot-regex '.*_yearly' \
---include-snapshot-times-and-ranks '5 years ago..anytime' 'latest 5'
-```
-
-
-For convenience, the lengthy command line above can be expressed in a more concise way, like so:
-
-
-```
-$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication \
 --delete-dst-snapshots --delete-dst-snapshots-except-plan \
 "{'prod':{'onsite':{'secondly':40,'minutely':40,'hourly':36,'daily':31,'weekly':12,'monthly':18,'yearly':5}}}"
 ```
 
+
+Note: This also prints how many GB of disk space in total would be freed if the command were to be
+run for real without the --dryrun flag.
 
 * Compare source and destination dataset trees recursively, for example to check if all recently
 taken snapshots have been successfully replicated by a periodic job. List snapshots only contained
@@ -376,10 +281,10 @@ datasets:
 
 
 ```
-$ bzfs tank1/foo/bar tank2/boo/bar --skip-replication \
---compare-snapshot-lists=src+dst+all --recursive --include-snapshot-regex \
-'.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago' \
---exclude-dataset-regex '(.*/)?tmp.*'
+$ bzfs tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshot-lists \
+--recursive --include-snapshot-regex '.*_(hourly|daily)' \
+--include-snapshot-times-and-ranks '7 days ago..4 hours ago' --exclude-dataset-regex \
+'(.*/)?tmp.*'
 ```
 
 
@@ -395,16 +300,12 @@ such as the metadata of the latest common snapshot, latest snapshots and oldest 
 as the time diff between the latest common snapshot and latest snapshot only in src (and only in
 dst), as well as how many src snapshots and how many GB of data are missing on dst, etc.
 
-* Example with further options:
+* Example that makes destination identical to source even if the two have drastically diverged:
 
 
 ```
-$ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive \
---exclude-snapshot-regex '.*_(secondly|minutely)' --exclude-snapshot-regex 'test_.*' \
---include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset \
-/tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex \
-'(.*/)?private' --exclude-dataset-regex \
-'(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*'
+$ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-dst-datasets \
+--delete-dst-snapshots
 ```
 
 <!-- END DESCRIPTION SECTION -->
@@ -446,71 +347,36 @@ pre-commit run --all-files                # Manually run linters/formatters
 <!-- FINE TO EDIT -->
 # Design Aspects
 
-* Rsync'ish look and feel.
-* Supports a variety of powerful include/exclude filters that can be combined to select which datasets, snapshots and
-properties to create or replicate or delete or compare.
-* Supports pull, push, pull-push and local transfer mode.
-* Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
-delete mode.
-* Continuously tested on Linux and FreeBSD.
-* Code is almost 100% covered by tests.
-* Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly
-deletes (or monitors or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as frequently
-as every N milliseconds.
-* For replication, periodically prints progress bar, throughput metrics, ETA, etc, to the same console status line (but not
-to the log file), which is helpful if the program runs in an interactive terminal session. The metrics represent aggregates
-over the parallel replication tasks.
-Example console status line:
-```
-2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] 80% ETA 0:00:04 ETA 01:23:08
-```
-* Simple and straightforward: Can be installed in less than a minute. Can be fully scripted without configuration
-files, or scheduled via cron or similar. Does not require a daemon other than ubiquitous sshd.
-* Stays true to the ZFS send/receive spirit. Retains the ability to use ZFS CLI options for fine tuning. Does not
-attempt to "abstract away" ZFS concepts and semantics. Keeps simple things simple, and makes complex things possible.
-* All ZFS and SSH commands (even in --dryrun mode) are logged such that they can be inspected, copy-and-pasted into
-a terminal/shell, and run manually to help anticipate or diagnose issues.
-* Supports snapshotting, replicating (or deleting) dataset subsets via powerful include/exclude regexes and other filters,
-which can be combined into a mini filter pipeline. Can be told to do such deletions only if a corresponding source dataset
-does not exist. For example, can snapshot, replicate (or delete) all except temporary datasets and private datasets.
-* Supports replicating (or deleting) snapshot subsets via powerful include/exclude regexes, time based filters, and
-oldest N/latest N filters, which can also be combined into a mini filter pipeline.
-    * For example, can replicate (or delete) daily and weekly snapshots while ignoring hourly and 5 minute snapshots.
-Or, can replicate daily and weekly snapshots to a remote destination while replicating hourly and 5 minute snapshots
-to a local destination.
-    * For example, can replicate (or delete) all daily snapshots older (or newer) than 90 days, and all weekly snapshots
-older (or newer) than 12 weeks.
-    * For example, can replicate (or delete) all daily snapshots except the latest (or oldest) 90 daily snapshots,
-and all weekly snapshots except the latest (or oldest) 12 weekly snapshots.
-    * For example, can replicate all daily snapshots that were created during the last 7 days, and at the
-same time ensure that at least the latest 7 daily snapshots are replicated regardless of creation time.
-This helps to safely cope with irregular scenarios where no snapshots were created or received within the last 7 days,
-or where more than 7 daily snapshots were created or received within the last 7 days.
-    * For example, can delete all daily snapshots older than 7 days, but retain the latest 7 daily
-snapshots regardless of creation time. It can help to avoid accidental pruning of the last snapshot that source and
-destination have in common.
-    * Can be told to do such deletions only if a corresponding snapshot does not exist in the source dataset.
-    * Optionally, deletions can specify which snapshots to retain instead of which snapshots to delete.
-    * Prints how many GB of disk space in total would be freed if the delete command were to be run for real without the
---dryrun flag.
-* Compare source and destination dataset trees recursively, in combination with snapshot filters and dataset filters.
-* Also supports replicating arbitrary dataset tree subsets by feeding it a list of flat datasets.
-* Efficiently supports complex replication policies with multiple sources and multiple destinations for each source.
-* Can be told what ZFS dataset properties to copy, also via include/exclude regexes.
-* Full and precise ZFS bookmark support for additional safety, or to reclaim disk space earlier.
-* Can be strict or told to be tolerant of runtime errors.
-* Automatically resumes ZFS send/receive operations that have been interrupted by network hiccups or other
-intermittent failures, via efficient 'zfs receive -s' and 'zfs send -t'.
-* Similarly, can be told to automatically retry snapshot delete operations.
-* Parametrizable retry logic.
-* Multiple bzfs processes can run in parallel. If multiple processes attempt to write to the same destination dataset
-simultaneously this is detected and the operation can be auto-retried safely.
-* A job that runs periodically declines to start if the same previous periodic job is still running without
-completion yet.
-* Can log to local and remote destinations out of the box.
-* Codebase is easy to change and maintain. No hidden magic. Python is very readable to contemporary engineers.
-Chances are that CI tests will catch changes that have unintended side effects.
-* It's fast!
+* CLI follows familiar rsync-style patterns.
+* Supports pull, push, pull-push, and local transfer modes.
+* Can create atomic snapshots, replicate, delete, monitor, and compare snapshots across many datasets in parallel, as
+  frequently as every N milliseconds.
+* Handles replication policies with multiple sources and multiple destinations per source.
+* Favors safe, reliable, and predictable behavior.
+* Operation modes are explicit: read-only, append-only, and delete mode.
+* Supports include/exclude filters for dataset and snapshot selection, plus time windows and oldest/latest N selectors.
+* Example: replicate hourly and daily snapshots while excluding minutely and secondly snapshots.
+* You can specify what to retain instead of what to delete.
+* Can recursively compare selected source and destination dataset trees with include/exclude filters.
+* Logs all ZFS and SSH commands, including in `--dryrun`, so they can be inspected and replayed manually.
+* In `--dryrun` mode, prints what would be deleted, plus estimated reclaimable disk space.
+* Supports ZFS bookmarks for safety and early space reclamation.
+* Can copy selected dataset properties with include/exclude regex filters.
+* Uses native ZFS semantics and keeps full access to ZFS CLI options.
+* Designed for automation: scriptable without config files, easy to schedule via cron, and no daemon required beyond
+  `sshd`.
+* Reliably supports resumable send/receive (`zfs receive -s` and `zfs send -t`).
+* Retry behavior for intermittent failures is configurable.
+* Multiple `bzfs` processes can run in parallel.
+* Prevents overlapping periodic runs by skipping a new run while the previous one is still active.
+* Implemented with efficient, reliable low latency mechanisms throughout.
+* Implemented in straightforward Python to make maintenance easy.
+* Unit and integration tests are about 2x runtime code size, with >99% coverage.
+* CI runs continuously on multiple Linux and FreeBSD versions via GitHub Hosted Runners.
+* Includes a script that spins up a local testbed sandbox with N source VMs and M destination VMs for end-to-end
+  testing.
+* Includes effective instructions for AI agents, pre-commit guardrails, and automated verification/test loops for
+  AI-assisted engineering.
 
 
 # Continuous Integration Testing
@@ -576,29 +442,25 @@ bzfs-test        # when installed via pip
 ```
 
 
-# Testing on GitHub Runners
+# Testing all Supported Platforms via GitHub Hosted Runners
 
-* First, on the GitHub page of this repo, click on "Fork/Create a new fork".
-* Click the 'Actions' menu on your repo, and then enable GitHub Actions on your fork.
-* Then select 'All workflows' -> 'Tests' on the left side.
-* Then click the 'Run workflow' dropdown menu on the right side, which looks something like
-[this screenshot](https://raw.githubusercontent.com/whoschek/bzfs/main/bzfs_docs/run_workflow_dialog.jpg).
-* Select the name of the job to run (e.g. 'test_ubuntu_24_04' or 'test_freebsd_14_1', etc) or
-select 'Run all jobs' to test all supported platforms, plus select the git branch to run with (typically the branch
-containing your changes).
-* Then click the 'Run workflow' button which kicks off the job.
-* Click on the job to watch job progress.
-* Once the run completes, you can click on the wheel on the top right to select 'Download log archive', which is
-a zip file containing the output of all jobs of the run. This is useful for debugging.
-* Once the job completes, also a coverage report appears on the bottom of the run page, which you can download by
-clicking on it. Unzip and browse the HTML coverage report to see if the code you added or changed is actually executed
-by a test. Experience shows that code that isn't executed likely contains bugs, so all changes (code lines and
-branch conditions) should be covered by a test before a merge is considered. In practice, this means to watch out
-for coverage report lines that aren't colored green.
-* FYI, example test runs with coverage reports are
-[here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule).
-Click on any run and browse to the bottom of the resulting run page to find the coverage reports, including a combined
-coverage report that merges all jobs of the run.
+01. Create a fork from the GitHub page for this repository.
+02. Open the `Actions` tab in your fork and enable GitHub Actions.
+03. Select `All workflows` -> `Tests` in the left sidebar.
+04. Open the `Run workflow` dropdown menu on the right. The UI looks like
+    [this screenshot](https://raw.githubusercontent.com/whoschek/bzfs/main/bzfs_docs/run_workflow_dialog.jpg).
+05. Select a single job (for example `test_ubuntu_24_04` or `test_freebsd_15_0` or `test_almalinux_10_zfs_2_4`) or
+    choose `Run all jobs` to run the test suite on the full matrix of all supported platforms.
+06. Select the branch to test, usually the branch that contains your changes.
+07. Click the 'Run workflow' button to start the run.
+08. Open each job page to monitor progress.
+09. After completion, open the top-right gear menu and download the log archive (zip) for debugging.
+10. Download and inspect the coverage report shown at the bottom of the run page. Watch out for coverage report lines
+    that aren't colored green. Experience shows that code that isn't executed likely contains bugs, so all changes (code
+    lines and branch conditions) should be covered by a test before a merge is considered.
+11. Example scheduled runs and coverage reports are
+    [here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule). Open any run and
+    scroll to the bottom of the page to find per-job and combined coverage artifacts.
 
 
 # Man Page
