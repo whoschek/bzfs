@@ -15,45 +15,36 @@
 # limitations under the License.
 # shellcheck disable=SC2154
 
-# Copies the local repo to the given remote user@host:path (via rsync) and runs tests there (via ssh).
+# Copies the local repo to the given remote user@host:path (via rsync/ssh) and runs tests there (via ssh).
 # The path in user@host:path must be a relative path without dots to prevent accidents.
 # Expects params to be provided via bzfs_test_* env vars.
 set -e
 cd "$(dirname "$(realpath "$0")")"
 echo "Running tests on $bzfs_test_remote_userhost:$bzfs_test_remote_path ..."
 
-if [ "$bzfs_test_ssh_port" = "" ]; then
-    bzfs_test_ssh_port="22"
-fi
-case "$bzfs_test_remote_userhost" in "" | -* | *[![:alnum:]_.@-]*)
-    echo "error: invalid bzfs_test_remote_userhost: $bzfs_test_remote_userhost" >&2
+die() {
+    echo "error: $*" >&2
     exit 1
-    ;;
+}
+
+case "$bzfs_test_remote_userhost" in
+    "" | -* | *[![:alnum:]_.@-]*) die "invalid bzfs_test_remote_userhost: $bzfs_test_remote_userhost" ;;
 esac
-case "$bzfs_test_remote_path" in "" | -* | /* | *[![:alnum:]/_-]*)
-    echo "error: invalid bzfs_test_remote_path: $bzfs_test_remote_path" >&2
-    exit 1
-    ;;
+case "$bzfs_test_remote_path" in
+    "" | -* | /* | *[![:alnum:]/_-]*) die "invalid bzfs_test_remote_path: $bzfs_test_remote_path" ;;
 esac
-case "$bzfs_test_ssh_port" in "" | *[![:digit:]]*)
-    echo "error: invalid bzfs_test_ssh_port: $bzfs_test_ssh_port" >&2
-    exit 1
-    ;;
+bzfs_test_ssh_port="${bzfs_test_ssh_port:-22}"
+case "$bzfs_test_ssh_port" in
+    "" | *[![:digit:]]*) die "invalid bzfs_test_ssh_port: $bzfs_test_ssh_port" ;;
 esac
-case "$bzfs_test_remote_private_key" in "" | -* | *[![:alnum:]/_.-]*)
-    echo "error: invalid bzfs_test_remote_private_key: $bzfs_test_remote_private_key" >&2
-    exit 1
-    ;;
+case "$bzfs_test_remote_private_key" in
+    "" | -* | *[![:alnum:]/_.-]*) die "invalid bzfs_test_remote_private_key: $bzfs_test_remote_private_key" ;;
 esac
-case "$bzfs_test_mode" in -* | *[![:alnum:]]*)
-    echo "error: invalid bzfs_test_mode: $bzfs_test_mode" >&2
-    exit 1
-    ;;
+case "$bzfs_test_mode" in
+    -* | *[![:alnum:]]*) die "invalid bzfs_test_mode: $bzfs_test_mode" ;;
 esac
-case "$bzfs_test_no_run_quietly" in -* | *[![:alnum:]]*)
-    echo "error: invalid bzfs_test_no_run_quietly: $bzfs_test_no_run_quietly" >&2
-    exit 1
-    ;;
+case "$bzfs_test_no_run_quietly" in
+    -* | *[![:alnum:]]*) die "invalid bzfs_test_no_run_quietly: $bzfs_test_no_run_quietly" ;;
 esac
 
 flags="-oServerAliveInterval=0 -x -T"
