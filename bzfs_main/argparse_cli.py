@@ -105,6 +105,17 @@ def argument_parser() -> argparse.ArgumentParser:
             }
         }
     ).replace(" ", "")
+    monitor_snapshots_example: str = str(
+        {
+            "prod": {
+                "us-west": {
+                    "minutely": {"latest": {"warning": "30 seconds", "critical": "300 seconds"}},
+                    "hourly": {"latest": {"warning": "30 minutes", "critical": "300 minutes"}},
+                    "daily": {"latest": {"warning": "4 hours", "critical": "8 hours"}},
+                },
+            },
+        }
+    ).replace(" ", "")
 
     # fmt: off
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
@@ -310,6 +321,17 @@ logs [various summary stats](https://github.com/whoschek/bzfs/blob/main/bzfs_doc
 such as the metadata of the latest common snapshot, latest snapshots and oldest snapshots, as well as the time diff
 between the latest common snapshot and latest snapshot only in src (and only in dst), as well as how many src snapshots
 and how many GB of data are missing on dst, etc.
+
+* Alert the user if the ZFS 'creation' time property of the latest destination snapshot for any specified snapshot name
+pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to check if snapshots are
+successfully replicated on schedule.
+Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
+The example alerts the user if the *latest* destination snapshot named `prod_us-west_<timestamp>_hourly` is more than 30
+minutes late (i.e. more than 30+60=90 minutes old) [warning], or more than 300 minutes late (i.e. more than 300+60=360
+minutes old) [critical]. Analog for minutely and daily snapshots:
+
+```$ {PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --recursive --skip-replication --verbose --monitor-snapshots \
+"{monitor_snapshots_example}"```
 
 * Example that makes destination identical to source even if the two have drastically diverged:
 
