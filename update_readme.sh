@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run this script to update README.md from the help info contained in bzfs.py.
 set -e
-cd "$(dirname "$(realpath "$0")")"
+cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
 # bzfs_main.* must be part of a virtual environment for `argparse-manpage` to work correctly
 tmp_venv=.venv-argparse-manpage

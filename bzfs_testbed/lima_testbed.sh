@@ -25,7 +25,7 @@ TESTBED_HOSTNAME_PREFIX="${TESTBED_HOSTNAME_PREFIX:-test}"  # VMs are named "${T
 TESTBED_ZPOOL_CAPACITY_MB="${TESTBED_ZPOOL_CAPACITY_MB:-1024}"  # 1GB test pool size by default
 export LIMA_MESH_VMS="^${TESTBED_HOSTNAME_PREFIX}.*"
 export LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-true}"
-mydir="$(dirname "$(realpath "$0")")"
+mydir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
 usage() {
     prog_name="$(basename "$0")"

@@ -19,7 +19,7 @@
 # The path in user@host:path must be a relative path without dots to prevent accidents.
 # Expects params to be provided via bzfs_test_* env vars.
 set -e
-cd "$(dirname "$(realpath "$0")")"
+cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 echo "Running tests on $bzfs_test_remote_userhost:$bzfs_test_remote_path ..."
 
 die() {

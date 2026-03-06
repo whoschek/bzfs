@@ -36,7 +36,7 @@ LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0 picks random unused port;
 LIMA_COPY_BASHRC="${LIMA_COPY_BASHRC:-false}"  # opt-in: copy host ~/.bashrc into guest ~/.bashrc
 LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-false}"  # to skip running the bzfs test suite
 LIMA_MESH_VMS="${LIMA_MESH_VMS:-}"  # optional `grep -E` regex to select VMs for mutual SSH trust in a mesh network
-LIMA_HOST_WORKDIR="$(dirname "$(dirname "$(realpath "$0")")")"  # aka git repo root dir
+LIMA_HOST_WORKDIR="$(dirname "$(dirname "$(realpath "${BASH_SOURCE[0]}")")")"  # aka git repo root dir
 LIMA_WORKDIR=/bzfs  # this is also the dir where $LIMA_HOST_WORKDIR is mounted within the guest VM
 LIMA_WORKDIR_WRITABLE="${LIMA_WORKDIR_WRITABLE:-false}"  # false=read-only, true=read-write shared with host
   # 'false' is for running tests only. 'true' enables repo file changes, e.g. for limited sharing with a sandboxed AI agent.
@@ -182,7 +182,7 @@ EOF
 
 # Optionally, configure a basic mesh network where each VM can talk via ssh to each other VM.
 export LIMA_MESH_VMS
-mydir="$(dirname "$(realpath "$0")")"
+mydir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 "$mydir/lima_mesh.sh"
 
 # Optionally, copy host ~/.bashrc into guest ~/.bashrc
