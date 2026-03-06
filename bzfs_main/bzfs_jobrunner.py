@@ -155,8 +155,8 @@ In many deployments, a cron job on each source host runs `{PROG_NAME}` periodica
 --prune-src-bookmarks), whereas another cron job on each destination host runs `{PROG_NAME}` periodically to prune
 outdated destination snapshots (via --prune-dst-snapshots), and to replicate the recently created snapshots from the source
 to the destination (via --replicate).
-A separate cron job on each source and each destination runs `{PROG_NAME}` periodically to alert the user if the latest or
-oldest snapshot is somehow too old (via --monitor-src-snapshots and --monitor-dst-snapshots).
+A separate cron job on each source host and each destination host runs `{PROG_NAME}` periodically to alert the user if the
+latest or oldest snapshot is somehow too old (via --monitor-src-snapshots and --monitor-dst-snapshots).
 The frequency of each activity can differ. Typical intervals range from N milliseconds to years.
 
 Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very same) shared file onto all

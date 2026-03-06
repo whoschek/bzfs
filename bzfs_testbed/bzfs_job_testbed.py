@@ -68,7 +68,7 @@ if len(unknown_args) == 0:
 # Source and destination datasets that will be managed, in the form of one or more (src, dst) pairs, excluding
 # usernames and excluding hostnames, which will all be auto-appended later:
 # root_dataset_pairs = ["tank1/foo/bar", "boo/bar", "tank1/baz", "baz"]  # i.e. tank1/foo/bar --> boo/bar, tank1/baz --> baz
-root_dataset_pairs = ["src/foo/bar", "dst/boo/bar"]  # i.e. replicate from tank1/foo/bar to tank2/boo/bar
+root_dataset_pairs = ["src/foo/bar", "dst/boo/bar"]  # i.e. replicate from src/foo/bar to dst/boo/bar
 
 
 # Include descendant datasets, i.e. datasets within the dataset tree, including children, children of children, etc.
@@ -115,7 +115,7 @@ dst_hosts = {
 # retain_dst_targets = dst_hosts
 retain_dst_targets = {
     "testdst01": ["", "onsite"]
-}  # host named "testdst01" retains replicas for snapshots with target="" or "onsite"
+}  # host named "testdst01" retains replicas for snapshots with target="" or target="onsite"
 
 
 # Dictionary that maps each destination hostname to a root dataset located on that destination host. Typically, this

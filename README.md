@@ -300,17 +300,18 @@ such as the metadata of the latest common snapshot, latest snapshots and oldest 
 as the time diff between the latest common snapshot and latest snapshot only in src (and only in
 dst), as well as how many src snapshots and how many GB of data are missing on dst, etc.
 
-* Alert the user if the ZFS 'creation' time property of the latest destination snapshot for any
-specified snapshot name pattern within the selected datasets is too old wrt. the specified age
-limit. The purpose is to check if snapshots are successfully replicated on schedule. Process exit
-code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively. The example alerts the user if the
-*latest* destination snapshot named `prod_us-west_<timestamp>_hourly` is more than 30
-minutes late (i.e. more than 30+60=90 minutes old) [warning], or more than 300 minutes late
-(i.e. more than 300+60=360 minutes old) [critical]. Analog for minutely and daily snapshots:
+* Alert the user if the ZFS 'creation' time property of the latest source or destination
+snapshot for any specified snapshot name pattern within the selected datasets is too old wrt. the
+specified age limit. The purpose is to check if snapshots are successfully created and replicated
+on schedule. Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively. The example
+alerts the user if the *latest* source or destination snapshot named
+`prod_us-west_<timestamp>_hourly` is more than 30 minutes late (i.e. more than 30+60=90
+minutes old) [warning], or more than 300 minutes late (i.e. more than 300+60=360 minutes old)
+[critical]. Analog for minutely and daily snapshots:
 
 
 ```
-$ bzfs dummy tank2/boo/bar --recursive --skip-replication --verbose --monitor-snapshots \
+$ bzfs tank1/foo/bar tank2/boo/bar --recursive --skip-replication -v --monitor-snapshots \
 "{'prod':{'us-west':{'minutely':{'latest':{'warning':'30seconds','critical':'300seconds'}},'hourly':{'latest':{'warning':'30minutes','critical':'300minutes'}},'daily':{'latest':{'warning':'4hours','critical':'8hours'}}}}}"
 ```
 
