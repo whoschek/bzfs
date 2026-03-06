@@ -101,7 +101,7 @@ repos:
         stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
       # config options like `force_grid_wrap` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.4
+    rev: v0.15.5
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
@@ -120,7 +120,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly infer --containers=true
         language: python
-        additional_dependencies: ['pyrefly==0.54.0']
+        additional_dependencies: ['pyrefly==0.55.0']
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1
@@ -181,7 +181,7 @@ repos:
           - mdformat-black                 # format embedded python
           - "mdformat-config; platform_system != 'Linux' or platform_machine != 'aarch64'"  # taplo install currently fails on aarch64 Linux per https://github.com/hukkin/mdformat-config/issues/8 and https://github.com/tamasfe/taplo/issues/791
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+    rev: v2.4.2
     hooks:
       - id: codespell  # Auto-fix typos; if you think this is in error, consider changing ignore-words-list in pyproject.toml
         additional_dependencies: [tomli]
