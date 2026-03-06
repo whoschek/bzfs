@@ -67,7 +67,7 @@ To understand the system's architecture and features, follow these steps:
   may ignore the *Change Validation Workflow*, *Core Software Development Workflow*, and *Commit Workflow*. Instead,
   apply the *Step by Step Reasoning Workflow* and focus on correctness of reasoning.
 - If the User literally requests `continue nonstop`, then go ahead and **safely continue** working until the acceptance
-  criteria are satisfied, without asking the User again whether you should continue — the answer is always implicitly
+  criteria are satisfied, without asking the User again whether you should continue - the answer is always implicitly
   `continue`.
 
 # Step by Step Reasoning Workflow
@@ -169,7 +169,7 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
      - Update `<path/to/plan.md>` whenever any of these change: plan, goals, constraints/assumptions, key decisions,
        lessons, steps, progress state (Done/Now/Next). `<path/to/plan.md>` is the canonical source of truth for the plan
        and progress. If the `update_plan` tool is available, prevent `update_plan` from diverging by updating it to a
-       brief high-level synthesis of `<path/to/plan.md>` (max 5–7 steps + statuses).
+       brief high-level synthesis of `<path/to/plan.md>` (max 5-7 steps + statuses).
      - Execute the plan in `<path/to/plan.md>` (subject to `AGENTS.md` rules) by continuing the workflow with Step 2
        ("Stop if Already Done").
 

@@ -165,7 +165,8 @@ repos:
         name: "forbid ambiguous characters"
         language: pygrep
         entry: '…|—|–|“|”|‘|’|→'             # replace ambiguous with unambiguous characters (em dash, curly quotes, etc)
-        types: [python]
+        exclude: '^\.pre-commit-config\.yaml$'
+        types_or: [python, shell, markdown, yaml, toml]
   - repo: https://github.com/hukkin/mdformat
     rev: 1.0.0
     hooks:

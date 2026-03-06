@@ -127,7 +127,7 @@ ease.
 The vision for **bzfs** is to be the de-facto open-source standard for ZFS data protection and management. It will be a
 single, stand-alone, zero-dependency command-line tool that is as powerful and ubiquitous for ZFS replication as `rsync`
 is for file-level synchronization. It will empower users with a declarative and expressive interface to manage the
-entire lifecycle of snapshots—from atomic, high-frequency creation to intelligent, policy-based pruning—across complex,
+entire lifecycle of snapshots-from atomic, high-frequency creation to intelligent, policy-based pruning-across complex,
 distributed topologies, all while maximizing performance and ensuring data integrity.
 
 ### 1.3. Target Audience<a name="13-target-audience"></a>
