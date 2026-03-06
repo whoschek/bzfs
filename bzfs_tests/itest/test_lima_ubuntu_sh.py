@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Integration tests for `lima_ubuntu_24_04.sh` using real `limactl` without mocks or stubs.
+"""Integration tests for `lima_ubuntu.sh` using real `limactl` without mocks or stubs.
 
 The test exercises scenarios with zero, one, and two test VMs. Assumes a local Lima installation and explicit opt-in via
 environment variable flag.
@@ -75,7 +75,7 @@ class TestLimaUbuntuScript(unittest.TestCase):
     def setUp(self) -> None:
         """Resolves repository paths used by the Lima workflow script tests."""
         self.repo_root: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-        self.script_path: str = os.path.join(self.repo_root, "bzfs_testbed", "lima_ubuntu_24_04.sh")
+        self.script_path: str = os.path.join(self.repo_root, "bzfs_testbed", "lima_ubuntu.sh")
 
     def test_a_zero_one_two_existing_test_vms(self) -> None:
         """Validates script behavior across 0/1/2 existing test VM scenarios."""

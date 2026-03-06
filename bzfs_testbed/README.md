@@ -16,9 +16,8 @@
 
 # End-to-End Testing on the Testbed
 
-For reproducible local testing on Ubuntu, consider using [`lima_ubuntu_24_04.sh`](lima_ubuntu_24_04.sh). On macOS or
-Linux, this script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of that
-VM.
+For reproducible local testing on Ubuntu, consider using [`lima_ubuntu.sh`](lima_ubuntu.sh). On macOS or Linux, this
+script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite inside of that VM.
 
 Also consider running the [`lima_testbed.sh`](lima_testbed.sh) script that uses this to create/delete a local Lima
 testbed with N source VMs and M destination VMs for testing, with VM-to-VM SSH networking enabled out of the box. All

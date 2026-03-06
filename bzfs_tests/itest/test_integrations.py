@@ -29,7 +29,7 @@ from bzfs_tests.itest.ibase import (
 from bzfs_tests.itest.test_incremental_send_steps import (
     IncrementalSendStepsTestCase,
 )
-from bzfs_tests.itest.test_lima_ubuntu_24_04_sh import (
+from bzfs_tests.itest.test_lima_ubuntu_sh import (
     TestLimaUbuntuScript,
 )
 from bzfs_tests.itest.test_local import (
