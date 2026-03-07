@@ -88,10 +88,9 @@ Optional conflict handling flags (keep disabled by default):
 
 ## 8) Periodic orchestration with bzfs_jobrunner
 
-Follow `bzfs_testbed/bzfs_job_testbed.py` conventions: source actions (`create/prune/monitor` on source) use `--src-host`;
-destination actions (`replicate/prune/monitor` on destination) use `--dst-host`. When emitting full fleet orchestration
-commands, pass dict/list values using `--flag={value}` style that matches `bzfs_job_testbed.py`. Carry over the same
-semantics as the example (action-to-host scope, plan intent, and retention meaning), not just syntax.
+Follow `bzfs_testbed/bzfs_job_testbed.py` conventions. When emitting full fleet orchestration commands, pass dict/list
+values using `--flag={value}` style that matches `bzfs_job_testbed.py`. Carry over the same semantics as the example
+(action-to-host scope, plan intent, and retention meaning), not just syntax.
 
 Source-host periodic tasks:
 
@@ -101,7 +100,6 @@ Source-host periodic tasks:
   --create-src-snapshots \
   --prune-src-snapshots \
   --prune-src-bookmarks \
-  --jobrunner-dryrun \
   --dryrun
 ```
 
@@ -112,7 +110,6 @@ Destination-host periodic tasks:
   --dst-host="$(hostname)" \
   --replicate \
   --prune-dst-snapshots \
-  --jobrunner-dryrun \
   --dryrun
 ```
 
@@ -121,19 +118,17 @@ Monitoring:
 ```bash
 /bzfs/bzfs_testbed/bzfs_job_testbed.py \
   --src-host="$(hostname)" \
-  --monitor-src-snapshots \
-  --jobrunner-dryrun \
-  --dryrun
+  --monitor-src-snapshots
 ```
 
 Fleet mapping and plan arguments (shape only):
 
 ```bash
 bzfs_jobrunner \
-  "--src-hosts=['nas']" \
-  "--dst-hosts={'nas': ['', 'onsite']}" \
-  "--retain-dst-targets={'nas': ['', 'onsite']}" \
-  "--dst-root-datasets={'nas': ''}" \
+  "--src-hosts=['testsrc01']" \
+  "--dst-hosts={'testdst01': ['', 'onsite']}" \
+  "--retain-dst-targets={'testdst01': ['', 'onsite']}" \
+  "--dst-root-datasets={'testdst01': ''}" \
   "--src-snapshot-plan={'prod': {'onsite': {'hourly': 36, 'daily': 31}}}"
 ```
 

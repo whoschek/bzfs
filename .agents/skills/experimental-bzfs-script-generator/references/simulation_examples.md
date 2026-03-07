@@ -9,8 +9,8 @@ future outputs.
 #!/usr/bin/env bash
 set -euo pipefail
 
-SRC_DATASET="tank/app"
-DST_DATASET="tank_bak/app"
+SRC_DATASET="src/foo/bar"
+DST_DATASET="dst/boo/bar"
 
 # Optional read-only preflight checks:
 zfs list -H -o name "$SRC_DATASET" >/dev/null
@@ -41,8 +41,8 @@ import subprocess
 
 
 def main() -> None:
-    src_dataset = "tank/app"
-    dst_dataset = "tank_bak/app"
+    src_dataset = "src/foo/bar"
+    dst_dataset = "dst/boo/bar"
 
     subprocess.run(["zfs", "list", "-H", "-o", "name", src_dataset], check=True)
     subprocess.run(["zfs", "list", "-H", "-o", "name", dst_dataset], check=True)
@@ -73,8 +73,8 @@ if __name__ == "__main__":
 #!/usr/bin/env bash
 set -euo pipefail
 
-SRC_DATASET="tank/app"
-DST_DATASET="tank_bak/app"
+SRC_DATASET="src/foo/bar"
+DST_DATASET="dst/boo/bar"
 DRYRUN="${DRYRUN:-1}"  # keep 1 for safety
 
 cmd=(
@@ -109,8 +109,8 @@ import subprocess
 
 
 def main() -> None:
-    src_dataset = "tank/app"
-    dst_dataset = "tank_bak/app"
+    src_dataset = "src/foo/bar"
+    dst_dataset = "dst/boo/bar"
     dryrun = os.getenv("DRYRUN", "1") == "1"
 
     cmd = [
@@ -143,9 +143,6 @@ if __name__ == "__main__":
 
 ## Scenario 3: Periodic jobrunner replication (state-changing, dry-run default)
 
-This scenario follows `bzfs_testbed/bzfs_job_testbed.py` conventions: destination actions use `--dst-host` (source actions
-would use `--src-host`).
-
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
@@ -157,7 +154,7 @@ DRYRUN="${DRYRUN:-1}"  # keep 1 for safety
 cmd=("$JOBCONFIG" --dst-host="$THIS_HOST" --replicate --prune-dst-snapshots)
 
 if [[ "$DRYRUN" == "1" ]]; then
-  cmd+=(--jobrunner-dryrun --dryrun)
+  cmd+=(--dryrun)
 fi
 
 printf 'Review command before run:\n'
@@ -186,7 +183,7 @@ def main() -> None:
     cmd = [jobconfig, f"--dst-host={this_host}", "--replicate", "--prune-dst-snapshots"]
 
     if dryrun:
-        cmd += ["--jobrunner-dryrun", "--dryrun"]
+        cmd += ["--dryrun"]
 
     print("Review command before run:")
     print("  " + shlex.join(cmd))

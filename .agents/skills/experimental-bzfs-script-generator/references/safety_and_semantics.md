@@ -10,10 +10,10 @@
 - For `bzfs_jobrunner` dict/list CLI args, follow `bzfs_job_testbed.py` style: build native Python objects, then pass
   them as `--flag={value}` strings.
 - Mirror `bzfs_job_testbed.py` at both syntactic and semantic levels.
-- While using this skill, do not run commands except optional read-only `zfs list` queries.
+- While using this skill, do not run commands except optional read-only `zfs list` and `zpool list` queries.
 - For state-changing workflows, keep dry-run enabled by default:
   - `bzfs ... --dryrun`
-  - `bzfs_jobrunner ... --dryrun` (usually with `--jobrunner-dryrun`)
+  - `bzfs_jobrunner ... --dryrun` (without `--jobrunner-dryrun`)
 - Keep real-run transitions explicit and operator-controlled.
 
 ## bzfs Safety-Critical Semantics

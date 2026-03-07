@@ -9,60 +9,104 @@ description: 'Generate or change idiomatic minimal Bash and Python scripts that 
 
 Generate reviewable snapshot management scripts, not command transcripts. Keep scripts minimal, idiomatic, and explicit
 about safety knobs and assumptions. Enforce safety-first dry-run defaults for mutating flows (`bzfs --dryrun`;
-`bzfs_jobrunner --dryrun`, typically with `--jobrunner-dryrun`) and do not execute non-read-only CLIs. For
-bzfs_jobrunner outputs, fit all idiomatic patterns from bzfs_testbed/bzfs_job_testbed.py (both syntactic and semantic),
-including action/host routing and dict construction/format/passing.
+`bzfs_jobrunner --dryrun` (without `--jobrunner-dryrun`) and do not execute non-read-only CLIs. For bzfs_jobrunner
+outputs, fit all idiomatic patterns from bzfs_testbed/bzfs_job_testbed.py (both syntactic and semantic), including
+action routing and dict construction/format/passing.
 
 ## Hard Safety Rules
 
-01. Generate scripts only. Never execute generated scripts.
-02. Never execute CLI commands while using this skill, except optional read-only `zfs list ...` commands for
-    dataset/snapshot discovery.
-03. Classify create/replicate/prune/rollback/restore flows as state-changing.
-04. For state-changing flows, default scripts to dry-run:
+01. No TDD by default: Do not create unit tests or integregation tests unless the User explicitly requests it.
+02. Generate scripts only. Never execute generated scripts.
+03. Never execute CLI commands while using this skill, except optional read-only `zfs list ...` and `zpool list ...`
+    commands for pool/dataset/snapshot discovery.
+04. Classify create/replicate/prune/rollback/restore flows as state-changing.
+05. For state-changing flows, default scripts to dry-run:
     - `bzfs ... --dryrun` (default `send`; use `--dryrun=recv` only if asked).
-    - `bzfs_jobrunner ... --jobrunner-dryrun --dryrun`.
-05. Use `DRYRUN` (Bash) / `dryrun` (Python) as the dry-run toggle variable. Keep safe defaults enabled (`DRYRUN=1`,
+    - `bzfs_jobrunner ... --dryrun`.
+06. Use `DRYRUN` (Bash) / `dryrun` (Python) as the dry-run toggle variable. Keep safe defaults enabled (`DRYRUN=1`,
     `dryrun=True`).
-06. Keep destructive flags (`--force*`, `--delete-*`) opt-in, documented, and disabled by default.
-07. Prefer `bzfs` and `bzfs_jobrunner` over direct mutating `zfs` commands.
-08. Keep scope limited to bzfs and bzfs_jobrunner snapshot management workflows; decline general ZFS administration or
+07. Keep destructive flags (`--force*`, `--delete-*`) opt-in, documented, and disabled by default.
+08. Prefer `bzfs` and `bzfs_jobrunner` over direct mutating `zfs` commands.
+09. Keep scope limited to bzfs and bzfs_jobrunner snapshot management workflows; decline general ZFS administration or
     non-bzfs tooling requests.
-09. Do not favor Bash over Python; provide both Bash and Python script outputs unless the user asks for one language.
-10. For `bzfs_jobrunner` scripts, mirror the action set and host routing style from `bzfs_testbed/bzfs_job_testbed.py`
-    (`--src-host` for source actions, `--dst-host` for destination actions).
-11. For `bzfs_jobrunner` scripts, mirror dict handling from `bzfs_testbed/bzfs_job_testbed.py`: build native dict/list
+10. Do not favor Bash over Python; provide both Bash and Python script outputs unless the user asks for one language.
+11. For `bzfs_jobrunner` scripts, mirror the action set from `bzfs_testbed/bzfs_job_testbed.py`.
+12. For `bzfs_jobrunner` scripts, mirror dict handling from `bzfs_testbed/bzfs_job_testbed.py`: build native dict/list
     objects in Python and pass them via `--flag={value}` formatting; in Bash, keep explicit quoted dict literals.
-12. Distill and apply `bzfs_job_testbed.py` idioms at both syntactic and semantic levels.
+13. Distill and apply `bzfs_job_testbed.py` idioms at both syntactic and semantic levels.
+
+## Step by Step Reasoning Workflow:
+
+- Think systematically through what's been asked of you, break down the problem, work through it step by step, and
+  reason deeply before responding.
 
 ## Script Generation Workflow
 
-1. Classify the request:
+1. Gather required inputs:
+
+   - datasets, recursion scope, hostnames and their roles, replication schedule, retention plans, monitoring plans, log
+     path.
+   - If inputs are missing, ask the User corresponding questions via the `request_user_input` tool or similar, if
+     available.
+
+2. Classify the request:
+
    - `read_only`: snapshot list compare, snapshot monitoring, inventory/listing.
    - `state_changing`: snapshot creation, replication/backup, snapshot pruning, restore.
-2. Choose the CLI:
-   - Use `bzfs` for ad hoc/manual workflows.
-   - Use `bzfs_jobrunner` for periodic or fleet-wide orchestration.
-   - For `bzfs_jobrunner`, model command shape after `bzfs_testbed/bzfs_job_testbed.py` action conventions.
-   - If the request is outside bzfs/bzfs_jobrunner snapshot management, state that it is out of scope and ask for a
-     bzfs-focused target.
-3. Gather required inputs:
-   - datasets, recursion scope, host/mode, retention plans, schedule, log path.
-   - If missing, ask focused questions or emit explicit placeholders (`SRC_DATASET`, `DST_DATASET`) and call them out.
-4. Generate idiomatic minimal code:
+
+3. Choose the CLI:
+
+- Prefer direct `bzfs` for:
+
+  - adhoc/manual snapshot creation,
+  - adhoc/manual replication or restore,
+  - adhoc/manual snapshot pruning,
+  - adhoc/manual monitoring of snapshots,
+  - snapshot list comparison.
+
+- Prefer `bzfs_jobrunner` for:
+
+  - periodic or automatic workflows,
+  - multi-host or fleet-wide orchestration,
+  - one shared jobconfig that drives create snapshot, replicate, prune, and monitor actions,
+  - cron/systemd style wrappers around a shared Python config.
+
+4. `bzfs_jobrunner` Host filtering:
+
+   - This is a complex area. Source-side actions usually scope with `--src-host`, destination-side actions with
+     `--dst-host`. But do not follow this template blindly; instead think deeply. Then add or omit `--src-host` and/or
+     `--dst-host` filters depending on which specific source/destination host subsets the workflow is actually intended
+     for (for example testing one src -> dst route, replicating from N source hosts to 1 destination host,
+     third-party-host orchestration, or high-frequency pair jobs).
+   - You have plenty of time; go slow and make sure everything is correct.
+
+5. Generate code:
+
+   - For `bzfs_jobrunner` NEVER merge any job actions (for example `--create-src-snapshots`, `--replicate`,
+     `--prune-src-snapshots`, `--prune-src-bookmarks`, `--prune-dst-snapshots`, `--monitor-src-snapshots`,
+     `--monitor-dst-snapshots`, `--dryrun`, `--verbose`) into the underlying jobconfig script code; instead keep them in
+     a separate launcher bash script so different actions can run with the same jobconfig configuration settings.
+   - Keep code idiomatic and minimal. Rigorously apply the KISS principle: Keep it simple stupid. Leave out all fluff
+     and unnecessary indirections/abstractions. Do not add any CLI flag. Do not add any environment variable beyond
+     DRYRUN.
    - Bash: `#!/usr/bin/env bash` + `set -euo pipefail`.
    - Python: `#!/usr/bin/env python3` + `subprocess.run([...], check=True)`.
    - Build commands as arrays/lists, not unsafe concatenated shell strings.
+   - Model command shape after `bzfs_testbed/bzfs_job_testbed.py` action conventions.
    - For `bzfs_jobrunner` dict args, follow `bzfs_job_testbed.py` style: Python dict/list objects rendered into
      `--src-hosts=...`, `--dst-hosts=...`, `--src-snapshot-plan=...`, etc.
    - Return paired Bash and Python variants by default.
-5. Add operator gates:
+
+6. Add operator gates:
+
    - A single dry-run switch defaulting to enabled.
    - Printed command preview before execution.
    - For Python previews, use `shlex.join(cmd)`.
-   - For `bzfs_jobrunner` scripts, include `--dryrun` when `DRYRUN=1`; include `--jobrunner-dryrun` unless explicitly
-     requested otherwise.
-6. Return three artifacts:
+   - For `bzfs_jobrunner` scripts, include `--dryrun` when `DRYRUN=1`; do not include `--jobrunner-dryrun` unless
+     explicitly requested otherwise.
+
+7. Return three artifacts:
+
    - scripts (Bash + Python, unless one language is explicitly requested),
    - what it does,
    - exactly what must be edited before first run.

@@ -2,8 +2,8 @@
 
 Use these templates to generate minimal scripts. Keep dry-run enabled unless a human explicitly changes the toggle.
 Default to returning both Bash and Python variants unless the user requests only one language. For `bzfs_jobrunner`
-templates, align action and host-routing with `bzfs_testbed/bzfs_job_testbed.py`. For `bzfs_jobrunner` dict/list options,
-align with `bzfs_job_testbed.py`: pass values as `--flag={value}`.
+templates, align action and host-routing with `bzfs_testbed/bzfs_job_testbed.py`. For `bzfs_jobrunner` dict/list
+options, align with `bzfs_job_testbed.py`: pass values as `--flag={value}`.
 
 ## Bash Template: One-Off bzfs Task
 
@@ -11,8 +11,8 @@ align with `bzfs_job_testbed.py`: pass values as `--flag={value}`.
 #!/usr/bin/env bash
 set -euo pipefail
 
-SRC_DATASET="tank1/src"
-DST_DATASET="tank2/bak"
+SRC_DATASET="src/foo/bar"
+DST_DATASET="dst/boo/bar"
 DRYRUN="${DRYRUN:-1}"  # keep 1 for safety
 
 cmd=(bzfs "$SRC_DATASET" "$DST_DATASET" --recursive)
@@ -46,8 +46,8 @@ import subprocess
 
 
 def main() -> None:
-    src_dataset = "tank1/src"
-    dst_dataset = "tank2/bak"
+    src_dataset = "src/foo/bar"
+    dst_dataset = "dst/boo/bar"
     dryrun = os.getenv("DRYRUN", "1") == "1"
 
     cmd: list[str] = ["bzfs", src_dataset, dst_dataset, "--recursive"]
@@ -75,18 +75,17 @@ set -euo pipefail
 
 JOBCONFIG="/bzfs/bzfs_testbed/bzfs_job_testbed.py"
 HOSTNAME_VALUE="$(hostname)"
-ACTION="${1:-replicate}"  # create-src-snapshots|replicate|prune-dst-snapshots|monitor-dst-snapshots
+ACTION="${1:---replicate}"  # --create-src-snapshots|--replicate|--prune-dst-snapshots|--monitor-dst-snapshots
 DRYRUN="${DRYRUN:-1}"  # keep 1 for safety
 
 cmd=("$JOBCONFIG")
 
-# Match bzfs_job_testbed.py: source actions run with --src-host; destination actions run with --dst-host.
 case "$ACTION" in
-  create-src-snapshots|prune-src-snapshots|prune-src-bookmarks|monitor-src-snapshots)
-    cmd+=(--src-host="$HOSTNAME_VALUE" "--$ACTION")
+  --create-src-snapshots|--prune-src-snapshots|--prune-src-bookmarks|--monitor-src-snapshots)
+    cmd+=(--src-host="$HOSTNAME_VALUE" "$ACTION")
     ;;
-  replicate|prune-dst-snapshots|monitor-dst-snapshots)
-    cmd+=(--dst-host="$HOSTNAME_VALUE" "--$ACTION")
+  --replicate|--prune-dst-snapshots|--monitor-dst-snapshots)
+    cmd+=(--dst-host="$HOSTNAME_VALUE" "$ACTION")
     ;;
   *)
     echo "Unsupported action: $ACTION" >&2
@@ -95,8 +94,8 @@ case "$ACTION" in
 esac
 
 if [[ "$DRYRUN" == "1" ]]; then
-  # --dryrun protects bzfs subcommands; --jobrunner-dryrun suppresses side effects in jobrunner itself.
-  cmd+=(--jobrunner-dryrun --dryrun)
+  # --dryrun protects bzfs subcommands
+  cmd+=(--dryrun)
 fi
 
 printf 'Review command before run:\n'
@@ -123,28 +122,26 @@ import sys
 def main() -> None:
     jobconfig = "/bzfs/bzfs_testbed/bzfs_job_testbed.py"
     hostname_value = socket.gethostname()
-    action = sys.argv[1] if len(sys.argv) > 1 else "replicate"
+    action = sys.argv[1] if len(sys.argv) > 1 else "--replicate"
     dryrun = os.getenv("DRYRUN", "1") == "1"
 
     cmd: list[str] = [jobconfig]
 
-    # Match bzfs_job_testbed.py: source actions use --src-host.
     if action in {
-        "create-src-snapshots",
-        "prune-src-snapshots",
-        "prune-src-bookmarks",
-        "monitor-src-snapshots",
+        "--create-src-snapshots",
+        "--prune-src-snapshots",
+        "--prune-src-bookmarks",
+        "--monitor-src-snapshots",
     }:
-        cmd += [f"--src-host={hostname_value}", f"--{action}"]
-    # Match bzfs_job_testbed.py: destination actions use --dst-host.
-    elif action in {"replicate", "prune-dst-snapshots", "monitor-dst-snapshots"}:
-        cmd += [f"--dst-host={hostname_value}", f"--{action}"]
+        cmd += [f"--src-host={hostname_value}", action]
+    elif action in {"--replicate", "--prune-dst-snapshots", "--monitor-dst-snapshots"}:
+        cmd += [f"--dst-host={hostname_value}", action]
     else:
         raise SystemExit(f"Unsupported action: {action}")
 
     if dryrun:
-        # --dryrun protects bzfs subcommands; --jobrunner-dryrun suppresses side effects in jobrunner itself.
-        cmd += ["--jobrunner-dryrun", "--dryrun"]
+        # --dryrun protects bzfs subcommands
+        cmd += ["--dryrun"]
 
     print("Review command before run:")
     print("  " + shlex.join(cmd))
@@ -163,8 +160,8 @@ Use this pattern when the script needs fleet mappings or plans (`--src-hosts`, `
 ### Bash
 
 ```bash
-SRC_HOSTS="['nas']"
-DST_HOSTS="{'nas': ['', 'onsite']}"
+SRC_HOSTS="['testsrc01']"
+DST_HOSTS="{'testdst01': ['', 'onsite']}"
 SRC_SNAPSHOT_PLAN="{'prod': {'onsite': {'hourly': 36, 'daily': 31}}}"
 
 cmd=(
@@ -178,8 +175,8 @@ cmd=(
 ### Python
 
 ```python
-src_hosts = ["nas"]
-dst_hosts = {"nas": ["", "onsite"]}
+src_hosts = ["testsrc01"]
+dst_hosts = {"testdst01": ["", "onsite"]}
 src_snapshot_plan = {"prod": {"onsite": {"hourly": 36, "daily": 31}}}
 
 cmd = [
@@ -194,10 +191,10 @@ cmd = [
 
 ```cron
 # Every minute: source snapshot creation + source pruning (still dry-run)
-* * * * * /usr/local/bin/bzfs-source-cycle.sh create-src-snapshots
-* * * * * /usr/local/bin/bzfs-source-cycle.sh prune-src-snapshots
+* * * * * /usr/local/bin/bzfs-src-cycle.sh --create-src-snapshots
+* * * * * /usr/local/bin/bzfs-src-cycle.sh --prune-src-snapshots
 
 # Every minute: destination replication + destination pruning (still dry-run)
-* * * * * /usr/local/bin/bzfs-dst-cycle.sh replicate
-* * * * * /usr/local/bin/bzfs-dst-cycle.sh prune-dst-snapshots
+* * * * * /usr/local/bin/bzfs-dst-cycle.sh --replicate
+* * * * * /usr/local/bin/bzfs-dst-cycle.sh --prune-dst-snapshots
 ```
