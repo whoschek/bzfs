@@ -159,5 +159,6 @@ tmp*/
 _tmp*/
 progress.md
 .codex/
+.codex-env.sh
 .agent/
 .roborev.toml

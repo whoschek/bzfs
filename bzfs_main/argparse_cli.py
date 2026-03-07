@@ -171,6 +171,9 @@ Example console status line:
 
 `2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] 80% ETA 0:00:04 ETA 01:23:08`
 
+{PROG_NAME} uses streaming algorithms to process millions of datasets with low memory usage and low latency.
+It handles replication policies with multiple sources and multiple destinations per source.
+
 Optionally, {PROG_NAME} applies bandwidth rate limiting and progress monitoring (via `pv`) during
 `zfs send/receive` transfers. Over the network, it can insert lightweight compression (via `zstd`)
 and buffering (via `mbuffer`) between endpoints. If one of these tools is not installed, {PROG_NAME}
