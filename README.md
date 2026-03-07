@@ -365,6 +365,7 @@ pre-commit run --all-files                # Manually run linters/formatters
 * Supports pull, push, pull-push, and local transfer modes.
 * Can create atomic snapshots, replicate, delete, monitor, and compare snapshots across many datasets in parallel, as
   frequently as every N milliseconds.
+* Uses streaming algorithms to process millions of datasets with low memory usage and low latency.
 * Handles replication policies with multiple sources and multiple destinations per source.
 * Favors safe, reliable, and predictable behavior.
 * Operation modes are explicit: read-only, append-only, and delete mode.
