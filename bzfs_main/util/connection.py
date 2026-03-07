@@ -403,10 +403,10 @@ class Connection:
         # and https://chessman7.substack.com/p/how-ssh-multiplexing-reuses-master
         control_limit_nanos: int = (remote.ssh_control_persist_secs - remote.ssh_control_persist_margin_secs) * 1_000_000_000
         socket_path: str | None = self._ssh_socket_path
-        is_socket_usable: bool = socket_path is None or self._is_ssh_control_socket_usable(socket_path)
         with self._lock:
-            if is_socket_usable and time.monotonic_ns() < self._last_refresh_time + control_limit_nanos:
-                return  # ssh master is alive, reuse its TCP connection (this is the common case and the ultra-fast path)
+            if time.monotonic_ns() < self._last_refresh_time + control_limit_nanos:
+                if socket_path is None or self._is_ssh_control_socket_usable(socket_path):
+                    return  # ssh master is alive, reuse its TCP connection (this is the common case and the ultra-fast path)
             ssh_cmd: list[str] = self._ssh_cmd
             ssh_sock_cmd: list[str] = ssh_cmd[0:-1]  # omit trailing ssh_user_host
             ssh_sock_cmd += ["-O", "check", remote.ssh_user_host]
