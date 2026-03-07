@@ -35,8 +35,9 @@ runs:
       version: "v2.0.3"
   - name: Start VM via Lima
     shell: bash
+    env:
+      alma_major_version: ${{ inputs.alma_major_version }}
     run: |
-      alma_major_version=${{ inputs.alma_major_version }}
       GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-$(pwd)}"
       arch="$(uname -m)"
       if [[ "$(uname -s)" == "Darwin" && "$arch" == "arm64" ]]; then
@@ -61,10 +62,12 @@ runs:
       limactl start --name=mylimavm --tty=false mylimavm.yaml
   - name: Install ZFS and other dependencies
     shell: bash
+    env:
+      zfs_version: ${{ inputs.zfs_version }}
+      ssh_program: ${{ inputs.ssh_program }}
     run: |
-      zfs_version=${{ inputs.zfs_version }}
-      ssh_program=${{ inputs.ssh_program }}
-      limactl shell --workdir=/testworkspace mylimavm -- bash -lc "./.github-workflow-scripts/install_almalinux_9.sh $zfs_version $ssh_program"
+      limactl shell --workdir=/testworkspace mylimavm -- \
+        ./.github-workflow-scripts/install_almalinux_9.sh "$zfs_version" "$ssh_program"
   - name: Display ZFS version and Python version
     shell: bash
     run: |
@@ -84,8 +87,9 @@ runs:
       EOF
   - name: Run tests inside VM
     shell: bash
+    env:
+      ssh_program: ${{ inputs.ssh_program }}
     run: |
-      ssh_program=${{ inputs.ssh_program }}
       limactl shell --workdir=/testworkspace mylimavm -- env \
         bzfs_test_mode="$bzfs_test_mode" \
         bzfs_test_no_run_quietly="$bzfs_test_no_run_quietly" \
