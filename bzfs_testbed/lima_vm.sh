@@ -133,7 +133,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
         sudo apt-get -y install zfs-dkms
         # Ensure the just-installed DKMS module is actually the loaded kernel module, and userland has same ZFS version as kernel
         sudo systemctl stop zfs-zed.service || true
-        sudo modprobe --remove zfs
+        sudo modprobe --remove zfs || true
         sudo modprobe zfs
     else
         sudo apt-get -y install zfsutils-linux
