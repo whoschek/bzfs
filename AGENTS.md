@@ -47,7 +47,8 @@ The `bzfs` project consists of two primary command-line tools:
 ## Repository Layout
 
 - `bzfs_main/` Core implementation including `bzfs.py` and `bzfs_jobrunner.py`.
-- `bzfs_tests/` All unit tests, integration tests, and the example job configuration (`bzfs_job_testbed.py`).
+- `bzfs_tests/` All unit tests and integration tests.
+- `bzfs_testbed/` Example job configuration (`bzfs_job_testbed.py`) and scripts for End-to-End Testing on local VMs.
 - `bzfs_docs/` and `bash_completion_d/` Documentation generation utilities used by the `update_readme.sh` script.
 
 ## Learning the Project

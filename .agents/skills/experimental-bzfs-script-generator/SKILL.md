@@ -73,11 +73,11 @@ action routing and dict construction/format/passing.
 
 4. `bzfs_jobrunner` Host filtering:
 
-   - This is a complex area. Source-side actions usually scope with `--src-host`, destination-side actions with
-     `--dst-host`. But do not follow this template blindly; instead think deeply. Then add or omit `--src-host` and/or
-     `--dst-host` filters depending on which specific source/destination host subsets the workflow is actually intended
-     for (for example testing one src -> dst route, replicating from N source hosts to 1 destination host,
-     third-party-host orchestration, or high-frequency pair jobs).
+   - This is a complex area. Think deeply. Source-side actions usually scope with `--src-host`, destination-side actions
+     with `--dst-host`. But do not follow this template blindly; depending on which specific source/destination host
+     subsets the workflow is actually intended for (for example third-party-host orchestration, testing one src -> dst
+     route, each destination host pulling independently or each source host pushing independently, or high-frequency
+     pair jobs), add or omit `--src-host` and/or `--dst-host` filters.
    - You have plenty of time; go slow and make sure everything is correct.
 
 5. Generate code:
