@@ -153,8 +153,8 @@ In this mode, {PROG_NAME} does not need to be installed on source or destination
 is required there. {PROG_NAME} can run as root or as a non-root user via sudo or delegated `zfs allow`
 permissions.
 
-{PROG_NAME} is written in Python and continuously tested with unit and integration tests for old and
-new ZFS versions on multiple Linux and FreeBSD versions, and for all Python versions >= 3.9 (including
+{PROG_NAME} is written in Python and continuously tested with unit and integration tests on old and
+new ZFS versions, on multiple Linux and FreeBSD versions, and on all Python versions >= 3.9 (including
 latest stable, currently python-3.14).
 
 {PROG_NAME} is a stand-alone program with zero required dependencies. It is meant to run in restricted

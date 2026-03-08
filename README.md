@@ -75,8 +75,8 @@ this mode, bzfs does not need to be installed on source or destination; only the
 required there. bzfs can run as root or as a non-root user via sudo or delegated `zfs allow`
 permissions.
 
-bzfs is written in Python and continuously tested with unit and integration tests for old and new
-ZFS versions on multiple Linux and FreeBSD versions, and for all Python versions >= 3.9
+bzfs is written in Python and continuously tested with unit and integration tests on old and new
+ZFS versions, on multiple Linux and FreeBSD versions, and on all Python versions >= 3.9
 (including latest stable, currently python-3.14).
 
 bzfs is a stand-alone program with zero required dependencies. It is meant to run in restricted
@@ -411,7 +411,7 @@ It also generates code coverage reports which are published [here](https://whosc
 # End-to-End Testing on the Testbed
 
 For reproducible local testing, consider using [`lima_vm.sh`](bzfs_testbed/lima_vm.sh).
-On macOS or Linux, this script uses Lima to locally create a guest Ubuntu or AlmaLinu VM, then runs the bzfs test suite
+On macOS or Linux, this script uses Lima to locally create a guest Ubuntu or AlmaLinux VM, then runs the bzfs test suite
 inside of that VM.
 
 Also consider running the [`lima_testbed.sh`](bzfs_testbed/lima_testbed.sh) script that uses this to create/delete a

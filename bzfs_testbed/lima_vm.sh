@@ -115,8 +115,10 @@ limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
 
 set -eo pipefail
 if [[ -f /etc/redhat-release ]]; then  # RHEL family
-    ./.github-workflow-scripts/install_almalinux_9.sh "${LIMA_ZFS_VERSION:-zfs-2.4}" "$LIMA_SSH_PROGRAM"
+    .github-workflow-scripts/install_almalinux_9.sh "${LIMA_ZFS_VERSION:-zfs-2.4}" "$LIMA_SSH_PROGRAM"
     sudo dnf -y install rsync ripgrep
+    # sudo dnf -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux net-tools traceroute sysstat ifstat iperf3 iotop iftop
+    # sudo dnf -y install npm && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
     export DEBIAN_FRONTEND=noninteractive
     if [[ ! -f ~/.bzfs_apt_update_done ]]; then
