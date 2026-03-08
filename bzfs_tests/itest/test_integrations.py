@@ -29,8 +29,8 @@ from bzfs_tests.itest.ibase import (
 from bzfs_tests.itest.test_incremental_send_steps import (
     IncrementalSendStepsTestCase,
 )
-from bzfs_tests.itest.test_lima_ubuntu_sh import (
-    TestLimaUbuntuScript,
+from bzfs_tests.itest.test_lima_vm_sh import (
+    TestLimaVmScript,
 )
 from bzfs_tests.itest.test_local import (
     LocalTestCase,
@@ -52,7 +52,7 @@ from bzfs_tests.itest.test_ssh import (
 def suite() -> unittest.TestSuite:
     ttype = AbstractTestCase()
     suite = unittest.TestSuite()
-    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestLimaUbuntuScript))
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(TestLimaVmScript))
     if not (ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))

@@ -410,8 +410,8 @@ It also generates code coverage reports which are published [here](https://whosc
 
 # End-to-End Testing on the Testbed
 
-For reproducible local testing on Ubuntu, consider using [`lima_ubuntu.sh`](bzfs_testbed/lima_ubuntu.sh).
-On macOS or Linux, this script uses Lima to locally create a guest Ubuntu server VM, then runs the bzfs test suite
+For reproducible local testing, consider using [`lima_vm.sh`](bzfs_testbed/lima_vm.sh).
+On macOS or Linux, this script uses Lima to locally create a guest Ubuntu or AlmaLinu VM, then runs the bzfs test suite
 inside of that VM.
 
 Also consider running the [`lima_testbed.sh`](bzfs_testbed/lima_testbed.sh) script that uses this to create/delete a
