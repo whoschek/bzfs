@@ -13,6 +13,7 @@ else
     python3 -m venv $tmp_venv
     # shellcheck disable=SC1091
     . $tmp_venv/bin/activate
+    python3 -m pip install --upgrade pip
     pip install -e '.[dev]'
 fi
 

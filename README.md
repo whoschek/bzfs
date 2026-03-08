@@ -356,6 +356,7 @@ git clone https://github.com/whoschek/bzfs.git
 cd bzfs
 python3 -m venv .venv                     # Create a Python virtual environment
 source .venv/bin/activate                 # Activate the virtual environment
+python3 -m pip install --upgrade pip      # Upgrade pip
 pip install -e '.[dev]'                   # Install all development dependencies
 pre-commit install --install-hooks        # Set up linters/formatters to run on every commit
 pre-commit run --all-files                # Manually run linters/formatters
