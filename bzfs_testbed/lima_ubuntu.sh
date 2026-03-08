@@ -96,6 +96,13 @@ fi
 LIMA_SSH_PORT="$(limactl list --tty=false --format="{{.SSHLocalPort}}" "$LIMA_VM_NAME")"
 mkdir -p "$LIMA_HOST_WORKDIR/.venv"  # makes `mount` later succeed in guest VM even in read-only mode
 
+# Workaround for https://github.com/lima-vm/lima/issues/678
+limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -s << 'EOF'
+set -eo pipefail
+sudo mkdir -p /etc/cloud/cloud.cfg.d
+sudo sh -c 'printf "ssh_deletekeys: false\n" > /etc/cloud/cloud.cfg.d/99-lima-preserve-ssh-hostkeys.cfg'
+EOF
+
 # Prepare VM
 limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
     LIMA_VM_NAME="$LIMA_VM_NAME" \
