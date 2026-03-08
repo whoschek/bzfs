@@ -24,7 +24,7 @@ cat /etc/redhat-release
 sudo dnf -y install dnf-plugins-core
 # sudo dnf config-manager --set-enabled crb
 
-sudo dnf -y install openssh-clients openssh-server zstd coreutils
+sudo dnf -y install openssh-clients openssh-server python3 zstd coreutils
 sudo systemctl enable --now sshd
 if [[ "$SSH_PROGRAM" == "hpnssh" ]]; then  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
     sudo dnf -y copr enable rapier1/hpnssh  # see https://copr.fedorainfracloud.org/coprs/rapier1/hpnssh/
@@ -70,32 +70,41 @@ if ! sudo dnf install -y zfs --enablerepo="epel,$ZFS_VERSION"; then
         exit 1
     fi
     # make it also work on aarch64, including guest VMs hosted by macOS on Apple Silicon
-    zfs_source_repo="${ZFS_VERSION}-source"
-    echo "Falling back to source build from repo '$zfs_source_repo' on '$arch' ..."
-    build_dir="$(mktemp -d)"
-    trap 'rm -rf "$build_dir"' EXIT
-    sudo dnf config-manager --set-enabled crb
-    sudo dnf install -y rpm-build
-    sudo dnf install -y dkms --enablerepo=epel
-    dnf -y download --source --disablerepo='*' --enablerepo="$zfs_source_repo" --destdir "$build_dir" zfs-dkms zfs
-    sudo dnf -y builddep "$build_dir"/zfs-dkms-[0-9]*.src.rpm "$build_dir"/zfs-[0-9]*.src.rpm
-    rpmbuild --rebuild "$build_dir"/zfs-dkms-[0-9]*.src.rpm "$build_dir"/zfs-[0-9]*.src.rpm
-    sudo dnf -y install "$HOME"/rpmbuild/RPMS/noarch/zfs-dkms-*.rpm
-    sudo dnf -y install \
-        "$HOME"/rpmbuild/RPMS/"$arch"/libnvpair[0-9]-[0-9]*.rpm \
-        "$HOME"/rpmbuild/RPMS/"$arch"/libuutil[0-9]-[0-9]*.rpm \
-        "$HOME"/rpmbuild/RPMS/"$arch"/libzpool[0-9]-[0-9]*.rpm \
-        "$HOME"/rpmbuild/RPMS/"$arch"/libzfs[0-9]-[0-9]*.rpm \
-        "$HOME"/rpmbuild/RPMS/"$arch"/zfs-[0-9]*.rpm \
-        "$HOME"/rpmbuild/RPMS/noarch/zfs-dracut-*.rpm
+    if [[ ! -f ~/.bzfs_zfs_done ]]; then
+        zfs_source_repo="${ZFS_VERSION}-source"
+        echo "Falling back to source build from repo '$zfs_source_repo' on '$arch' ..."
+        build_dir="$(mktemp -d)"
+        trap 'rm -rf "$build_dir"' EXIT
+        sudo dnf config-manager --set-enabled crb
+        sudo dnf install -y rpm-build
+        sudo dnf install -y dkms --enablerepo=epel
+        dnf -y download --source --disablerepo='*' --enablerepo="$zfs_source_repo" --destdir "$build_dir" zfs-dkms zfs
+        sudo dnf -y builddep "$build_dir"/zfs-dkms-[0-9]*.src.rpm "$build_dir"/zfs-[0-9]*.src.rpm
+        rpmbuild --rebuild "$build_dir"/zfs-dkms-[0-9]*.src.rpm "$build_dir"/zfs-[0-9]*.src.rpm
+        sudo dnf -y install "$HOME"/rpmbuild/RPMS/noarch/zfs-dkms-*.rpm
+        sudo dnf -y install \
+            "$HOME"/rpmbuild/RPMS/"$arch"/libnvpair[0-9]-[0-9]*.rpm \
+            "$HOME"/rpmbuild/RPMS/"$arch"/libuutil[0-9]-[0-9]*.rpm \
+            "$HOME"/rpmbuild/RPMS/"$arch"/libzpool[0-9]-[0-9]*.rpm \
+            "$HOME"/rpmbuild/RPMS/"$arch"/libzfs[0-9]-[0-9]*.rpm \
+            "$HOME"/rpmbuild/RPMS/"$arch"/zfs-[0-9]*.rpm \
+            "$HOME"/rpmbuild/RPMS/noarch/zfs-dracut-*.rpm
+        touch ~/.bzfs_zfs_done
+    fi
+    if ! modinfo zfs > /dev/null 2>&1; then
+        sudo dkms autoinstall -k "$(uname -r)"
+    fi
 fi
 sudo modprobe zfs
 zfs --version
 
 mkdir -p "$HOME/.ssh"
-rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
-ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N "" # create private key and public key
-cat "$HOME/.ssh/id_rsa.pub" >> "$HOME/.ssh/authorized_keys"
 chmod u=rwx,go= "$HOME/.ssh"
-chmod u=rw,go= "$HOME/.ssh/id_rsa" "$HOME/.ssh/authorized_keys"
-chmod u=rw,go=r "$HOME/.ssh/id_rsa.pub"
+if [[ ! -f ~/.bzfs_keys_done ]]; then
+    rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
+    ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N "" # create private key and public key
+    cat "$HOME/.ssh/id_rsa.pub" >> "$HOME/.ssh/authorized_keys"
+    chmod u=rw,go= "$HOME/.ssh/id_rsa" "$HOME/.ssh/authorized_keys"
+    chmod u=rw,go=r "$HOME/.ssh/id_rsa.pub"
+    touch ~/.bzfs_keys_done
+fi
