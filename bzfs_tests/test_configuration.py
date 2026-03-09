@@ -357,6 +357,28 @@ class TestHelperFunctions(AbstractTestCase):
         st_mode = os.stat(expected_locks_dir).st_mode
         self.assertEqual(stat.S_IMODE(st_mode), stat.S_IRWXU)
 
+    def test_lock_file_name_distinguishes_ssh_ports(self) -> None:
+        """Distinct SSH ports must produce distinct periodic-job lock paths."""
+        common_args = ["src", "dst", "--ssh-src-host", "src-host", "--ssh-dst-host", "dst-host"]
+        args1 = self.argparser_parse_args(common_args + ["--ssh-src-port", "22", "--ssh-dst-port", "22"])
+        params1 = self.make_params(args=args1, log_params=LogParams(args1))
+        args2 = self.argparser_parse_args(common_args + ["--ssh-src-port", "2222", "--ssh-dst-port", "2222"])
+        params2 = self.make_params(args=args2, log_params=LogParams(args2))
+        self.assertNotEqual(params1.lock_file_name(), params2.lock_file_name())
+
+    def test_lock_file_name_distinguishes_ssh_config_files(self) -> None:
+        """Distinct SSH config files must produce distinct periodic-job lock paths."""
+        common_args = ["src", "dst", "--ssh-src-host", "src-host", "--ssh-dst-host", "dst-host"]
+        args1 = self.argparser_parse_args(
+            common_args + ["--ssh-src-config-file=bzfs_ssh_config_a", "--ssh-dst-config-file=bzfs_ssh_config_a"]
+        )
+        params1 = self.make_params(args=args1, log_params=LogParams(args1))
+        args2 = self.argparser_parse_args(
+            common_args + ["--ssh-src-config-file=bzfs_ssh_config_b", "--ssh-dst-config-file=bzfs_ssh_config_b"]
+        )
+        params2 = self.make_params(args=args2, log_params=LogParams(args2))
+        self.assertNotEqual(params1.lock_file_name(), params2.lock_file_name())
+
     def test_custom_ssh_config_file_must_match_file_name_pattern(self) -> None:
         args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bzfs_ssh_config.cfg"])
         self.make_params(args=args)

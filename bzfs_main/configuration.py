@@ -468,7 +468,11 @@ class Params(MiniParams):
                self.args.delete_empty_dst_datasets,
                self.args.compare_snapshot_lists, self.args.monitor_snapshots,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
-               self.src.basis_ssh_user, self.dst.basis_ssh_user)
+               self.src.basis_ssh_user, self.dst.basis_ssh_user,
+               self.src.ssh_port, self.dst.ssh_port,
+               os.path.abspath(self.src.ssh_config_file) if self.src.ssh_config_file else "",
+               os.path.abspath(self.dst.ssh_config_file) if self.dst.ssh_config_file else "",
+               )
         # fmt: on
         hash_code: str = sha256_hex(str(key))
         log_parent_dir: str = os.path.dirname(self.log_params.log_dir)
