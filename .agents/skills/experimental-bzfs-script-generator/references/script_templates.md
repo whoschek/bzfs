@@ -3,7 +3,8 @@
 Use these templates to generate minimal scripts. Keep dry-run enabled unless a human explicitly changes the toggle.
 Default to returning both Bash and Python variants unless the user requests only one language. For `bzfs_jobrunner`
 templates, align action and host-routing with `bzfs_testbed/bzfs_job_testbed.py`. For `bzfs_jobrunner` dict/list
-options, align with `bzfs_job_testbed.py`: pass values as `--flag={value}`.
+options, align with `bzfs_job_testbed.py`: pass values as `--flag={value}`. For standard schedule policies, prefer
+plan-based convenience flags over manual `--include-snapshot-times-and-ranks` chains.
 
 ## Bash Template: One-Off bzfs Task
 
@@ -19,8 +20,9 @@ cmd=(bzfs "$SRC_DATASET" "$DST_DATASET" --recursive)
 
 # Add task flags here, for example:
 # cmd+=(--skip-replication --compare-snapshot-lists=src+dst+all)
-# cmd+=(--create-src-snapshots --create-src-snapshots-plan "{'prod':{'onsite':{'hourly':36}}}")
-# cmd+=(--delete-dst-snapshots --delete-dst-snapshots-except-plan "{'prod':{'onsite':{'daily':31}}}")
+# cmd+=(--create-src-snapshots --create-src-snapshots-plan "{'prod':{'onsite':{'minutely':40,'hourly':36,'daily':31}}}")
+# cmd+=(--include-snapshot-plan "{'prod':{'onsite':{'minutely':40,'hourly':36,'daily':31}}}")
+# cmd+=(--delete-dst-snapshots --delete-dst-snapshots-except-plan "{'prod':{'onsite':{'minutely':40,'hourly':36,'daily':31}}}")
 
 if [[ "$DRYRUN" == "1" ]]; then
   cmd+=(--dryrun)
@@ -49,11 +51,15 @@ def main() -> None:
     src_dataset = "src/foo/bar"
     dst_dataset = "dst/boo/bar"
     dryrun = os.getenv("DRYRUN", "1") == "1"
+    snapshot_plan = {"prod": {"onsite": {"minutely": 40, "hourly": 36, "daily": 31}}}
+    prune_plan = {"prod": {"onsite": {"minutely": 40, "hourly": 36, "daily": 31}}}
 
     cmd: list[str] = ["bzfs", src_dataset, dst_dataset, "--recursive"]
 
     # Add task flags here, for example:
     # cmd += ["--skip-replication", "--compare-snapshot-lists=src+dst+all"]
+    # cmd += [f"--include-snapshot-plan={snapshot_plan}"]
+    # cmd += ["--delete-dst-snapshots", f"--delete-dst-snapshots-except-plan={prune_plan}"]
 
     if dryrun:
         cmd.append("--dryrun")

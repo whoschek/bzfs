@@ -16,6 +16,14 @@
 
 # Miscellaneous bzfs Examples
 
+- Replicate all daily snapshots created during the last 7 days, and at the same time ensure that the latest 7 daily
+  snapshots (per dataset) are replicated regardless of creation time:
+
+```
+$ bzfs tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily' \
+--include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7'
+```
+
 - Delete all tmp datasets within tank2/boo/bar:
 
 ```

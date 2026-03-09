@@ -12,10 +12,6 @@ set -euo pipefail
 SRC_DATASET="src/foo/bar"
 DST_DATASET="dst/boo/bar"
 
-# Optional read-only preflight checks:
-zfs list -H -o name "$SRC_DATASET" >/dev/null
-zfs list -H -o name "$DST_DATASET" >/dev/null
-
 cmd=(
   bzfs "$SRC_DATASET" "$DST_DATASET"
   --recursive
@@ -44,9 +40,6 @@ def main() -> None:
     src_dataset = "src/foo/bar"
     dst_dataset = "dst/boo/bar"
 
-    subprocess.run(["zfs", "list", "-H", "-o", "name", src_dataset], check=True)
-    subprocess.run(["zfs", "list", "-H", "-o", "name", dst_dataset], check=True)
-
     cmd = [
         "bzfs",
         src_dataset,
@@ -67,7 +60,7 @@ if __name__ == "__main__":
     main()
 ```
 
-## Scenario 2: Safe destination pruning (state-changing, dry-run default)
+## Scenario 2: Plan-based filtered replication (state-changing, dry-run default)
 
 ```bash
 #!/usr/bin/env bash
@@ -80,11 +73,7 @@ DRYRUN="${DRYRUN:-1}"  # keep 1 for safety
 cmd=(
   bzfs "$SRC_DATASET" "$DST_DATASET"
   --recursive
-  --skip-replication
-  --delete-dst-snapshots
-  --include-snapshot-regex '.*_daily'
-  --include-snapshot-times-and-ranks "notime" "all except latest 7"
-  --include-snapshot-times-and-ranks "anytime..7 days ago"
+  --include-snapshot-plan "{'prod':{'onsite':{'minutely':40,'hourly':36,'daily':31}}}"
 )
 
 if [[ "$DRYRUN" == "1" ]]; then
@@ -99,7 +88,7 @@ printf '\n'
 
 ```python
 #!/usr/bin/env python3
-"""Prune destination snapshots with dry-run enabled by default."""
+"""Replicate snapshots selected by a standard snapshot plan."""
 
 from __future__ import annotations
 
@@ -112,21 +101,14 @@ def main() -> None:
     src_dataset = "src/foo/bar"
     dst_dataset = "dst/boo/bar"
     dryrun = os.getenv("DRYRUN", "1") == "1"
+    snapshot_plan = {"prod": {"onsite": {"minutely": 40, "hourly": 36, "daily": 31}}}
 
     cmd = [
         "bzfs",
         src_dataset,
         dst_dataset,
         "--recursive",
-        "--skip-replication",
-        "--delete-dst-snapshots",
-        "--include-snapshot-regex",
-        ".*_daily",
-        "--include-snapshot-times-and-ranks",
-        "notime",
-        "all except latest 7",
-        "--include-snapshot-times-and-ranks",
-        "anytime..7 days ago",
+        f"--include-snapshot-plan={snapshot_plan}",
     ]
 
     if dryrun:
@@ -202,3 +184,4 @@ if __name__ == "__main__":
 4. Optional read-only preflight `zfs list` checks reduce operator mistakes.
 5. Python command previews should use `shlex.join(cmd)` for correct quoting.
 6. For `bzfs_jobrunner` dict/list args, mirror `bzfs_job_testbed.py` and pass `--flag={value}`.
+7. Prefer `--include-snapshot-plan` over manual `--include-snapshot-times-and-ranks` chains for standard schedules.

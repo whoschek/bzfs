@@ -11,7 +11,10 @@ Read-only tasks (monitoring, compare, inventory) do not require `--dryrun`.
 - `SRC`: source dataset (or `user@host:dataset`)
 - `DST`: destination dataset (or `user@host:dataset`)
 - `dummy`: virtual empty source used for independent retention policies
-- `PLAN`: bzfs plan dictionary string
+- `PLAN`: bzfs plan dictionary string, for example `"{'prod':{'onsite':{'minutely':40,'hourly':36,'daily':31}}}"`
+
+Prefer plan-based convenience flags such as `--include-snapshot-plan` and `--delete-dst-snapshots-except-plan` over
+manual `--include-snapshot-times-and-ranks` chains when standard schedule policies are sufficient.
 
 ## 1) Create snapshots only (ad hoc/manual)
 
@@ -32,7 +35,16 @@ bzfs "$SRC" "$DST" \
   --dryrun
 ```
 
-## 3) Prune destination snapshots by retention plan
+## 3) Replicate snapshots by snapshot plan
+
+```bash
+bzfs "$SRC" "$DST" \
+  --recursive \
+  --include-snapshot-plan "$PLAN" \
+  --dryrun
+```
+
+## 4) Prune destination snapshots by retention plan
 
 ```bash
 bzfs "$SRC_OR_DUMMY" "$DST" \
@@ -43,7 +55,7 @@ bzfs "$SRC_OR_DUMMY" "$DST" \
   --dryrun
 ```
 
-## 4) Prune bookmarks by retention plan
+## 5) Prune bookmarks by retention plan
 
 ```bash
 bzfs dummy "$DATASET" \
@@ -54,7 +66,7 @@ bzfs dummy "$DATASET" \
   --dryrun
 ```
 
-## 5) Monitor snapshot age
+## 6) Monitor snapshot age
 
 ```bash
 bzfs "$SRC" "$DST" \
@@ -63,7 +75,7 @@ bzfs "$SRC" "$DST" \
   --monitor-snapshots "$MONITOR_PLAN"
 ```
 
-## 6) Compare source and destination snapshot lists
+## 7) Compare source and destination snapshot lists
 
 ```bash
 bzfs "$SRC" "$DST" \
@@ -72,7 +84,7 @@ bzfs "$SRC" "$DST" \
   --compare-snapshot-lists=src+dst+all
 ```
 
-## 7) Restore rehearsal into non-production dataset
+## 8) Restore rehearsal into non-production dataset
 
 ```bash
 bzfs "$BACKUP_SRC" "$RESTORE_DST" \
@@ -86,7 +98,7 @@ Optional conflict handling flags (keep disabled by default):
 - `--force-rollback-to-latest-common-snapshot`
 - `--force`
 
-## 8) Periodic orchestration with bzfs_jobrunner
+## 9) Periodic orchestration with bzfs_jobrunner
 
 Follow `bzfs_testbed/bzfs_job_testbed.py` conventions. When emitting full fleet orchestration commands, pass dict/list
 values using `--flag={value}` style that matches `bzfs_job_testbed.py`. Carry over the same semantics as the example
@@ -132,7 +144,7 @@ bzfs_jobrunner \
   "--src-snapshot-plan={'prod': {'onsite': {'hourly': 36, 'daily': 31}}}"
 ```
 
-## 9) Read-only inventory command (allowed execution during skill use)
+## 10) Read-only inventory command (allowed execution during skill use)
 
 ```bash
 zfs list -t snapshot,bookmark -o name,guid,createtxg,creation -s creation -r "$DATASET"

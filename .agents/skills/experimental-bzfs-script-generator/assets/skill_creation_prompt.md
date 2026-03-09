@@ -41,6 +41,10 @@
   syntactic and semantic), including how to construct, format and pass dicts, and follow the same idiomatic patterns in
   generated scripts.
 
+- Prefer plan-based convenience flags such as `--include-snapshot-plan`, `--create-src-snapshots-plan`, and
+  `--delete-dst-snapshots-except-plan` over hand-written `--include-snapshot-times-and-ranks` chains when standard
+  secondly/minutely/hourly/daily/weekly/monthly/yearly policies are sufficient.
+
 - Keep code idiomatic and minimal. Rigorously apply the KISS principle: Keep it simple stupid. Leave out all fluff and
   unnecessary indirections/abstractions. Do not add any CLI flag. Do not add any environment variable beyond DRYRUN.
 

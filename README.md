@@ -391,6 +391,8 @@ pre-commit run --all-files                # Manually run linters/formatters
 * Retry behavior for intermittent failures is configurable.
 * Multiple `bzfs` processes can run in parallel.
 * Prevents overlapping periodic runs by skipping a new run while the previous one is still active.
+* Optionally caches snapshot metadata via ZFS `snapshots_changed` to reduce latency by avoiding unnecessary
+  `zfs list -t snapshot` calls.
 * Implemented with efficient, reliable low latency mechanisms throughout.
 * Implemented in straightforward Python to make maintenance easy.
 * Unit and integration tests are about 2x runtime code size, with >99% coverage.
