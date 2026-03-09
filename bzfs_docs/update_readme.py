@@ -13,12 +13,12 @@
 # limitations under the License.
 #
 """
-Run this script to update README.md from the help info contained in bzfs.py.
-Example usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main/bzfs.py README.md
+Run this script to regenerate a README from the argparse help text of a selected module.
+Example usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main.bzfs README.md
 This essentially does the following steps:
-argparse-manpage --module bzfs_main.bzfs --function argument_parser > /tmp/manpage.1
+argparse-manpage --module <module> --function argument_parser > /tmp/manpage.1
 pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
-Then takes that output, auto-cleans it and auto-replaces certain sections of README.md with it.
+Then takes that output, auto-cleans it and auto-replaces certain sections of the target README with it.
 
 Before doing so install prerequisites:
 brew install pandoc  # OSX
@@ -91,7 +91,7 @@ def main() -> None:
     manpage = content.splitlines(keepends=True)
 
     # Step 4: Replace Description Section
-    # Step 4a: Extract replacement from cleaned markdown, which is the text between "# DESCRIPTION" and "**SRC_DATASET"
+    # Step 4a: Extract replacement from cleaned markdown, which is the text between "# DESCRIPTION" and help detail.
     begin_desc_markdown_tag = "# DESCRIPTION"
     begin_help_markdown_tags = ["**SRC_DATASET", "**--create-src-snapshots"]
     begin_desc_markdown_idx = find_match(
@@ -107,7 +107,7 @@ def main() -> None:
     )
     replacement = "".join(manpage[begin_desc_markdown_idx + 1 : begin_help_markdown_idx]).strip()
 
-    # Step 4b: replace text between '<!-- DESCRIPTION BEGIN -->' and '<!-- END DESCRIPTION SECTION -->' in README.md
+    # Step 4b: Replace text between '<!-- BEGIN DESCRIPTION SECTION -->' and '<!-- END DESCRIPTION SECTION -->'.
     begin_desc_readme_tag = "<!-- BEGIN DESCRIPTION SECTION -->"
     end_desc_readme_tag = "<!-- END DESCRIPTION SECTION -->"
     with open(readme_file, encoding="utf-8") as f:

@@ -194,8 +194,9 @@ that `zfs list -t snapshot` performance degrades as snapshot counts grow within 
 snapshot count small, and prune at a cadence that matches your snapshot creation rate. Consider using `--skip-parent` and
 `--exclude-dataset*` filters so only datasets that need this frequency are selected.
 
-To reduce startup overhead, use the `--daemon-*` options and split the crontab entry (or, preferably, a high-frequency
-systemd timer) into multiple processes, from one source host to one destination host, along these lines:
+To reduce startup overhead, forward `--daemon-lifetime` to `bzfs`, use the `--daemon-*` options, and split the
+crontab entry (or, preferably, a high-frequency systemd timer) into multiple processes, from one source host to one
+destination host, along these lines:
 
 * crontab on source hosts:
 
@@ -260,7 +261,8 @@ This is harmless because that extra process exits immediately with a message lik
         help="Hostname of localhost. Default is the hostname without the domain name, querying the Operating System.\n\n")
     parser.add_argument(
         "--src-hosts", default=None, metavar="LIST_STRING",
-        help="Hostnames of the sources to operate on.\n\n")
+        help="Hostnames of the sources to operate on. Specify a Python list literal such as "
+             "`\"['src1', 'src2']\"`. If omitted, reads the same list literal from stdin.\n\n")
     parser.add_argument(
         "--src-host", default=None, action="append", metavar="STRING",
         help="For subsetting --src-hosts; Can be specified multiple times; Indicates to only use the --src-hosts that are "

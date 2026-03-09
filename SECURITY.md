@@ -31,7 +31,7 @@ Only the following versions are eligible for security updates:
 | Version | Supported |
 | -- | -- |
 | Latest release | ✅ |
-| Development commits (on master branch) | ✅ |
+| Development commits (on main branch) | ✅ |
 | All other versions | ❌ |
 
 ## Security Best Practices

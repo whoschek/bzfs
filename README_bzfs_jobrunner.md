@@ -92,9 +92,9 @@ grow within the selected datasets. Keep the active snapshot count small, and pru
 that matches your snapshot creation rate. Consider using `--skip-parent` and
 `--exclude-dataset*` filters so only datasets that need this frequency are selected.
 
-To reduce startup overhead, use the `--daemon-*` options and split the crontab entry (or,
-preferably, a high-frequency systemd timer) into multiple processes, from one source host to one
-destination host, along these lines:
+To reduce startup overhead, forward `--daemon-lifetime` to `bzfs`, use the `--daemon-*`
+options, and split the crontab entry (or, preferably, a high-frequency systemd timer) into
+multiple processes, from one source host to one destination host, along these lines:
 
 * crontab on source hosts:
 
@@ -260,7 +260,8 @@ usage: bzfs_jobrunner
 
 **--src-hosts** *LIST_STRING*
 
-*  Hostnames of the sources to operate on.
+*  Hostnames of the sources to operate on. Specify a Python list literal such as `"['src1',
+    'src2']"`. If omitted, reads the same list literal from stdin.
 
 <!-- -->
 

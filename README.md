@@ -244,13 +244,14 @@ tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_minutely
 ```
 
 
-* Replicate all daily snapshots created during the last 7 days, and at the same time ensure that
-the latest 7 daily snapshots (per dataset) are replicated regardless of creation time:
+* Replicate all daily snapshots created during the last 31 days, and at the same time ensure that
+the latest 31 daily snapshots (per dataset) are replicated regardless of creation time. Same for
+40 minutely snapshots, and 36 hourly snapshots:
 
 
 ```
-$ bzfs tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily' \
---include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7'
+$ bzfs tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-plan \
+"{'prod':{'us-west':{'minutely':40,'hourly':36,'daily':31}}}"
 ```
 
 
@@ -469,7 +470,7 @@ bzfs-test        # when installed via pip
 03. Select `All workflows` -> `Tests` in the left sidebar.
 04. Open the `Run workflow` dropdown menu on the right. The UI looks like
     [this screenshot](https://raw.githubusercontent.com/whoschek/bzfs/main/bzfs_docs/run_workflow_dialog.jpg).
-05. Select a single job (for example `test_ubuntu_24_04` or `test_freebsd_15_0` or `test_almalinux_10_zfs_2_4`) or
+05. Select a single job (for example `test_ubuntu_24_04` or `test_freebsd_15_0` or `test_almalinux_10_zfs_2_4_hpnssh`) or
     choose `Run all jobs` to run the test suite on the full matrix of all supported platforms.
 06. Select the branch to test, usually the branch that contains your changes.
 07. Click the 'Run workflow' button to start the run.

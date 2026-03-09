@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run this script to update README.md from the help info contained in bzfs.py.
+# Regenerate both README files from argparse help text and refresh shell completion.
 set -e
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 

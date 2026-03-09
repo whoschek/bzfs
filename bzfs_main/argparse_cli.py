@@ -286,11 +286,11 @@ tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_hourly
 
 tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_minutely```
 
-* Replicate all daily snapshots created during the last 7 days, and at the same time ensure that the latest 7 daily
-snapshots (per dataset) are replicated regardless of creation time:
+* Replicate all daily snapshots created during the last 31 days, and at the same time ensure that the latest 31 daily
+snapshots (per dataset) are replicated regardless of creation time. Same for 40 minutely snapshots, and 36 hourly
+snapshots:
 
-```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7'```
+```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-plan "{create_src_snapshots_plan_example2}"```
 
 Note: The example above compares the specified times against the standard ZFS 'creation' time property of the snapshots
 (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be part of the snapshot name.
