@@ -23,7 +23,7 @@ Then takes that output, auto-cleans it and auto-replaces certain sections of the
 Before doing so install prerequisites:
 brew install pandoc  # OSX
 sudo apt-get -y install pandoc  # Linux
-pip install argparse-manpage  # see https://github.com/praiskup/argparse-manpage
+python3 -m pip install argparse-manpage  # see https://github.com/praiskup/argparse-manpage
 """
 
 from __future__ import (

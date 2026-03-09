@@ -92,7 +92,7 @@ To understand the system's architecture and features, follow these steps:
   python3 -m venv .venv                     # Create a Python virtual environment
   source .venv/bin/activate                 # Activate the virtual environment
   python3 -m pip install --upgrade pip      # Upgrade pip
-  pip install -e '.[dev]'                   # Install all development dependencies
+  python3 -m pip install -e '.[dev]'        # Install all development dependencies
   pre-commit install --install-hooks        # Set up linters/formatters to run on every commit
   ```
 

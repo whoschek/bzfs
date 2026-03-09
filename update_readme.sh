@@ -14,7 +14,7 @@ else
     # shellcheck disable=SC1091
     . $tmp_venv/bin/activate
     python3 -m pip install --upgrade pip
-    pip install -e '.[dev]'
+    python3 -m pip install -e '.[dev]'
 fi
 
 export NO_COLOR=1  # don't add color codes to generated man pages

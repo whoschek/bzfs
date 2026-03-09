@@ -41,7 +41,7 @@ runs:
     shell: bash
     run: |
       python3 -m pip install --upgrade pip
-      pip install --upgrade "coverage[toml]==7.*"
+      python3 -m pip install --upgrade "coverage[toml]==7.*"
   - name: Install ssh + other dependencies
     shell: bash
     run: |

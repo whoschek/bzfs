@@ -348,7 +348,8 @@ sudo ln -sf $(pwd)/bzfs /usr/local/bin/bzfs                     # Optional syste
 sudo ln -sf $(pwd)/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner # Optional system installation
 
 # Alternatively, install a release via pip:
-pip install bzfs
+python3 -m pip install bzfs
+python3 -m pip install --upgrade bzfs     # To upgrade an existing bzfs installation
 bzfs --help  # Run the CLI
 bzfs_jobrunner --help
 
@@ -358,7 +359,7 @@ cd bzfs
 python3 -m venv .venv                     # Create a Python virtual environment
 source .venv/bin/activate                 # Activate the virtual environment
 python3 -m pip install --upgrade pip      # Upgrade pip
-pip install -e '.[dev]'                   # Install all development dependencies
+python3 -m pip install -e '.[dev]'        # Install all development dependencies
 pre-commit install --install-hooks        # Set up linters/formatters to run on every commit
 pre-commit run --all-files                # Manually run linters/formatters
 ```
