@@ -433,31 +433,22 @@ _Tree = dict[str, "_Tree"]  # Type alias
 
 
 def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
-    """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names, in the
-    form of nested dicts; This converts the dataset list into a dependency tree."""
+    """Takes as input a sorted list of datasets and returns a (reverse) sorted directory tree containing the same dataset
+    names, in the form of nested dicts; This converts the dataset list into a dependency tree."""
     tree: _Tree = {}
     interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint
-    for dataset in sorted_datasets:
+    shared_empty_leaf: _Tree = {}  # tree with shared empty leafs has ~30% lower memory footprint than non-compacted version
+
+    for dataset in reversed(sorted_datasets):
         current: _Tree = tree
-        for component in dataset.split(COMPONENT_SEPARATOR):
+        components: list[str] = dataset.split(COMPONENT_SEPARATOR)
+        k: int = len(components) - 1
+        for i, component in enumerate(components):
             child: _Tree | None = current.get(component)
             if child is None:
-                child = {}
+                child = {} if i < k else shared_empty_leaf  # sharing is safe as the tree is treated as immutable henceforth
+                assert current is not shared_empty_leaf
                 component = interner.intern(component)
                 current[component] = child
             current = child
-
-    def compact(node: _Tree) -> None:
-        """Tree with shared empty leaf nodes has some 30% lower memory footprint than the non-compacted version."""
-        shared_empty_leaf: _Tree = {}
-        stack: list[_Tree] = [node]
-        while stack:  # algo implemented using iteration to avoid hitting recursion limits with pathologically deep trees
-            current_node: _Tree = stack.pop()
-            for key, child_node in current_node.items():
-                if len(child_node) == 0:
-                    current_node[key] = shared_empty_leaf  # sharing is safe as the tree is treated as immutable henceforth
-                else:
-                    stack.append(child_node)  # recurse down the tree
-
-    compact(tree)
     return tree

@@ -106,43 +106,65 @@ class TestBuildTree(unittest.TestCase):
             if isinstance(value, dict):
                 self.assert_keys_sorted(value)
 
+    def _reverse_tree(self, tree: dict[str, Any]) -> dict[str, Any]:
+        return {key: self._reverse_tree(value) for key, value in reversed(tree.items())}
+
+    def build_tree(self, datasets: list[str]) -> dict[str, Any]:
+        return self._reverse_tree(_build_dataset_tree(datasets))
+
+    def test_empty_leaf_nodes_are_shared(self) -> None:
+        datasets = ["other", "pool/a", "pool/b/c"]
+        tree = _build_dataset_tree(datasets)
+        leaves = [
+            tree["other"],
+            tree["pool"]["a"],
+            tree["pool"]["b"]["c"],
+        ]
+        self.assertTrue(all(leaf is leaves[0] for leaf in leaves))
+
+    def test_raw_tree_keys_descend(self) -> None:
+        datasets = ["pool", "pool/dataset", "pool/dataset/sub", "pool/other", "pool/other/sub/child"]
+        expected_tree = {"pool": {"other": {"sub": {"child": {}}}, "dataset": {"sub": {}}}}
+        tree = _build_dataset_tree(datasets)
+        self.assertEqual(expected_tree, tree)
+
     def test_basic_tree(self) -> None:
         datasets = ["pool", "pool/dataset", "pool/dataset/sub", "pool/other", "pool/other/sub/child"]
         expected_tree = {"pool": {"dataset": {"sub": {}}, "other": {"sub": {"child": {}}}}}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
     def test_empty_input(self) -> None:
         datasets: list[str] = []
         expected_tree: _Tree = {}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
 
     def test_single_root(self) -> None:
         datasets: list[str] = ["pool"]
         expected_tree: _Tree = {"pool": {}}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
     def test_single_branch(self) -> None:
         datasets: list[str] = ["pool/dataset/sub/child"]
         expected_tree: _Tree = {"pool": {"dataset": {"sub": {"child": {}}}}}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots(self) -> None:
         datasets: list[str] = ["pool", "otherpool", "anotherpool"]
         expected_tree: _Tree = {"anotherpool": {}, "otherpool": {}, "pool": {}}
-        tree = _build_dataset_tree(sorted(datasets))
+        tree = self.build_tree(sorted(datasets))
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
     def test_large_dataset(self) -> None:
         datasets: list[str] = [f"pool/dataset{i}" for i in range(100)]
-        tree = _build_dataset_tree(sorted(datasets))
+        tree = self.build_tree(sorted(datasets))
         self.assertEqual(100, len(tree["pool"]))
         self.assert_keys_sorted(tree)
 
@@ -155,49 +177,49 @@ class TestBuildTree(unittest.TestCase):
             "pool/parent/child3",
         ]
         expected_tree: _Tree = {"pool": {"parent": {"child1": {}, "child2": {"grandchild": {}}, "child3": {}}}}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
     def test_no_children(self) -> None:
         datasets: list[str] = ["pool", "otherpool"]
         expected_tree: _Tree = {"otherpool": {}, "pool": {}}
-        tree = _build_dataset_tree(sorted(datasets))
+        tree = self.build_tree(sorted(datasets))
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
     def test_single_level(self) -> None:
         datasets: list[str] = ["pool", "pool1", "pool2", "pool3"]
         expected_tree: _Tree = {"pool": {}, "pool1": {}, "pool2": {}, "pool3": {}}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_with_hierarchy(self) -> None:
         datasets: list[str] = ["pool", "pool1", "pool1/dataset1", "pool2", "pool2/dataset2", "pool2/dataset2/sub", "pool3"]
         expected_tree: _Tree = {"pool": {}, "pool1": {"dataset1": {}}, "pool2": {"dataset2": {"sub": {}}}, "pool3": {}}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_flat(self) -> None:
         datasets: list[str] = ["root1", "root2", "root3", "root4"]
         expected_tree: _Tree = {"root1": {}, "root2": {}, "root3": {}, "root4": {}}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_mixed_depth(self) -> None:
         datasets: list[str] = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
         expected_tree: _Tree = {"a": {"b": {"c": {}}}, "x": {"y": {}}, "z": {"1": {}, "2": {"3": {}}}}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
     def test_tree_with_missing_intermediate_nodes(self) -> None:
         datasets: list[str] = ["a", "a/b/c", "z/2/3"]
         expected_tree: _Tree = {"a": {"b": {"c": {}}}, "z": {"2": {"3": {}}}}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
@@ -212,7 +234,7 @@ class TestBuildTree(unittest.TestCase):
             f"a/b/c/{br}/{br}/done",
         ]
         expected_tree: _Tree = {"a": {"b": {"c": {"0d": {}, "1d": {}, br: {"prune": {"monitor": {}}, br: {"done": {}}}}}}}
-        tree = _build_dataset_tree(datasets)
+        tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
 
