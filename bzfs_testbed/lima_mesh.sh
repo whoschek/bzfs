@@ -41,7 +41,7 @@ if [[ ${#lima_mesh_vm_names[@]} -gt 1 ]]; then
     lima_mesh_public_keys=()
     for lima_mesh_vm_name in "${lima_mesh_vm_names[@]}"; do
         if [[ "$(limactl list --tty=false --format='{{.Status}}' "$lima_mesh_vm_name")" != "Running" ]]; then
-            echo "error: LIMA_MESH_VMS matched a VM that is not running: $lima_mesh_vm_name" >&2
+            echo "ERROR: LIMA_MESH_VMS matched a VM that is not running: $lima_mesh_vm_name" >&2
             exit 1
         fi
         lima_mesh_public_key="$(limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$lima_mesh_vm_name" -- bash -lc 'cat ~/.ssh/id_rsa.pub' | tr -d '\r\n')"
@@ -116,7 +116,7 @@ for source_vm_name in "${lima_mesh_vm_names[@]}"; do
         limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$source_vm_name" -- ssh -n -oBatchMode=yes "$target_vm_name" true
         target_hostname="$(limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$source_vm_name" -- ssh -n -oBatchMode=yes "$target_vm_name" hostname)"
         if [[ "$target_hostname" != "$target_vm_name" ]]; then
-            echo "error: Mesh hostname verification failed: source=$source_vm_name target=$target_vm_name got=$target_hostname" >&2
+            echo "ERROR: Mesh hostname verification failed: source=$source_vm_name target=$target_vm_name got=$target_hostname" >&2
             exit 1
         fi
     done

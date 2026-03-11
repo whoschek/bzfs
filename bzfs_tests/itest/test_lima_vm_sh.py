@@ -269,7 +269,7 @@ class TestLimaVmScript(unittest.TestCase):
                     "--tty=false",
                     vm_name,
                     "--ssh-port=0",
-                    "--timeout=2m",
+                    "--timeout=1m",
                     "--progress=false",
                 ],
                 check=True,

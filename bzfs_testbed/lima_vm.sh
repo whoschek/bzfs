@@ -92,7 +92,7 @@ fi
 # Start VM if it isn't already running
 if [[ "$(limactl list --tty=false --format='{{.Status}}' "$LIMA_VM_NAME")" != "Running" ]]; then
     # limactl edit --tty=false "$LIMA_VM_NAME" --set=".mounts += [{\"location\":\"$HOME/repos\",\"mountPoint\":\"/repos\",\"writable\":false}]"
-    limactl start --tty=false "$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-2m}" \
+    limactl start --tty=false "$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-1m}" \
         --progress="${LIMA_START_PROGRESS:-false}" --log-level="${LIMA_START_LOGLEVEL:-info}"
 fi
 LIMA_SSH_PORT="$(limactl list --tty=false --format="{{.SSHLocalPort}}" "$LIMA_VM_NAME")"
