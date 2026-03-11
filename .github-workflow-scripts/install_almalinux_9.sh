@@ -89,10 +89,11 @@ if ! sudo dnf install -y zfs --enablerepo="epel,$ZFS_VERSION"; then
             "$HOME"/rpmbuild/RPMS/"$arch"/libzfs[0-9]-[0-9]*.rpm \
             "$HOME"/rpmbuild/RPMS/"$arch"/zfs-[0-9]*.rpm \
             "$HOME"/rpmbuild/RPMS/noarch/zfs-dracut-*.rpm
+        for kernel_release in $(rpm -q kernel-devel --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n'); do
+            sudo dkms autoinstall -k "$kernel_release"
+        done
+        printf 'zfs\n' | sudo tee /etc/modules-load.d/zfs.conf > /dev/null  # autoload zfs module on reboot
         touch ~/.bzfs_zfs_done
-    fi
-    if ! modinfo zfs > /dev/null 2>&1; then
-        sudo dkms autoinstall -k "$(uname -r)"
     fi
 fi
 sudo modprobe zfs
