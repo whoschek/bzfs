@@ -26,6 +26,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import time
 import unittest
 import uuid
 from collections.abc import (
@@ -39,6 +40,13 @@ from dataclasses import (
 )
 from typing import (
     final,
+)
+
+from bzfs_main import (
+    argparse_cli,
+)
+from bzfs_main.util import (
+    utils,
 )
 
 
@@ -73,9 +81,10 @@ class ScriptRunResult:
 class TestLimaVmScript(unittest.TestCase):
 
     def setUp(self) -> None:
-        """Resolves repository paths used by the Lima workflow script tests."""
+        """Resolves repo paths and the timestamp prefix used by this test run."""
         self.repo_root: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
         self.script_path: str = os.path.join(self.repo_root, "bzfs_testbed", "lima_vm.sh")
+        self.log_time_prefix: str = time.strftime("%Y-%m-%d_%H-%M-%S")
 
     def test_a_zero_one_two_existing_test_vms(self) -> None:
         """Validates script behavior across 0/1/2 existing test VM scenarios."""
@@ -138,6 +147,43 @@ class TestLimaVmScript(unittest.TestCase):
             self._assert_vm_can_ssh_host_by_name(source_vm=target_vm, target_host=source_vm)
             self._assert_vm_can_ssh_host_by_name(source_vm=source_vm, target_host=target_vm)
 
+    def test_smoke_test_and_zpool_survive_reboot_across_supported_templates(self) -> None:
+        """Ensures supported template and ZFS combinations pass smoke tests and survive reboot."""
+        env = {key: value for key, value in os.environ.items() if not key.startswith("LIMA_")}
+        env["bzfs_test_mode"] = "smoke"
+        env["bzfs_test_no_run_quietly"] = "true"
+        test_suffix = uuid.uuid4().hex[:8]
+        vm_name = f"bzfs-lima-{test_suffix}-reboot"
+        log_dir = os.path.join(utils.get_home_directory(), argparse_cli.LOG_DIR_DEFAULT + "-test-vm")
+        os.makedirs(log_dir, exist_ok=True)
+        log_sequence = 0
+
+        for template in ("template:ubuntu-24.04", "template:almalinux-9", "template:almalinux-10"):
+            zfs_versions = ["", "zfs-2.4"] if "ubuntu" in template else ["zfs-2.2", "zfs-2.3", "zfs-2.4"]
+            for zfs_version in zfs_versions:
+                log_sequence += 1
+                run_env = dict(env)
+                run_env["LIMA_VM_NAME"] = vm_name
+                run_env["LIMA_VM_TEMPLATE"] = template
+                run_env["LIMA_ZFS_VERSION"] = zfs_version
+                version_name = zfs_version if zfs_version != "" else "default"
+                log_path = os.path.join(log_dir, f"{self.log_time_prefix}+{log_sequence}+{template}+{version_name}.log")
+                with self._cleanup_vms(vm_name):
+                    self._run_logged_bash_script(
+                        log_path,
+                        run_env,
+                        f"""
+                        set -eo pipefail
+                        {shlex.quote(self.script_path)}
+                        limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'truncate -s 100M ~/test_pool_smoke'
+                        limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'sudo zpool create -f test-pool-smoke ~/test_pool_smoke'
+                        limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'zpool list -H test-pool-smoke | grep -q .'
+                        limactl stop --tty=false {shlex.quote(vm_name)}
+                        limactl start --tty=false {shlex.quote(vm_name)} --timeout=1m
+                        limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'zpool list -H test-pool-smoke | grep -q .'
+                        """,
+                    )
+
     @contextmanager
     def _cleanup_vms(self, *vm_names: str) -> Iterator[None]:
         """Deletes listed test VMs before/after a block for idempotent cleanup."""
@@ -154,7 +200,6 @@ class TestLimaVmScript(unittest.TestCase):
         env = {key: value for key, value in os.environ.items() if not key.startswith("LIMA_")}
         env["LIMA_VM_NAME"] = vm_name
         env["LIMA_NO_RUN_TESTS"] = "true"
-        env["LIMA_START_PROGRESS"] = "false"
         if extra_env is not None:
             env.update(extra_env)
         env["PS4"] = "+ "  # Keep xtrace prefix stable so _parse_limactl_calls can reliably match traced commands.
@@ -281,6 +326,24 @@ class TestLimaVmScript(unittest.TestCase):
             check=False,
         )
         self.assertEqual(0, result.returncode, msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}")
+
+    def _run_logged_bash_script(self, log_path: str, env: dict[str, str], script: str) -> None:
+        """Runs a bash script, logs combined output, and fails with the saved log on error."""
+        with open(log_path, "w", encoding="utf-8") as log_file:
+            process = subprocess.run(
+                ["bash", "-lc", script],
+                check=False,
+                cwd=self.repo_root,
+                env=env,
+                text=True,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+            )
+        if process.returncode == 0:
+            return
+        with open(log_path, encoding="utf-8") as log_file:
+            log_output = log_file.read()
+        self.fail(f"log file: {log_path}\n\n{log_output}")
 
     def _run_limactl(self, args: list[str], check: bool) -> subprocess.CompletedProcess[str]:
         """Runs limactl with captured output for deterministic test assertions."""
