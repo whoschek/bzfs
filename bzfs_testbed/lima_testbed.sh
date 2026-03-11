@@ -23,7 +23,8 @@ TESTBED_NUM_SRC_VMS="${TESTBED_NUM_SRC_VMS:-1}"  # number of VMs acting as a rep
 TESTBED_NUM_DST_VMS="${TESTBED_NUM_DST_VMS:-1}"  # number of VMs acting as a replication destination
 TESTBED_HOSTNAME_PREFIX="${TESTBED_HOSTNAME_PREFIX:-test}"  # VMs are named "${TESTBED_HOSTNAME_PREFIX}${GROUP}${COUNTER}"
 TESTBED_ZPOOL_CAPACITY_MB="${TESTBED_ZPOOL_CAPACITY_MB:-1024}"  # 1GB test pool size by default
-export LIMA_MESH_VMS="^${TESTBED_HOSTNAME_PREFIX}.*"
+testbed_hostname_prefix_ere="$(printf '%s\n' "$TESTBED_HOSTNAME_PREFIX" | sed 's/[][(){}.^$*+?|\\]/\\&/g')"  # regex escape
+export LIMA_MESH_VMS="^${testbed_hostname_prefix_ere}.*"
 export LIMA_NO_RUN_TESTS="${LIMA_NO_RUN_TESTS:-true}"
 mydir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
@@ -72,7 +73,7 @@ delete_matching_vms() {
     lima_vm_names="$(limactl list --tty=false --format='{{.Name}}')"
     while IFS= read -r vm; do
         matching_vm_names+=("$vm")
-    done < <(grep -E -- "^${TESTBED_HOSTNAME_PREFIX}.*" <<< "$lima_vm_names" || [[ "$?" -eq 1 ]]) # 1 means "no match"
+    done < <(grep -E -- "$LIMA_MESH_VMS" <<< "$lima_vm_names" || [[ "$?" -eq 1 ]]) # 1 means "no match"
     for vm in "${matching_vm_names[@]}"; do
         echo "Stopping Lima VM: $vm"
         limactl stop --tty=false --force "$vm" || true
