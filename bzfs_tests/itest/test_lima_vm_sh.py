@@ -158,8 +158,23 @@ class TestLimaVmScript(unittest.TestCase):
         os.makedirs(log_dir, exist_ok=True)
         log_sequence = 0
 
-        for template in ("template:ubuntu-24.04", "template:almalinux-9", "template:almalinux-10"):
-            zfs_versions = ["", "zfs-2.4"] if "ubuntu" in template else ["zfs-2.2", "zfs-2.3", "zfs-2.4"]
+        for template in [
+            "template:experimental/ubuntu-26.04",
+            "template:ubuntu-24.04",
+            "template:debian-13",
+            "template:almalinux-9",
+            "template:almalinux-10",
+            "template:rocky-9",
+            "template:rocky-10",
+            "template:centos-stream-9",
+            "template:centos-stream-10",
+        ]:
+            if "ubuntu-26.04" in template or "debian" in template:
+                zfs_versions = [""]
+            elif "ubuntu-24.04" in template:
+                zfs_versions = ["", "zfs-2.4"]
+            else:
+                zfs_versions = ["zfs-2.2", "zfs-2.3", "zfs-2.4"]
             for zfs_version in zfs_versions:
                 log_sequence += 1
                 run_env = dict(env)
@@ -167,7 +182,9 @@ class TestLimaVmScript(unittest.TestCase):
                 run_env["LIMA_VM_TEMPLATE"] = template
                 run_env["LIMA_ZFS_VERSION"] = zfs_version
                 version_name = zfs_version if zfs_version != "" else "default"
-                log_path = os.path.join(log_dir, f"{self.log_time_prefix}+{log_sequence}+{template}+{version_name}.log")
+                log_path = os.path.join(
+                    log_dir, f"{self.log_time_prefix}+run{log_sequence:02d}+{template.replace('/','_')}+{version_name}.log"
+                )
                 with self._cleanup_vms(vm_name):
                     self._run_logged_bash_script(
                         log_path,

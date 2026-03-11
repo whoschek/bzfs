@@ -24,7 +24,7 @@ cat /etc/redhat-release
 sudo dnf -y install dnf-plugins-core
 # sudo dnf config-manager --set-enabled crb
 
-sudo dnf -y install openssh-clients openssh-server python3 zstd coreutils
+sudo dnf -y install openssh-clients openssh-server zstd coreutils
 sudo systemctl enable --now sshd
 if [[ "$SSH_PROGRAM" == "hpnssh" ]]; then  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
     sudo dnf -y copr enable rapier1/hpnssh  # see https://copr.fedorainfracloud.org/coprs/rapier1/hpnssh/

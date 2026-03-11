@@ -114,13 +114,16 @@ limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
     bash -s << 'EOF'
 
 set -eo pipefail
-if [[ -f /etc/redhat-release ]]; then  # RHEL family
+if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     .github-workflow-scripts/install_almalinux_9.sh "${LIMA_ZFS_VERSION:-zfs-2.4}" "$LIMA_SSH_PROGRAM"
     sudo dnf -y install rsync ripgrep
     # sudo dnf -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo dnf -y install npm && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
     export DEBIAN_FRONTEND=noninteractive
+    if [[ -f /etc/apt/sources.list.d/debian.sources ]]; then  # Debian-13 publishes ZFS packages in contrib rather than main
+        sudo sed -i 's/^Components: main$/Components: main contrib/' /etc/apt/sources.list.d/debian.sources
+    fi
     if [[ ! -f ~/.bzfs_apt_update_done ]]; then
         echo "Now running 'apt-get update' ..."
         sudo apt-get -y -qq update
@@ -128,8 +131,11 @@ elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
         touch ~/.bzfs_apt_update_done
     fi
 
-    # Upgrade zfs kernel + userland to specific upstream zfs version
-    if [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then
+    if [[ -f /etc/apt/sources.list.d/debian.sources ]]; then  # Debian-13
+        sudo apt-get -y install zfsutils-linux "linux-headers-$(uname -r)" zfs-dkms
+        sudo modprobe zfs
+    elif [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then  # Ubuntu
+        # Upgrade zfs kernel + userland to specific upstream zfs version
         # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
         sudo add-apt-repository ppa:patrickdk/zfs; sudo apt-get -y update
         sudo apt-get -y install zfs-dkms
@@ -137,7 +143,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
         sudo systemctl stop zfs-zed.service || true
         sudo modprobe --remove zfs || true
         sudo modprobe zfs
-    else
+    else  # Ubuntu
         sudo apt-get -y install zfsutils-linux
     fi
     zfs --version
@@ -155,7 +161,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
         touch ~/.bzfs_keys_done
     fi
 else
-    echo "ERROR: Unsupported guest OS: expected a Debian-family or RHEL-family guest." >&2
+    echo "ERROR: Unsupported guest OS: expected a Debian-family or RHEL/EL-family guest." >&2
     exit 1
 fi
 
@@ -174,10 +180,12 @@ else
     fi
 fi
 sudo systemctl daemon-reload
-if [[ -f /etc/redhat-release ]]; then
-    sudo systemctl restart sshd.service  # RHEL family
-else
-    sudo systemctl restart ssh.socket  # debian/ubuntu family
+if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
+    sudo systemctl restart sshd.service
+elif [[ -f /etc/apt/sources.list.d/debian.sources ]]; then  # Debian-13
+    sudo systemctl restart ssh.service
+else  # Ubuntu
+    sudo systemctl restart ssh.socket
 fi
 ssh -n -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oConnectTimeout=5 -p "$LIMA_SSH_PORT" 127.0.0.1 echo hello1  # verify
 ssh -n -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oConnectTimeout=5 -p "$LIMA_SSH_PORT" 127.0.0.2 echo hello2  # verify
