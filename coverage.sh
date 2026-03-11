@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 #
 # Copyright 2024 Wolfgang Hoschek AT mac DOT com
 #
@@ -33,8 +33,7 @@ elif [ "$(which coverage 2> /dev/null)" = "" ]; then
     python3 -m pip install --upgrade pip
     python3 -m pip install --upgrade "coverage[toml]>=7.6"
 fi
-PYTHON_LAZY_IMPORTS=normal  # PEP 810
-export PYTHON_LAZY_IMPORTS
+export PYTHON_LAZY_IMPORTS=normal  # PEP 810
 
 # see https://coverage.readthedocs.io/
 PYTHONPATH=. python3 -m coverage run -m bzfs_tests.test_all
