@@ -39,6 +39,8 @@ from collections.abc import (
 )
 from concurrent.futures import (
     Future,
+)
+from concurrent.futures.thread import (
     ThreadPoolExecutor,
 )
 from dataclasses import (

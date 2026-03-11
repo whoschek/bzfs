@@ -26,6 +26,8 @@ import time
 import unittest
 from concurrent.futures import (
     Future,
+)
+from concurrent.futures.process import (
     ProcessPoolExecutor,
 )
 from functools import (

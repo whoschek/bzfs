@@ -33,6 +33,8 @@ from concurrent.futures import (
     FIRST_COMPLETED,
     Executor,
     Future,
+)
+from concurrent.futures.thread import (
     ThreadPoolExecutor,
 )
 from typing import (

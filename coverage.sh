@@ -33,7 +33,7 @@ elif [ "$(which coverage 2> /dev/null)" = "" ]; then
     python3 -m pip install --upgrade pip
     python3 -m pip install --upgrade "coverage[toml]>=7.6"
 fi
-PYTHON_LAZY_IMPORTS=all  # PEP 810
+PYTHON_LAZY_IMPORTS=normal  # PEP 810
 export PYTHON_LAZY_IMPORTS
 
 # see https://coverage.readthedocs.io/

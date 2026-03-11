@@ -27,6 +27,7 @@ from collections import (
 from typing import (
     TYPE_CHECKING,
     Callable,
+    Final,
 )
 from unittest.mock import (
     MagicMock,
@@ -920,11 +921,12 @@ class TestReplication(AbstractTestCase):
             return ""
 
         captured_steps: list[list[tuple[str, str, str, list[str]]]] = []
+        original_incremental_send_steps_wrapper: Final = _incremental_send_steps_wrapper  # workaround for PEP810 lazy import
 
         def observing_incremental_send_steps_wrapper(
             pp: Params, src_snaps: list[str], src_guids: list[str], included: set[str], is_resume: bool
         ) -> list[tuple]:
-            steps = _incremental_send_steps_wrapper(pp, src_snaps, src_guids, included, is_resume)
+            steps = original_incremental_send_steps_wrapper(pp, src_snaps, src_guids, included, is_resume)
             captured_steps.append(steps)
             return steps
 
