@@ -2,15 +2,15 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.19.0] - Not yet released
+## [1.19.0] - March 12, 2026
 
-- [bzfs] docs: Simplify READMEs.
+- [bzfs] docs: Restructure and simplify READMEs.
 - [bzfs] [perf] Use better heuristic for `zfs list -t snapshot` minibatch size if parallelism is disabled.
 - [bzfs] [perf] Reuse ssh connection even immediately after reboot of operating system.
 - [bzfs] [perf] Refresh ssh connection immediately when the expected control socket path is missing or stale, and remove
   stale control socket paths.
-- [bzfs] Add [`lima_vm.sh`](bzfs_testbed/lima_vm.sh) script that uses Lima to locally create a guest Ubuntu or AlmaLinux
-  VM, then runs the bzfs test suite inside of that VM.
+- [bzfs] Add [`lima_vm.sh`](bzfs_testbed/lima_vm.sh) script that uses Lima to locally create a guest Ubuntu/Debian or
+  AlmaLinux/EL VM, then runs the bzfs test suite inside of that VM.
 - [bzfs] Add [`lima_testbed.sh`](bzfs_testbed/lima_testbed.sh) script that uses this to create/delete a local Lima
   testbed with N source VMs and M destination VMs for testing, with VM-to-VM SSH networking enabled out of the box. All
   default settings work out of the box. Also add example replication jobconfig script
@@ -22,6 +22,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   VM.
 - [bzfs] Also run nightly CI tests on zfs-2.4.1 and zfs-2.3.6.
 - [bzfs] Also run nightly CI tests on AlmaLinux-10 with zfs-2.4.1 and `hpnssh`.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.18.0...v1.19.0
 
 ## [1.18.0] - February 14, 2026
 
