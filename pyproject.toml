@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bzfs"
-version = "1.19.0"
+version = "1.20.0.dev0"
 
 description = """
 bzfs is a CLI built for highly reliable and scalable near real-time ZFS snapshot replication with minimal operational \
