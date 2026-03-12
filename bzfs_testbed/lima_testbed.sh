@@ -56,7 +56,7 @@ create_vm_group() {
 # prepare VM
 set -eo pipefail
 if ! zpool list -H "$pool" >/dev/null 2>&1; then
-    dd if=/dev/zero of=~/test_pool_"$pool" bs=1M count="$zpool_capacity_mb" status=progress  # create empty test file
+    truncate -s "${zpool_capacity_mb}M" ~/test_pool_"$pool"  # create sparse test file
     sudo zpool create "$pool" ~/test_pool_"$pool"  # create empty test pool
 fi
 if ! sudo zfs list -H "$pool/foo/bar" >/dev/null 2>&1; then
