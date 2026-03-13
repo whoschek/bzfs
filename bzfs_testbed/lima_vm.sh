@@ -144,6 +144,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
         sudo systemctl stop zfs-zed.service || true
         sudo modprobe --remove zfs || true
         sudo modprobe zfs
+        sudo systemctl start zfs-zed.service
     else  # Ubuntu
         sudo apt-get -y install zfsutils-linux
     fi
