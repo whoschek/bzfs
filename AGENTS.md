@@ -57,6 +57,8 @@ To understand the system's architecture and features, follow these steps:
 
 - **High-Level Docs:** Read `README.md` and `README_bzfs_jobrunner.md` to understand the purpose, features, and usage.
 - **Job Configuration:** Study `bzfs_testbed/bzfs_job_testbed.py` to understand how `bzfs_jobrunner` is configured.
+- **End-to-End Testbed:** Read `bzfs_testbed/README.md`, `bzfs_testbed/lima_vm.sh`, and `bzfs_testbed/lima_testbed.sh`
+  to understand how to operate the local VM testbed.
 - **Code Design:** Read the overview docstrings at the top of `bzfs_main/bzfs.py` and `bzfs_main/bzfs_jobrunner.py` to
   see where key functionalities are implemented.
 
