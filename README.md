@@ -419,7 +419,7 @@ On macOS or Linux, this script uses Lima to locally create a guest Ubuntu or Alm
 the bzfs test suite inside of that VM.
 
 Also consider running the [`lima_testbed.sh`](bzfs_testbed/lima_testbed.sh) script that uses this to create/delete a
-local Lima testbed with N source VMs and M destination VMs for testing, with ZFS and VM-to-VM SSH networking enabled
+local Lima testbed with N source VMs and M destination VMs for testing, with ZFS and VM-to-VM SSH connectivity working
 out of the box. All default settings work out of the box.
 
 Then consider running the example replication jobconfig script [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py)
