@@ -1,9 +1,9 @@
 ---
-name: experimental-bzfs-script-generator
+name: bzfs-experimental-script-generator
 description: 'Generate or change idiomatic minimal Bash and Python scripts that use bzfs and bzfs_jobrunner for ZFS snapshot management workflows in a sandboxed test VM: snapshot creation, replication/backup, restore rehearsal, snapshot pruning, snapshot monitoring, and snapshot list comparison. Use when asked to create or change ad hoc/manual or periodic/automatic scripts for these tasks. Do not use this skill for general ZFS administration or non-bzfs tooling.'
 ---
 
-# Experimental bzfs Script Generator
+# bzfs Experimental Script Generator
 
 ## Core Outcome
 
