@@ -17,11 +17,11 @@
 # End-to-End Testing on the Testbed
 
 For reproducible local testing, consider using [`lima_vm.sh`](lima_vm.sh). On macOS or Linux, this script uses Lima to
-locally create a guest Ubuntu or AlmaLinux VM, then runs the bzfs test suite inside of that VM.
+locally create a guest Ubuntu or AlmaLinux VM, then installs ZFS and runs the bzfs test suite inside of that VM.
 
 Also consider running the [`lima_testbed.sh`](lima_testbed.sh) script that uses this to create/delete a local Lima
-testbed with N source VMs and M destination VMs for testing, with VM-to-VM SSH networking enabled out of the box. All
-default settings work out of the box.
+testbed with N source VMs and M destination VMs for testing, with ZFS and VM-to-VM SSH networking enabled out of the
+box. All default settings work out of the box.
 
 Then consider running the example replication jobconfig script [`bzfs_job_testbed.py`](bzfs_job_testbed.py) on the
 testbed, which also works out of the box.

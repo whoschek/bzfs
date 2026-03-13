@@ -10,10 +10,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] [perf] Refresh ssh connection immediately when the expected control socket path is missing or stale, and remove
   stale control socket paths.
 - [bzfs] Add [`lima_vm.sh`](bzfs_testbed/lima_vm.sh) script that uses Lima to locally create a guest Ubuntu/Debian or
-  AlmaLinux/EL VM, then runs the bzfs test suite inside of that VM.
+  AlmaLinux/EL VM, then installs ZFS and runs the bzfs test suite inside of that VM.
 - [bzfs] Add [`lima_testbed.sh`](bzfs_testbed/lima_testbed.sh) script that uses this to create/delete a local Lima
-  testbed with N source VMs and M destination VMs for testing, with VM-to-VM SSH networking enabled out of the box. All
-  default settings work out of the box. Also add example replication jobconfig script
+  testbed with N source VMs and M destination VMs for testing, with ZFS and VM-to-VM SSH networking enabled out of the
+  box. All default settings work out of the box. Also add example replication jobconfig script
   [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py) for use after running `lima_testbed.sh`, which also works
   out of the box. With this in place, users can now simply tell Codex, Claude, or any comparable agent something like
   "Run the bzfs_job_testbed.py example replication script on the testbed." It will figure out the rest and do it.

@@ -15,7 +15,8 @@
 # limitations under the License.
 
 # This script can run on macOS on Apple Silicon, or on Linux on any arch.
-# The script uses Lima to locally create a guest Ubuntu or AlmaLinux VM, then runs the bzfs test suite inside of that VM.
+# The script uses Lima to locally create a guest Ubuntu or AlmaLinux VM, then installs ZFS and runs the bzfs test suite
+# inside of that VM.
 # By default uses ubuntu-24.04 with zfs-2.4 or default ZFS depending on the value of $LIMA_ZFS_VERSION.
 # Cold start of the guest VM takes ~30 seconds with defaults; warm start takes ~1.5 seconds.
 # To create an AlmaLinux-10 guest VM use: export LIMA_VM_TEMPLATE=template:almalinux-10

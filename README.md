@@ -415,12 +415,12 @@ It also generates code coverage reports which are published [here](https://whosc
 # End-to-End Testing on the Testbed
 
 For reproducible local testing, consider using [`lima_vm.sh`](bzfs_testbed/lima_vm.sh).
-On macOS or Linux, this script uses Lima to locally create a guest Ubuntu or AlmaLinux VM, then runs the bzfs test suite
-inside of that VM.
+On macOS or Linux, this script uses Lima to locally create a guest Ubuntu or AlmaLinux VM, then installs ZFS and runs
+the bzfs test suite inside of that VM.
 
 Also consider running the [`lima_testbed.sh`](bzfs_testbed/lima_testbed.sh) script that uses this to create/delete a
-local Lima testbed with N source VMs and M destination VMs for testing, with VM-to-VM SSH networking enabled out of the
-box. All default settings work out of the box.
+local Lima testbed with N source VMs and M destination VMs for testing, with ZFS and VM-to-VM SSH networking enabled
+out of the box. All default settings work out of the box.
 
 Then consider running the example replication jobconfig script [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py)
 on the testbed, which also works out of the box.
