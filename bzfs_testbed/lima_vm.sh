@@ -145,6 +145,22 @@ elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
         sudo modprobe --remove zfs || true
         sudo modprobe zfs
         sudo systemctl start zfs-zed.service
+    elif [[ "$LIMA_ZFS_VERSION" == tag:zfs-* ]]; then  # EXPERIMENTAL e.g. 'tag:zfs-2.4.1', 'tag:zfs-2.3.6', 'tag:zfs-2.2.9'
+        sudo apt-get -y install alien autoconf automake build-essential debhelper-compat dh-dkms dh-python dkms fakeroot gawk libaio-dev libattr1-dev libblkid-dev libcurl4-openssl-dev libelf-dev libffi-dev libpam0g-dev libssl-dev libtirpc-dev libtool libudev-dev linux-headers-generic po-debconf python3 python3-all-dev python3-cffi python3-dev python3-packaging python3-setuptools python3-sphinx uuid-dev zlib1g-dev
+        sudo apt-get -y install git
+        upstream_zfs_git_tag="${LIMA_ZFS_VERSION#tag:}"
+        build_dir="$(mktemp -d /var/tmp/zfs-src.XXXXXX)"
+        trap 'rm -rf "$build_dir"' EXIT
+        git clone --branch "$upstream_zfs_git_tag" --single-branch https://github.com/openzfs/zfs.git "$build_dir/zfs"
+        (
+            cd "$build_dir/zfs"
+            ./autogen.sh
+            ./configure
+            make native-deb-utils
+            rm ../openzfs-zfs-dracut_*.deb  # instead use initramfs
+            sudo apt-get -y install --fix-missing ../*.deb
+            printf 'zfs\n' | sudo tee /etc/modules-load.d/zfs.conf > /dev/null  # autoload zfs module on reboot
+        )
     else  # Ubuntu
         sudo apt-get -y install zfsutils-linux
     fi
