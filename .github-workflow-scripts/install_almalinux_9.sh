@@ -62,7 +62,7 @@ fi
 sudo dnf install -y "https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval '%{dist}').noarch.rpm"
 sudo dnf repolist all | grep -i zfs
 sudo dnf config-manager --disable 'zfs*'
-sudo dnf install -y "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
+sudo dnf install -y kernel-devel "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
 if ! sudo dnf install -y zfs --enablerepo="epel,$ZFS_VERSION"; then
     arch="$(rpm --eval '%{_arch}')"
     if [[ "$arch" != "aarch64" ]]; then

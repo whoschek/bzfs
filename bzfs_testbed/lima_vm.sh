@@ -120,11 +120,8 @@ if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     sudo dnf -y install rsync ripgrep
     # sudo dnf -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo dnf -y install npm && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
-elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
+elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     export DEBIAN_FRONTEND=noninteractive
-    if [[ -f /etc/apt/sources.list.d/debian.sources ]]; then  # Debian-13 publishes ZFS packages in contrib rather than main
-        sudo sed -i 's/^Components: main$/Components: main contrib/' /etc/apt/sources.list.d/debian.sources
-    fi
     if [[ ! -f ~/.bzfs_apt_update_done ]]; then
         echo "Now running 'apt-get update' ..."
         sudo apt-get -y -qq update
@@ -132,10 +129,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
         touch ~/.bzfs_apt_update_done
     fi
 
-    if [[ -f /etc/apt/sources.list.d/debian.sources ]]; then  # Debian-13
-        sudo apt-get -y install zfsutils-linux "linux-headers-$(uname -r)" zfs-dkms
-        sudo modprobe zfs
-    elif [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then  # Ubuntu
+    if [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then  # Ubuntu
         # Upgrade zfs kernel + userland to specific upstream zfs version
         # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
         sudo add-apt-repository ppa:patrickdk/zfs; sudo apt-get -y update
@@ -179,7 +173,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # debian/ubuntu family
         touch ~/.bzfs_keys_done
     fi
 else
-    echo "ERROR: Unsupported guest OS: expected a Debian-family or RHEL/EL-family guest." >&2
+    echo "ERROR: Unsupported guest OS: expected an Ubuntu or RHEL/EL-family guest." >&2
     exit 1
 fi
 
@@ -200,8 +194,6 @@ fi
 sudo systemctl daemon-reload
 if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     sudo systemctl restart sshd.service
-elif [[ -f /etc/apt/sources.list.d/debian.sources ]]; then  # Debian-13
-    sudo systemctl restart ssh.service
 else  # Ubuntu
     sudo systemctl restart ssh.socket
 fi
