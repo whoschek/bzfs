@@ -26,7 +26,7 @@
 set -eo pipefail
 LIMA_VM_TEMPLATE="${LIMA_VM_TEMPLATE:-template:ubuntu-24.04}"  # see `limactl create --list-templates` for available options
 LIMA_VM_NAME="${LIMA_VM_NAME:-mylimavm}"
-LIMA_VM_DISK="${LIMA_VM_DISK:-10}"  # GiB
+LIMA_VM_DISK="${LIMA_VM_DISK:-15}"  # GiB
 LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(4, #cores)
 LIMA_VM_MEMORY="${LIMA_VM_MEMORY:-4}"  # GiB
 LIMA_VM_RECREATE="${LIMA_VM_RECREATE:-false}"  # to init VM from scratch
@@ -118,7 +118,7 @@ set -eo pipefail
 if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     .github-workflow-scripts/install_almalinux_9.sh "${LIMA_ZFS_VERSION:-zfs-2.4}" "$LIMA_SSH_PROGRAM"
     sudo dnf -y install rsync ripgrep
-    # sudo dnf -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux net-tools traceroute sysstat ifstat iperf3 iotop iftop
+    # sudo dnf -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo dnf -y install npm && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     export DEBIAN_FRONTEND=noninteractive
@@ -162,7 +162,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
 
     # Run common preparation steps
     sudo apt-get -y install python3 zstd mbuffer pv rsync ripgrep python3-venv
-    # sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux net-tools traceroute sysstat ifstat iperf3 iotop iftop
+    # sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo apt-get -y install npm && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 
     mkdir -p "$HOME/.ssh"
