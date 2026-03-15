@@ -134,15 +134,21 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
         # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
         sudo add-apt-repository ppa:patrickdk/zfs; sudo apt-get -y update
         sudo apt-get -y install zfs-dkms
-        # Ensure the just-installed DKMS module is actually the loaded kernel module, and userland has same ZFS version as kernel
+        # Ensure just-installed DKMS module is actually the loaded kernel module, and userland has same ZFS version as kernel
         sudo systemctl stop zfs-zed.service || true
         sudo modprobe --remove zfs || true
         sudo modprobe zfs
         sudo systemctl start zfs-zed.service
-    elif [[ "$LIMA_ZFS_VERSION" =~ ^tag:zfs-[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then  # EXPERIMENTAL 'tag:zfs-2.4.1', 'tag:zfs-2.3.6', 'tag:zfs-2.2.9'
-        sudo apt-get -y install alien autoconf automake build-essential debhelper-compat dh-dkms dh-python dkms fakeroot gawk libaio-dev libattr1-dev libblkid-dev libcurl4-openssl-dev libelf-dev libffi-dev libpam0g-dev libssl-dev libtirpc-dev libtool libudev-dev linux-headers-generic po-debconf python3 python3-all-dev python3-cffi python3-dev python3-packaging python3-setuptools python3-sphinx uuid-dev zlib1g-dev
+    elif [[ "$LIMA_ZFS_VERSION" =~ ^tag:zfs-[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then  # Ubuntu
+        # EXPERIMENTAL 'tag:zfs-2.4.1', 'tag:zfs-2.3.6', 'tag:zfs-2.2.9'
         sudo apt-get -y install git
-        upstream_zfs_git_tag="${LIMA_ZFS_VERSION#tag:}"
+        upstream_zfs_git_tag="${LIMA_ZFS_VERSION#tag:}"  # strip 'tag:' prefix
+        git ls-remote --tags --refs --exit-code https://github.com/openzfs/zfs.git "refs/tags/$upstream_zfs_git_tag" # verify
+        # see https://openzfs.github.io/openzfs-docs/Developer%20Resources/Custom%20Packages.html#debian-and-ubuntu
+        sudo apt-get -y install alien autoconf automake build-essential debhelper-compat dh-dkms dh-python dkms fakeroot \
+            gawk libaio-dev libattr1-dev libblkid-dev libcurl4-openssl-dev libelf-dev libffi-dev libpam0g-dev libssl-dev \
+            libtirpc-dev libtool libudev-dev linux-headers-generic po-debconf python3 python3-all-dev python3-cffi \
+            python3-dev python3-packaging python3-setuptools python3-sphinx uuid-dev zlib1g-dev
         build_dir="$(mktemp -d /var/tmp/zfs-src.XXXXXX)"
         trap 'rm -rf "$build_dir"' EXIT
         git clone --branch "$upstream_zfs_git_tag" --single-branch https://github.com/openzfs/zfs.git "$build_dir/zfs"
