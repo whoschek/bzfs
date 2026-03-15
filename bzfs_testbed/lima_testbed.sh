@@ -62,6 +62,9 @@ if ! zpool list -H "$pool" >/dev/null 2>&1; then
 fi
 if ! sudo zfs list -H "$pool/foo/bar" >/dev/null 2>&1; then
     sudo zfs create -p "$pool/foo/bar"  # create example test datasets
+    if [[ "$pool" == "src" ]]; then
+        sudo chown -R "$USER" "/$pool/foo/bar"
+    fi
 fi
 EOF
     done
