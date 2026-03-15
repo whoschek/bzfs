@@ -64,6 +64,7 @@ if ! sudo zfs list -H "$pool/foo/bar" >/dev/null 2>&1; then
     sudo zfs create -p "$pool/foo/bar"  # create example test datasets
     if [[ "$pool" == "src" ]]; then
         sudo chown -R "$USER" "/$pool/foo/bar"
+        echo "hello $(date)" > "/$pool/foo/bar/hello.txt"
     fi
 fi
 EOF
