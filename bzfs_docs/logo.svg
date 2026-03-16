@@ -1,42 +1,464 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1640 1024" role="img" aria-labelledby="title desc">
-  <title id="title">bzfs</title>
-  <desc id="desc">bzfs</desc>
-  <defs>
-    <linearGradient id="bg" x1="170" y1="138" x2="854" y2="892" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1d1838"/>
-      <stop offset="1" stop-color="#0a1018"/>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 3400 1024"
+   role="img"
+   aria-labelledby="title desc"
+   version="1.1"
+   id="svg29"
+   sodipodi:docname="logo6.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   width="3400"
+   height="1024"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <sodipodi:namedview
+     id="namedview29"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.203125"
+     inkscape:cx="1860.9231"
+     inkscape:cy="1447.3846"
+     inkscape:window-width="1460"
+     inkscape:window-height="847"
+     inkscape:window-x="268"
+     inkscape:window-y="344"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg29" />
+  <title
+     id="title">bzfs</title>
+  <desc
+     id="desc">bzfs</desc>
+  <defs
+     id="defs7">
+    <rect
+       x="1043.6923"
+       y="206.76923"
+       width="1993.8462"
+       height="1024"
+       id="rect48" />
+    <linearGradient
+       id="bg"
+       x1="170"
+       y1="138"
+       x2="854"
+       y2="892"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#1d1838"
+         id="stop1" />
+      <stop
+         offset="1"
+         stop-color="#0a1018"
+         id="stop2" />
     </linearGradient>
-    <linearGradient id="flow" x1="286" y1="512" x2="738" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#aa84ff"/>
-      <stop offset="1" stop-color="#68ebff"/>
+    <linearGradient
+       id="flow"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0"
+         stop-color="#aa84ff"
+         id="stop3" />
+      <stop
+         offset="1"
+         stop-color="#68ebff"
+         id="stop4" />
     </linearGradient>
-    <linearGradient id="wordmark" x1="1092" y1="370" x2="1498" y2="626" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#00c8c8"/>
-      <stop offset="0.55" stop-color="#e068d8"/>
-      <stop offset="1" stop-color="#f2a618"/>
+    <linearGradient
+       id="wordmark"
+       x1="1092"
+       y1="370"
+       x2="1498"
+       y2="626"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         offset="0%"
+         stop-color="#ED652E"
+         id="stop5" />
+      <stop
+         offset="100%"
+         stop-color="#F6C053"
+         id="stop7" />
     </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#wordmark"
+       id="linearGradient30"
+       gradientUnits="userSpaceOnUse"
+       x1="1092"
+       y1="370"
+       x2="1498"
+       y2="626"
+       gradientTransform="translate(4.0784102,48.609433)" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient34"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient35"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient36"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient37"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient38"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient39"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient40"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient41"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient42"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient43"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient44"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient45"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#flow"
+       id="linearGradient46"
+       gradientUnits="userSpaceOnUse"
+       x1="286"
+       y1="512"
+       x2="738"
+       y2="512" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#wordmark"
+       id="linearGradient47"
+       gradientUnits="userSpaceOnUse"
+       x1="1092"
+       y1="370"
+       x2="1498"
+       y2="626"
+       gradientTransform="translate(-19.692308,-295.38462)" />
   </defs>
-  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
-  <g fill="#aa84ff" opacity="0.16" stroke="#aa84ff" stroke-width="14">
-    <rect x="190" y="214" width="92" height="92" rx="20"/>
-    <rect x="190" y="372" width="92" height="92" rx="20"/>
-    <rect x="190" y="530" width="92" height="92" rx="20"/>
-    <rect x="190" y="688" width="92" height="92" rx="20"/>
+  <rect
+     width="1024"
+     height="1024"
+     rx="224"
+     fill="url(#bg)"
+     id="rect7"
+     x="0"
+     y="0"
+     style="fill:url(#bg)" />
+  <g
+     fill="#aa84ff"
+     opacity="0.16"
+     stroke="#aa84ff"
+     stroke-width="14"
+     id="g11">
+    <rect
+       x="190"
+       y="214"
+       width="92"
+       height="92"
+       rx="20"
+       id="rect8" />
+    <rect
+       x="190"
+       y="372"
+       width="92"
+       height="92"
+       rx="20"
+       id="rect9" />
+    <rect
+       x="190"
+       y="530"
+       width="92"
+       height="92"
+       rx="20"
+       id="rect10" />
+    <rect
+       x="190"
+       y="688"
+       width="92"
+       height="92"
+       rx="20"
+       id="rect11" />
   </g>
-  <g fill="#68ebff" opacity="0.16" stroke="#68ebff" stroke-width="14">
-    <rect x="744" y="274" width="92" height="92" rx="20"/>
-    <rect x="744" y="466" width="92" height="92" rx="20"/>
-    <rect x="744" y="658" width="92" height="92" rx="20"/>
+  <g
+     fill="#68ebff"
+     opacity="0.16"
+     stroke="#68ebff"
+     stroke-width="14"
+     id="g14">
+    <rect
+       x="744"
+       y="274"
+       width="92"
+       height="92"
+       rx="20"
+       id="rect12" />
+    <rect
+       x="744"
+       y="466"
+       width="92"
+       height="92"
+       rx="20"
+       id="rect13" />
+    <rect
+       x="744"
+       y="658"
+       width="92"
+       height="92"
+       rx="20"
+       id="rect14" />
   </g>
-  <g fill="none" stroke="url(#flow)" stroke-width="10" stroke-linecap="round">
-    <path d="M282 260 744 320"/><path d="M282 260 744 512"/><path d="M282 260 744 704"/>
-    <path d="M282 418 744 320"/><path d="M282 418 744 512"/><path d="M282 418 744 704"/>
-    <path d="M282 576 744 320"/><path d="M282 576 744 512"/><path d="M282 576 744 704"/>
-    <path d="M282 734 744 320"/><path d="M282 734 744 512"/><path d="M282 734 744 704"/>
+  <g
+     fill="none"
+     stroke="url(#flow)"
+     stroke-width="10"
+     stroke-linecap="round"
+     id="g25"
+     style="stroke:url(#linearGradient46)">
+    <path
+       d="m 282,260 462,60"
+       id="path14"
+       style="stroke:url(#linearGradient34)" />
+    <path
+       d="M 282,260 744,512"
+       id="path15"
+       style="stroke:url(#linearGradient35)" />
+    <path
+       d="M 282,260 744,704"
+       id="path16"
+       style="stroke:url(#linearGradient36)" />
+    <path
+       d="M 282,418 744,320"
+       id="path17"
+       style="stroke:url(#linearGradient37)" />
+    <path
+       d="m 282,418 462,94"
+       id="path18"
+       style="stroke:url(#linearGradient38)" />
+    <path
+       d="M 282,418 744,704"
+       id="path19"
+       style="stroke:url(#linearGradient39)" />
+    <path
+       d="M 282,576 744,320"
+       id="path20"
+       style="stroke:url(#linearGradient40)" />
+    <path
+       d="M 282,576 744,512"
+       id="path21"
+       style="stroke:url(#linearGradient41)" />
+    <path
+       d="M 282,576 744,704"
+       id="path22"
+       style="stroke:url(#linearGradient42)" />
+    <path
+       d="M 282,734 744,320"
+       id="path23"
+       style="stroke:url(#linearGradient43)" />
+    <path
+       d="M 282,734 744,512"
+       id="path24"
+       style="stroke:url(#linearGradient44)" />
+    <path
+       d="M 282,734 744,704"
+       id="path25"
+       style="stroke:url(#linearGradient45)" />
   </g>
-  <path d="M352 154h320" fill="none" stroke="#eef6ff" stroke-opacity="0.46" stroke-width="20" stroke-linecap="round"/>
-  <path d="M592 96 744 154 592 212" fill="none" stroke="#eef6ff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M672 870H352" fill="none" stroke="#eef6ff" stroke-opacity="0.46" stroke-width="20" stroke-linecap="round"/>
-  <path d="M434 812 282 870 434 928" fill="none" stroke="#eef6ff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="1080" y="586" fill="url(#wordmark)" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="232" font-weight="700" letter-spacing="-6">bzfs</text>
+  <path
+     d="M 327,154 H 639"
+     fill="none"
+     stroke="#7a7f87"
+     stroke-width="20"
+     stroke-linecap="round"
+     id="path26" />
+  <path
+     d="m 597,96 q 6,24 42,58 -36,34 -42,58 l 102,-58 z"
+     fill="#7a7f87"
+     id="path27" />
+  <path
+     d="M 698,870 H 388"
+     fill="none"
+     stroke="#7a7f87"
+     stroke-width="20"
+     stroke-linecap="round"
+     id="path28" />
+  <path
+     d="m 430,812 q -6,24 -42,58 36,34 42,58 L 328,870 Z"
+     fill="#7a7f87"
+     id="path29" />
+  <text
+     x="1060.3076"
+     y="290.61539"
+     fill="url(#wordmark)"
+     font-family="'JetBrains Mono', 'DejaVu Sans Mono', monospace"
+     font-size="232px"
+     font-weight="700"
+     letter-spacing="-6"
+     id="text29"
+     style="fill:url(#linearGradient47)">bzfs</text>
+  <text
+     x="1084.0784"
+     y="634.60944"
+     fill="url(#wordmark)"
+     font-family="'JetBrains Mono', 'DejaVu Sans Mono', monospace"
+     font-size="232px"
+     font-weight="700"
+     letter-spacing="-6"
+     id="text30"
+     style="font-size:117.333px;fill:url(#linearGradient30)"><tspan
+       sodipodi:role="line"
+       id="tspan30"
+       x="1084.0784"
+       y="634.60944"
+       style="font-size:117.333px;fill:url(#linearGradient30)">Reliable, scalable, near real-time</tspan><tspan
+       sodipodi:role="line"
+       x="1084.0784"
+       y="781.2757"
+       style="font-size:117.333px;fill:url(#linearGradient30)"
+       id="tspan47">ZFS snapshot replication</tspan><tspan
+       sodipodi:role="line"
+       id="tspan31"
+       x="1084.0784"
+       y="927.94196"
+       style="font-size:117.333px;fill:url(#linearGradient30)">with minimal operational complexity</tspan></text>
+  <text
+     xml:space="preserve"
+     style="font-size:40px;line-height:1.25;font-family:sans-serif"
+     x="6112.8838"
+     y="1991.2126"
+     id="text32"><tspan
+       sodipodi:role="line"
+       id="tspan32"
+       x="6112.8838"
+       y="1991.2126"></tspan></text>
+  <text
+     xml:space="preserve"
+     style="font-size:40px;line-height:1.25;font-family:sans-serif"
+     x="6836.9609"
+     y="2798.8374"
+     id="text33"><tspan
+       sodipodi:role="line"
+       id="tspan33"
+       x="6836.9609"
+       y="2798.8374">+_</tspan></text>
+  <text
+     xml:space="preserve"
+     style="font-size:40px;line-height:1.25;font-family:sans-serif"
+     x="1503.8529"
+     y="696.22821"
+     id="text34"><tspan
+       sodipodi:role="line"
+       id="tspan34"
+       x="1503.8529"
+       y="696.22821"> </tspan></text>
+  <metadata
+     id="metadata34">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>bzfs</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <text
+     xml:space="preserve"
+     id="text48"
+     style="font-size:40px;line-height:1.25;font-family:sans-serif;white-space:pre;shape-inside:url(#rect48);display:inline" />
 </svg>

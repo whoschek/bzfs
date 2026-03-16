@@ -16,8 +16,8 @@
 <h1 align="left">
   <img
     src="bzfs_docs/logo.svg"
-    alt="bzfs bidirectional mesh lattice logo"
-    width="340"
+    alt="bzfs logo"
+    width="640"
   />
 </h1>
 
