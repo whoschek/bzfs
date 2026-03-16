@@ -13,7 +13,14 @@
  KIND, either express or implied.  See the License for the
  specific language governing permissions and limitations
  under the License.-->
-# bzfs
+<h1 align="left">
+  <img
+    src="bzfs_docs/logo.svg"
+    alt="bzfs bidirectional mesh lattice logo"
+    width="340"
+  />
+</h1>
+
 [![Build](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml/badge.svg)](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml)
 [![Coverage](https://whoschek.github.io/bzfs/badges/coverage-badge.svg)](https://whoschek.github.io/bzfs/coverage/)
 [![os](https://whoschek.github.io/bzfs/badges/os-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)

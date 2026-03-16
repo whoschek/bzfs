@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1640 1024" role="img" aria-labelledby="title desc">
+  <title id="title">bzfs</title>
+  <desc id="desc">bzfs</desc>
+  <defs>
+    <linearGradient id="bg" x1="170" y1="138" x2="854" y2="892" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1d1838"/>
+      <stop offset="1" stop-color="#0a1018"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="286" y1="512" x2="738" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#aa84ff"/>
+      <stop offset="1" stop-color="#68ebff"/>
+    </linearGradient>
+    <linearGradient id="wordmark" x1="1092" y1="370" x2="1498" y2="626" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00c8c8"/>
+      <stop offset="0.55" stop-color="#e068d8"/>
+      <stop offset="1" stop-color="#f2a618"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <g fill="#aa84ff" opacity="0.16" stroke="#aa84ff" stroke-width="14">
+    <rect x="190" y="214" width="92" height="92" rx="20"/>
+    <rect x="190" y="372" width="92" height="92" rx="20"/>
+    <rect x="190" y="530" width="92" height="92" rx="20"/>
+    <rect x="190" y="688" width="92" height="92" rx="20"/>
+  </g>
+  <g fill="#68ebff" opacity="0.16" stroke="#68ebff" stroke-width="14">
+    <rect x="744" y="274" width="92" height="92" rx="20"/>
+    <rect x="744" y="466" width="92" height="92" rx="20"/>
+    <rect x="744" y="658" width="92" height="92" rx="20"/>
+  </g>
+  <g fill="none" stroke="url(#flow)" stroke-width="10" stroke-linecap="round">
+    <path d="M282 260 744 320"/><path d="M282 260 744 512"/><path d="M282 260 744 704"/>
+    <path d="M282 418 744 320"/><path d="M282 418 744 512"/><path d="M282 418 744 704"/>
+    <path d="M282 576 744 320"/><path d="M282 576 744 512"/><path d="M282 576 744 704"/>
+    <path d="M282 734 744 320"/><path d="M282 734 744 512"/><path d="M282 734 744 704"/>
+  </g>
+  <path d="M352 154h320" fill="none" stroke="#eef6ff" stroke-opacity="0.46" stroke-width="20" stroke-linecap="round"/>
+  <path d="M592 96 744 154 592 212" fill="none" stroke="#eef6ff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M672 870H352" fill="none" stroke="#eef6ff" stroke-opacity="0.46" stroke-width="20" stroke-linecap="round"/>
+  <path d="M434 812 282 870 434 928" fill="none" stroke="#eef6ff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1080" y="586" fill="url(#wordmark)" font-family="JetBrains Mono, DejaVu Sans Mono, monospace" font-size="232" font-weight="700" letter-spacing="-6">bzfs</text>
+</svg>
