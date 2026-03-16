@@ -5,7 +5,7 @@
    aria-labelledby="title desc"
    version="1.1"
    id="svg29"
-   sodipodi:docname="logo6.svg"
+   sodipodi:docname="logo.svg"
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    width="3400"
    height="1024"
@@ -32,9 +32,10 @@
      inkscape:window-width="1460"
      inkscape:window-height="847"
      inkscape:window-x="268"
-     inkscape:window-y="344"
+     inkscape:window-y="316"
      inkscape:window-maximized="0"
-     inkscape:current-layer="svg29" />
+     inkscape:current-layer="svg29"
+     showgrid="false" />
   <title
      id="title">bzfs</title>
   <desc
@@ -104,7 +105,7 @@
        y1="370"
        x2="1498"
        y2="626"
-       gradientTransform="translate(4.0784102,48.609433)" />
+       gradientTransform="translate(4.0784102,33.840203)" />
     <linearGradient
        inkscape:collect="always"
        xlink:href="#flow"
@@ -231,7 +232,7 @@
        y1="370"
        x2="1498"
        y2="626"
-       gradientTransform="translate(-19.692308,-295.38462)" />
+       gradientTransform="translate(-24.615385,-364.3077)" />
   </defs>
   <rect
      width="1024"
@@ -384,8 +385,8 @@
      fill="#7a7f87"
      id="path29" />
   <text
-     x="1060.3076"
-     y="290.61539"
+     x="1055.3845"
+     y="221.69231"
      fill="url(#wordmark)"
      font-family="'JetBrains Mono', 'DejaVu Sans Mono', monospace"
      font-size="232px"
@@ -395,7 +396,7 @@
      style="fill:url(#linearGradient47)">bzfs</text>
   <text
      x="1084.0784"
-     y="634.60944"
+     y="619.84021"
      fill="url(#wordmark)"
      font-family="'JetBrains Mono', 'DejaVu Sans Mono', monospace"
      font-size="232px"
@@ -406,17 +407,17 @@
        sodipodi:role="line"
        id="tspan30"
        x="1084.0784"
-       y="634.60944"
+       y="619.84021"
        style="font-size:117.333px;fill:url(#linearGradient30)">Reliable, scalable, near real-time</tspan><tspan
        sodipodi:role="line"
        x="1084.0784"
-       y="781.2757"
+       y="766.50647"
        style="font-size:117.333px;fill:url(#linearGradient30)"
        id="tspan47">ZFS snapshot replication</tspan><tspan
        sodipodi:role="line"
        id="tspan31"
        x="1084.0784"
-       y="927.94196"
+       y="913.17273"
        style="font-size:117.333px;fill:url(#linearGradient30)">with minimal operational complexity</tspan></text>
   <text
      xml:space="preserve"
@@ -427,7 +428,7 @@
        sodipodi:role="line"
        id="tspan32"
        x="6112.8838"
-       y="1991.2126"></tspan></text>
+       y="1991.2126" /></text>
   <text
      xml:space="preserve"
      style="font-size:40px;line-height:1.25;font-family:sans-serif"
