@@ -29,9 +29,8 @@ testbed, which also works out of the box.
 Or instead, simply tell Codex, Claude, or any comparable agent something like "Run the bzfs_job_testbed.py example
 replication script on the testbed." It will figure out the rest and do it.
 
-For a smaller single-container Ubuntu 24.04 environment, use [`docker_create.sh`](docker_create.sh). It rebuilds the
-image from [`Dockerfile.ubuntu-24.04`](Dockerfile.ubuntu-24.04), replaces any existing `bzfs-ubuntu-24.04` container,
-and checks out `bzfs` into `/bzfs`. By default it selects the latest stable `v*` git tag via generalized numeric sort
-(`sort -V`), and you can override that with `BZFS_GIT_TAG=...`. If you want to publish the image to Docker Hub after
-`docker login`, set `BZFS_DOCKER_PUSH=true` and `BZFS_DOCKERHUB_USER=...`. The default Docker Hub tag is
-`$BZFS_DOCKER_OS-$BZFS_GIT_TAG`, which for this script means `ubuntu-24.04-vX.Y.Z`.
+For a small single-container Ubuntu environment, consider using [`docker_create.sh`](docker_create.sh). It builds a
+minimal docker image with a checkout of the latest stable `v*` git tag of `bzfs`. If you want to publish the image to a
+registry such as Docker Hub after `docker login`, set `BZFS_DOCKER_PUSH=true` and `BZFS_DOCKER_REGISTRY_PREFIX=...`. The
+default pushed image reference is `${BZFS_DOCKER_REGISTRY_PREFIX}/bzfs:${BZFS_GIT_TAG}-${BZFS_DOCKER_OS}`, for example
+`docker.io/mydockerhubuser/bzfs:v1.19.0-ubuntu-24.04`. Published images include both `linux/amd64` and `linux/arm64`.

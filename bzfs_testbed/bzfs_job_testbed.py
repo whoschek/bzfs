@@ -390,6 +390,20 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 
 cmd = ["bzfs_jobrunner"]
 # cmd = ["uv", "run", "--no-project", "bzfs_jobrunner"]  # alternatively launch python via `uv`
+# import shutil
+# ssh_user = os.environ.get("BZFS_SSH_USER", pwd.getpwuid(os.getuid()).pw_name)
+# cmd = [  # advanced usage: alternatively launch via a given docker image
+#     shutil.which("nerdctl") or "docker",  # Lima ships with nerdctl which is compatible with docker CLI
+#     "run",
+#     "--rm",  # auto-removes container on job exit
+#     # "--publish=2222:22",
+#     f"--mount=type=bind,src={home_dir}/.ssh,dst=/root/.ssh,readonly",  # inherits auth from host to container (read-only)
+#     "--mount=type=volume,dst=/root/.ssh/bzfs",  # ensures this dir is writable even if parent dir is read-only
+#     "docker.io/whoschek/bzfs:v1.19.0-ubuntu-24.04",  # docker image to use for the container
+#     "bzfs_jobrunner",
+#     f"--ssh-src-user={ssh_user}",  # by default programs run as root *inside* of the container; pass ssh username explicitly
+#     f"--ssh-dst-user={ssh_user}",
+# ]
 cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-hosts={src_hosts}"]
 cmd += [f"--dst-hosts={dst_hosts}"]

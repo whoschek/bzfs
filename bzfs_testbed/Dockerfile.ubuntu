@@ -1,5 +1,6 @@
-# Build a bzfs Ubuntu 24.04 container image for testbed use.
-FROM ubuntu:24.04
+# Build a bzfs container image for testbed use.
+ARG BZFS_DOCKER_BASE_IMAGE=ubuntu:24.04
+FROM ${BZFS_DOCKER_BASE_IMAGE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BZFS_GIT_REMOTE=https://github.com/whoschek/bzfs.git
@@ -7,12 +8,12 @@ ARG BZFS_GIT_TAG
 
 RUN apt-get -y -qq update \
     && apt-get -y full-upgrade \
-    && apt-get -y install zfsutils-linux python3 \
-    && apt-get -y install python3 zstd mbuffer pv rsync ripgrep python3-venv \
+    && apt-get -y install zfsutils-linux \
+    && apt-get -y install python3 zstd mbuffer pv \
     && apt-get -y install git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --branch "${BZFS_GIT_TAG}" "${BZFS_GIT_REMOTE}" /bzfs \
+RUN git clone --single-branch --branch "${BZFS_GIT_TAG}" "${BZFS_GIT_REMOTE}" /bzfs \
     && ln -sf /bzfs/bzfs_main/bzfs /usr/local/bin/bzfs \
     && ln -sf /bzfs/bzfs_main/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner
 

@@ -99,8 +99,10 @@ fi
 sudo modprobe zfs
 zfs --version
 
-mkdir -p "$HOME/.ssh"
-chmod u=rwx,go= "$HOME/.ssh"
+# shellcheck disable=SC2174
+mkdir -p --mode=u=rwx,go= "$HOME/.ssh"
+# shellcheck disable=SC2174
+mkdir -p --mode=u=rwx,go= "$HOME/.ssh/bzfs"
 if [[ ! -f ~/.bzfs_keys_done ]]; then
     rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
     ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N "" # create private key and public key

@@ -180,7 +180,8 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     # sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo apt-get -y install npm bubblewrap && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 
-    mkdir -p "$HOME/.ssh"
+    mkdir -p --mode=u=rwx,go= "$HOME/.ssh"
+    mkdir -p --mode=u=rwx,go= "$HOME/.ssh/bzfs"
     if [[ ! -f ~/.bzfs_keys_done ]]; then
         rm -f "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub"
         ssh-keygen -t rsa -f "$HOME/.ssh/id_rsa" -q -N ""  # create private key and public key
