@@ -76,7 +76,7 @@ repos:
     hooks:
       - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
-      #- id: check-compose-spec         # Validate syntax of Docker Compose files
+      - id: check-compose-spec          # Validate syntax of Docker Compose files
       - id: check-dependabot            # Validate syntax of Dependabot config files
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.11
