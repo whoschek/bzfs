@@ -17,20 +17,20 @@
 # This script builds minimal docker images with a checkout of the latest stable `v*` git tag of `bzfs`.
 # If you want to publish the images to a registry such as Docker Hub after `docker login`, set
 # `BZFS_DOCKER_PUSH=true` and `BZFS_DOCKER_REGISTRY_PREFIX=...`.
-# The default pushed image references are `${BZFS_DOCKER_REGISTRY_PREFIX}/bzfs:${BZFS_GIT_TAG}-${BZFS_DOCKER_OS}`,
+# The pushed image references are `${BZFS_DOCKER_REGISTRY_PREFIX}/bzfs:${BZFS_GIT_TAG}-${BZFS_DOCKER_OS}`,
 # for example `docker.io/mydockerhubuser/bzfs:v1.19.0-ubuntu-24.04`.
 # Published images include both `linux/amd64` and `linux/arm64`.
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_dir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 BZFS_GIT_REMOTE="${BZFS_GIT_REMOTE:-https://github.com/whoschek/bzfs.git}"
-BZFS_DOCKERFILE="${BZFS_DOCKERFILE:-${SCRIPT_DIR}/Dockerfile.ubuntu}"
+BZFS_DOCKERFILE="${BZFS_DOCKERFILE:-${script_dir}/Dockerfile.ubuntu}"
 BZFS_DOCKER_OS_LIST="${BZFS_DOCKER_OS_LIST:-ubuntu-24.04,ubuntu-26.04}"
 BZFS_DOCKER_BASE_IMAGES="${BZFS_DOCKER_BASE_IMAGES:-ubuntu:24.04,ubuntu:26.04}"
 BZFS_DOCKER_PUSH="${BZFS_DOCKER_PUSH:-false}"
 BZFS_DOCKER_REGISTRY_PREFIX="${BZFS_DOCKER_REGISTRY_PREFIX:-}"  # e.g. 'docker.io/mydockerhubuser'
 BZFS_DOCKER_PLATFORMS="${BZFS_DOCKER_PLATFORMS:-linux/amd64,linux/arm64}"
 
-latest_stable_bzfs_tag() {
+fetch_latest_stable_bzfs_tag() {
     git ls-remote --refs --tags --sort='version:refname' "$BZFS_GIT_REMOTE" "refs/tags/v*" |
           sed 's#^[^[:space:]]*[[:space:]]refs/tags/##' |
           grep -E '^v[0-9]+([.][0-9]+)*$' |
@@ -50,16 +50,16 @@ host_platform() {
 
 docker_buildx_build() {
     docker buildx build \
-        --build-arg "BZFS_DOCKER_BASE_IMAGE=$BZFS_DOCKER_BASE_IMAGE" \
+        --build-arg "BZFS_DOCKER_BASE_IMAGE=$bzfs_docker_base_image" \
         --build-arg "BZFS_GIT_REMOTE=$BZFS_GIT_REMOTE" \
         --build-arg "BZFS_GIT_TAG=$BZFS_GIT_TAG" \
         --file "$BZFS_DOCKERFILE" \
         "$@"
 }
 
-LATEST_STABLE_BZFS_TAG="$(latest_stable_bzfs_tag)"
-BZFS_GIT_TAG="${BZFS_GIT_TAG:-$LATEST_STABLE_BZFS_TAG}"
-if [[ -z "$LATEST_STABLE_BZFS_TAG" ]]; then
+latest_stable_bzfs_tag="$(fetch_latest_stable_bzfs_tag)"
+BZFS_GIT_TAG="${BZFS_GIT_TAG:-$latest_stable_bzfs_tag}"
+if [[ -z "$latest_stable_bzfs_tag" ]]; then
     echo "ERROR: Failed to determine a stable bzfs git tag from $BZFS_GIT_REMOTE" >&2
     exit 1
 fi
@@ -80,53 +80,50 @@ if [[ ${#bzfs_docker_os_list[@]} -ne ${#bzfs_docker_base_images[@]} ]]; then
 fi
 
 for i in "${!bzfs_docker_os_list[@]}"; do
-    BZFS_DOCKER_OS="${bzfs_docker_os_list[$i]}"
-    BZFS_DOCKER_BASE_IMAGE="${bzfs_docker_base_images[$i]}"
-    if [[ -z "$BZFS_DOCKER_OS" || -z "$BZFS_DOCKER_BASE_IMAGE" ]]; then
+    bzfs_docker_os="${bzfs_docker_os_list[$i]}"
+    bzfs_docker_base_image="${bzfs_docker_base_images[$i]}"
+    if [[ -z "$bzfs_docker_os" || -z "$bzfs_docker_base_image" ]]; then
         echo "ERROR: BZFS_DOCKER_OS_LIST and BZFS_DOCKER_BASE_IMAGES must not contain empty items" >&2
         exit 1
     fi
 
-    BZFS_DOCKER_TAG="${BZFS_GIT_TAG}-${BZFS_DOCKER_OS}"
-    BZFS_DOCKER_CONTAINER="bzfs-$BZFS_DOCKER_TAG"
-    if docker container inspect "$BZFS_DOCKER_CONTAINER" > /dev/null 2>&1; then
-        echo "Removing existing $BZFS_DOCKER_CONTAINER ..."
-        docker rm -f "$BZFS_DOCKER_CONTAINER"
+    bzfs_docker_tag="${BZFS_GIT_TAG}-${bzfs_docker_os}"
+    bzfs_docker_container="bzfs-$bzfs_docker_tag"
+    if docker container inspect "$bzfs_docker_container" > /dev/null 2>&1; then
+        echo "Removing existing $bzfs_docker_container ..."
+        docker rm -f "$bzfs_docker_container"
     fi
 
     docker_buildx_build \
         --load \
         --platform "$(host_platform)" \
-        --tag "$BZFS_DOCKER_TAG" \
-        "$SCRIPT_DIR"
-    printf 'Built image %s from %s at tag %s\n' "$BZFS_DOCKER_TAG" "$BZFS_GIT_REMOTE" "$BZFS_GIT_TAG"
+        --tag "$bzfs_docker_tag" \
+        "$script_dir"
+    printf 'Built image %s from %s at tag %s\n' "$bzfs_docker_tag" "$BZFS_GIT_REMOTE" "$BZFS_GIT_TAG"
 
     # sanity check
-    docker run --rm "$BZFS_DOCKER_TAG" bash -lc '
+    docker run --rm "$bzfs_docker_tag" bash -lc '
         set -euo pipefail
         command -v bzfs > /dev/null
         command -v bzfs_jobrunner > /dev/null
         bzfs --help > /dev/null
         bzfs_jobrunner --help > /dev/null
     '
-    printf 'docker run sanity check passed for %s\n' "$BZFS_DOCKER_TAG"
+    printf 'docker run sanity check passed for %s\n' "$bzfs_docker_tag"
 
     if [[ "$BZFS_DOCKER_PUSH" == "true" ]]; then
         bzfs_docker_registry_repo="${BZFS_DOCKER_REGISTRY_PREFIX}/${BZFS_DOCKER_IMAGE:-bzfs}"
-        bzfs_docker_registry_tags=(--tag "${bzfs_docker_registry_repo}:${BZFS_DOCKER_TAG}")
-        if [[ "$BZFS_GIT_TAG" == "$LATEST_STABLE_BZFS_TAG" ]]; then
-            bzfs_docker_registry_tags+=(--tag "${bzfs_docker_registry_repo}:latest-${BZFS_DOCKER_OS}")
+        bzfs_docker_registry_tags=(--tag "${bzfs_docker_registry_repo}:${bzfs_docker_tag}")
+        if [[ "$BZFS_GIT_TAG" == "$latest_stable_bzfs_tag" ]]; then
+            bzfs_docker_registry_tags+=(--tag "${bzfs_docker_registry_repo}:latest-${bzfs_docker_os}")
         fi
         docker_buildx_build \
             --platform "$BZFS_DOCKER_PLATFORMS" \
             "${bzfs_docker_registry_tags[@]}" \
             --push \
-            "$SCRIPT_DIR"
+            "$script_dir"
         printf 'Pushed image to registry %s\n' "${bzfs_docker_registry_tags[*]}"
     fi
 done
-
-# Optional: Run a long-lived interactive local container based on the image.
-# docker run -d --name "$BZFS_DOCKER_CONTAINER" --hostname "$BZFS_DOCKER_CONTAINER" "$BZFS_DOCKER_TAG"
 
 printf 'Success!\n'
