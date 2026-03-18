@@ -128,7 +128,7 @@ if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     .github-workflow-scripts/install_almalinux_9.sh "${LIMA_ZFS_VERSION:-zfs-2.4}" "$LIMA_SSH_PROGRAM"
     sudo dnf -y install rsync ripgrep
     # sudo dnf -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
-    # sudo dnf -y install npm && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
+    # sudo dnf -y install npm bubblewrap && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     export DEBIAN_FRONTEND=noninteractive
     if [[ ! -f ~/.bzfs_apt_update_done ]]; then
@@ -178,7 +178,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     # Run common preparation steps
     sudo apt-get -y install python3 zstd mbuffer pv rsync ripgrep python3-venv
     # sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
-    # sudo apt-get -y install npm && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
+    # sudo apt-get -y install npm bubblewrap && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 
     mkdir -p "$HOME/.ssh"
     if [[ ! -f ~/.bzfs_keys_done ]]; then
