@@ -57,8 +57,9 @@ docker_buildx_build() {
         "$@"
 }
 
-BZFS_GIT_TAG="${BZFS_GIT_TAG:-$(latest_stable_bzfs_tag)}"
-if [[ -z "$BZFS_GIT_TAG" ]]; then
+LATEST_STABLE_BZFS_TAG="$(latest_stable_bzfs_tag)"
+BZFS_GIT_TAG="${BZFS_GIT_TAG:-$LATEST_STABLE_BZFS_TAG}"
+if [[ -z "$LATEST_STABLE_BZFS_TAG" ]]; then
     echo "ERROR: Failed to determine a stable bzfs git tag from $BZFS_GIT_REMOTE" >&2
     exit 1
 fi
@@ -111,13 +112,17 @@ for i in "${!bzfs_docker_os_list[@]}"; do
     printf 'docker run sanity check passed for %s\n' "$BZFS_DOCKER_TAG"
 
     if [[ "$BZFS_DOCKER_PUSH" == "true" ]]; then
-        BZFS_DOCKER_REGISTRY_IMAGE="${BZFS_DOCKER_REGISTRY_PREFIX}/${BZFS_DOCKER_IMAGE:-bzfs}:${BZFS_DOCKER_TAG}"
+        bzfs_docker_registry_repo="${BZFS_DOCKER_REGISTRY_PREFIX}/${BZFS_DOCKER_IMAGE:-bzfs}"
+        bzfs_docker_registry_tags=(--tag "${bzfs_docker_registry_repo}:${BZFS_DOCKER_TAG}")
+        if [[ "$BZFS_GIT_TAG" == "$LATEST_STABLE_BZFS_TAG" ]]; then
+            bzfs_docker_registry_tags+=(--tag "${bzfs_docker_registry_repo}:latest-${BZFS_DOCKER_OS}")
+        fi
         docker_buildx_build \
             --platform "$BZFS_DOCKER_PLATFORMS" \
-            --tag "$BZFS_DOCKER_REGISTRY_IMAGE" \
+            "${bzfs_docker_registry_tags[@]}" \
             --push \
             "$SCRIPT_DIR"
-        printf 'Pushed image to registry %s\n' "$BZFS_DOCKER_REGISTRY_IMAGE"
+        printf 'Pushed image to registry %s\n' "${bzfs_docker_registry_tags[*]}"
     fi
 done
 
