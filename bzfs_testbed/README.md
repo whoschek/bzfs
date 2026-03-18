@@ -29,8 +29,8 @@ testbed, which also works out of the box.
 Or instead, simply tell Codex, Claude, or any comparable agent something like "Run the bzfs_job_testbed.py example
 replication script on the testbed." It will figure out the rest and do it.
 
-For a small single-container Ubuntu environment, consider using [`docker_create.sh`](docker_create.sh). It builds a
-minimal docker image with a checkout of the latest stable `v*` git tag of `bzfs`. If you want to publish the image to a
+For a small Ubuntu container environment, consider using [`docker_create.sh`](docker_create.sh). It builds minimal
+docker images with a checkout of the latest stable `v*` git tag of `bzfs`. If you want to publish the images to a
 registry such as Docker Hub after `docker login`, set `BZFS_DOCKER_PUSH=true` and `BZFS_DOCKER_REGISTRY_PREFIX=...`. The
 default pushed image reference is `${BZFS_DOCKER_REGISTRY_PREFIX}/bzfs:${BZFS_GIT_TAG}-${BZFS_DOCKER_OS}`, for example
-`docker.io/mydockerhubuser/bzfs:v1.19.0-ubuntu-24.04`. Published images include both `linux/amd64` and `linux/arm64`.
+`docker.io/mydockerhubuser/bzfs:v1.19.0-ubuntu-24.04`. Published images include `linux/amd64` and `linux/arm64`.
