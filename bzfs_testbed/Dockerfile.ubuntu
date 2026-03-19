@@ -8,7 +8,6 @@ ARG BZFS_GIT_TAG
 
 RUN apt-get -y -qq update \
     && apt-get -y full-upgrade \
-    && apt-get -y install zfsutils-linux \
     && apt-get -y install python3 zstd mbuffer pv \
     && apt-get -y install git \
     && rm -rf /var/lib/apt/lists/*
