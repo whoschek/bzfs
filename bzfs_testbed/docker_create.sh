@@ -23,7 +23,7 @@
 set -euo pipefail
 script_dir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 BZFS_GIT_REMOTE="${BZFS_GIT_REMOTE:-https://github.com/whoschek/bzfs.git}"
-BZFS_DOCKERFILE="${BZFS_DOCKERFILE:-${script_dir}/Dockerfile.ubuntu}"
+BZFS_DOCKERFILE="${BZFS_DOCKERFILE:-${script_dir}/Dockerfile}"
 BZFS_DOCKER_OS_LIST="${BZFS_DOCKER_OS_LIST:-ubuntu-24.04,ubuntu-26.04}"
 BZFS_DOCKER_BASE_IMAGES="${BZFS_DOCKER_BASE_IMAGES:-ubuntu:24.04,ubuntu:26.04}"
 BZFS_DOCKER_PUSH="${BZFS_DOCKER_PUSH:-false}"
