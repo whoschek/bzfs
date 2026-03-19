@@ -60,6 +60,14 @@ if [[ "$LIMA_VM_RECREATE" == "true" ]]; then
     limactl stop --tty=false --force "$LIMA_VM_NAME" || true
     limactl delete --tty=false --force "$LIMA_VM_NAME"  # by design fails with non-zero exit code if the VM is "protected"
 fi
+LIMA_HOST_SHADOW_DIR="$HOME/.bzfs-lima-empty-shadow"
+shadow_subdirs=(.venv .git/hooks)  # hide these host git repo subdirs from guest VM
+shadow_mount_args=()
+for subdir in "${shadow_subdirs[@]}"; do
+    mkdir -p "$LIMA_HOST_SHADOW_DIR/$subdir"
+    mkdir -p "$LIMA_HOST_WORKDIR/$subdir"  # makes `mount` later succeed in guest VM even in read-only mode
+    shadow_mount_args+=(--set=".mounts += [{\"location\":\"$LIMA_HOST_SHADOW_DIR/$subdir\",\"mountPoint\":\"$LIMA_WORKDIR/$subdir\",\"writable\":false}]")
+done
 
 # Create VM if it doesn't already exist
 lima_vm_names="$(limactl list --tty=false --format='{{.Name}}')"
@@ -77,6 +85,7 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
         --set=".ssh.loadDotSSHPubKeys=true" \
         --set=".mounts = ${LIMA_VM_MOUNTS:-[]}" \
         --set=".mounts += [{\"location\":\"$LIMA_HOST_WORKDIR\",\"mountPoint\":\"$LIMA_WORKDIR\",\"writable\":$LIMA_WORKDIR_WRITABLE}]" \
+        "${shadow_mount_args[@]}" \
         --containerd="${LIMA_VM_CONTAINERD:-none}" \
         "${limactl_mount_type_arg[@]}" \
         "$LIMA_VM_TEMPLATE"
@@ -97,7 +106,6 @@ if [[ "$(limactl list --tty=false --format='{{.Status}}' "$LIMA_VM_NAME")" != "R
         --progress="${LIMA_START_PROGRESS:-false}" --log-level="${LIMA_START_LOGLEVEL:-info}"
 fi
 LIMA_SSH_PORT="$(limactl list --tty=false --format="{{.SSHLocalPort}}" "$LIMA_VM_NAME")"
-mkdir -p "$LIMA_HOST_WORKDIR/.venv"  # makes `mount` later succeed in guest VM even in read-only mode
 
 # Workaround for https://github.com/lima-vm/lima/issues/678
 limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -s << 'EOF'
@@ -112,6 +120,7 @@ limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
     LIMA_SSH_PORT="$LIMA_SSH_PORT" \
     LIMA_ZFS_VERSION="$LIMA_ZFS_VERSION" \
     LIMA_SSH_PROGRAM="${LIMA_SSH_PROGRAM:-ssh}" \
+    LIMA_SHADOW_SUBDIRS="${shadow_subdirs[*]}" \
     bash -s << 'EOF'
 
 set -eo pipefail
@@ -216,13 +225,14 @@ setup_bind_mount() {  # also ensures mount persists across reboot and restart of
     if ! grep -Fqx -- "$fstab_entry" /etc/fstab; then
         printf '%s\n' "$fstab_entry" | sudo tee -a /etc/fstab > /dev/null
     fi
-    if ! mountpoint -q "$target_dir"; then
-        sudo mount "$target_dir"
+    if [[ ! "$source_dir" -ef "$target_dir" ]]; then
+        sudo mount --bind "$source_dir" "$target_dir"
     fi
 }
-# Enable guest VM to have its own virtual environment and git hooks
-setup_bind_mount "$HOME/.bzfs-lima/.venv" "$(pwd)/.venv"
-setup_bind_mount "$HOME/.bzfs-lima/git-hooks" "$(pwd)/.git/hooks"
+read -r -a shadow_subdirs <<< "${LIMA_SHADOW_SUBDIRS:-}"
+for subdir in "${shadow_subdirs[@]}"; do
+    setup_bind_mount "$HOME/.bzfs-lima/$subdir" "$(pwd)/$subdir"  # enable guest VM to have its own venv, hooks, etc
+done
 
 # Display ZFS version and Python version
 id -u -n
