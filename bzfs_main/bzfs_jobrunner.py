@@ -98,6 +98,7 @@ from bzfs_main.util.utils import (
     DIE_STATUS,
     LOG_TRACE,
     UMASK,
+    UNIX_TIME_INFINITY_SECS,
     JobStats,
     Subprocesses,
     TaskTiming,
@@ -432,6 +433,12 @@ This is harmless because that extra process exits immediately with a message lik
         help="If this much time has passed after a worker process has started executing, kill the straggling worker "
              "(optional). Other workers remain unaffected. Examples: 60, 3600\n\n")
     parser.add_argument(
+        "--repeat-if-took-more-than-seconds", type=float, min=0.001, default=UNIX_TIME_INFINITY_SECS,
+        action=check_range.CheckRange, metavar="FLOAT",
+        help="Repeat the entire workflow if it took longer than this much time. Use this (with the POSIX `timeout` CLI) "
+             "before migrating VM storage to converge replication and reduce cutover downtime. Default is infinity, i.e. "
+             "never repeat the workflow. Examples: 1, 0.1\n\n")
+    parser.add_argument(
         "--spawn-process-per-job", action="store_true",
         help="Spawn a Python process per subjob instead of a Python thread per subjob (optional). The former is only "
              "recommended for a job operating in parallel on a large number of hosts as it helps avoid exceeding "
@@ -606,6 +613,7 @@ class Job:
         workers, workers_is_percent = args.workers
         max_workers: int = max(1, round((os.cpu_count() or 1) * workers / 100.0) if workers_is_percent else round(workers))
         worker_timeout_seconds: int = args.worker_timeout_seconds
+        repeat_if_took_more_than_nanos: int = int(args.repeat_if_took_more_than_seconds * 1_000_000_000)
         self.spawn_process_per_job = args.spawn_process_per_job
         username: str = pwd.getpwuid(os.getuid()).pw_name
         assert username
@@ -834,12 +842,18 @@ class Job:
         msg += f"{len(dst_hosts)}/{nb_dst_hosts} dst hosts: {list(dst_hosts.keys())}"
         log.info("%s", dry(msg, is_dry_run=self.jobrunner_dryrun))
         log.log(LOG_TRACE, "subjobs: \n%s", _pretty_print_formatter(subjobs))
-        self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds, args.jitter)
-        ex = self.worst_exception
-        if isinstance(ex, int):
-            assert ex != 0
-            sys.exit(ex)
-        assert ex is None, ex
+        while True:
+            start_time_nanos = time.monotonic_ns()
+            self.first_exception = None
+            self.worst_exception = None
+            self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds, args.jitter)
+            ex = self.worst_exception
+            if isinstance(ex, int):
+                assert ex != 0
+                sys.exit(ex)
+            assert ex is None, ex
+            if time.monotonic_ns() - start_time_nanos <= repeat_if_took_more_than_nanos:
+                break
         log.info("Succeeded. Bye!")
 
     def replication_opts(

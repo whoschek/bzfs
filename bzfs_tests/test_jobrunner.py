@@ -81,6 +81,7 @@ def suite() -> unittest.TestSuite:
         TestParserIsolationAcrossSubjobs,
         TestSpawnProcessPerJobDecision,
         TestScopedTerminationInProcess,
+        TestRepeatIfTookMoreThanSeconds,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -1403,3 +1404,87 @@ class TestParserIsolationAcrossSubjobs(AbstractTestCase):
 
         # Critically: include_dataset_regex must equal the exact forwarded value for each subjob (no accumulation)
         self.assertListEqual([["^pool/dst$"], ["^pool/dst$"]], captured_include_dataset_regex_values)
+
+
+#############################################################################
+class TestRepeatIfTookMoreThanSeconds(AbstractTestCase):
+
+    def setUp(self) -> None:
+        self.job = make_bzfs_jobrunner_job()
+
+    @staticmethod
+    def _build_argv(*, repeat_if_took_more_than_seconds: float) -> list[str]:
+        return [
+            bzfs_jobrunner.PROG_NAME,
+            "--job-id=test",
+            "--root-dataset-pairs",
+            "tank/src",
+            "pool/dst",
+            "--src-hosts=['src1']",
+            "--dst-hosts={'dst1': ['onsite']}",
+            "--retain-dst-targets={'dst1': ['onsite']}",
+            "--dst-root-datasets={'dst1': 'pool/backup'}",
+            "--create-src-snapshots",
+            f"--repeat-if-took-more-than-seconds={repeat_if_took_more_than_seconds}",
+        ]
+
+    def test_repeats_workflow_when_elapsed_time_exceeds_threshold(self) -> None:
+        """A successful workflow repeats until a later pass completes within the configured duration."""
+        argv = self._build_argv(repeat_if_took_more_than_seconds=1.0)
+        call_count = 0
+
+        def fake_run_subjobs(*args: object, **kwargs: object) -> None:
+            nonlocal call_count
+            call_count += 1
+
+        with patch.object(self.job, "run_subjobs", side_effect=fake_run_subjobs):
+            with patch(
+                "bzfs_main.bzfs_jobrunner.time.monotonic_ns",
+                side_effect=[0, 1_000_000_001, 2_000_000_000, 2_500_000_000],
+            ):
+                with patch("sys.argv", argv):
+                    with suppress_output():
+                        self.job.run_main(argv)
+
+        self.assertEqual(2, call_count)
+
+    def test_does_not_repeat_when_elapsed_time_is_within_threshold(self) -> None:
+        """A successful workflow stops after one pass when its duration is already short enough."""
+        argv = self._build_argv(repeat_if_took_more_than_seconds=1.0)
+        call_count = 0
+
+        def fake_run_subjobs(*args: object, **kwargs: object) -> None:
+            nonlocal call_count
+            call_count += 1
+
+        with patch.object(self.job, "run_subjobs", side_effect=fake_run_subjobs):
+            with patch("bzfs_main.bzfs_jobrunner.time.monotonic_ns", side_effect=[0, 999_999_999]):
+                with patch("sys.argv", argv):
+                    with suppress_output():
+                        self.job.run_main(argv)
+
+        self.assertEqual(1, call_count)
+
+    def test_failing_repeated_pass_exits_immediately(self) -> None:
+        """Any repeated pass that reports a failure status aborts the overall workflow immediately."""
+        argv = self._build_argv(repeat_if_took_more_than_seconds=1.0)
+        call_count = 0
+
+        def fake_run_subjobs(*args: object, **kwargs: object) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                self.job.worst_exception = 7
+
+        with patch.object(self.job, "run_subjobs", side_effect=fake_run_subjobs):
+            with patch(
+                "bzfs_main.bzfs_jobrunner.time.monotonic_ns",
+                side_effect=[0, 1_000_000_001, 2_000_000_000],
+            ):
+                with patch("sys.argv", argv):
+                    with self.assertRaises(SystemExit) as cm:
+                        with suppress_output():
+                            self.job.run_main(argv)
+
+        self.assertEqual(7, cm.exception.code)
+        self.assertEqual(2, call_count)

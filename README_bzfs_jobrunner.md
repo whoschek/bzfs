@@ -166,6 +166,7 @@ usage: bzfs_jobrunner
        [--work-period-seconds FLOAT]
        [--jitter]
        [--worker-timeout-seconds FLOAT]
+       [--repeat-if-took-more-than-seconds FLOAT]
        [--spawn-process-per-job]
        [--jobrunner-dryrun]
        [--jobrunner-log-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
@@ -536,6 +537,16 @@ usage: bzfs_jobrunner
 
 *  If this much time has passed after a worker process has started executing, kill the straggling
     worker (optional). Other workers remain unaffected. Examples: 60, 3600
+
+<!-- -->
+
+<div id="--repeat-if-took-more-than-seconds"></div>
+
+**--repeat-if-took-more-than-seconds** *FLOAT*
+
+*  Repeat the entire workflow if it took longer than this much time. Use this (with the POSIX
+    `timeout` CLI) before migrating VM storage to converge replication and reduce cutover
+    downtime. Default is infinity, i.e. never repeat the workflow. Examples: 1, 0.1
 
 <!-- -->
 
