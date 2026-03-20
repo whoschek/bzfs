@@ -61,7 +61,7 @@ dev = [  # for development only
   "pre-commit==4.3.0 ; python_version < '3.10'",   # see https://github.com/pre-commit/pre-commit
   "pre-commit==4.5.1 ; python_version >= '3.10'",  # see https://github.com/pre-commit/pre-commit
   "black==25.11.0",                 # see https://github.com/psf/black
-  "ruff==0.15.6",                   # see https://github.com/astral-sh/ruff
+  "ruff==0.15.7",                   # see https://github.com/astral-sh/ruff
   "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
   "mypy==1.19.1",                   # see https://github.com/python/mypy
   "shellcheck-py==0.11.0.1",        # see https://github.com/shellcheck-py/shellcheck-py
@@ -343,6 +343,7 @@ disable_error_code = [  # toggles to exclude overly strict `mypy` checks in deve
 [tool.pyrefly]
 python-version = "3.9"
 #untyped-def-behavior = "check-and-infer-return-type"
+#errors = { deprecated = "error" }
 #project-includes = ["**/bzfs_*/**"]
 project-excludes = ["bzfs_testbed/bzfs_job_testbed.py", "**/.venv/**"]
 
