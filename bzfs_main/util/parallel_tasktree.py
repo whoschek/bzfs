@@ -20,6 +20,37 @@ This module contains only generic scheduling and coordination (the "algorithm").
 are customizable and implemented by callers via the CompletionCallback API or wrappers such as ``parallel_tasktree_policy``.
 
 Has zero dependencies beyond the Python standard library.
+
+Example Usage:
+--------------
+    import logging
+    from bzfs_main.util.parallel_tasktree import CompletionCallback, CompletionCallbackResult, ParallelTaskTree
+
+    datasets = ["a", "a/b", "a/b/c", "a/d", "e"]
+
+    def process_dataset(dataset: str, _submit_count: int) -> CompletionCallback:
+        print(dataset)
+
+        def completion_callback(_todo_futures) -> CompletionCallbackResult:
+            return CompletionCallbackResult(no_skip=True, fail=False)
+
+        return completion_callback
+
+    log = logging.getLogger(__name__)
+    tasktree = ParallelTaskTree(
+        log=log,
+        datasets=datasets,
+        process_dataset=process_dataset,
+        max_workers=2,
+    )
+    tasktree.process_datasets_in_parallel()
+
+    # Sample output:
+    # a
+    # a/b
+    # a/d
+    # e
+    # a/b/c
 """
 
 from __future__ import (
