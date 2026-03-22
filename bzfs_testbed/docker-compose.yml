@@ -23,6 +23,6 @@ services:
         target: /etc/hpnssh
         read_only: true
       - type: bind
-        source: /tmp/mybzfs-root-ssh
+        source: /bzfs.ssh
         target: /root/.ssh
         read_only: true
