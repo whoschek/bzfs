@@ -48,4 +48,4 @@ WORKDIR /bzfs
 
 EXPOSE 22 2222
 
-CMD ["/bin/bash", "-lc", "/usr/sbin/sshd -D -e & /usr/sbin/hpnsshd -D -e & wait -n"]
+CMD ["/bin/bash", "-lc", "mkdir -p /run/sshd && /usr/sbin/sshd -D -e & /usr/sbin/hpnsshd -D -e & wait -n"]
