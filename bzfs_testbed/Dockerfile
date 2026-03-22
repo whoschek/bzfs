@@ -8,8 +8,12 @@ ARG BZFS_GIT_TAG
 
 RUN apt-get -y -qq update \
     && apt-get -y full-upgrade \
-    && apt-get -y install python3 zstd mbuffer pv \
+    && apt-get -y install openssh-server python3 zstd mbuffer pv \
     && apt-get -y install git \
+    && apt-get -y install software-properties-common \
+    && add-apt-repository -y ppa:rapier1/hpnssh \
+    && apt-get -y -qq update \
+    && apt-get -y install hpnssh \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --single-branch --branch "${BZFS_GIT_TAG}" "${BZFS_GIT_REMOTE}" /bzfs \
