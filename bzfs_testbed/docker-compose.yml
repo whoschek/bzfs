@@ -1,0 +1,35 @@
+# Compose equivalent of the `nerdctl run ...` portion of ./docker_example.sh.
+#
+# Host prerequisites from ./docker_example.sh still apply because Compose cannot
+# create or mutate host mount sources such as /etc/hpnssh or
+# /tmp/mybzfs-root-ssh for you.
+#
+# Usage:
+#   sudo nerdctl compose -f docker-compose.yml up -d
+#   ssh -p 2222 root@127.0.0.1 'zfs list'
+#   sudo nerdctl compose -f docker-compose.yml down
+name: bzfs
+
+services:
+  bzfs:
+    container_name: bzfs
+    image: ${BZFS_DOCKER_IMAGE:-docker.io/whoschek/bzfs:v1.19.0-ubuntu-24.04}
+    privileged: true
+    restart: unless-stopped
+    ports:
+      - "2222:2222"
+    devices:
+      - /dev/zfs:/dev/zfs
+    volumes:
+      - type: bind
+        source: /etc/ssh
+        target: /etc/ssh
+        read_only: true
+      - type: bind
+        source: /etc/hpnssh
+        target: /etc/hpnssh
+        read_only: true
+      - type: bind
+        source: /tmp/mybzfs-root-ssh
+        target: /root/.ssh
+        read_only: true
