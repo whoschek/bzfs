@@ -20,8 +20,7 @@ sudo nerdctl run -d --name mybzfs \
     --publish=2222:2222 \
     --mount type=bind,src=/etc/ssh,dst=/etc/ssh,readonly \
     --mount type=bind,src=/etc/hpnssh,dst=/etc/hpnssh,readonly \
-    --mount type=bind,src=/etc/hostid,dst=/etc/hostid,readonly \
-    --volume /tmp/mybzfs-root-ssh:/root/.ssh:ro \
+    --mount type=bind,src=/tmp/mybzfs-root-ssh,dst=/root/.ssh,readonly \
     --device=/dev/zfs:/dev/zfs \
     --privileged \
     "${BZFS_DOCKER_IMAGE}" > /dev/null
