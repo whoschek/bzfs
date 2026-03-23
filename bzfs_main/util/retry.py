@@ -251,6 +251,18 @@ def on_exhaustion_raise(outcome: AttemptOutcome) -> NoReturn:
     raise RetryError(outcome=outcome) from retryable_error
 
 
+def _update_previous_outcomes(
+    previous_outcomes: tuple[AttemptOutcome, ...], outcome: AttemptOutcome, policy: RetryPolicy, retry: Retry
+) -> tuple[AttemptOutcome, ...]:
+    """Computes value of previous_outcomes for next retry iteration."""
+    n: int = policy.max_previous_outcomes
+    if n > 0:  # outcome will be passed to next attempt via Retry.previous_outcomes
+        if previous_outcomes:  # detach to reduce memory footprint
+            outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))
+        previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # immutable deque
+    return previous_outcomes
+
+
 #############################################################################
 _T = TypeVar("_T")
 
@@ -338,11 +350,7 @@ def call_with_retries(
                     sleep(sleep_nanos, retry)
                     idle_nanos += sleep_nanos
                     if not is_terminated(retry):
-                        n: int = policy.max_previous_outcomes
-                        if n > 0:  # outcome will be passed to next attempt via Retry.previous_outcomes
-                            if previous_outcomes:  # detach to reduce memory footprint
-                                outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))
-                            previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # imm deque
+                        previous_outcomes = _update_previous_outcomes(previous_outcomes, outcome, policy, retry)
                         del outcome  # help gc
                         retry_count += 1
                         continue  # continue retry loop with next attempt
@@ -427,11 +435,7 @@ async def call_with_retries_async(
                     await sleep(sleep_nanos, retry)
                     idle_nanos += sleep_nanos
                     if not is_terminated(retry):
-                        n: int = policy.max_previous_outcomes
-                        if n > 0:  # outcome will be passed to next attempt via Retry.previous_outcomes
-                            if previous_outcomes:  # detach to reduce memory footprint
-                                outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))
-                            previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # imm deque
+                        previous_outcomes = _update_previous_outcomes(previous_outcomes, outcome, policy, retry)
                         del outcome  # help gc
                         retry_count += 1
                         continue  # continue retry loop with next attempt
