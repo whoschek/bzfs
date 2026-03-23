@@ -47,9 +47,9 @@ Example Usage:
 
     # Sample output:
     # a
+    # e
     # a/b
     # a/d
-    # e
     # a/b/c
 """
 
@@ -400,8 +400,8 @@ class ParallelTaskTree:
         else:  # job completed without success
             # ... thus, opening the barrier shall always do nothing in node and its ancestors.
             # perf: Irrevocably mark (exactly once) barriers of this node and all its ancestors as cleared due to subtree
-            # skip, via barriers_cleared=True. This enables to avoid redundant re-walking the entire ancestor chain on
-            # subsequent skip.
+            # skip, via barriers_cleared=True. This enables to avoid redundant re-walking the ancestor chain on subsequent
+            # skip.
             tmp: _TreeNode | None = node
             while (tmp is not None) and not tmp.mut.barriers_cleared:
                 tmp.mut.barriers_cleared = True

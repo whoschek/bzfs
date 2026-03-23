@@ -1253,7 +1253,17 @@ _ZFS_RECV_O_PROPS_FILESYSTEM_ONLY: Final[frozenset[str]] = frozenset(
 
 
 def _sanitize_recv_opts_for_dataset_type(recv_opts: list[str], *, is_volume: bool) -> None:
-    """Drops `zfs receive` `-o/-x` props that `zfs receive` rejects for this dataset type."""
+    """Drops `zfs receive` `-o/-x` props that `zfs receive` rejects for this dataset type. Keeps props for which `zfs
+    receive` emits harmless warnings.
+
+    For example:
+    drop -o canmount=<value> on zvols
+    drop -o recordsize=<value> on zvols
+    drop -x casesensitivity on zvols
+    drop -o/-x volsize on filesystems
+    keep -x mountpoint on zvols
+    keep -o/-x volmode on filesystems
+    """
     i = 0
     while i + 1 < len(recv_opts):
         opt: str = recv_opts[i]
@@ -1268,8 +1278,8 @@ def _sanitize_recv_opts_for_dataset_type(recv_opts: list[str], *, is_volume: boo
             inapplicable_props = _ZFS_RECV_O_PROPS_VOLUME_ONLY if opt == "-o" else _ZFS_RECV_X_PROPS_VOLUME_ONLY
         if propname in inapplicable_props:
             del recv_opts[i : i + 2]  # drop this property on this dataset type (but retain it on other dataset types)
-            continue
-        i += 2
+        else:
+            i += 2
 
 
 def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:

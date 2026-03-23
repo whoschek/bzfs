@@ -544,9 +544,9 @@ usage: bzfs_jobrunner
 
 **--repeat-if-took-more-than-seconds** *FLOAT*
 
-*  Repeat the entire workflow if it took longer than this much time. Use this (with the POSIX
-    `timeout` CLI) before migrating VM storage to converge replication and reduce cutover
-    downtime. Default is infinity, i.e. never repeat the workflow. Examples: 1, 0.1
+*  Repeat the entire workflow if it took longer than this much time and was successful. Use this
+    (with the POSIX `timeout` CLI) before migrating VM storage to converge replication and
+    reduce cutover downtime. Default is infinity, i.e. never repeat the workflow. Examples: 1, 0.1
 
 <!-- -->
 

@@ -435,9 +435,9 @@ This is harmless because that extra process exits immediately with a message lik
     parser.add_argument(
         "--repeat-if-took-more-than-seconds", type=float, min=0.001, default=UNIX_TIME_INFINITY_SECS,
         action=check_range.CheckRange, metavar="FLOAT",
-        help="Repeat the entire workflow if it took longer than this much time. Use this (with the POSIX `timeout` CLI) "
-             "before migrating VM storage to converge replication and reduce cutover downtime. Default is infinity, i.e. "
-             "never repeat the workflow. Examples: 1, 0.1\n\n")
+        help="Repeat the entire workflow if it took longer than this much time and was successful. Use this (with the POSIX "
+             "`timeout` CLI) before migrating VM storage to converge replication and reduce cutover downtime. Default is "
+             "infinity, i.e. never repeat the workflow. Examples: 1, 0.1\n\n")
     parser.add_argument(
         "--spawn-process-per-job", action="store_true",
         help="Spawn a Python process per subjob instead of a Python thread per subjob (optional). The former is only "
