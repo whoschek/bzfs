@@ -871,6 +871,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
         self.p.zfs_recv_ox_names = {"existing"}
         self.job = bzfs.Job()
         self.job.params = self.p
+        self.job.src_properties = {"ds": bzfs.DatasetProperties(1, 0)}
 
     def test_appends_x_options_when_supported(self) -> None:
         recv_opts: list[str] = []
@@ -900,6 +901,48 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
         pattern, _ = self.p.zfs_recv_o_config.include_regexes[0]
         self.assertIn("compression", pattern.pattern)
         self.assertNotIn("mountpoint", pattern.pattern)
+
+    def test_keeps_only_recv_opts_supported_for_filesystem(self) -> None:
+        self.p.zfs_recv_x_names = []  # type: ignore[misc]  # cannot assign to final attribute
+        self.p.zfs_recv_ox_names = set()
+        self.job.src_properties = {"ds": bzfs.DatasetProperties(1024, 0)}  # >= 0 int indicates fs
+        recv_opts = ["-u", "-o", "canmount=noauto", "-x", "mountpoint", "-o", "volmode=none", "-x", "volsize"]
+        with (
+            patch.object(self.p, "is_program_available", return_value=False),
+            patch("bzfs_main.replication._zfs_get", return_value={}),
+        ):
+            result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
+        self.assertEqual(["-u", "-o", "canmount=noauto", "-x", "mountpoint", "-o", "volmode=none"], result_opts)
+        self.assertEqual([], set_opts)
+
+    def test_keeps_only_recv_opts_supported_for_volume(self) -> None:
+        self.p.zfs_recv_x_names = []  # type: ignore[misc]  # cannot assign to final attribute
+        self.p.zfs_recv_ox_names = set()
+        self.job.src_properties = {"ds": bzfs.DatasetProperties(-4096, 0)}  # < 0 indicates zvol
+        recv_opts = [
+            "-u",
+            "-o",
+            "devices=off",
+            "-o",
+            "canmount=noauto",
+            "-x",
+            "devices",
+            "-x",
+            "mountpoint",
+            "-o",
+            "volmode=none",
+            "-x",
+            "casesensitivity",
+            "-o",
+            "recordsize=128K",
+        ]
+        with (
+            patch.object(self.p, "is_program_available", return_value=False),
+            patch("bzfs_main.replication._zfs_get", return_value={}),
+        ):
+            result_opts, set_opts = _add_recv_property_options(self.job, True, recv_opts, "ds", {})
+        self.assertEqual(["-u", "-x", "devices", "-x", "mountpoint", "-o", "volmode=none"], result_opts)
+        self.assertEqual([], set_opts)
 
     def test_appends_o_options_for_whitelisted_props(self) -> None:
         """Add '-o' options for properties allowed by default regex."""
@@ -1260,6 +1303,7 @@ class TestJobMethods(AbstractTestCase):
         job.validate_once()
         job.max_workers.setdefault("src", 1)
         job.max_workers.setdefault("dst", 1)
+        job.src_properties = {"pool/src": bzfs.DatasetProperties(1, 0)}
 
         # Craft synthetic zfs list outputs (guid\tname) for src and dst
         src_dataset = "pool/src"

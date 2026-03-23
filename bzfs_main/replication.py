@@ -1175,6 +1175,7 @@ def _add_recv_property_options(
 ) -> tuple[list[str], list[str]]:
     """Reads the ZFS properties of the given src dataset; Appends zfs recv -o and -x values to recv_opts according to CLI
     params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""
+    is_volume: bool = job.src_properties[dataset].recordsize < 0
     p = job.params
     set_opts: list[str] = []
     x_names: list[str] = p.zfs_recv_x_names
@@ -1220,7 +1221,55 @@ def _add_recv_property_options(
                 else:
                     assert config is p.zfs_set_config
                     set_opts.append(f"{propname}={props[propname]}")
+    _sanitize_recv_opts_for_dataset_type(recv_opts, is_volume=is_volume)
     return recv_opts, set_opts
+
+
+_ZFS_RECV_X_PROPS_VOLUME_ONLY: Final[frozenset[str]] = frozenset({"volblocksize", "volsize"})
+_ZFS_RECV_O_PROPS_VOLUME_ONLY: Final[frozenset[str]] = _ZFS_RECV_X_PROPS_VOLUME_ONLY
+_ZFS_RECV_X_PROPS_FILESYSTEM_ONLY: Final[frozenset[str]] = frozenset({"casesensitivity", "normalization", "utf8only"})
+_ZFS_RECV_O_PROPS_FILESYSTEM_ONLY: Final[frozenset[str]] = frozenset(
+    {
+        # see https://github.com/openzfs/zfs/blob/master/module/zcommon/zfs_prop.c
+        "aclinherit",
+        "aclmode",
+        "acltype",
+        "atime",
+        "canmount",
+        "casesensitivity",
+        "devices",
+        "mountpoint",
+        "normalization",
+        "overlay",
+        "recordsize",
+        "relatime",
+        "sharenfs",
+        "sharesmb",
+        "snapdir",
+        "utf8only",
+        "xattr",
+    }
+)
+
+
+def _sanitize_recv_opts_for_dataset_type(recv_opts: list[str], *, is_volume: bool) -> None:
+    """Drops `zfs receive` `-o/-x` props that `zfs receive` rejects for this dataset type."""
+    i = 0
+    while i + 1 < len(recv_opts):
+        opt: str = recv_opts[i]
+        if opt not in ("-o", "-x"):
+            i += 1
+            continue
+        arg: str = recv_opts[i + 1]
+        propname: str = arg.split("=", 1)[0] if opt == "-o" else arg
+        if is_volume:
+            inapplicable_props = _ZFS_RECV_O_PROPS_FILESYSTEM_ONLY if opt == "-o" else _ZFS_RECV_X_PROPS_FILESYSTEM_ONLY
+        else:
+            inapplicable_props = _ZFS_RECV_O_PROPS_VOLUME_ONLY if opt == "-o" else _ZFS_RECV_X_PROPS_VOLUME_ONLY
+        if propname in inapplicable_props:
+            del recv_opts[i : i + 2]  # drop this property on this dataset type (but retain it on other dataset types)
+            continue
+        i += 2
 
 
 def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:
