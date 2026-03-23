@@ -20,12 +20,12 @@
 # The pushed image references are `${BZFS_DOCKER_REGISTRY_PREFIX}/bzfs:${BZFS_GIT_TAG}-${BZFS_DOCKER_OS}`,
 # for example `docker.io/mydockerhubuser/bzfs:v1.19.0-ubuntu-24.04`.
 # Published images include both `linux/amd64` and `linux/arm64`.
-set -euo pipefail
+set -eo pipefail
 script_dir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 BZFS_GIT_REMOTE="${BZFS_GIT_REMOTE:-https://github.com/whoschek/bzfs.git}"
 BZFS_DOCKERFILE="${BZFS_DOCKERFILE:-${script_dir}/Dockerfile}"
-BZFS_DOCKER_OS_LIST="${BZFS_DOCKER_OS_LIST:-ubuntu-24.04,ubuntu-26.04}"
-BZFS_DOCKER_BASE_IMAGES="${BZFS_DOCKER_BASE_IMAGES:-ubuntu:24.04,ubuntu:26.04}"
+BZFS_DOCKER_OS_LIST="${BZFS_DOCKER_OS_LIST:-ubuntu-24.04}"
+BZFS_DOCKER_BASE_IMAGES="${BZFS_DOCKER_BASE_IMAGES:-ubuntu:24.04}"
 BZFS_DOCKER_PUSH="${BZFS_DOCKER_PUSH:-false}"
 BZFS_DOCKER_REGISTRY_PREFIX="${BZFS_DOCKER_REGISTRY_PREFIX:-}"  # e.g. 'docker.io/mydockerhubuser'
 BZFS_DOCKER_PLATFORMS="${BZFS_DOCKER_PLATFORMS:-linux/amd64,linux/arm64}"

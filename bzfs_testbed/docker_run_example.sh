@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-set -e
+#
+# Configures and runs a basic example rootful container via docker compose.
+set -eo pipefail
 
 # configure ~/.ssh/ for the docker container (will be bind-mounted)
 sudo rm -rf /bzfs.ssh
 sudo mkdir -p /bzfs.ssh
+sudo rsync -a ~/.ssh/ /bzfs.ssh
+sudo chown -R root /bzfs.ssh
 cat ~/.ssh/id_rsa.pub | sudo tee /bzfs.ssh/authorized_keys > /dev/null
 sudo chmod u=rw,go= /bzfs.ssh/authorized_keys
 

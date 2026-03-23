@@ -1,6 +1,4 @@
-# Build a bzfs docker image for testbed use, for example via ./docker_create.sh.
-#
-# For a working rootful run/SSH/ZFS example, see ./docker_run_ssh_zfs.sh.
+# Build a bzfs docker image for testbed use, for example via ./docker_image.sh and ./docker_run_example.sh.
 ARG BZFS_DOCKER_BASE_IMAGE=ubuntu:24.04
 FROM ${BZFS_DOCKER_BASE_IMAGE}
 
