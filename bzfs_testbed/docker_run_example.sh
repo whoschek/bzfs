@@ -22,6 +22,14 @@ sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|' /etc/hpns
 DOCKER_CLI="$(command -v nerdctl || command -v docker)"  # Lima includes nerdctl which is compatible with docker CLI in this context
 sudo "$DOCKER_CLI" compose -f docker-compose.yml up -d
 sleep 1
+
 ssh -p 2222 root@127.0.0.1 'zfs list'  # verify
+sudo "$DOCKER_CLI" compose -f docker-compose.yml exec bzfs \
+    bzfs dst/foo/bar dst/foo/baz \
+       --recursive \
+       --create-src-snapshots \
+       --create-src-snapshots-plan="{'prod':{'us-west':{'minutely':40,'hourly':36,'daily':31}}}"
+ssh -p 2222 root@127.0.0.1 'zfs list -t snapshot'  # verify
+
 sudo "$DOCKER_CLI" compose -f docker-compose.yml down
 printf 'Success!\n'

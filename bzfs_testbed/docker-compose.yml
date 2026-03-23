@@ -25,4 +25,4 @@ services:
       - type: bind
         source: /bzfs.ssh
         target: /root/.ssh
-        read_only: true
+        read_only: false
