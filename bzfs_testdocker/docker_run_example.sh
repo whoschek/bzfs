@@ -29,7 +29,7 @@ if [[ "$#" -ne 1 ]]; then
 fi
 
 BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"
-CONTAINER_SSH_PORT="${CONTAINER_SSH_PORT:-2222}" # set this to 22 if you want to use OpenSSH sshd instead of hpnsshd
+CONTAINER_SSH_PORT="${CONTAINER_SSH_PORT:-22}" # set this to 2222 if you want to use hpnsshd instead of OpenSSH sshd
 CONTAINER_NAME=bzfs
 CONTAINER_USER_NAME="$(id -un)"
 CONTAINER_USER_UID="$(id -u)"
@@ -63,6 +63,7 @@ case "$1" in
         # precreate bind-mounted host paths as the invoking user so the container does not implicitly create root-owned dirs
         mkdir -p "$CONTAINER_USER_HOME/bzfs-config" "$CONTAINER_USER_HOME/bzfs-config/bzfs-cron.d"
         mkdir -p "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
+        chmod u=rwx,go= "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
 
         # run container if it doesn't exist yet
         if ! sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
