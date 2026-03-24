@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Creates a container user that matches the invoking host user, seeds `~/.ssh`, and grants passwordless `sudo` access to
-# `zfs` and `zpool`.
+# Creates a user inside of the container that matches the invoking host user, seeds `~/.ssh`, and grants passwordless `sudo`
+# access to `zfs` and `zpool` for that user inside of the container.
 set -euo pipefail
 
 ensure_container_user() {
