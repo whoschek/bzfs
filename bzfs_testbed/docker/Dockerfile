@@ -23,7 +23,7 @@ RUN apt-get -y -qq update \
 RUN git clone --single-branch --branch "${BZFS_GIT_TAG}" "${BZFS_GIT_REMOTE}" /bzfs \
     && ln -sf /bzfs/bzfs_main/bzfs /usr/local/bin/bzfs \
     && ln -sf /bzfs/bzfs_main/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner \
-    && chmod 755 /usr/local/bin/bzfs-container-entrypoint
+    && chmod u=rwx,go=rx /usr/local/bin/bzfs-container-entrypoint
 
 WORKDIR /bzfs
 

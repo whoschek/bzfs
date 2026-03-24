@@ -21,15 +21,15 @@ ensure_container_user() {
     mkdir -p "$container_user_home/.ssh"
     cp -a /bzfs.ssh/. "$container_user_home/.ssh/"
     mkdir -p "$container_user_home/.ssh/bzfs"
-    chmod 700 "$container_user_home/.ssh"
+    chmod u=rwx,go= "$container_user_home/.ssh"
     chown -R "$container_user_uid:$container_user_gid" "$container_user_home"
     if [[ -f "$container_user_home/.ssh/authorized_keys" ]]; then
-        chmod 600 "$container_user_home/.ssh/authorized_keys"
+        chmod u=rw,go= "$container_user_home/.ssh/authorized_keys"
     fi
 
     printf '%s ALL=(root) NOPASSWD: %s, %s\n' "$container_user_name" "$(command -v zfs)" "$(command -v zpool)" \
         > /etc/sudoers.d/bzfs-container-user
-    chmod 440 /etc/sudoers.d/bzfs-container-user
+    chmod u=r,g=r,o= /etc/sudoers.d/bzfs-container-user
 }
 
 ensure_container_user

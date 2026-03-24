@@ -101,7 +101,7 @@ case "$1" in
             rm -f /etc/cron.d/bzfs-*
             for file in /bzfs-config/bzfs-cron.d/*; do
                 [[ -f \"\$file\" ]] || continue
-                install -o root -g root -m 644 \"\$file\" \"/etc/cron.d/bzfs-\${file##*/}\"
+                install -o root -g root -m u=rw,go=r \"\$file\" \"/etc/cron.d/bzfs-\${file##*/}\"
             done
             /usr/sbin/cron
         "
