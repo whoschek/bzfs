@@ -21,7 +21,9 @@ locally create a guest Ubuntu or AlmaLinux VM, then installs ZFS and runs the bz
 
 Also consider running the [`lima_testbed.sh`](lima_testbed.sh) script that uses this to create/delete a local Lima
 testbed with N source VMs and M destination VMs for testing, with ZFS and VM-to-VM SSH connectivity working out of the
-box. All default settings work out of the box.
+box. All default settings work out of the box. The script also supports `--validate-s2s`, which executes a rerunnable
+3-VM validation of critical `--s2s=pull`/`--s2s=push` paths plus config-file fallback warnings and a check that the
+initiator host is control-plane only.
 
 Then consider running the example replication jobconfig script [`bzfs_job_testbed.py`](bzfs_job_testbed.py) on the
 testbed, which also works out of the box.
@@ -29,5 +31,5 @@ testbed, which also works out of the box.
 Or instead, simply tell Codex, Claude, or any comparable agent something like "Run the bzfs_job_testbed.py example
 replication script on the testbed." It will figure out the rest and do it.
 
-If you want to run the example jobs in a docker container on the testbed VMs, see the usage guide in
+Advanced Option: If you want to run the example jobs in a docker container on the testbed VMs, see the usage guide in
 [`docker/README.md`](docker/README.md).

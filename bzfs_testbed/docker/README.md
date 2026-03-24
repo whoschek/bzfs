@@ -70,7 +70,7 @@ cd bzfs_testbed/docker
 BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_run_example.sh up
 ```
 
-By default the script maps the host port `2222` to container port `22` (OpenSSH) via `CONTAINER_SSH_PORT=22`. To use
+By default the script forwards the host port `2222` to container port `22` (OpenSSH) via `CONTAINER_SSH_PORT=22`. To use
 `hpnsshd` instead, recreate the container with:
 
 ```bash

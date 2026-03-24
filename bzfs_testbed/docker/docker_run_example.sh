@@ -15,11 +15,11 @@ usage() {
     cat << EOF
 Usage: ${prog_name} up|down|runjob|shell
 
-Modes:
+Commands:
   up            Create or start the container, then reload cron jobs.
   down          Remove the container if it exists.
   runjob        Run the example job in the container.
-  shell         Enter an interactive bash shell in the container.
+  shell         Enter an interactive shell in the container.
 
 EOF
 }
@@ -30,7 +30,7 @@ if [[ "$#" -ne 1 ]]; then
 fi
 
 BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"
-CONTAINER_SSH_PORT="${CONTAINER_SSH_PORT:-22}" # set this to 2222 if you want to use hpnsshd instead of OpenSSH sshd
+CONTAINER_SSH_PORT="${CONTAINER_SSH_PORT:-22}" # set this to 2222 if you want to forward to hpnsshd instead of OpenSSH sshd
 CONTAINER_NAME=bzfs
 CONTAINER_USER_NAME="$(id -un)"
 CONTAINER_USER_UID="$(id -u)"
@@ -134,7 +134,7 @@ case "$1" in
         ;;
     shell)
         require_running_container
-        exec sudo "$DOCKER_CLI" exec -it \
+        sudo "$DOCKER_CLI" exec -it \
             --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
             --workdir "$CONTAINER_USER_HOME" \
             "$CONTAINER_NAME" \
