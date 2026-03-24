@@ -61,7 +61,6 @@ case "$1" in
 
         sudo "$DOCKER_CLI" image ls  # list all docker images in the local registry
 
-        # precreate bind-mounted host paths as the invoking user so the container does not implicitly create root-owned dirs
         mkdir -p "$CONTAINER_USER_HOME/bzfs-config" "$CONTAINER_USER_HOME/bzfs-config/bzfs-cron.d"
         mkdir -p "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
         chmod u=rwx,go= "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"

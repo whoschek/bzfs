@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Creates a user inside of the container that matches the invoking host user, seeds `~/.ssh`, and grants passwordless `sudo`
-# access to `zfs` and `zpool` for that user inside of the container.
+# access to `zfs` for that user inside of the container.
 set -euo pipefail
 
 ensure_container_user() {
@@ -27,8 +27,7 @@ ensure_container_user() {
         chmod u=rw,go= "$container_user_home/.ssh/authorized_keys"
     fi
 
-    printf '%s ALL=(root) NOPASSWD: %s, %s\n' "$container_user_name" "$(command -v zfs)" "$(command -v zpool)" \
-        > /etc/sudoers.d/bzfs-container-user
+    printf '%s ALL=(root) NOPASSWD: %s\n' "$container_user_name" "$(command -v zfs)" > /etc/sudoers.d/bzfs-container-user
     chmod u=r,g=r,o= /etc/sudoers.d/bzfs-container-user
 }
 
