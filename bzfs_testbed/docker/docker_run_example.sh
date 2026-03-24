@@ -37,13 +37,14 @@ CONTAINER_USER_UID="$(id -u)"
 CONTAINER_USER_GID="$(id -g)"
 CONTAINER_USER_HOME="$HOME"
 DOCKER_CLI="${DOCKER_CLI:-$(command -v nerdctl || command -v docker)}"  # Lima includes nerdctl which is compatible w/ docker
+DOCKER_CLI="sudo $DOCKER_CLI"
 
 container_exec() {
-    sudo "$DOCKER_CLI" exec --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$CONTAINER_NAME" ${1+"$@"}
+    $DOCKER_CLI exec --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$CONTAINER_NAME" ${1+"$@"}
 }
 
 require_running_container() {
-    if [[ "$(sudo "$DOCKER_CLI" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+    if [[ "$($DOCKER_CLI inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
         echo "ERROR: Container '$CONTAINER_NAME' is not running; use 'up' first" >&2
         exit 1
     fi
@@ -59,15 +60,15 @@ case "$1" in
         sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' /etc/hpnssh/sshd_config  # change all occurrences of /etc/ssh to /etc/hpnssh
         sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|' /etc/hpnssh/sshd_config  # comment out Include directives
 
-        sudo "$DOCKER_CLI" image ls  # list all docker images in the local registry
+        $DOCKER_CLI image ls  # list all docker images in the local registry
 
         mkdir -p "$CONTAINER_USER_HOME/bzfs-config" "$CONTAINER_USER_HOME/bzfs-config/bzfs-cron.d"
         mkdir -p "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
         chmod u=rwx,go= "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
 
         # run container if it doesn't exist yet
-        if ! sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
-            sudo "$DOCKER_CLI" run -d \
+        if ! $DOCKER_CLI container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
+            $DOCKER_CLI run -d \
                 --name "$CONTAINER_NAME" \
                 --env "BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
                 --env "BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
@@ -89,13 +90,13 @@ case "$1" in
                 "$BZFS_DOCKER_IMAGE"
             sleep 1
         # start container if it isn't running yet aka if it has been stopped
-        elif [[ "$(sudo "$DOCKER_CLI" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
-            sudo "$DOCKER_CLI" start "$CONTAINER_NAME"
+        elif [[ "$($DOCKER_CLI inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+            $DOCKER_CLI start "$CONTAINER_NAME"
             sleep 1
         fi
 
         # reload managed cron jobs from ~/bzfs-config/bzfs-cron.d and ensure cron is running
-        sudo "$DOCKER_CLI" exec "$CONTAINER_NAME" bash -lc "
+        $DOCKER_CLI exec "$CONTAINER_NAME" bash -lc "
             pkill -x cron || true
             rm -f /etc/cron.d/bzfs-*
             for file in /bzfs-config/bzfs-cron.d/*; do
@@ -106,8 +107,8 @@ case "$1" in
         "
         ;;
     down)
-        if sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
-            sudo "$DOCKER_CLI" rm -f "$CONTAINER_NAME"
+        if $DOCKER_CLI container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
+            $DOCKER_CLI rm -f "$CONTAINER_NAME"
         fi
         ;;
     runjob)
@@ -133,7 +134,7 @@ case "$1" in
         ;;
     shell)
         require_running_container
-        sudo "$DOCKER_CLI" exec -it \
+        $DOCKER_CLI exec -it \
             --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
             --workdir "$CONTAINER_USER_HOME" \
             "$CONTAINER_NAME" \
