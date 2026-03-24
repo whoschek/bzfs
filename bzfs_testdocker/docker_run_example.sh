@@ -10,13 +10,23 @@
 # If you change the image or port env vars or similar, run `down` and then `up` to recreate the container.
 set -eo pipefail
 
-# configure /etc/hpnssh/ for the docker container (will be bind-mounted)
-sudo rm -rf /etc/hpnssh
-sudo cp -a /etc/ssh /etc/hpnssh
-sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' /etc/hpnssh/sshd_config  # remove existing ports
-printf '%s\n' "Port 2222" | sudo tee -a /etc/hpnssh/sshd_config > /dev/null  # add port 2222
-sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' /etc/hpnssh/sshd_config  # change all occurrences of /etc/ssh to /etc/hpnssh
-sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|' /etc/hpnssh/sshd_config  # comment out Include directives
+usage() {
+    prog_name="$(basename "$0")"
+    cat << EOF
+Usage: ${prog_name} up|down|runjob
+
+Modes:
+  up            Create or start the container, then reload cron jobs.
+  down          Remove the container if it exists.
+  runjob        Run the example job in the container.
+
+EOF
+}
+
+if [[ "$#" -ne 1 ]]; then
+    usage >&2
+    exit 2
+fi
 
 BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"
 CONTAINER_SSH_PORT="${CONTAINER_SSH_PORT:-2222}" # set this to 22 if you want to use OpenSSH sshd instead of hpnsshd
@@ -38,26 +48,16 @@ require_running_container() {
     fi
 }
 
-usage() {
-    prog_name="$(basename "$0")"
-    cat << EOF
-Usage: ${prog_name} up|down|runjob
-
-Modes:
-  up            Create or start the container, then reload cron jobs.
-  down          Remove the container if it exists.
-  runjob        Run the example job in the container.
-
-EOF
-}
-
-if [[ "$#" -ne 1 ]]; then
-    usage >&2
-    exit 2
-fi
-
 case "$1" in
     up)
+        # configure /etc/hpnssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted.
+        sudo rm -rf /etc/hpnssh
+        sudo cp -a /etc/ssh /etc/hpnssh
+        sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' /etc/hpnssh/sshd_config  # remove existing ports
+        printf '%s\n' "Port 2222" | sudo tee -a /etc/hpnssh/sshd_config > /dev/null  # add port 2222
+        sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' /etc/hpnssh/sshd_config  # change all occurrences of /etc/ssh to /etc/hpnssh
+        sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|' /etc/hpnssh/sshd_config  # comment out Include directives
+
         sudo "$DOCKER_CLI" image ls  # list all docker images in the local registry
 
         # precreate bind-mounted host paths as the invoking user so the container does not implicitly create root-owned dirs
