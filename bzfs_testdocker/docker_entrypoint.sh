@@ -26,7 +26,8 @@ ensure_container_user() {
         chmod 600 "$container_user_home/.ssh/authorized_keys"
     fi
 
-    printf '%s ALL=(root) NOPASSWD: %s, %s\n' "$container_user_name" "$(command -v zfs)" "$(command -v zpool)" > /etc/sudoers.d/bzfs-container-user
+    printf '%s ALL=(root) NOPASSWD: %s, %s\n' "$container_user_name" "$(command -v zfs)" "$(command -v zpool)" \
+        > /etc/sudoers.d/bzfs-container-user
     chmod 440 /etc/sudoers.d/bzfs-container-user
 }
 
