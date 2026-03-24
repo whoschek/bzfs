@@ -5,14 +5,14 @@
 # Works out of the box on VMs created via ../bzfs_testbed/lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
 # is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
 #
-# If ~/bzfs-config/bzfs-cron.d exists, each `up` copies its files into the container /etc/cron.d before starting cron.
-# See ./cronjob_example for a documented cron file that runs the same job as `runjob`.
-# If you change the image or port env vars or similar, rerun `down` and then `up` to recreate the container.
+# If ~/bzfs-config/bzfs-cron.d exists, each `up` copies its files into the container /etc/cron.d.
+# See ./cronjob_example for a documented cron file that periodically runs the same job as `runjob`.
+# If you change the image or port env vars or similar, run `down` and then `up` to recreate the container.
 set -eo pipefail
 
 # configure /etc/hpnssh/ for the docker container (will be bind-mounted)
 sudo rm -rf /etc/hpnssh
-sudo rsync -a /etc/ssh/ /etc/hpnssh
+sudo cp -a /etc/ssh /etc/hpnssh
 sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' /etc/hpnssh/sshd_config  # remove existing ports
 printf '%s\n' "Port 2222" | sudo tee -a /etc/hpnssh/sshd_config > /dev/null  # add port 2222
 sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' /etc/hpnssh/sshd_config  # change all occurrences of /etc/ssh to /etc/hpnssh
