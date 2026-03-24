@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This script builds minimal docker images with a checkout of the latest stable `v*` git tag of `bzfs`.
+# This script builds docker images with a checkout of the latest stable `v*` git tag of `bzfs`.
 # If you want to publish the images to a registry such as Docker Hub after `docker login`, set
 # `BZFS_DOCKER_PUSH=true` and `BZFS_DOCKER_REGISTRY_PREFIX=...`.
 # The pushed image references are `${BZFS_DOCKER_REGISTRY_PREFIX}/bzfs:${BZFS_GIT_TAG}-${BZFS_DOCKER_OS}`,
@@ -123,7 +123,7 @@ for i in "${!bzfs_docker_os_list[@]}"; do
                 "${bzfs_docker_registry_tags[@]}" \
                 --push \
                 "$script_dir"
-        else  # nerdctl does not understand --push
+        else  # workaround for the fact that nerdctl does not understand --push
             container_build \
                 --platform "$BZFS_DOCKER_PLATFORMS" \
                 "${bzfs_docker_registry_tags[@]}" \

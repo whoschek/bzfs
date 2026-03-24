@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 #
 # Configures and runs a basic example rootful bzfs docker container.
+# Run this script on *each* of the testbed VMs to start containers everywhere.
 # Works out of the box on VMs created via ../bzfs_testbed/lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
-# is available - for example run `sudo ./docker_image.sh` on each testbed VM to generate this prerequisite.
+# is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
+# This script immediately runs a replication example that expects all peer testbed VMs to already have their containers
+# listening on port 2222, so the first invocation on a given VM may fail with "ssh: connect to host ... port 2222:
+# Connection refused" until the other VMs have also started their containers; simply rerun after the peers are up.
 set -eo pipefail
 
 # configure /etc/hpnssh/ for the docker container (will be bind-mounted)
