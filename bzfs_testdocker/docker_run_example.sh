@@ -5,8 +5,8 @@
 # Works out of the box on VMs created via ../bzfs_testbed/lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
 # is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
 # This script immediately runs a replication example that expects all peer testbed VMs to already have their containers
-# listening on port 2222, so the first invocation on a given VM may fail with "ssh: connect to host ... port 2222:
-# Connection refused" until the other VMs have also started their containers; simply rerun after the peers are up.
+# running, so the first invocation on a given VM may fail with "ssh: connect to host ... port 2222: Connection refused" until
+# the other VMs have also started their containers; simply rerun after the peers are up.
 set -eo pipefail
 
 # configure /etc/hpnssh/ for the docker container (will be bind-mounted)
@@ -18,6 +18,7 @@ sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' /etc/hpnssh/sshd_config  # change all occ
 sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|' /etc/hpnssh/sshd_config  # comment out Include directives
 
 BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"
+CONTAINER_SSH_PORT="${CONTAINER_SSH_PORT:-2222}" # set this to 22 if you want to use OpenSSH sshd instead of hpnsshd
 CONTAINER_NAME=bzfs
 CONTAINER_USER_NAME="$(id -un)"
 CONTAINER_USER_UID="$(id -u)"
@@ -31,6 +32,9 @@ container_exec() {
 
 sudo "$DOCKER_CLI" image ls  # list all docker images in the local registry
 
+# precreate bind-mounted host paths as the invoking user so the container does not implicitly create root-owned dirs
+mkdir -p "$CONTAINER_USER_HOME/bzfs-config" "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
+
 # run container if it doesn't exist yet
 if ! sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
     sudo "$DOCKER_CLI" run -d \
@@ -41,7 +45,7 @@ if ! sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; th
         --env "BZFS_CONTAINER_USER_HOME=$CONTAINER_USER_HOME" \
         --privileged \
         --device /dev/zfs:/dev/zfs \
-        --publish 2222:2222 \
+        --publish "2222:$CONTAINER_SSH_PORT" \
         --volume /etc/ssh:/etc/ssh:ro \
         --volume /etc/hpnssh:/etc/hpnssh:ro \
         --volume "$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
