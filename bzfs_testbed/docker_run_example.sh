@@ -23,25 +23,33 @@ container_exec() {
     sudo "$DOCKER_CLI" exec --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$CONTAINER_NAME" "$@"
 }
 
-sudo "$DOCKER_CLI" rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
-sudo "$DOCKER_CLI" run -d \
-    --name "$CONTAINER_NAME" \
-    --env "BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
-    --env "BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
-    --env "BZFS_CONTAINER_USER_GID=$CONTAINER_USER_GID" \
-    --env "BZFS_CONTAINER_USER_HOME=$CONTAINER_USER_HOME" \
-    --privileged \
-    --device /dev/zfs:/dev/zfs \
-    --publish 2222:2222 \
-    --volume /etc/ssh:/etc/ssh:ro \
-    --volume /etc/hpnssh:/etc/hpnssh:ro \
-    --volume "$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
-    --volume /etc/hostid:/etc/hostid:ro \
-    --volume /etc/hostname:/etc/hostname:ro \
-    --uts=host \
-    --add-host "$(hostname):127.0.0.1" \
-    "$BZFS_DOCKER_IMAGE"
-sleep 1
+#sudo "$DOCKER_CLI" rm -f "$CONTAINER_NAME"  # delete container
+
+# 'run' container if it doesn't exist yet
+if ! sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
+    sudo "$DOCKER_CLI" run -d \
+        --name "$CONTAINER_NAME" \
+        --env "BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
+        --env "BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
+        --env "BZFS_CONTAINER_USER_GID=$CONTAINER_USER_GID" \
+        --env "BZFS_CONTAINER_USER_HOME=$CONTAINER_USER_HOME" \
+        --privileged \
+        --device /dev/zfs:/dev/zfs \
+        --publish 2222:2222 \
+        --volume /etc/ssh:/etc/ssh:ro \
+        --volume /etc/hpnssh:/etc/hpnssh:ro \
+        --volume "$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
+        --volume /etc/hostid:/etc/hostid:ro \
+        --volume /etc/hostname:/etc/hostname:ro \
+        --uts=host \
+        --add-host "$(hostname):127.0.0.1" \
+        "$BZFS_DOCKER_IMAGE"
+    sleep 1
+# 'start' container if it isn't running yet aka if it has been stopped
+elif [[ "$(sudo "$DOCKER_CLI" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+    sudo "$DOCKER_CLI" start "$CONTAINER_NAME" > /dev/null
+    sleep 1
+fi
 
 container_exec zfs list  # verify
 
@@ -54,5 +62,4 @@ container_exec bzfs testsrc01:src/foo/bar testdst01:dst/bar/baz \
 
 container_exec zfs list -t snapshot  # verify
 
-sudo "$DOCKER_CLI" rm -f "$CONTAINER_NAME"
 printf 'Success!\n'
