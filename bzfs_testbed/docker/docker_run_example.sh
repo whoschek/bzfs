@@ -60,11 +60,11 @@ case "$1" in
         sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' /etc/hpnssh/sshd_config  # change all occurrences of /etc/ssh to /etc/hpnssh
         sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|' /etc/hpnssh/sshd_config  # comment out Include directives
 
-        $DOCKER_CLI image ls  # list all docker images in the local registry
-
         mkdir -p "$CONTAINER_USER_HOME/bzfs-config" "$CONTAINER_USER_HOME/bzfs-config/bzfs-cron.d"
         mkdir -p "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
         chmod u=rwx,go= "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
+
+        $DOCKER_CLI image ls  # list all docker images in the local registry
 
         # run container if it doesn't exist yet
         if ! $DOCKER_CLI container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
@@ -120,15 +120,6 @@ case "$1" in
             --create-src-snapshots --replicate  --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots \
             --ssh-src-port=2222 \
             --ssh-dst-port=2222
-
-        if false; then
-            container_exec bzfs testsrc01:src/foo/bar testdst01:dst/bar/baz \
-                --ssh-src-port=2222 \
-                --ssh-dst-port=2222 \
-                --recursive \
-                --create-src-snapshots \
-                --create-src-snapshots-plan="{'prod':{'us-west':{'minutely':40,'hourly':36,'daily':31}}}"
-        fi
 
         # container_exec zfs list -t snapshot  # verify
         ;;
