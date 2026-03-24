@@ -6,7 +6,7 @@
 # is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
 #
 # If ~/bzfs-config/bzfs-cron.d exists, each `up` copies its files into the container /etc/cron.d before starting cron.
-# See ./runjob_example.cron for a documented cron file that runs the same job as `runjob`.
+# See ./cronjob_example for a documented cron file that runs the same job as `runjob`.
 # If you change the image or port env vars or similar, rerun `down` and then `up` to recreate the container.
 set -eo pipefail
 
