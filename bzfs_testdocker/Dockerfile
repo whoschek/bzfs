@@ -10,7 +10,7 @@ COPY docker_entrypoint.sh /usr/local/bin/bzfs-container-entrypoint
 
 RUN apt-get -y -qq update \
     && apt-get -y full-upgrade \
-    && apt-get -y install openssh-server python3 sudo zstd mbuffer pv \
+    && apt-get -y install openssh-server cron python3 sudo zstd mbuffer pv \
     && apt-get -y install git \
     && apt-get -y install zfsutils-linux \
     && apt-get -y install software-properties-common \

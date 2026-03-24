@@ -4,6 +4,9 @@
 # Run `up` on *each* of the testbed VMs to start containers everywhere, then run `runjob` once the peers are up.
 # Works out of the box on VMs created via ../bzfs_testbed/lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
 # is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
+#
+# If ~/bzfs-config/bzfs-cron.d exists, each `up` copies its files into the container /etc/cron.d before starting cron.
+# If you change the image or port env vars or similar, rerun `down` and then `up` to recreate the container.
 set -eo pipefail
 
 # configure /etc/hpnssh/ for the docker container (will be bind-mounted)
@@ -27,13 +30,20 @@ container_exec() {
     sudo "$DOCKER_CLI" exec --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$CONTAINER_NAME" ${1+"$@"}
 }
 
+require_running_container() {
+    if [[ "$(sudo "$DOCKER_CLI" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+        echo "ERROR: Container '$CONTAINER_NAME' is not running; use 'up' first" >&2
+        exit 1
+    fi
+}
+
 usage() {
     prog_name="$(basename "$0")"
     cat << EOF
 Usage: ${prog_name} up|down|runjob
 
 Modes:
-  up            Create or start the container.
+  up            Create or start the container, then reload cron jobs.
   down          Remove the container if it exists.
   runjob        Run the example job in the container.
 
@@ -50,7 +60,8 @@ case "$1" in
         sudo "$DOCKER_CLI" image ls  # list all docker images in the local registry
 
         # precreate bind-mounted host paths as the invoking user so the container does not implicitly create root-owned dirs
-        mkdir -p "$CONTAINER_USER_HOME/bzfs-config" "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
+        mkdir -p "$CONTAINER_USER_HOME/bzfs-config" "$CONTAINER_USER_HOME/bzfs-config/bzfs-cron.d"
+        mkdir -p "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
 
         # run container if it doesn't exist yet
         if ! sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
@@ -80,6 +91,17 @@ case "$1" in
             sudo "$DOCKER_CLI" start "$CONTAINER_NAME"
             sleep 1
         fi
+
+        # reload managed cron jobs from ~/bzfs-config/bzfs-cron.d and ensure cron is running
+        sudo "$DOCKER_CLI" exec "$CONTAINER_NAME" bash -lc "
+            pkill -x cron || true
+            rm -f /etc/cron.d/bzfs-*
+            for file in /bzfs-config/bzfs-cron.d/*; do
+                [[ -f \"\$file\" ]] || continue
+                install -o root -g root -m 644 \"\$file\" \"/etc/cron.d/bzfs-\${file##*/}\"
+            done
+            /usr/sbin/cron
+        "
         ;;
     down)
         if sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
@@ -87,10 +109,7 @@ case "$1" in
         fi
         ;;
     runjob)
-        if [[ "$(sudo "$DOCKER_CLI" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
-            echo "ERROR: Container '$CONTAINER_NAME' is not running; use 'up' first" >&2
-            exit 1
-        fi
+        require_running_container
 
         container_exec zfs list  # verify
 
