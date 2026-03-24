@@ -19,6 +19,7 @@
 # the ~/.ssh/authorized_keys file of each other matching VM.
 # Matching applies a `grep -E` regex to all known Lima VM names. The default is zero matching VMs.
 # Also makes it so that, on each matching VM, `ssh <vm_name>` connects to that other VM, via ~/.ssh/config aliases.
+
 set -eo pipefail
 LIMA_MESH_VMS="${LIMA_MESH_VMS:-}"  # optional `grep -E` regex to select VMs for mutual SSH trust in a mesh network
 LIMA_WORKDIR="/"
@@ -63,9 +64,9 @@ if [[ ${#lima_mesh_vm_names[@]} -gt 1 ]]; then
 set -eo pipefail
 source_public_key="$1"
 mkdir -p "$HOME/.ssh"
-chmod 700 "$HOME/.ssh"
+chmod u=rwx,go= "$HOME/.ssh"
 touch "$HOME/.ssh/authorized_keys"
-chmod 600 "$HOME/.ssh/authorized_keys"
+chmod u=rw,go= "$HOME/.ssh/authorized_keys"
 if ! grep -Fqx -- "$source_public_key" "$HOME/.ssh/authorized_keys"; then  # append public key if it isn't already present
     printf '%s\n' "$source_public_key" >> "$HOME/.ssh/authorized_keys"
 fi
@@ -76,9 +77,9 @@ EOF
         limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$source_vm_name" -- bash -s -- "${source_ssh_alias_args[@]}" << 'EOF'
 set -eo pipefail
 mkdir -p "$HOME/.ssh"
-chmod 700 "$HOME/.ssh"
+chmod u=rwx,go= "$HOME/.ssh"
 touch "$HOME/.ssh/config"
-chmod 600 "$HOME/.ssh/config"
+chmod u=rw,go= "$HOME/.ssh/config"
 mesh_config_path="$HOME/.ssh/config.bzfs-lima-mesh"
 include_line="Include ~/.ssh/config.bzfs-lima-mesh"
 sed -i '\|^Include ~/.ssh/config.bzfs-lima-mesh$|d' "$HOME/.ssh/config"  # remove existing Include line before reinserting
@@ -89,7 +90,7 @@ else
 fi
 rm -f "$mesh_config_path"
 touch "$mesh_config_path"
-chmod 600 "$mesh_config_path"
+chmod u=rw,go= "$mesh_config_path"
 while [[ "$#" -gt 0 ]]; do
     target_vm_name="$1"
     target_hostname="$2"
