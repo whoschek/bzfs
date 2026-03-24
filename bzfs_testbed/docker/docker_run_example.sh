@@ -113,9 +113,7 @@ case "$1" in
         ;;
     runjob)
         require_running_container
-
         container_exec zfs list  # verify
-
         container_exec /bzfs/bzfs_testbed/bzfs_job_testbed.py \
             --create-src-snapshots --replicate  --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots \
             --ssh-src-port=2222 \
