@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 #
 # Configures and runs a basic example rootful bzfs docker container.
-# Run this script on *each* of the testbed VMs to start containers everywhere.
+# Run `up` on *each* of the testbed VMs to start containers everywhere, then run `runjob` once the peers are up.
 # Works out of the box on VMs created via ../bzfs_testbed/lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
 # is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
-# This script immediately runs a replication example that expects all peer testbed VMs to already have their containers
-# running, so the first invocation on a given VM may fail with "ssh: connect to host ... port 2222: Connection refused" until
-# the other VMs have also started their containers; simply rerun after the peers are up.
 set -eo pipefail
 
 # configure /etc/hpnssh/ for the docker container (will be bind-mounted)
@@ -30,59 +27,98 @@ container_exec() {
     sudo "$DOCKER_CLI" exec --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$CONTAINER_NAME" ${1+"$@"}
 }
 
-sudo "$DOCKER_CLI" image ls  # list all docker images in the local registry
+usage() {
+    prog_name="$(basename "$0")"
+    cat << EOF
+Usage: ${prog_name} up|down|runjob
 
-# precreate bind-mounted host paths as the invoking user so the container does not implicitly create root-owned dirs
-mkdir -p "$CONTAINER_USER_HOME/bzfs-config" "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
+Modes:
+  up            Create or start the container.
+  down          Remove the container if it exists.
+  runjob        Run the example job in the container.
 
-# run container if it doesn't exist yet
-if ! sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
-    sudo "$DOCKER_CLI" run -d \
-        --name "$CONTAINER_NAME" \
-        --env "BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
-        --env "BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
-        --env "BZFS_CONTAINER_USER_GID=$CONTAINER_USER_GID" \
-        --env "BZFS_CONTAINER_USER_HOME=$CONTAINER_USER_HOME" \
-        --privileged \
-        --device /dev/zfs:/dev/zfs \
-        --publish "2222:$CONTAINER_SSH_PORT" \
-        --volume /etc/ssh:/etc/ssh:ro \
-        --volume /etc/hpnssh:/etc/hpnssh:ro \
-        --volume "$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
-        --volume "$CONTAINER_USER_HOME/bzfs-config:/bzfs-config:ro" \
-        --volume "$CONTAINER_USER_HOME/bzfs-job-logs:$CONTAINER_USER_HOME/bzfs-job-logs" \
-        --volume "$CONTAINER_USER_HOME/bzfs-logs:$CONTAINER_USER_HOME/bzfs-logs" \
-        --volume /etc/hostid:/etc/hostid:ro \
-        --volume /etc/hostname:/etc/hostname:ro \
-        --uts=host \
-        --add-host "$(hostname):127.0.0.1" \
-        "$BZFS_DOCKER_IMAGE"
-    sleep 1
-# start container if it isn't running yet aka if it has been stopped
-elif [[ "$(sudo "$DOCKER_CLI" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
-    sudo "$DOCKER_CLI" start "$CONTAINER_NAME"
-    sleep 1
+EOF
+}
+
+if [[ "$#" -ne 1 ]]; then
+    usage >&2
+    exit 2
 fi
 
-container_exec zfs list  # verify
+case "$1" in
+    up)
+        sudo "$DOCKER_CLI" image ls  # list all docker images in the local registry
 
-if true; then
-    container_exec /bzfs/bzfs_testbed/bzfs_job_testbed.py \
-        --create-src-snapshots --replicate  --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots \
-        --ssh-src-port=2222 \
-        --ssh-dst-port=2222
-fi
+        # precreate bind-mounted host paths as the invoking user so the container does not implicitly create root-owned dirs
+        mkdir -p "$CONTAINER_USER_HOME/bzfs-config" "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
 
-if false; then
-    container_exec bzfs testsrc01:src/foo/bar testdst01:dst/bar/baz \
-        --ssh-src-port=2222 \
-        --ssh-dst-port=2222 \
-        --recursive \
-        --create-src-snapshots \
-        --create-src-snapshots-plan="{'prod':{'us-west':{'minutely':40,'hourly':36,'daily':31}}}"
-fi
+        # run container if it doesn't exist yet
+        if ! sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
+            sudo "$DOCKER_CLI" run -d \
+                --name "$CONTAINER_NAME" \
+                --env "BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
+                --env "BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
+                --env "BZFS_CONTAINER_USER_GID=$CONTAINER_USER_GID" \
+                --env "BZFS_CONTAINER_USER_HOME=$CONTAINER_USER_HOME" \
+                --privileged \
+                --device /dev/zfs:/dev/zfs \
+                --publish "2222:$CONTAINER_SSH_PORT" \
+                --volume /etc/ssh:/etc/ssh:ro \
+                --volume /etc/hpnssh:/etc/hpnssh:ro \
+                --volume "$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
+                --volume "$CONTAINER_USER_HOME/bzfs-config:/bzfs-config:ro" \
+                --volume "$CONTAINER_USER_HOME/bzfs-job-logs:$CONTAINER_USER_HOME/bzfs-job-logs" \
+                --volume "$CONTAINER_USER_HOME/bzfs-logs:$CONTAINER_USER_HOME/bzfs-logs" \
+                --volume /etc/hostid:/etc/hostid:ro \
+                --volume /etc/hostname:/etc/hostname:ro \
+                --uts=host \
+                --add-host "$(hostname):127.0.0.1" \
+                "$BZFS_DOCKER_IMAGE"
+            sleep 1
+        # start container if it isn't running yet aka if it has been stopped
+        elif [[ "$(sudo "$DOCKER_CLI" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+            sudo "$DOCKER_CLI" start "$CONTAINER_NAME"
+            sleep 1
+        fi
+        ;;
+    down)
+        if sudo "$DOCKER_CLI" container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
+            sudo "$DOCKER_CLI" rm -f "$CONTAINER_NAME"
+        fi
+        ;;
+    runjob)
+        if [[ "$(sudo "$DOCKER_CLI" inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+            echo "ERROR: Container '$CONTAINER_NAME' is not running; use 'up' first" >&2
+            exit 1
+        fi
 
-container_exec zfs list -t snapshot  # verify
+        container_exec zfs list  # verify
 
-#sudo "$DOCKER_CLI" rm -f "$CONTAINER_NAME"  # delete container
+        container_exec /bzfs/bzfs_testbed/bzfs_job_testbed.py \
+            --create-src-snapshots --replicate  --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots \
+            --ssh-src-port=2222 \
+            --ssh-dst-port=2222
+
+        if false; then
+            container_exec bzfs testsrc01:src/foo/bar testdst01:dst/bar/baz \
+                --ssh-src-port=2222 \
+                --ssh-dst-port=2222 \
+                --recursive \
+                --create-src-snapshots \
+                --create-src-snapshots-plan="{'prod':{'us-west':{'minutely':40,'hourly':36,'daily':31}}}"
+        fi
+
+        container_exec zfs list -t snapshot  # verify
+        ;;
+    -h | --help)
+        usage
+        exit 0
+        ;;
+    *)
+        echo "ERROR: Unknown argument: $1" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
+
 printf 'Success!\n'
