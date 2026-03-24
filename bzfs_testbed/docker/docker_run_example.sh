@@ -2,7 +2,7 @@
 #
 # Configures and runs a basic example rootful bzfs docker container.
 # Run `up` on *each* of the testbed VMs to start containers everywhere, then run `runjob` once the peers are up.
-# Works out of the box on VMs created via ../bzfs_testbed/lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
+# Works out of the box on VMs created via ../lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
 # is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
 #
 # If ~/bzfs-config/bzfs-cron.d exists, each `up` copies its files into the container /etc/cron.d.
@@ -13,12 +13,13 @@ set -eo pipefail
 usage() {
     prog_name="$(basename "$0")"
     cat << EOF
-Usage: ${prog_name} up|down|runjob
+Usage: ${prog_name} up|down|runjob|shell
 
 Modes:
   up            Create or start the container, then reload cron jobs.
   down          Remove the container if it exists.
   runjob        Run the example job in the container.
+  shell         Enter an interactive bash shell in the container.
 
 EOF
 }
@@ -129,7 +130,15 @@ case "$1" in
                 --create-src-snapshots-plan="{'prod':{'us-west':{'minutely':40,'hourly':36,'daily':31}}}"
         fi
 
-        container_exec zfs list -t snapshot  # verify
+        # container_exec zfs list -t snapshot  # verify
+        ;;
+    shell)
+        require_running_container
+        exec sudo "$DOCKER_CLI" exec -it \
+            --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
+            --workdir "$CONTAINER_USER_HOME" \
+            "$CONTAINER_NAME" \
+            bash -l
         ;;
     -h | --help)
         usage
