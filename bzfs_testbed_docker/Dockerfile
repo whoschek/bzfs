@@ -35,4 +35,4 @@ WORKDIR /bzfs
 EXPOSE 2222
 
 ENTRYPOINT ["/usr/local/bin/bzfs-container-entrypoint"]
-CMD ["/bin/bash", "-lc", "mkdir -p /run/sshd && touch /var/log/sshd.log /var/log/hpnsshd.log && /usr/sbin/sshd -D -e 2>>/var/log/sshd.log & if command -v hpnsshd > /dev/null; then /usr/sbin/hpnsshd -D -e 2>>/var/log/hpnsshd.log & fi; wait -n"]
+CMD ["/bin/bash", "-lc", "mkdir -p /run/sshd && /usr/sbin/sshd -D -e 2>>/var/log/sshd.log & if command -v hpnsshd > /dev/null; then /usr/sbin/hpnsshd -D -e 2>>/var/log/hpnsshd.log & fi; wait -n"]

@@ -36,6 +36,7 @@ configure_fail2ban() {
     local fail2ban_maxretry="${BZFS_FAIL2BAN_MAXRETRY:?BZFS_FAIL2BAN_MAXRETRY must not be empty}"
     local fail2ban_findtime="${BZFS_FAIL2BAN_FINDTIME:?BZFS_FAIL2BAN_FINDTIME must not be empty}"
     local fail2ban_port="${BZFS_FAIL2BAN_PORT:?BZFS_FAIL2BAN_PORT must not be empty}"
+    local fail2ban_ignoreip="${BZFS_FAIL2BAN_IGNOREIP-}"
 
     if [[ "$fail2ban_enabled" == "false" ]]; then
         return
@@ -45,9 +46,8 @@ configure_fail2ban() {
     chmod u=rw,g=r,o=r /var/log/sshd.log /var/log/hpnsshd.log /var/log/fail2ban.log
     cat > /etc/fail2ban/jail.d/bzfs-sshd.local << EOF
 [DEFAULT]
-banaction = nftables[type=multiport]
-banaction_allports = nftables[type=allports]
 backend = auto
+ignoreip = ${fail2ban_ignoreip}
 
 [sshd]
 enabled = true
