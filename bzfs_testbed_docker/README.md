@@ -17,8 +17,9 @@
 # Docker Testbed Helpers
 
 This directory contains helper files for running `bzfs` inside a privileged Docker or nerdctl container on the local
-testbed. The intended environment is VMs created via [`../lima_testbed.sh`](../lima_testbed.sh) where ZFS and VM-to-VM
-SSH connectivity is already available.
+testbed. The intended environment is VMs created via
+[`../bzfs_testbed/lima_testbed.sh`](../bzfs_testbed/lima_testbed.sh) where ZFS and VM-to-VM SSH connectivity is already
+available.
 
 ## Files
 
@@ -35,14 +36,15 @@ SSH connectivity is already available.
 - A Linux host or VM with ZFS installed.
 - A rootful container runtime reachable as `docker` or `nerdctl` CLI.
 - SSH keys already present in `~/.ssh`, because that directory is bind-mounted into the container.
-- The example [`../bzfs_job_testbed.py`](../bzfs_job_testbed.py) script because `runjob` executes that job config.
+- The example [`../bzfs_testbed/bzfs_job_testbed.py`](../bzfs_testbed/bzfs_job_testbed.py) script because `runjob`
+  executes that job config.
 
 ## Build an Image
 
 Run this on each testbed VM that should host a container:
 
 ```bash
-cd bzfs_testbed/docker
+cd bzfs_testbed_docker
 sudo ./docker_image.sh
 ```
 
@@ -67,7 +69,7 @@ if you use a different tag or registry.
 Bring the container up on each VM:
 
 ```bash
-cd bzfs_testbed/docker
+cd bzfs_testbed_docker
 BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_run_example.sh up
 ```
 
@@ -75,7 +77,7 @@ The script forwards the host port `2222` to container port `2222`, which is wher
 container. To use `hpnsshd` instead, recreate the container with:
 
 ```bash
-cd bzfs_testbed/docker
+cd bzfs_testbed_docker
 ./docker_run_example.sh down
 BZFS_DOCKER_INSTALL_HPNSSH=true BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_run_example.sh up
 ```
@@ -113,7 +115,7 @@ Remove the container:
 ## Cron Jobs
 
 If `~/bzfs-config/cron.d/` exists, `up` copies its files into `/etc/cron.d/` inside the container. To install the
-included [`cronjob_example.sh`](cronjob_example):
+included [`cronjob_example`](cronjob_example):
 
 ```bash
 mkdir -p ~/bzfs-config/cron.d
