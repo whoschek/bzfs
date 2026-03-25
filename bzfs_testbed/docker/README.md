@@ -113,11 +113,17 @@ Remove the container:
 ## Cron Jobs
 
 If `~/bzfs-config/cron.d/` exists, `up` copies its files into `/etc/cron.d/` inside the container. To install the
-included [`cronjob_example.sh`](cronjob_example), edit `USER_NAME` and `USER_HOME` in that file, then reload cron jobs:
+included [`cronjob_example.sh`](cronjob_example):
 
 ```bash
 mkdir -p ~/bzfs-config/cron.d
 cp cronjob_example ~/bzfs-config/cron.d/
+```
+
+Edit `USER_NAME` and `USER_HOME` in that file, then reload cron jobs:
+
+```bash
+nano ~/bzfs-config/cron.d/cronjob_example
 ./docker_run_example.sh up
 ```
 
