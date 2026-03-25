@@ -69,9 +69,9 @@ case "$1" in
         sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|' "$etc_hpnssh_volume_source/sshd_config"  # comment out Include directives
 
         for sshd_config in "$etc_ssh_volume_source/sshd_config" "$etc_hpnssh_volume_source/sshd_config"; do
-            sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' "$sshd_config"  # remove existing ports
+            sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/Id' "$sshd_config"  # remove existing ports
             # comment out any non-comment line that contains a PasswordAuthentication directive unless it says 'no'
-            sudo sed -i -E '/^[[:space:]]*#/!{/PasswordAuthentication/{/^PasswordAuthentication no$/! s/^/# /;}}' "$sshd_config"
+            sudo sed -i -E '/^[[:space:]]*#/!{/PasswordAuthentication/I{/^PasswordAuthentication no$/I! s/^/# /;}}' "$sshd_config"
             sudo sed -i '1i PasswordAuthentication no' "$sshd_config"  # prepend strict safe directive
         done
 
