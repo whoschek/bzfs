@@ -60,20 +60,25 @@ case "$1" in
         etc_ssh_volume_source="$CONTAINER_USER_HOME/bzfs-config/etc/ssh"
         sudo rm -rf "$etc_ssh_volume_source"
         sudo cp -a /etc/ssh "$etc_ssh_volume_source"
-        sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' "$etc_ssh_volume_source/sshd_config"  # remove existing ports
 
         # configure /etc/hpnssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
         etc_hpnssh_volume_source="$CONTAINER_USER_HOME/bzfs-config/etc/hpnssh"
         sudo rm -rf "$etc_hpnssh_volume_source"
         sudo cp -a /etc/ssh "$etc_hpnssh_volume_source"
-        sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' "$etc_hpnssh_volume_source/sshd_config"  # remove existing ports
         sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' "$etc_hpnssh_volume_source/sshd_config"  # change all occurrences of /etc/ssh to /etc/hpnssh
         sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|' "$etc_hpnssh_volume_source/sshd_config"  # comment out Include directives
 
+        for sshd_config in "$etc_ssh_volume_source/sshd_config" "$etc_hpnssh_volume_source/sshd_config"; do
+            sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' "$sshd_config"  # remove existing ports
+            # comment out any non-comment line that contains a PasswordAuthentication directive unless it says 'no'
+            sudo sed -i -E '/^[[:space:]]*#/!{/PasswordAuthentication/{/^PasswordAuthentication no$/! s/^/# /;}}' "$sshd_config"
+            sudo sed -i '1i PasswordAuthentication no' "$sshd_config"  # prepend strict safe directive
+        done
+
         if [[ "$BZFS_DOCKER_INSTALL_HPNSSH" == "true" ]]; then
-            printf '%s\n' "Port 2222" | sudo tee -a "$etc_hpnssh_volume_source/sshd_config" > /dev/null  # add port 2222
+            sudo sed -i '1i Port 2222' "$etc_hpnssh_volume_source/sshd_config"  # prepend port 2222
         else
-            printf '%s\n' "Port 2222" | sudo tee -a "$etc_ssh_volume_source/sshd_config" > /dev/null  # add port 2222
+            sudo sed -i '1i Port 2222' "$etc_ssh_volume_source/sshd_config"  # prepend port 2222
         fi
 
         $DOCKER_CLI image ls  # list all docker images in the local registry
