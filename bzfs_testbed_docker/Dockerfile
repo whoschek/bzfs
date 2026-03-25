@@ -15,8 +15,8 @@ RUN apt-get -y -qq update \
     && apt-get -y install openssh-server sudo cron python3 zstd mbuffer pv \
     && apt-get -y install git \
     && apt-get -y install zfsutils-linux \
-    && apt-get -y install software-properties-common \
     && if [ "$BZFS_DOCKER_INSTALL_HPNSSH" = "true" ]; then \
+           apt-get -y install software-properties-common; \
            add-apt-repository -y ppa:rapier1/hpnssh; \
            apt-get -y -qq update; \
            apt-get -y install hpnssh; \
