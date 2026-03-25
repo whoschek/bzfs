@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Creates a user inside of the container that matches the invoking host user, seeds `~/.ssh`, grants passwordless `sudo`
-# access to `zfs`, and launches the required SSH daemon.
+# access to `zfs`, and launches cron and the required SSH daemon.
 
 set -euo pipefail
 
@@ -65,6 +65,7 @@ EOF
     fail2ban-client ping > /dev/null
 }
 
+# Install managed cron files
 install_cron_jobs() {
     rm -f /etc/cron.d/bzfs-*
     for file in /bzfs-config/cron.d/*; do
@@ -73,14 +74,29 @@ install_cron_jobs() {
     done
 }
 
+# Stop cron and SSH daemon so PID 1 exits whenever either service stops or the container is terminated
+shutdown_services() {
+    kill -TERM "$cron_pid" "$sshd_pid" 2> /dev/null || true
+    wait "$cron_pid" "$sshd_pid" 2> /dev/null || true
+}
+
 ensure_container_user
 configure_fail2ban
 install_cron_jobs
-/usr/sbin/cron
+/usr/sbin/cron -f &
+cron_pid=$!
+
 mkdir -p /run/sshd
 docker_install_hpnssh="${BZFS_DOCKER_INSTALL_HPNSSH:?BZFS_DOCKER_INSTALL_HPNSSH must not be empty}"
 if [[ "$docker_install_hpnssh" == "true" ]]; then
-    exec /usr/sbin/hpnsshd -D -e 2>> /var/log/hpnsshd.log
+    /usr/sbin/hpnsshd -D -e 2>> /var/log/hpnsshd.log &
 else
-    exec /usr/sbin/sshd -D -e 2>> /var/log/sshd.log
+    /usr/sbin/sshd -D -e 2>> /var/log/sshd.log &
 fi
+sshd_pid=$!
+
+trap 'shutdown_services; exit 0' TERM INT
+
+wait -n "$cron_pid" "$sshd_pid" || true
+shutdown_services
+exit 1

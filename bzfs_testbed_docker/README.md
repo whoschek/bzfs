@@ -91,6 +91,7 @@ BZFS_DOCKER_INSTALL_HPNSSH=true BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_
 - Starts a privileged container named `bzfs`.
 - Bind-mounts host SSH config, user SSH keys, config files and log directories.
 - Loads managed cron files from `~/bzfs-config/cron.d` during container startup.
+- Exits the container if `cron` or the selected SSH daemon exits.
 
 Run the example job after all peer containers are up:
 
