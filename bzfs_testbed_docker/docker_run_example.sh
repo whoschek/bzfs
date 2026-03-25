@@ -8,6 +8,7 @@
 # If ~/bzfs-config/cron.d exists, each `up` copies its files into the container /etc/cron.d.
 # See ./cronjob_example for a documented cron file that periodically runs the same job as `runjob`.
 # If you change the image or port env vars or similar, run `down` and then `up` to recreate the container.
+
 set -eo pipefail
 
 usage() {
