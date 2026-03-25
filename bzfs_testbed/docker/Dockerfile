@@ -6,6 +6,7 @@ FROM ${BZFS_DOCKER_BASE_IMAGE}
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BZFS_GIT_REMOTE=https://github.com/whoschek/bzfs.git
 ARG BZFS_GIT_TAG
+ARG BZFS_DOCKER_INSTALL_HPNSSH=true
 
 COPY docker_entrypoint.sh /usr/local/bin/bzfs-container-entrypoint
 
@@ -15,9 +16,11 @@ RUN apt-get -y -qq update \
     && apt-get -y install git \
     && apt-get -y install zfsutils-linux \
     && apt-get -y install software-properties-common \
-    && add-apt-repository -y ppa:rapier1/hpnssh \
-    && apt-get -y -qq update \
-    && apt-get -y install hpnssh \
+    && if [ "$BZFS_DOCKER_INSTALL_HPNSSH" = "true" ]; then \
+           add-apt-repository -y ppa:rapier1/hpnssh; \
+           apt-get -y -qq update; \
+           apt-get -y install hpnssh; \
+       fi \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --single-branch --branch "${BZFS_GIT_TAG}" "${BZFS_GIT_REMOTE}" /bzfs \
@@ -30,4 +33,4 @@ WORKDIR /bzfs
 EXPOSE 22 2222
 
 ENTRYPOINT ["/usr/local/bin/bzfs-container-entrypoint"]
-CMD ["/bin/bash", "-lc", "mkdir -p /run/sshd && /usr/sbin/sshd -D -e & /usr/sbin/hpnsshd -D -e & wait -n"]
+CMD ["/bin/bash", "-lc", "mkdir -p /run/sshd && /usr/sbin/sshd -D -e & if command -v hpnsshd > /dev/null; then /usr/sbin/hpnsshd -D -e & fi; wait -n"]

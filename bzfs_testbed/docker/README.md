@@ -22,7 +22,8 @@ SSH connectivity is already available.
 
 ## Files
 
-- [`Dockerfile`](Dockerfile): Builds an image with `bzfs`, `bzfs_jobrunner`, OpenSSH, hpnssh, cron and ZFS userland.
+- [`Dockerfile`](Dockerfile): Builds an image with `bzfs`, `bzfs_jobrunner`, ZFS userland, cron, OpenSSH, and optional
+  hpnssh.
 - [`docker_image.sh`](docker_image.sh): Builds a local image from the latest stable `v*` git tag by default, and can
   optionally push multi-arch images to a registry.
 - [`docker_run_example.sh`](docker_run_example.sh): Starts or removes the container and runs the example
@@ -70,22 +71,23 @@ cd bzfs_testbed/docker
 BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_run_example.sh up
 ```
 
-By default the script forwards the host port `2222` to container port `22` (OpenSSH) via `CONTAINER_SSH_PORT=22`. To use
-`hpnsshd` instead, recreate the container with:
+The script forwards the host port `2222` to container port `2222`, which is where OpenSSH listens inside of the
+container. To use `hpnsshd` instead, recreate the container with:
 
 ```bash
 cd bzfs_testbed/docker
 ./docker_run_example.sh down
-CONTAINER_SSH_PORT=2222 BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_run_example.sh up
+BZFS_DOCKER_INSTALL_HPNSSH=true BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_run_example.sh up
 ```
 
 `up` performs the following:
 
-- Prepares `/etc/hpnssh` on the host and configures hpnsshd to listen on port `2222` inside of the container.
+- Prepares `~/bzfs-config/etc/ssh` and `~/bzfs-config/etc/hpnssh` on the host and configures whether OpenSSH or hpnsshd
+  listens on port `2222` inside of the container.
 - Creates host directories `~/bzfs-config`, `~/bzfs-job-logs`, and `~/bzfs-logs`, if they do not already exist.
 - Starts a privileged container named `bzfs`.
 - Bind-mounts host SSH config, user SSH keys, config files and log directories.
-- Reloads managed cron files from `~/bzfs-config/bzfs-cron.d`.
+- Reloads managed cron files from `~/bzfs-config/cron.d`.
 
 Run the example job after all peer containers are up:
 
@@ -110,12 +112,12 @@ Remove the container:
 
 ## Cron Jobs
 
-If `~/bzfs-config/bzfs-cron.d/` exists, `up` copies its files into `/etc/cron.d/` inside the container. To install the
+If `~/bzfs-config/cron.d/` exists, `up` copies its files into `/etc/cron.d/` inside the container. To install the
 included [`cronjob_example.sh`](cronjob_example), edit `USER_NAME` and `USER_HOME` in that file, then reload cron jobs:
 
 ```bash
-mkdir -p ~/bzfs-config/bzfs-cron.d
-cp cronjob_example ~/bzfs-config/bzfs-cron.d/
+mkdir -p ~/bzfs-config/cron.d
+cp cronjob_example ~/bzfs-config/cron.d/
 ./docker_run_example.sh up
 ```
 

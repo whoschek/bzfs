@@ -5,7 +5,7 @@
 # Works out of the box on VMs created via ../lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
 # is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
 #
-# If ~/bzfs-config/bzfs-cron.d exists, each `up` copies its files into the container /etc/cron.d.
+# If ~/bzfs-config/cron.d exists, each `up` copies its files into the container /etc/cron.d.
 # See ./cronjob_example for a documented cron file that periodically runs the same job as `runjob`.
 # If you change the image or port env vars or similar, run `down` and then `up` to recreate the container.
 set -eo pipefail
@@ -30,7 +30,7 @@ if [[ "$#" -ne 1 ]]; then
 fi
 
 BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"
-CONTAINER_SSH_PORT="${CONTAINER_SSH_PORT:-22}" # set this to 2222 if you want to forward to hpnsshd instead of OpenSSH sshd
+BZFS_DOCKER_INSTALL_HPNSSH="${BZFS_DOCKER_INSTALL_HPNSSH:-false}"
 CONTAINER_NAME=bzfs
 CONTAINER_USER_NAME="$(id -un)"
 CONTAINER_USER_UID="$(id -u)"
@@ -52,17 +52,29 @@ require_running_container() {
 
 case "$1" in
     up)
-        # configure /etc/hpnssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted.
-        sudo rm -rf /etc/hpnssh
-        sudo cp -a /etc/ssh /etc/hpnssh
-        sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' /etc/hpnssh/sshd_config  # remove existing ports
-        printf '%s\n' "Port 2222" | sudo tee -a /etc/hpnssh/sshd_config > /dev/null  # add port 2222
-        sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' /etc/hpnssh/sshd_config  # change all occurrences of /etc/ssh to /etc/hpnssh
-        sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|' /etc/hpnssh/sshd_config  # comment out Include directives
-
-        mkdir -p "$CONTAINER_USER_HOME/bzfs-config" "$CONTAINER_USER_HOME/bzfs-config/bzfs-cron.d"
+        mkdir -p "$CONTAINER_USER_HOME/bzfs-config/etc" "$CONTAINER_USER_HOME/bzfs-config/cron.d"
         mkdir -p "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
         chmod u=rwx,go= "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
+
+        # configure /etc/ssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
+        etc_ssh_volume_source="$CONTAINER_USER_HOME/bzfs-config/etc/ssh"
+        sudo rm -rf "$etc_ssh_volume_source"
+        sudo cp -a /etc/ssh "$etc_ssh_volume_source"
+        sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' "$etc_ssh_volume_source/sshd_config"  # remove existing ports
+
+        # configure /etc/hpnssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
+        etc_hpnssh_volume_source="$CONTAINER_USER_HOME/bzfs-config/etc/hpnssh"
+        sudo rm -rf "$etc_hpnssh_volume_source"
+        sudo cp -a /etc/ssh "$etc_hpnssh_volume_source"
+        sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' "$etc_hpnssh_volume_source/sshd_config"  # remove existing ports
+        sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' "$etc_hpnssh_volume_source/sshd_config"  # change all occurrences of /etc/ssh to /etc/hpnssh
+        sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|' "$etc_hpnssh_volume_source/sshd_config"  # comment out Include directives
+
+        if [[ "$BZFS_DOCKER_INSTALL_HPNSSH" == "true" ]]; then
+            printf '%s\n' "Port 2222" | sudo tee -a "$etc_hpnssh_volume_source/sshd_config" > /dev/null  # add port 2222
+        else
+            printf '%s\n' "Port 2222" | sudo tee -a "$etc_ssh_volume_source/sshd_config" > /dev/null  # add port 2222
+        fi
 
         $DOCKER_CLI image ls  # list all docker images in the local registry
 
@@ -76,9 +88,9 @@ case "$1" in
                 --env "BZFS_CONTAINER_USER_HOME=$CONTAINER_USER_HOME" \
                 --privileged \
                 --device /dev/zfs:/dev/zfs \
-                --publish "2222:$CONTAINER_SSH_PORT" \
-                --volume /etc/ssh:/etc/ssh:ro \
-                --volume /etc/hpnssh:/etc/hpnssh:ro \
+                --publish "2222:2222" \
+                --volume "$etc_ssh_volume_source:/etc/ssh:ro" \
+                --volume "$etc_hpnssh_volume_source:/etc/hpnssh:ro" \
                 --volume "$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
                 --volume "$CONTAINER_USER_HOME/bzfs-config:/bzfs-config:ro" \
                 --volume "$CONTAINER_USER_HOME/bzfs-job-logs:$CONTAINER_USER_HOME/bzfs-job-logs" \
@@ -95,11 +107,11 @@ case "$1" in
             sleep 1
         fi
 
-        # reload managed cron jobs from ~/bzfs-config/bzfs-cron.d and ensure cron is running
+        # reload managed cron jobs from ~/bzfs-config/cron.d and ensure cron is running
         $DOCKER_CLI exec "$CONTAINER_NAME" bash -lc "
             pkill -x cron || true
             rm -f /etc/cron.d/bzfs-*
-            for file in /bzfs-config/bzfs-cron.d/*; do
+            for file in /bzfs-config/cron.d/*; do
                 [[ -f \"\$file\" ]] || continue
                 install -o root -g root -m u=rw,go=r \"\$file\" \"/etc/cron.d/bzfs-\${file##*/}\"
             done

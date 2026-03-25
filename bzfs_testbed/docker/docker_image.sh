@@ -26,6 +26,7 @@ BZFS_GIT_REMOTE="${BZFS_GIT_REMOTE:-https://github.com/whoschek/bzfs.git}"
 BZFS_DOCKERFILE="${BZFS_DOCKERFILE:-${script_dir}/Dockerfile}"
 BZFS_DOCKER_OS_LIST="${BZFS_DOCKER_OS_LIST:-ubuntu-24.04}"
 BZFS_DOCKER_BASE_IMAGES="${BZFS_DOCKER_BASE_IMAGES:-ubuntu:24.04}"
+BZFS_DOCKER_INSTALL_HPNSSH="${BZFS_DOCKER_INSTALL_HPNSSH:-true}"
 BZFS_DOCKER_PUSH="${BZFS_DOCKER_PUSH:-false}"
 BZFS_DOCKER_REGISTRY_PREFIX="${BZFS_DOCKER_REGISTRY_PREFIX:-}"  # e.g. 'docker.io/mydockerhubuser'
 BZFS_DOCKER_PLATFORMS="${BZFS_DOCKER_PLATFORMS:-linux/amd64,linux/arm64}" # remove one on "exec /bin/sh: exec format error"
@@ -52,6 +53,7 @@ host_platform() {
 container_build() {
     "$DOCKER_CLI" build \
         --build-arg "BZFS_DOCKER_BASE_IMAGE=$bzfs_docker_base_image" \
+        --build-arg "BZFS_DOCKER_INSTALL_HPNSSH=$BZFS_DOCKER_INSTALL_HPNSSH" \
         --build-arg "BZFS_GIT_REMOTE=$BZFS_GIT_REMOTE" \
         --build-arg "BZFS_GIT_TAG=$BZFS_GIT_TAG" \
         --file "$BZFS_DOCKERFILE" \
