@@ -29,5 +29,42 @@ ensure_container_user() {
     chmod u=r,g=r,o= /etc/sudoers.d/bzfs-container-user
 }
 
+# Security policy: Ban an IP for <ban_time> minutes after <maxretry> failed SSH authentications within <findtime> seconds.
+configure_fail2ban() {
+    local fail2ban_enabled="${BZFS_FAIL2BAN_ENABLED:?BZFS_FAIL2BAN_ENABLED must not be empty}"
+    local fail2ban_bantime="${BZFS_FAIL2BAN_BANTIME:?BZFS_FAIL2BAN_BANTIME must not be empty}"
+    local fail2ban_maxretry="${BZFS_FAIL2BAN_MAXRETRY:?BZFS_FAIL2BAN_MAXRETRY must not be empty}"
+    local fail2ban_findtime="${BZFS_FAIL2BAN_FINDTIME:?BZFS_FAIL2BAN_FINDTIME must not be empty}"
+    local fail2ban_port="${BZFS_FAIL2BAN_PORT:?BZFS_FAIL2BAN_PORT must not be empty}"
+
+    if [[ "$fail2ban_enabled" == "false" ]]; then
+        return
+    fi
+    mkdir -p /etc/fail2ban/jail.d /run/fail2ban
+    touch /var/log/sshd.log /var/log/hpnsshd.log /var/log/fail2ban.log
+    chmod u=rw,g=r,o=r /var/log/sshd.log /var/log/hpnsshd.log /var/log/fail2ban.log
+    cat > /etc/fail2ban/jail.d/bzfs-sshd.local << EOF
+[DEFAULT]
+banaction = nftables[type=multiport]
+banaction_allports = nftables[type=allports]
+backend = auto
+
+[sshd]
+enabled = true
+port = ssh,${fail2ban_port}
+logpath = /var/log/sshd.log
+          /var/log/hpnsshd.log
+bantime = ${fail2ban_bantime}
+maxretry = ${fail2ban_maxretry}
+findtime = ${fail2ban_findtime}
+EOF
+
+    fail2ban-client stop > /dev/null 2>&1 || true
+    rm -f /run/fail2ban/fail2ban.sock
+    "$(command -v fail2ban-server)" -b --logtarget /var/log/fail2ban.log
+    fail2ban-client ping > /dev/null
+}
+
 ensure_container_user
+configure_fail2ban
 exec "$@"

@@ -32,6 +32,13 @@ fi
 
 BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"
 BZFS_DOCKER_INSTALL_HPNSSH="${BZFS_DOCKER_INSTALL_HPNSSH:-false}"
+
+# Default security policy: ban an IP for 2 minutes after 5 failed SSH authentications within 30 seconds.
+BZFS_FAIL2BAN_ENABLED="${BZFS_FAIL2BAN_ENABLED:-true}"
+BZFS_FAIL2BAN_BANTIME="${BZFS_FAIL2BAN_BANTIME:-2m}"
+BZFS_FAIL2BAN_MAXRETRY="${BZFS_FAIL2BAN_MAXRETRY:-5}"
+BZFS_FAIL2BAN_FINDTIME="${BZFS_FAIL2BAN_FINDTIME:-30s}"
+
 CONTAINER_NAME=bzfs
 CONTAINER_USER_NAME="$(id -un)"
 CONTAINER_USER_UID="$(id -u)"
@@ -95,6 +102,11 @@ case "$1" in
                 --env "BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
                 --env "BZFS_CONTAINER_USER_GID=$CONTAINER_USER_GID" \
                 --env "BZFS_CONTAINER_USER_HOME=$CONTAINER_USER_HOME" \
+                --env "BZFS_FAIL2BAN_ENABLED=$BZFS_FAIL2BAN_ENABLED" \
+                --env "BZFS_FAIL2BAN_BANTIME=$BZFS_FAIL2BAN_BANTIME" \
+                --env "BZFS_FAIL2BAN_MAXRETRY=$BZFS_FAIL2BAN_MAXRETRY" \
+                --env "BZFS_FAIL2BAN_FINDTIME=$BZFS_FAIL2BAN_FINDTIME" \
+                --env "BZFS_FAIL2BAN_PORT=2222" \
                 --privileged \
                 --device /dev/zfs:/dev/zfs \
                 --publish "2222:2222" \
