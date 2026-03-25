@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Creates a user inside of the container that matches the invoking host user, seeds `~/.ssh`, and grants passwordless `sudo`
-# access to `zfs` for that user inside of the container.
+# Creates a user inside of the container that matches the invoking host user, seeds `~/.ssh`, grants passwordless `sudo`
+# access to `zfs`, and launches the required SSH daemon.
 
 set -euo pipefail
 
@@ -67,4 +67,10 @@ EOF
 
 ensure_container_user
 configure_fail2ban
-exec "$@"
+mkdir -p /run/sshd
+docker_install_hpnssh="${BZFS_DOCKER_INSTALL_HPNSSH:?BZFS_DOCKER_INSTALL_HPNSSH must not be empty}"
+if [[ "$docker_install_hpnssh" == "true" ]]; then
+    exec /usr/sbin/hpnsshd -D -e 2>> /var/log/hpnsshd.log
+else
+    exec /usr/sbin/sshd -D -e 2>> /var/log/sshd.log
+fi
