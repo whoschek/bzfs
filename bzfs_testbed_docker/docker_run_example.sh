@@ -100,6 +100,7 @@ case "$1" in
         if ! $DOCKER_CLI container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
             $DOCKER_CLI run -d \
                 --name "$CONTAINER_NAME" \
+                --restart unless-stopped \
                 --env "BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
                 --env "BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
                 --env "BZFS_CONTAINER_USER_GID=$CONTAINER_USER_GID" \
@@ -136,7 +137,8 @@ case "$1" in
         ;;
     down)
         if $DOCKER_CLI container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
-            $DOCKER_CLI rm -f "$CONTAINER_NAME"
+            $DOCKER_CLI stop "$CONTAINER_NAME"
+            $DOCKER_CLI rm "$CONTAINER_NAME"
         fi
         ;;
     runjob)
