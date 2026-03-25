@@ -74,6 +74,7 @@ case "$1" in
             # comment out any non-comment line that contains a PasswordAuthentication directive unless it says 'no'
             sudo sed -i -E '/^[[:space:]]*#/!{/PasswordAuthentication/I{/^PasswordAuthentication no$/I! s/^/# /;}}' "$sshd_config"
             sudo sed -i '1i PubkeyAuthentication yes' "$sshd_config"  # prepend explicit pubkey auth directive
+            sudo sed -i '1i PermitRootLogin no' "$sshd_config"  # prepend strict safe directive
             sudo sed -i '1i KbdInteractiveAuthentication no' "$sshd_config"  # prepend strict safe directive
             sudo sed -i '1i PasswordAuthentication no' "$sshd_config"  # prepend strict safe directive
         done
