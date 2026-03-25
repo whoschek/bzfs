@@ -18,6 +18,7 @@
 # connectivity working out of the box. All default settings work out of the box.
 # After running this script, consider running the example bzfs_testbed/bzfs_job_testbed.py script to replicate across the VMs,
 # which also works out of the box.
+
 set -eo pipefail
 TESTBED_NUM_SRC_VMS="${TESTBED_NUM_SRC_VMS:-1}"  # number of VMs acting as a replication source
 TESTBED_NUM_DST_VMS="${TESTBED_NUM_DST_VMS:-1}"  # number of VMs acting as a replication destination
