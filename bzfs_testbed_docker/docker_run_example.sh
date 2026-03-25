@@ -62,8 +62,8 @@ require_running_container() {
 case "$1" in
     up)
         mkdir -p "$CONTAINER_USER_HOME/bzfs-config/etc" "$CONTAINER_USER_HOME/bzfs-config/cron.d"
-        mkdir -p "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
-        chmod u=rwx,go= "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs"
+        mkdir -p "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs" "$CONTAINER_USER_HOME/bzfs-var-log"
+        chmod u=rwx,go= "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs" "$CONTAINER_USER_HOME/bzfs-var-log"
 
         # configure /etc/ssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
         etc_ssh_volume_source="$CONTAINER_USER_HOME/bzfs-config/etc/ssh"
@@ -119,6 +119,7 @@ case "$1" in
                 --volume "$CONTAINER_USER_HOME/bzfs-config:/bzfs-config:ro" \
                 --volume "$CONTAINER_USER_HOME/bzfs-job-logs:$CONTAINER_USER_HOME/bzfs-job-logs" \
                 --volume "$CONTAINER_USER_HOME/bzfs-logs:$CONTAINER_USER_HOME/bzfs-logs" \
+                --volume "$CONTAINER_USER_HOME/bzfs-var-log:/var/log" \
                 --volume /etc/hostid:/etc/hostid:ro \
                 --volume /etc/hostname:/etc/hostname:ro \
                 --uts=host \

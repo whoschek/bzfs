@@ -86,7 +86,8 @@ BZFS_DOCKER_INSTALL_HPNSSH=true BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_
 
 - Prepares `~/bzfs-config/etc/ssh` and `~/bzfs-config/etc/hpnssh` on the host and configures whether OpenSSH or hpnsshd
   listens on port `2222` inside of the container.
-- Creates host directories `~/bzfs-config`, `~/bzfs-job-logs`, and `~/bzfs-logs`, if they do not already exist.
+- Creates host directories `~/bzfs-config`, `~/bzfs-job-logs`, `~/bzfs-logs`, and `~/bzfs-var-log`, if they do not
+  already exist.
 - Starts a privileged container named `bzfs`.
 - Bind-mounts host SSH config, user SSH keys, config files and log directories.
 - Reloads managed cron files from `~/bzfs-config/cron.d`.
