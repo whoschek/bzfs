@@ -27,7 +27,12 @@ if [ "$bzfs_test_remote_userhost" = "" ]; then
     echo "Now using TMPDIR: $TMPDIR"
     echo "Now using bzfs_test_mode: $bzfs_test_mode"
     export PYTHON_LAZY_IMPORTS="${PYTHON_LAZY_IMPORTS:-all}"  # PEP 810
-    ./run_quietly.sh "$(basename "$0")" python3 -m bzfs_tests.test_all
+    if [ "$bzfs_test_names" == "" ]; then
+        ./run_quietly.sh "$(basename "$0")" python3 -m bzfs_tests.test_all
+    else  # Example: bzfs_test_names=bzfs_tests.test_retry,bzfs_tests.test_utils.TestHelperFunctions.test_has_duplicates ./test.sh
+        IFS=, read -r -a bzfs_test_name_list <<< "$bzfs_test_names"
+        ./run_quietly.sh "$(basename "$0")" python3 -m unittest --failfast --verbose "${bzfs_test_name_list[@]}"
+    fi
 else
     ./test_host.sh  # rsync's the local repo to remote host and runs tests there
 fi

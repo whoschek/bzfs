@@ -43,6 +43,9 @@ esac
 case "$bzfs_test_mode" in
     -* | *[![:alnum:]]*) die "invalid bzfs_test_mode: $bzfs_test_mode" ;;
 esac
+case "$bzfs_test_names" in
+    -* | *[![:alnum:]_.,]*) die "invalid bzfs_test_names: $bzfs_test_names" ;;
+esac
 case "$bzfs_test_no_run_quietly" in
     -* | *[![:alnum:]]*) die "invalid bzfs_test_no_run_quietly: $bzfs_test_no_run_quietly" ;;
 esac
@@ -57,5 +60,6 @@ rsync -a --delete --exclude=.venv --exclude=.git/hooks --compress-choice=zstd --
 ssh -i "$bzfs_test_remote_private_key" -p "$bzfs_test_ssh_port" $flags "$bzfs_test_remote_userhost" \
     "bzfs_test_ssh_port=$bzfs_test_ssh_port" \
     "bzfs_test_mode=$bzfs_test_mode" \
+    "bzfs_test_names=$bzfs_test_names" \
     "bzfs_test_no_run_quietly=$bzfs_test_no_run_quietly" \
     "$bzfs_test_remote_path/test.sh"
