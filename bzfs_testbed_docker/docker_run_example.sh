@@ -5,9 +5,10 @@
 # Works out of the box on VMs created via ../lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
 # is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
 #
-# If ~/bzfs-config/cron.d exists, each `up` copies its files into the container /etc/cron.d.
+# If ~/bzfs-config/cron.d exists, container startup copies its files into /etc/cron.d.
 # See ./cronjob_example for a documented cron file that periodically runs the same job as `runjob`.
-# If you change the image or port env vars or similar, run `down` and then `up` to recreate the container.
+# If you change the image, managed cron files, port env vars or similar, run `down` and then `up` to recreate the
+# container.
 
 set -eo pipefail
 
@@ -17,7 +18,7 @@ usage() {
 Usage: ${prog_name} up|down|runjob|shell
 
 Commands:
-  up            Create or start the container, then reload cron jobs.
+  up            Create or start the container.
   down          Remove the container if it exists.
   runjob        Run the example job in the container.
   shell         Enter an interactive shell in the container.
@@ -132,16 +133,6 @@ case "$1" in
             sleep 1
         fi
 
-        # reload managed cron jobs from ~/bzfs-config/cron.d and ensure cron is running
-        $DOCKER_CLI exec "$CONTAINER_NAME" bash -lc "
-            pkill -x cron || true
-            rm -f /etc/cron.d/bzfs-*
-            for file in /bzfs-config/cron.d/*; do
-                [[ -f \"\$file\" ]] || continue
-                install -o root -g root -m u=rw,go=r \"\$file\" \"/etc/cron.d/bzfs-\${file##*/}\"
-            done
-            /usr/sbin/cron
-        "
         ;;
     down)
         if $DOCKER_CLI container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then

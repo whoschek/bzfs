@@ -65,8 +65,18 @@ EOF
     fail2ban-client ping > /dev/null
 }
 
+install_cron_jobs() {
+    rm -f /etc/cron.d/bzfs-*
+    for file in /bzfs-config/cron.d/*; do
+        [[ -f "$file" ]] || continue
+        install -o root -g root -m u=rw,go=r "$file" "/etc/cron.d/bzfs-${file##*/}"
+    done
+}
+
 ensure_container_user
 configure_fail2ban
+install_cron_jobs
+/usr/sbin/cron
 mkdir -p /run/sshd
 docker_install_hpnssh="${BZFS_DOCKER_INSTALL_HPNSSH:?BZFS_DOCKER_INSTALL_HPNSSH must not be empty}"
 if [[ "$docker_install_hpnssh" == "true" ]]; then

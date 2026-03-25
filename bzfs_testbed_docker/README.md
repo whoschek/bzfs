@@ -90,7 +90,7 @@ BZFS_DOCKER_INSTALL_HPNSSH=true BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_
   already exist.
 - Starts a privileged container named `bzfs`.
 - Bind-mounts host SSH config, user SSH keys, config files and log directories.
-- Reloads managed cron files from `~/bzfs-config/cron.d`.
+- Loads managed cron files from `~/bzfs-config/cron.d` during container startup.
 
 Run the example job after all peer containers are up:
 
@@ -115,18 +115,19 @@ Remove the container:
 
 ## Cron Jobs
 
-If `~/bzfs-config/cron.d/` exists, `up` copies its files into `/etc/cron.d/` inside the container. To install the
-included [`cronjob_example`](cronjob_example):
+If `~/bzfs-config/cron.d/` exists, container startup copies its files into `/etc/cron.d/` inside the container. To
+install the included [`cronjob_example`](cronjob_example):
 
 ```bash
 mkdir -p ~/bzfs-config/cron.d
 cp cronjob_example ~/bzfs-config/cron.d/
 ```
 
-Edit `USER_NAME` and `USER_HOME` in that file, then reload cron jobs:
+Edit `USER_NAME` and `USER_HOME` in that file, then recreate the container so startup reloads the managed cron files:
 
 ```bash
 nano ~/bzfs-config/cron.d/cronjob_example
+./docker_run_example.sh down
 ./docker_run_example.sh up
 ```
 
