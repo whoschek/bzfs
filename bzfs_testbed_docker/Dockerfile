@@ -4,10 +4,10 @@
 ARG BZFS_DOCKER_BASE_IMAGE=ubuntu:24.04
 FROM ${BZFS_DOCKER_BASE_IMAGE}
 
-ARG DEBIAN_FRONTEND=noninteractive
 ARG BZFS_GIT_REMOTE=https://github.com/whoschek/bzfs.git
-ARG BZFS_GIT_TAG
+ARG BZFS_GIT_TAG  # for example 'v1.19.0'
 ARG BZFS_DOCKER_INSTALL_HPNSSH=true  # hpnssh is optional
+ARG DEBIAN_FRONTEND=noninteractive
 
 COPY docker_entrypoint.sh /usr/local/bin/bzfs-container-entrypoint
 
