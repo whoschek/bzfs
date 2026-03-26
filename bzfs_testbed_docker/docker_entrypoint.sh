@@ -47,7 +47,6 @@ configure_fail2ban() {
     cat > /etc/fail2ban/jail.d/bzfs-sshd.local << EOF
 [DEFAULT]
 backend = auto
-ignoreip = ${fail2ban_ignoreip}
 
 [sshd]
 enabled = true
@@ -57,6 +56,7 @@ logpath = /var/log/sshd.log
 bantime = ${fail2ban_bantime}
 maxretry = ${fail2ban_maxretry}
 findtime = ${fail2ban_findtime}
+ignoreip = ${fail2ban_ignoreip}
 EOF
 
     fail2ban-client stop > /dev/null 2>&1 || true
