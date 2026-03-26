@@ -27,7 +27,7 @@ available.
   hpnssh.
 - [`docker_image.sh`](docker_image.sh): Builds a local image from the latest stable `v*` git tag by default, and can
   optionally push multi-arch images to a registry.
-- [`docker_run_example.sh`](docker_run_example.sh): Starts or removes the container and runs the example
+- [`docker_run_example.sh`](docker_run_example.sh): Starts or removes the container and runs or monitors the example
   `bzfs_job_testbed.py` job inside it.
 - [`cronjob_example`](cronjob_example): Example cron file for periodic job execution inside the container.
 
@@ -85,7 +85,7 @@ BZFS_DOCKER_INSTALL_HPNSSH=true BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_
 `up` performs the following:
 
 - Prepares `~/bzfs/bzfs-config/etc/ssh` and `~/bzfs/bzfs-config/etc/hpnssh` on the host and configures whether OpenSSH
-  or hpnsshd listens on port `2222` inside of the container.
+  or hpnsshd listens inside of the container.
 - Creates host directories `~/bzfs/bzfs-config`, `~/bzfs/bzfs-job-logs`, `~/bzfs/bzfs-logs`, and `~/bzfs/bzfs-var-log`,
   if they do not already exist.
 - Starts a privileged container named `bzfs`.
@@ -100,7 +100,16 @@ Run the example job after all peer containers are up:
 ```
 
 This executes `bzfs_testbed/bzfs_job_testbed.py` inside the container and uses SSH port `2222` for both source and
-destination hosts.
+destination hosts. Override `BZFS_JOBCONFIG` if you want `runjob` to use a different jobconfig file.
+
+Monitor snapshot age from inside the container:
+
+```bash
+./docker_run_example.sh monitor
+```
+
+This executes `bzfs_testbed/bzfs_job_testbed.py --monitor-src-snapshots --monitor-dst-snapshots --verbose` inside the
+container.
 
 If there are problems consider entering an interactive shell inside the running container for debugging:
 
