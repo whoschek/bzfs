@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Creates a user inside of the container that matches the invoking host user, seeds `~/.ssh`, grants passwordless `sudo`
-# access to `zfs`, and launches cron and the required SSH daemon.
+# Creates a user inside of the container that matches the invoking host user, populates `~/.ssh/` and `/etc/cron.d/`,
+# grants passwordless `sudo` access to `zfs`, and launches cron and the required SSH daemon.
 
 set -euo pipefail
 
@@ -29,7 +29,7 @@ ensure_container_user() {
     chmod u=r,g=r,o= /etc/sudoers.d/bzfs-container-user
 }
 
-# Security policy: Ban an IP for <ban_time> minutes after <maxretry> failed SSH authentications within <findtime> seconds.
+# Security policy: Ban an IP for <ban_time> minutes after <maxretry> failed SSH authentications within <findtime> seconds
 configure_fail2ban() {
     local fail2ban_enabled="${BZFS_FAIL2BAN_ENABLED:?BZFS_FAIL2BAN_ENABLED must not be empty}"
     local fail2ban_bantime="${BZFS_FAIL2BAN_BANTIME:?BZFS_FAIL2BAN_BANTIME must not be empty}"

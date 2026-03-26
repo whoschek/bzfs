@@ -1,6 +1,5 @@
 # Example cron file for periodically running a bzfs job.
-# Copy this file to `~/bzfs/bzfs-config/cron.d/` on the VM host, replace `USER_NAME` and `USER_HOME`,
-# then run `./docker_run_example.sh up` to reload the managed cron files inside the container.
+# Replace `USER_HOME` and `USER_NAME` with your own values.
 
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
