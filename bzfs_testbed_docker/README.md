@@ -100,15 +100,16 @@ Run the example job after all peer containers are up:
 ```
 
 This executes `bzfs_testbed/bzfs_job_testbed.py` inside the container and uses SSH port `2222` for both source and
-destination hosts. Override `BZFS_JOBCONFIG` if you want `runjob` to use a different jobconfig file.
+destination hosts. Add `-v` for verbose output. Override `BZFS_JOBCONFIG` if you want `runjob` to use a different
+jobconfig file.
 
 Monitor snapshot age from inside the container:
 
 ```bash
-./docker_run_example.sh monitor
+./docker_run_example.sh monitor -v
 ```
 
-This executes `bzfs_testbed/bzfs_job_testbed.py --monitor-src-snapshots --monitor-dst-snapshots --verbose` inside the
+This executes `bzfs_testbed/bzfs_job_testbed.py --monitor-src-snapshots --monitor-dst-snapshots -v` inside the
 container.
 
 If there are problems consider entering an interactive shell inside the running container for debugging:

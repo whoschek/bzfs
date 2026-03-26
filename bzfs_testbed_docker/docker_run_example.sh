@@ -15,19 +15,19 @@ set -eo pipefail
 usage() {
     prog_name="$(basename "$0")"
     cat << EOF
-Usage: ${prog_name} up|down|runjob|shell
+Usage: ${prog_name} up|down|shell|runjob [-v]|monitor [-v]
 
 Commands:
   up            Create or start the container.
   down          Remove the container if it exists.
   shell         Enter an interactive shell in the container.
-  runjob        Run the example job in the container.
-  monitor       Monitor snapshot age.
+  runjob        Run the example job in the container; add -v for verbose output.
+  monitor       Monitor snapshot age; add -v for verbose output.
 
 EOF
 }
 
-if [[ "$#" -ne 1 ]]; then
+if [[ "$#" -eq 0 ]]; then
     usage >&2
     exit 2
 fi
@@ -35,7 +35,7 @@ fi
 BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"
 BZFS_DOCKER_INSTALL_HPNSSH="${BZFS_DOCKER_INSTALL_HPNSSH:-false}"
 BZFS_CONTAINER_NAME="${BZFS_CONTAINER_NAME:-bzfs}"
-BZFS_CONTAINER_PORT="${BZFS_CONTAINER_PORT:-2222}"
+BZFS_HOST_PORT="${BZFS_HOST_PORT:-2222}"
 BZFS_JOBCONFIG="${BZFS_JOBCONFIG:-/bzfs/bzfs_testbed/bzfs_job_testbed.py}"
 
 # If enabled ban an IP for 15 minutes after 10 failed SSH authentications within 5 minutes.
@@ -96,9 +96,14 @@ prepare_container_host_home() {
     else
         sshd_config="$etc_ssh_volume_source/sshd_config"
     fi
-    sudo sed -i "1i Port $BZFS_CONTAINER_PORT" "$sshd_config"  # prepend internal port
+    sudo sed -i "1i Port $BZFS_HOST_PORT" "$sshd_config"  # prepend internal port
     sudo sed -i "1i Port 2222" "$sshd_config"  # prepend port 2222
 }
+
+verbose=()
+if [[ "$2" == "-v" ]]; then
+    verbose+=("-v")
+fi
 
 case "$1" in
     up)
@@ -123,7 +128,7 @@ case "$1" in
                 --env "BZFS_FAIL2BAN_PORT=2222" \
                 --privileged \
                 --device /dev/zfs:/dev/zfs \
-                --publish "$BZFS_CONTAINER_PORT:2222" \
+                --publish "$BZFS_HOST_PORT:2222" \
                 --volume "$etc_ssh_volume_source:/etc/ssh:ro" \
                 --volume "$etc_hpnssh_volume_source:/etc/hpnssh:ro" \
                 --volume "$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
@@ -162,17 +167,19 @@ case "$1" in
         container_exec zfs list  # verify
         container_exec "$BZFS_JOBCONFIG" \
             --create-src-snapshots --replicate  --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots \
-            --ssh-src-port="$BZFS_CONTAINER_PORT" \
-            --ssh-dst-port="$BZFS_CONTAINER_PORT"
+            "${verbose[@]}" \
+            --ssh-src-port="$BZFS_HOST_PORT" \
+            --ssh-dst-port="$BZFS_HOST_PORT"
 
         # container_exec zfs list -t snapshot  # verify
         ;;
     monitor)
         require_running_container
         container_exec "$BZFS_JOBCONFIG" \
-            --monitor-src-snapshots --monitor-dst-snapshots --verbose \
-            --ssh-src-port="$BZFS_CONTAINER_PORT" \
-            --ssh-dst-port="$BZFS_CONTAINER_PORT"
+            --monitor-src-snapshots --monitor-dst-snapshots \
+            "${verbose[@]}" \
+            --ssh-src-port="$BZFS_HOST_PORT" \
+            --ssh-dst-port="$BZFS_HOST_PORT"
         ;;
     -h | --help)
         usage
