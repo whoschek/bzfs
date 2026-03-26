@@ -96,8 +96,10 @@ prepare_container_host_home() {
     else
         sshd_config="$etc_ssh_volume_source/sshd_config"
     fi
-    sudo sed -i "1i Port $BZFS_HOST_PORT" "$sshd_config"  # prepend internal port
     sudo sed -i "1i Port 2222" "$sshd_config"  # prepend port 2222
+    if [[ "$BZFS_HOST_PORT" != "2222" ]]; then
+        sudo sed -i "1i Port $BZFS_HOST_PORT" "$sshd_config"  # prepend internal port
+    fi
 }
 
 verbose=()
