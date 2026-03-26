@@ -20,8 +20,9 @@ Usage: ${prog_name} up|down|runjob|shell
 Commands:
   up            Create or start the container.
   down          Remove the container if it exists.
-  runjob        Run the example job in the container.
   shell         Enter an interactive shell in the container.
+  runjob        Run the example job in the container.
+  monitor       Monitor snapshot age.
 
 EOF
 }
@@ -35,6 +36,7 @@ BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"
 BZFS_DOCKER_INSTALL_HPNSSH="${BZFS_DOCKER_INSTALL_HPNSSH:-false}"
 BZFS_CONTAINER_NAME="${BZFS_CONTAINER_NAME:-bzfs}"
 BZFS_CONTAINER_PORT="${BZFS_CONTAINER_PORT:-2222}"
+BZFS_JOBCONFIG="${BZFS_JOBCONFIG:-/bzfs/bzfs_testbed/bzfs_job_testbed.py}"
 
 # If enabled ban an IP for 15 minutes after 10 failed SSH authentications within 5 minutes.
 BZFS_FAIL2BAN_ENABLED="${BZFS_FAIL2BAN_ENABLED:-false}"
@@ -62,42 +64,45 @@ require_running_container() {
     fi
 }
 
+prepare_container_host_home() {
+    mkdir -p "$CONTAINER_HOST_HOME/bzfs-config/etc" "$CONTAINER_HOST_HOME/bzfs-config/cron.d"
+    mkdir -p "$CONTAINER_HOST_HOME/bzfs-job-logs" "$CONTAINER_HOST_HOME/bzfs-logs" "$CONTAINER_HOST_HOME/bzfs-var-log"
+    chmod u=rwx,go= "$CONTAINER_HOST_HOME/bzfs-job-logs" "$CONTAINER_HOST_HOME/bzfs-logs" "$CONTAINER_HOST_HOME/bzfs-var-log"
+
+    # configure /etc/ssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
+    etc_ssh_volume_source="$CONTAINER_HOST_HOME/bzfs-config/etc/ssh"
+    sudo rm -rf "$etc_ssh_volume_source"
+    sudo cp -a /etc/ssh "$etc_ssh_volume_source"
+
+    # configure /etc/hpnssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
+    etc_hpnssh_volume_source="$CONTAINER_HOST_HOME/bzfs-config/etc/hpnssh"
+    sudo rm -rf "$etc_hpnssh_volume_source"
+    sudo cp -a /etc/ssh "$etc_hpnssh_volume_source"
+    sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' "$etc_hpnssh_volume_source/sshd_config"  # change all occurrences of /etc/ssh to /etc/hpnssh
+
+    for sshd_config in "$etc_ssh_volume_source/sshd_config" "$etc_hpnssh_volume_source/sshd_config"; do
+        sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/Id' "$sshd_config"  # remove existing ports
+        sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|I' "$sshd_config"  # comment out Include directives
+        # comment out any non-comment line that contains a PasswordAuthentication directive unless it says 'no'
+        sudo sed -i -E '/^[[:space:]]*#/!{/PasswordAuthentication/I{/^PasswordAuthentication no$/I! s/^/# /;}}' "$sshd_config"
+        sudo sed -i '1i PubkeyAuthentication yes' "$sshd_config"  # prepend explicit pubkey auth directive
+        sudo sed -i '1i PermitRootLogin no' "$sshd_config"  # prepend strict safe directive
+        sudo sed -i '1i KbdInteractiveAuthentication no' "$sshd_config"  # prepend strict safe directive
+        sudo sed -i '1i PasswordAuthentication no' "$sshd_config"  # prepend strict safe directive
+    done
+
+    if [[ "$BZFS_DOCKER_INSTALL_HPNSSH" == "true" ]]; then
+        sshd_config="$etc_hpnssh_volume_source/sshd_config"
+    else
+        sshd_config="$etc_ssh_volume_source/sshd_config"
+    fi
+    sudo sed -i "1i Port $BZFS_CONTAINER_PORT" "$sshd_config"  # prepend internal port
+    sudo sed -i "1i Port 2222" "$sshd_config"  # prepend port 2222
+}
+
 case "$1" in
     up)
-        mkdir -p "$CONTAINER_HOST_HOME/bzfs-config/etc" "$CONTAINER_HOST_HOME/bzfs-config/cron.d"
-        mkdir -p "$CONTAINER_HOST_HOME/bzfs-job-logs" "$CONTAINER_HOST_HOME/bzfs-logs" "$CONTAINER_HOST_HOME/bzfs-var-log"
-        chmod u=rwx,go= "$CONTAINER_HOST_HOME/bzfs-job-logs" "$CONTAINER_HOST_HOME/bzfs-logs" "$CONTAINER_HOST_HOME/bzfs-var-log"
-
-        # configure /etc/ssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
-        etc_ssh_volume_source="$CONTAINER_HOST_HOME/bzfs-config/etc/ssh"
-        sudo rm -rf "$etc_ssh_volume_source"
-        sudo cp -a /etc/ssh "$etc_ssh_volume_source"
-
-        # configure /etc/hpnssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
-        etc_hpnssh_volume_source="$CONTAINER_HOST_HOME/bzfs-config/etc/hpnssh"
-        sudo rm -rf "$etc_hpnssh_volume_source"
-        sudo cp -a /etc/ssh "$etc_hpnssh_volume_source"
-        sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' "$etc_hpnssh_volume_source/sshd_config"  # change all occurrences of /etc/ssh to /etc/hpnssh
-
-        for sshd_config in "$etc_ssh_volume_source/sshd_config" "$etc_hpnssh_volume_source/sshd_config"; do
-            sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/Id' "$sshd_config"  # remove existing ports
-            sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|I' "$sshd_config"  # comment out Include directives
-            # comment out any non-comment line that contains a PasswordAuthentication directive unless it says 'no'
-            sudo sed -i -E '/^[[:space:]]*#/!{/PasswordAuthentication/I{/^PasswordAuthentication no$/I! s/^/# /;}}' "$sshd_config"
-            sudo sed -i '1i PubkeyAuthentication yes' "$sshd_config"  # prepend explicit pubkey auth directive
-            sudo sed -i '1i PermitRootLogin no' "$sshd_config"  # prepend strict safe directive
-            sudo sed -i '1i KbdInteractiveAuthentication no' "$sshd_config"  # prepend strict safe directive
-            sudo sed -i '1i PasswordAuthentication no' "$sshd_config"  # prepend strict safe directive
-        done
-
-        if [[ "$BZFS_DOCKER_INSTALL_HPNSSH" == "true" ]]; then
-            sshd_config="$etc_hpnssh_volume_source/sshd_config"
-        else
-            sshd_config="$etc_ssh_volume_source/sshd_config"
-        fi
-        sudo sed -i "1i Port $BZFS_CONTAINER_PORT" "$sshd_config"  # prepend internal port
-        sudo sed -i "1i Port 2222" "$sshd_config"  # prepend port 2222
-
+        prepare_container_host_home
         $DOCKER_CLI image ls  # list all docker images in the local registry
 
         # run container if it doesn't exist yet
@@ -137,23 +142,12 @@ case "$1" in
             $DOCKER_CLI start "$BZFS_CONTAINER_NAME"
             sleep 1
         fi
-
         ;;
     down)
         if $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
             $DOCKER_CLI stop "$BZFS_CONTAINER_NAME"
             $DOCKER_CLI rm "$BZFS_CONTAINER_NAME"
         fi
-        ;;
-    runjob)
-        require_running_container
-        container_exec zfs list  # verify
-        container_exec /bzfs/bzfs_testbed/bzfs_job_testbed.py \
-            --create-src-snapshots --replicate  --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots \
-            --ssh-src-port="$BZFS_CONTAINER_PORT" \
-            --ssh-dst-port="$BZFS_CONTAINER_PORT"
-
-        # container_exec zfs list -t snapshot  # verify
         ;;
     shell)
         require_running_container
@@ -162,6 +156,23 @@ case "$1" in
             --workdir "$CONTAINER_USER_HOME" \
             "$BZFS_CONTAINER_NAME" \
             bash -l
+        ;;
+    runjob)
+        require_running_container
+        container_exec zfs list  # verify
+        container_exec "$BZFS_JOBCONFIG" \
+            --create-src-snapshots --replicate  --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots \
+            --ssh-src-port="$BZFS_CONTAINER_PORT" \
+            --ssh-dst-port="$BZFS_CONTAINER_PORT"
+
+        # container_exec zfs list -t snapshot  # verify
+        ;;
+    monitor)
+        require_running_container
+        container_exec "$BZFS_JOBCONFIG" \
+            --monitor-src-snapshots --monitor-dst-snapshots --verbose \
+            --ssh-src-port="$BZFS_CONTAINER_PORT" \
+            --ssh-dst-port="$BZFS_CONTAINER_PORT"
         ;;
     -h | --help)
         usage
