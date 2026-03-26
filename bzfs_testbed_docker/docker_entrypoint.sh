@@ -96,7 +96,6 @@ fi
 sshd_pid=$!
 
 trap 'shutdown_services; exit 0' TERM INT
-
 wait -n "$cron_pid" "$sshd_pid" || true
 shutdown_services
 exit 1
