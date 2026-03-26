@@ -54,11 +54,11 @@ DOCKER_CLI="${DOCKER_CLI:-$(command -v nerdctl || command -v docker)}"  # Lima i
 DOCKER_CLI="sudo $DOCKER_CLI"
 
 container_exec() {
-    $DOCKER_CLI exec --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$BZFS_CONTAINER_NAME" ${1+"$@"}
+    $DOCKER_CLI exec --user="${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$BZFS_CONTAINER_NAME" ${1+"$@"}
 }
 
 require_running_container() {
-    if [[ "$($DOCKER_CLI inspect --format '{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+    if [[ "$($DOCKER_CLI inspect --format='{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
         echo "ERROR: Container '$BZFS_CONTAINER_NAME' is not running; use 'up' first" >&2
         exit 1
     fi
@@ -115,36 +115,36 @@ case "$1" in
         # run container if it doesn't exist yet
         if ! $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
             $DOCKER_CLI run -d \
-                --name "$BZFS_CONTAINER_NAME" \
-                --restart unless-stopped \
-                --env "BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
-                --env "BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
-                --env "BZFS_CONTAINER_USER_GID=$CONTAINER_USER_GID" \
-                --env "BZFS_CONTAINER_USER_HOME=$CONTAINER_USER_HOME" \
-                --env "BZFS_DOCKER_INSTALL_HPNSSH=$BZFS_DOCKER_INSTALL_HPNSSH" \
-                --env "BZFS_FAIL2BAN_ENABLED=$BZFS_FAIL2BAN_ENABLED" \
-                --env "BZFS_FAIL2BAN_BANTIME=$BZFS_FAIL2BAN_BANTIME" \
-                --env "BZFS_FAIL2BAN_MAXRETRY=$BZFS_FAIL2BAN_MAXRETRY" \
-                --env "BZFS_FAIL2BAN_FINDTIME=$BZFS_FAIL2BAN_FINDTIME" \
-                --env "BZFS_FAIL2BAN_IGNOREIP=$BZFS_FAIL2BAN_IGNOREIP" \
-                --env "BZFS_FAIL2BAN_PORT=2222" \
-                --publish "$BZFS_HOST_PORT:2222" \
-                --volume "$etc_ssh_volume_source:/etc/ssh:ro" \
-                --volume "$etc_hpnssh_volume_source:/etc/hpnssh:ro" \
-                --volume "$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
-                --volume "$CONTAINER_HOST_HOME/bzfs-config:/bzfs-config:ro" \
-                --volume "$CONTAINER_HOST_HOME/bzfs-job-logs:$CONTAINER_USER_HOME/bzfs-job-logs" \
-                --volume "$CONTAINER_HOST_HOME/bzfs-logs:$CONTAINER_USER_HOME/bzfs-logs" \
-                --volume "$CONTAINER_HOST_HOME/bzfs-var-log:/var/log" \
-                --volume /etc/hostid:/etc/hostid:ro \
-                --volume /etc/hostname:/etc/hostname:ro \
+                --name="$BZFS_CONTAINER_NAME" \
+                --restart=unless-stopped \
+                --env="BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
+                --env="BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
+                --env="BZFS_CONTAINER_USER_GID=$CONTAINER_USER_GID" \
+                --env="BZFS_CONTAINER_USER_HOME=$CONTAINER_USER_HOME" \
+                --env="BZFS_DOCKER_INSTALL_HPNSSH=$BZFS_DOCKER_INSTALL_HPNSSH" \
+                --env="BZFS_FAIL2BAN_ENABLED=$BZFS_FAIL2BAN_ENABLED" \
+                --env="BZFS_FAIL2BAN_BANTIME=$BZFS_FAIL2BAN_BANTIME" \
+                --env="BZFS_FAIL2BAN_MAXRETRY=$BZFS_FAIL2BAN_MAXRETRY" \
+                --env="BZFS_FAIL2BAN_FINDTIME=$BZFS_FAIL2BAN_FINDTIME" \
+                --env="BZFS_FAIL2BAN_IGNOREIP=$BZFS_FAIL2BAN_IGNOREIP" \
+                --env="BZFS_FAIL2BAN_PORT=2222" \
+                --publish="$BZFS_HOST_PORT:2222" \
+                --volume="$etc_ssh_volume_source:/etc/ssh:ro" \
+                --volume="$etc_hpnssh_volume_source:/etc/hpnssh:ro" \
+                --volume="$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
+                --volume="$CONTAINER_HOST_HOME/bzfs-config:/bzfs-config:ro" \
+                --volume="$CONTAINER_HOST_HOME/bzfs-job-logs:$CONTAINER_USER_HOME/bzfs-job-logs" \
+                --volume="$CONTAINER_HOST_HOME/bzfs-logs:$CONTAINER_USER_HOME/bzfs-logs" \
+                --volume="$CONTAINER_HOST_HOME/bzfs-var-log:/var/log" \
+                --volume=/etc/hostid:/etc/hostid:ro \
+                --volume=/etc/hostname:/etc/hostname:ro \
                 --uts=host \
-                --add-host "$(hostname):127.0.0.1" \
-                --device /dev/zfs:/dev/zfs \
+                --add-host="$(hostname):127.0.0.1" \
+                --device=/dev/zfs:/dev/zfs \
                 --privileged \
                 "$BZFS_DOCKER_IMAGE"
         # start container if it isn't running yet aka if it has been stopped
-        elif [[ "$($DOCKER_CLI inspect --format '{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+        elif [[ "$($DOCKER_CLI inspect --format='{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
             $DOCKER_CLI start "$BZFS_CONTAINER_NAME"
         fi
         ;;
@@ -157,8 +157,8 @@ case "$1" in
     shell)
         require_running_container
         $DOCKER_CLI exec -it \
-            --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
-            --workdir "$CONTAINER_USER_HOME" \
+            --user="${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
+            --workdir="$CONTAINER_USER_HOME" \
             "$BZFS_CONTAINER_NAME" \
             bash -l
         ;;
