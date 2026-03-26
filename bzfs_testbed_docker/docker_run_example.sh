@@ -128,8 +128,6 @@ case "$1" in
                 --env "BZFS_FAIL2BAN_FINDTIME=$BZFS_FAIL2BAN_FINDTIME" \
                 --env "BZFS_FAIL2BAN_IGNOREIP=$BZFS_FAIL2BAN_IGNOREIP" \
                 --env "BZFS_FAIL2BAN_PORT=2222" \
-                --privileged \
-                --device /dev/zfs:/dev/zfs \
                 --publish "$BZFS_HOST_PORT:2222" \
                 --volume "$etc_ssh_volume_source:/etc/ssh:ro" \
                 --volume "$etc_hpnssh_volume_source:/etc/hpnssh:ro" \
@@ -142,6 +140,8 @@ case "$1" in
                 --volume /etc/hostname:/etc/hostname:ro \
                 --uts=host \
                 --add-host "$(hostname):127.0.0.1" \
+                --device /dev/zfs:/dev/zfs \
+                --privileged \
                 "$BZFS_DOCKER_IMAGE"
         # start container if it isn't running yet aka if it has been stopped
         elif [[ "$($DOCKER_CLI inspect --format '{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
