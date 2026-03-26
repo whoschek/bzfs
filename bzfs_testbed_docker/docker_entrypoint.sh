@@ -29,6 +29,15 @@ ensure_container_user() {
     chmod u=r,g=r,o= /etc/sudoers.d/bzfs-container-user
 }
 
+# Install managed cron files
+install_cron_jobs() {
+    rm -f /etc/cron.d/bzfs-*
+    for file in /bzfs-config/cron.d/*; do
+        [[ -f "$file" ]] || continue
+        install -o root -g root -m u=rw,go=r "$file" "/etc/cron.d/bzfs-${file##*/}"
+    done
+}
+
 # Security policy: Ban an IP for <ban_time> minutes after <maxretry> failed SSH authentications within <findtime> seconds
 configure_fail2ban() {
     local fail2ban_enabled="${BZFS_FAIL2BAN_ENABLED:?BZFS_FAIL2BAN_ENABLED must not be empty}"
@@ -63,15 +72,6 @@ EOF
     rm -f /run/fail2ban/fail2ban.sock
     "$(command -v fail2ban-server)" -b --logtarget /var/log/fail2ban.log
     fail2ban-client ping > /dev/null
-}
-
-# Install managed cron files
-install_cron_jobs() {
-    rm -f /etc/cron.d/bzfs-*
-    for file in /bzfs-config/cron.d/*; do
-        [[ -f "$file" ]] || continue
-        install -o root -g root -m u=rw,go=r "$file" "/etc/cron.d/bzfs-${file##*/}"
-    done
 }
 
 # Stop cron and SSH daemon so PID 1 exits whenever either service stops/dies or the container is terminated
