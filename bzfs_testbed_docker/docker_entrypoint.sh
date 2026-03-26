@@ -74,7 +74,7 @@ install_cron_jobs() {
     done
 }
 
-# Stop cron and SSH daemon so PID 1 exits whenever either service stops or the container is terminated
+# Stop cron and SSH daemon so PID 1 exits whenever either service stops/dies or the container is terminated
 shutdown_services() {
     kill -TERM "$cron_pid" "$sshd_pid" 2> /dev/null || true
     wait "$cron_pid" "$sshd_pid" 2> /dev/null || true

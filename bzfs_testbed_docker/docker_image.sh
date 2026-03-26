@@ -35,9 +35,9 @@ DOCKER_CLI="${DOCKER_CLI:-$(command -v nerdctl || command -v docker)}"  # Lima i
 
 fetch_latest_stable_bzfs_tag() {
     git ls-remote --refs --tags --sort='version:refname' "$BZFS_GIT_REMOTE" "refs/tags/v*" |
-          sed 's#^[^[:space:]]*[[:space:]]refs/tags/##' |
-          grep -E '^v[0-9]+([.][0-9]+)*$' |
-          tail -n 1
+        sed 's#^[^[:space:]]*[[:space:]]refs/tags/##' |
+        grep -E '^v[0-9]+([.][0-9]+)*$' |
+        tail -n 1
 }
 
 host_platform() {

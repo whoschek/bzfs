@@ -141,11 +141,9 @@ case "$1" in
                 --uts=host \
                 --add-host "$(hostname):127.0.0.1" \
                 "$BZFS_DOCKER_IMAGE"
-            sleep 1
         # start container if it isn't running yet aka if it has been stopped
         elif [[ "$($DOCKER_CLI inspect --format '{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
             $DOCKER_CLI start "$BZFS_CONTAINER_NAME"
-            sleep 1
         fi
         ;;
     down)
