@@ -34,6 +34,7 @@ fi
 BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"
 BZFS_DOCKER_INSTALL_HPNSSH="${BZFS_DOCKER_INSTALL_HPNSSH:-false}"
 BZFS_CONTAINER_NAME="${BZFS_CONTAINER_NAME:-bzfs}"
+BZFS_CONTAINER_PORT="${BZFS_CONTAINER_PORT:-2222}"
 
 # If enabled ban an IP for 15 minutes after 10 failed SSH authentications within 5 minutes.
 BZFS_FAIL2BAN_ENABLED="${BZFS_FAIL2BAN_ENABLED:-false}"
@@ -90,10 +91,12 @@ case "$1" in
         done
 
         if [[ "$BZFS_DOCKER_INSTALL_HPNSSH" == "true" ]]; then
-            sudo sed -i '1i Port 2222' "$etc_hpnssh_volume_source/sshd_config"  # prepend port 2222
+            sshd_config="$etc_hpnssh_volume_source/sshd_config"
         else
-            sudo sed -i '1i Port 2222' "$etc_ssh_volume_source/sshd_config"  # prepend port 2222
+            sshd_config="$etc_ssh_volume_source/sshd_config"
         fi
+        sudo sed -i "1i Port $BZFS_CONTAINER_PORT" "$sshd_config"  # prepend internal port
+        sudo sed -i "1i Port 2222" "$sshd_config"  # prepend port 2222
 
         $DOCKER_CLI image ls  # list all docker images in the local registry
 
@@ -115,7 +118,7 @@ case "$1" in
                 --env "BZFS_FAIL2BAN_PORT=2222" \
                 --privileged \
                 --device /dev/zfs:/dev/zfs \
-                --publish "2222:2222" \
+                --publish "$BZFS_CONTAINER_PORT:2222" \
                 --volume "$etc_ssh_volume_source:/etc/ssh:ro" \
                 --volume "$etc_hpnssh_volume_source:/etc/hpnssh:ro" \
                 --volume "$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
@@ -147,8 +150,8 @@ case "$1" in
         container_exec zfs list  # verify
         container_exec /bzfs/bzfs_testbed/bzfs_job_testbed.py \
             --create-src-snapshots --replicate  --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots \
-            --ssh-src-port=2222 \
-            --ssh-dst-port=2222
+            --ssh-src-port="$BZFS_CONTAINER_PORT" \
+            --ssh-dst-port="$BZFS_CONTAINER_PORT"
 
         # container_exec zfs list -t snapshot  # verify
         ;;
