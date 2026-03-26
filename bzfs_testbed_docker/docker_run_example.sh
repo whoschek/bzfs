@@ -5,7 +5,7 @@
 # Works out of the box on VMs created via ../lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
 # is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
 #
-# If ~/bzfs-config/cron.d exists, container startup copies its files into /etc/cron.d.
+# If ~/bzfs/bzfs-config/cron.d exists, container startup copies its files into /etc/cron.d.
 # See ./cronjob_example for a documented cron file that periodically runs the same job as `runjob`.
 # If you change the image, managed cron files, port env vars or similar, run `down` and then `up` to recreate the
 # container.
@@ -33,6 +33,7 @@ fi
 
 BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"
 BZFS_DOCKER_INSTALL_HPNSSH="${BZFS_DOCKER_INSTALL_HPNSSH:-false}"
+BZFS_CONTAINER_NAME="${BZFS_CONTAINER_NAME:-bzfs}"
 
 # If enabled ban an IP for 15 minutes after 10 failed SSH authentications within 5 minutes.
 BZFS_FAIL2BAN_ENABLED="${BZFS_FAIL2BAN_ENABLED:-false}"
@@ -41,38 +42,38 @@ BZFS_FAIL2BAN_MAXRETRY="${BZFS_FAIL2BAN_MAXRETRY:-10}"
 BZFS_FAIL2BAN_FINDTIME="${BZFS_FAIL2BAN_FINDTIME:-5m}"
 BZFS_FAIL2BAN_IGNOREIP="${BZFS_FAIL2BAN_IGNOREIP:-}"  # Example safe allowlist: '127.0.0.1/8 ::1'
 
-CONTAINER_NAME=bzfs
 CONTAINER_USER_NAME="$(id -un)"
 CONTAINER_USER_UID="$(id -u)"
 CONTAINER_USER_GID="$(id -g)"
 CONTAINER_USER_HOME="$HOME"
+CONTAINER_HOST_HOME="${CONTAINER_USER_HOME}/${BZFS_CONTAINER_NAME}"
 DOCKER_CLI="${DOCKER_CLI:-$(command -v nerdctl || command -v docker)}"  # Lima includes nerdctl which is compatible w/ docker
 DOCKER_CLI="sudo $DOCKER_CLI"
 
 container_exec() {
-    $DOCKER_CLI exec --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$CONTAINER_NAME" ${1+"$@"}
+    $DOCKER_CLI exec --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$BZFS_CONTAINER_NAME" ${1+"$@"}
 }
 
 require_running_container() {
-    if [[ "$($DOCKER_CLI inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
-        echo "ERROR: Container '$CONTAINER_NAME' is not running; use 'up' first" >&2
+    if [[ "$($DOCKER_CLI inspect --format '{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+        echo "ERROR: Container '$BZFS_CONTAINER_NAME' is not running; use 'up' first" >&2
         exit 1
     fi
 }
 
 case "$1" in
     up)
-        mkdir -p "$CONTAINER_USER_HOME/bzfs-config/etc" "$CONTAINER_USER_HOME/bzfs-config/cron.d"
-        mkdir -p "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs" "$CONTAINER_USER_HOME/bzfs-var-log"
-        chmod u=rwx,go= "$CONTAINER_USER_HOME/bzfs-job-logs" "$CONTAINER_USER_HOME/bzfs-logs" "$CONTAINER_USER_HOME/bzfs-var-log"
+        mkdir -p "$CONTAINER_HOST_HOME/bzfs-config/etc" "$CONTAINER_HOST_HOME/bzfs-config/cron.d"
+        mkdir -p "$CONTAINER_HOST_HOME/bzfs-job-logs" "$CONTAINER_HOST_HOME/bzfs-logs" "$CONTAINER_HOST_HOME/bzfs-var-log"
+        chmod u=rwx,go= "$CONTAINER_HOST_HOME/bzfs-job-logs" "$CONTAINER_HOST_HOME/bzfs-logs" "$CONTAINER_HOST_HOME/bzfs-var-log"
 
         # configure /etc/ssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
-        etc_ssh_volume_source="$CONTAINER_USER_HOME/bzfs-config/etc/ssh"
+        etc_ssh_volume_source="$CONTAINER_HOST_HOME/bzfs-config/etc/ssh"
         sudo rm -rf "$etc_ssh_volume_source"
         sudo cp -a /etc/ssh "$etc_ssh_volume_source"
 
         # configure /etc/hpnssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
-        etc_hpnssh_volume_source="$CONTAINER_USER_HOME/bzfs-config/etc/hpnssh"
+        etc_hpnssh_volume_source="$CONTAINER_HOST_HOME/bzfs-config/etc/hpnssh"
         sudo rm -rf "$etc_hpnssh_volume_source"
         sudo cp -a /etc/ssh "$etc_hpnssh_volume_source"
         sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' "$etc_hpnssh_volume_source/sshd_config"  # change all occurrences of /etc/ssh to /etc/hpnssh
@@ -97,9 +98,9 @@ case "$1" in
         $DOCKER_CLI image ls  # list all docker images in the local registry
 
         # run container if it doesn't exist yet
-        if ! $DOCKER_CLI container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
+        if ! $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
             $DOCKER_CLI run -d \
-                --name "$CONTAINER_NAME" \
+                --name "$BZFS_CONTAINER_NAME" \
                 --restart unless-stopped \
                 --env "BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
                 --env "BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
@@ -118,10 +119,10 @@ case "$1" in
                 --volume "$etc_ssh_volume_source:/etc/ssh:ro" \
                 --volume "$etc_hpnssh_volume_source:/etc/hpnssh:ro" \
                 --volume "$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
-                --volume "$CONTAINER_USER_HOME/bzfs-config:/bzfs-config:ro" \
-                --volume "$CONTAINER_USER_HOME/bzfs-job-logs:$CONTAINER_USER_HOME/bzfs-job-logs" \
-                --volume "$CONTAINER_USER_HOME/bzfs-logs:$CONTAINER_USER_HOME/bzfs-logs" \
-                --volume "$CONTAINER_USER_HOME/bzfs-var-log:/var/log" \
+                --volume "$CONTAINER_HOST_HOME/bzfs-config:/bzfs-config:ro" \
+                --volume "$CONTAINER_HOST_HOME/bzfs-job-logs:$CONTAINER_USER_HOME/bzfs-job-logs" \
+                --volume "$CONTAINER_HOST_HOME/bzfs-logs:$CONTAINER_USER_HOME/bzfs-logs" \
+                --volume "$CONTAINER_HOST_HOME/bzfs-var-log:/var/log" \
                 --volume /etc/hostid:/etc/hostid:ro \
                 --volume /etc/hostname:/etc/hostname:ro \
                 --uts=host \
@@ -129,16 +130,16 @@ case "$1" in
                 "$BZFS_DOCKER_IMAGE"
             sleep 1
         # start container if it isn't running yet aka if it has been stopped
-        elif [[ "$($DOCKER_CLI inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
-            $DOCKER_CLI start "$CONTAINER_NAME"
+        elif [[ "$($DOCKER_CLI inspect --format '{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+            $DOCKER_CLI start "$BZFS_CONTAINER_NAME"
             sleep 1
         fi
 
         ;;
     down)
-        if $DOCKER_CLI container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
-            $DOCKER_CLI stop "$CONTAINER_NAME"
-            $DOCKER_CLI rm "$CONTAINER_NAME"
+        if $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
+            $DOCKER_CLI stop "$BZFS_CONTAINER_NAME"
+            $DOCKER_CLI rm "$BZFS_CONTAINER_NAME"
         fi
         ;;
     runjob)
@@ -156,7 +157,7 @@ case "$1" in
         $DOCKER_CLI exec -it \
             --user "${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
             --workdir "$CONTAINER_USER_HOME" \
-            "$CONTAINER_NAME" \
+            "$BZFS_CONTAINER_NAME" \
             bash -l
         ;;
     -h | --help)

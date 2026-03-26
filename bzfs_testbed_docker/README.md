@@ -84,13 +84,13 @@ BZFS_DOCKER_INSTALL_HPNSSH=true BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_
 
 `up` performs the following:
 
-- Prepares `~/bzfs-config/etc/ssh` and `~/bzfs-config/etc/hpnssh` on the host and configures whether OpenSSH or hpnsshd
-  listens on port `2222` inside of the container.
-- Creates host directories `~/bzfs-config`, `~/bzfs-job-logs`, `~/bzfs-logs`, and `~/bzfs-var-log`, if they do not
-  already exist.
+- Prepares `~/bzfs/bzfs-config/etc/ssh` and `~/bzfs/bzfs-config/etc/hpnssh` on the host and configures whether OpenSSH
+  or hpnsshd listens on port `2222` inside of the container.
+- Creates host directories `~/bzfs/bzfs-config`, `~/bzfs/bzfs-job-logs`, `~/bzfs/bzfs-logs`, and `~/bzfs/bzfs-var-log`,
+  if they do not already exist.
 - Starts a privileged container named `bzfs`.
 - Bind-mounts host SSH config, user SSH keys, config files and log directories.
-- Loads managed cron files from `~/bzfs-config/cron.d` during container startup.
+- Loads managed cron files from `~/bzfs/bzfs-config/cron.d` during container startup.
 - Exits the container if `cron` or the selected SSH daemon exits.
 
 Run the example job after all peer containers are up:
@@ -116,20 +116,20 @@ Remove the container:
 
 ## Cron Jobs
 
-If `~/bzfs-config/cron.d/` exists, container startup copies its files into `/etc/cron.d/` inside the container. To
+If `~/bzfs/bzfs-config/cron.d/` exists, container startup copies its files into `/etc/cron.d/` inside the container. To
 install the included [`cronjob_example`](cronjob_example):
 
 ```bash
-mkdir -p ~/bzfs-config/cron.d
-cp cronjob_example ~/bzfs-config/cron.d/
+mkdir -p ~/bzfs/bzfs-config/cron.d
+cp cronjob_example ~/bzfs/bzfs-config/cron.d/
 ```
 
 Edit `USER_NAME` and `USER_HOME` in that file, then recreate the container so startup reloads the managed cron files:
 
 ```bash
-nano ~/bzfs-config/cron.d/cronjob_example
+nano ~/bzfs/bzfs-config/cron.d/cronjob_example
 ./docker_run_example.sh down
 ./docker_run_example.sh up
 ```
 
-The cron job writes its output below `~/bzfs-job-logs/cron/`.
+The cron job writes its output below `~/bzfs/bzfs-job-logs/cron/`.
