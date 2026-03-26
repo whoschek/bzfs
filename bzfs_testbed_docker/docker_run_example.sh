@@ -114,7 +114,7 @@ case "$1" in
 
         # run container if it doesn't exist yet
         if ! $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
-            $DOCKER_CLI run -d \
+            $DOCKER_CLI run --detach \
                 --name="$BZFS_CONTAINER_NAME" \
                 --restart=unless-stopped \
                 --env="BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
