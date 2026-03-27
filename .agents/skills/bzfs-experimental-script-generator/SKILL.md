@@ -1,6 +1,10 @@
 ---
 name: bzfs-experimental-script-generator
-description: 'Generate or change idiomatic minimal Bash and Python scripts that use bzfs and bzfs_jobrunner for ZFS snapshot management workflows in a sandboxed test VM: snapshot creation, replication/backup, restore rehearsal, snapshot pruning, snapshot monitoring, and snapshot list comparison. Use when asked to create or change ad hoc/manual or periodic/automatic scripts for these tasks. Do not use this skill for general ZFS administration or non-bzfs tooling.'
+description:
+  Generate or change idiomatic minimal Bash and Python scripts that use bzfs and bzfs_jobrunner for ZFS snapshot
+  management workflows in a sandboxed test VM: snapshot creation, replication/backup, restore rehearsal, snapshot
+  pruning, snapshot monitoring, and snapshot list comparison. Use when asked to create or change ad hoc/manual or
+  periodic/automatic scripts for these tasks. Do not use this skill for general ZFS administration or non-bzfs tooling.
 ---
 
 # bzfs Experimental Script Generator
@@ -15,19 +19,19 @@ action routing and dict construction/format/passing.
 
 ## Hard Safety Rules
 
-01. No TDD by default: Do not create unit tests or integregation tests unless the User explicitly requests it.
-02. Generate scripts only. Never execute generated scripts.
-03. Never execute CLI commands while using this skill, except optional read-only `zfs list ...` and `zpool list ...`
+1.  No TDD by default: Do not create unit tests or integregation tests unless the User explicitly requests it.
+2.  Generate scripts only. Never execute generated scripts.
+3.  Never execute CLI commands while using this skill, except optional read-only `zfs list ...` and `zpool list ...`
     commands for pool/dataset/snapshot discovery.
-04. Classify create/replicate/prune/rollback/restore flows as state-changing.
-05. For state-changing flows, default scripts to dry-run:
+4.  Classify create/replicate/prune/rollback/restore flows as state-changing.
+5.  For state-changing flows, default scripts to dry-run:
     - `bzfs ... --dryrun` (default `send`; use `--dryrun=recv` only if asked).
     - `bzfs_jobrunner ... --dryrun`.
-06. Use `DRYRUN` (Bash) / `dryrun` (Python) as the dry-run toggle variable. Keep safe defaults enabled (`DRYRUN=1`,
+6.  Use `DRYRUN` (Bash) / `dryrun` (Python) as the dry-run toggle variable. Keep safe defaults enabled (`DRYRUN=1`,
     `dryrun=True`).
-07. Keep destructive flags (`--force*`, `--delete-*`) opt-in, documented, and disabled by default.
-08. Prefer `bzfs` and `bzfs_jobrunner` over direct mutating `zfs` commands.
-09. Keep scope limited to bzfs and bzfs_jobrunner snapshot management workflows; decline general ZFS administration or
+7.  Keep destructive flags (`--force*`, `--delete-*`) opt-in, documented, and disabled by default.
+8.  Prefer `bzfs` and `bzfs_jobrunner` over direct mutating `zfs` commands.
+9.  Keep scope limited to bzfs and bzfs_jobrunner snapshot management workflows; decline general ZFS administration or
     non-bzfs tooling requests.
 10. Do not favor Bash over Python; provide both Bash and Python script outputs unless the user asks for one language.
 11. For `bzfs_jobrunner` scripts, mirror the action set from `bzfs_testbed/bzfs_job_testbed.py`.
@@ -43,21 +47,18 @@ action routing and dict construction/format/passing.
 ## Script Generation Workflow
 
 1. Gather required inputs:
-
    - datasets, recursion scope, hostnames and their roles, replication schedule, retention plans, monitoring plans, log
      path.
    - If inputs are missing, ask the User corresponding questions via the `request_user_input` tool or similar, if
      available.
 
 2. Classify the request:
-
    - `read_only`: snapshot list compare, snapshot monitoring, inventory/listing.
    - `state_changing`: snapshot creation, replication/backup, snapshot pruning, restore.
 
 3. Choose the CLI:
 
 - Prefer direct `bzfs` for:
-
   - adhoc/manual snapshot creation,
   - adhoc/manual replication or restore,
   - adhoc/manual snapshot pruning,
@@ -65,14 +66,12 @@ action routing and dict construction/format/passing.
   - snapshot list comparison.
 
 - Prefer `bzfs_jobrunner` for:
-
   - periodic or automatic workflows,
   - multi-host or fleet-wide orchestration,
   - one shared jobconfig that drives create snapshot, replicate, prune, and monitor actions,
   - cron/systemd style wrappers around a shared Python config.
 
 4. `bzfs_jobrunner` Host filtering:
-
    - This is a complex area. Think deeply. Source-side actions usually scope with `--src-host`, destination-side actions
      with `--dst-host`. But do not follow this template blindly; depending on which specific source/destination host
      subsets the workflow is actually intended for (for example third-party-host orchestration, testing one src -> dst
@@ -81,7 +80,6 @@ action routing and dict construction/format/passing.
    - You have plenty of time; go slow and make sure everything is correct.
 
 5. Generate code:
-
    - For `bzfs_jobrunner` NEVER merge any job actions (for example `--create-src-snapshots`, `--replicate`,
      `--prune-src-snapshots`, `--prune-src-bookmarks`, `--prune-dst-snapshots`, `--monitor-src-snapshots`,
      `--monitor-dst-snapshots`, `--dryrun`, `--verbose`) into the underlying jobconfig script code; instead keep them in
@@ -101,7 +99,6 @@ action routing and dict construction/format/passing.
    - Return paired Bash and Python variants by default.
 
 6. Add operator gates:
-
    - A single dry-run switch defaulting to enabled.
    - Printed command preview before execution.
    - For Python previews, use `shlex.join(cmd)`.
@@ -109,7 +106,6 @@ action routing and dict construction/format/passing.
      explicitly requested otherwise.
 
 7. Return three artifacts:
-
    - scripts (Bash + Python, unless one language is explicitly requested),
    - what it does,
    - exactly what must be edited before first run.

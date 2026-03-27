@@ -1,6 +1,9 @@
 ---
 name: bzfs-improve-code-coverage
-description: Improve code coverage in this repository with project-approved coverage commands and meaningful test additions. Use when asked to increase coverage, identify uncovered branches/functions, or report before-vs-after coverage percentages.
+description:
+  Improve code coverage in this repository with project-approved coverage commands and meaningful test additions. Use
+  when asked to increase coverage, identify uncovered branches/functions, or report before-vs-after coverage
+  percentages.
 ---
 
 # bzfs Improve Code Coverage

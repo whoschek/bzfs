@@ -20,11 +20,11 @@
 
 - [ ] I have added [tests](https://github.com/whoschek/bzfs/blob/main/AGENTS.md#how-to-write-tests) to cover my changes.
 - [ ] All [Change Validation Workflow](https://github.com/whoschek/bzfs/blob/main/AGENTS.md#change-validation-workflow)
-  checks passed.
+      checks passed.
 - [ ] All [Commit Workflow](https://github.com/whoschek/bzfs/blob/main/AGENTS.md#commit-workflow) checks passed.
 - [ ] `pre-commit run --all-files --hook-stage manual` passed.
 - [ ] `bzfs_test_mode='' ./test.sh` integration tests passed.
 - [ ] I have updated the documentation accordingly.
 - [ ] I have read the [**contributing** document](https://github.com/whoschek/bzfs/blob/main/CONTRIBUTING.md).
 - [ ] All commit messages are
-  [properly formatted and contain Signed-off-by](https://github.com/whoschek/bzfs/blob/main/AGENTS.md#commit-workflow).
+      [properly formatted and contain Signed-off-by](https://github.com/whoschek/bzfs/blob/main/AGENTS.md#commit-workflow).

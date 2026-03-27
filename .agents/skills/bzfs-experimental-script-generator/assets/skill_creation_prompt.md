@@ -7,9 +7,7 @@
 - Do not use the skill for general ZFS administration or non-bzfs tooling.
 
 - Choose the CLI:
-
   - Prefer direct `bzfs` for:
-
     - adhoc/manual snapshot creation,
     - adhoc/manual replication or restore,
     - adhoc/manual snapshot pruning,
@@ -17,14 +15,12 @@
     - snapshot list comparison.
 
   - Prefer `bzfs_jobrunner` for:
-
     - periodic or automatic workflows,
     - multi-host or fleet-wide orchestration,
     - one shared jobconfig that drives create snapshot, replicate, prune, and monitor actions,
     - cron/systemd style wrappers around a shared Python config.
 
 - `bzfs_jobrunner` Host filtering:
-
   - This is a complex area. Think deeply. Source-side actions usually scope with `--src-host`, destination-side actions
     with `--dst-host`. But do not follow this template blindly; depending on which specific source/destination host
     subsets the workflow is actually intended for (for example third-party-host orchestration, testing one src -> dst
@@ -56,7 +52,7 @@
   skill MUST NEVER execute CLI commands except for read-only `zfs list` and read-only `zpool list` - the skill shall
   ONLY generate scripts that Users carefully review and maybe later test according to their own judgement.
 
-- Spend *A LOT OF TIME* to think this through very deeply, spend at least 30 minutes of work on this, because the issues
+- Spend _A LOT OF TIME_ to think this through very deeply, spend at least 30 minutes of work on this, because the issues
   are subtle and complex and safety critical and any change here has high impact.
 
 - If you have questions regarding the semantics of the underlying `zfs` CLI, consult the ../zfs/man directory.

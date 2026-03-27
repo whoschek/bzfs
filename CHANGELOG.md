@@ -168,7 +168,7 @@ Removed CLI options that were deprecated in version ≤ 1.12.0:
 - [bzfs] Replaced `--create-src-snapshots-enable-snapshots-changed-cache` CLI option with `--cache-snapshots`. The old
   flag will remain available in deprecated state for the time being (yet has no effect anymore), and will be removed in
   a future release.
-- [bzfs] Fixed `--cache-snapshots` such that it now *simply works*.
+- [bzfs] Fixed `--cache-snapshots` such that it now _simply works_.
 - [bzfs] [perf] Made `--cache-snapshots` also boost the performance of replication and `--monitor-snapshots`.
 - [bzfs] [perf] `--cache-snapshots`: No need to require the `extensible_dataset` ZFS feature to enable caching.
 - [bzfs] Replaced the `--no-create-bookmarks` CLI option with `--create-bookmarks=none` and added

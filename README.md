@@ -566,6 +566,7 @@ usage: bzfs [-h]
             [--ssh-control-persist-secs INT]
             [--threads INT[%]]
             [--max-concurrent-ssh-sessions-per-tcp-connection INT]
+            [--s2s {off,pull,push}]
             [--bwlimit STRING]
             [--no-estimate-send-size]
             [--compression-program {zstd,lz4,pzstd,pigz,gzip,-}]
@@ -1986,6 +1987,31 @@ usage: bzfs [-h]
     operation such that the dedicated connection is never used by any other concurrent SSH
     session, effectively ignoring the value of the
     --max-concurrent-ssh-sessions-per-tcp-connection parameter in the ZFS send/receive case.
+
+<!-- -->
+
+<div id="--s2s"></div>
+
+**--s2s** *{off,pull,push}*
+
+*  Efficient Server-to-Server replication bulk data transfer mode for cases that traditionally
+    used pull-push mode (default: off).
+
+    * `off`: Keeps existing behavior where the `zfs send` stream may pass through the
+    intermediate initiator host in pull-push mode, potentially creating a central bandwidth
+    bottleneck.
+
+    * `pull`: Tells the destination host to pull the `zfs send` stream directly from the
+    source host; requires admin setup such that the destination user+host can `ssh` into the
+    source host.
+
+    * `push`: Tells the source host to push the `zfs send` stream directly to the destination
+    host; requires admin setup such that the source user+host can `ssh` into the destination
+    host.
+
+    * Note: Orchestration continues to be performed by the initiator regardless of --s2s mode.
+    This option has no effect unless both replication endpoints are remote. --pv* progress
+    reporting and --bwlimit options are ignored/disabled in s2s modes.
 
 <!-- -->
 

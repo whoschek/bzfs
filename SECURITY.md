@@ -28,11 +28,11 @@ Instead, please report them via [GitHub Security Advisory](https://github.com/wh
 
 Only the following versions are eligible for security updates:
 
-| Version | Supported |
-| -- | -- |
-| Latest release | ✅ |
-| Development commits (on main branch) | ✅ |
-| All other versions | ❌ |
+| Version                              | Supported |
+| ------------------------------------ | --------- |
+| Latest release                       | ✅        |
+| Development commits (on main branch) | ✅        |
+| All other versions                   | ❌        |
 
 ## Security Best Practices
 

@@ -67,8 +67,8 @@ To understand the system's architecture and features, follow these steps:
 - **Instruction Precedence:** If there is any conflict, the User's explicit requests for the current session take
   precedence over any `AGENTS.md` rule.
 - For tasks that only involve review, analysis, explanation, or design proposals without modifying repository files, you
-  may ignore the *Change Validation Workflow*, *Core Software Development Workflow*, and *Commit Workflow*. Instead,
-  apply the *Step by Step Reasoning Workflow* and focus on correctness of reasoning.
+  may ignore the _Change Validation Workflow_, _Core Software Development Workflow_, and _Commit Workflow_. Instead,
+  apply the _Step by Step Reasoning Workflow_ and focus on correctness of reasoning.
 - If the User literally requests `continue nonstop`, then go ahead and **safely continue** working until the acceptance
   criteria are satisfied, without asking the User again whether you should continue - the answer is always implicitly
   `continue`.
@@ -100,7 +100,7 @@ To understand the system's architecture and features, follow these steps:
 
 # Command Verification Rules
 
-- A *verification command* is a CLI command whose purpose is to check or validate changes, e.g. unit tests, integration
+- A _verification command_ is a CLI command whose purpose is to check or validate changes, e.g. unit tests, integration
   tests, smoke tests, functional tests, `pre-commit`.
 - **NEVER fabricate having run a command or its results. NEVER fabricate exit code `0` or any other exit code.**
 - If it isn't feasible to run the command (e.g. missing tools, permissions, or environment restrictions), then you MUST
@@ -122,19 +122,17 @@ To validate your changes, you MUST follow this exact sequence:
    active so that all tools and pre-commit hooks run consistently.
 
 3. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite.
-
    - Apply the [Command Verification Rules](#command-verification-rules).
    - If the exit code is non-zero, iteratively fix the source code and re-run until the exit code is `0` (unless a
      failure is intentionally expected by TDD design).
 
 4. **Stage Untracked Files:** Run `git add <paths>` for any new or renamed files that are part of this change, but
    exclude the files in `lab/` and `_tmp/`. This ensures that subsequent `pre-commit` checks only see relevant files.
-   *Note:* `pre-commit` only processes tracked files, even with `--all-files`.
+   _Note:_ `pre-commit` only processes tracked files, even with `--all-files`.
 
 5. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run all hooks specified in
    `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting with `ruff`, formatting with
    `black`, type checking with `mypy`.
-
    - Apply the [Command Verification Rules](#command-verification-rules).
    - If the exit code is non-zero, iteratively fix all reported issues and re-run until the exit code is `0`.
 
@@ -150,7 +148,6 @@ To validate your changes, you MUST follow this exact sequence:
    setup and execution. Unlike the unit tests, the smoke tests, functional tests and other integration tests require
    that the `zfs` CLI is installed, and ZFS admin permissions are available, so by default stick to unit tests
    (`bzfs_test_mode=unit`) unless instructed otherwise.
-
    - Apply the [Command Verification Rules](#command-verification-rules) when running these test commands.
 
 # Core Software Development Workflow
@@ -158,7 +155,6 @@ To validate your changes, you MUST follow this exact sequence:
 For tasks that change code, tests, or scripts in this repository, you MUST follow this exact sequence:
 
 1. **Getting up to Speed:**
-
    - Read the git log to get up to speed on what was recently worked on.
    - If the User literally requests `plan2go=<path/to/plan.md>`:
      - If `<path/to/plan.md>` does not exist:
@@ -193,7 +189,6 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
    (tests must initially fail as expected) using the [Change Validation Workflow](#change-validation-workflow) with
    `bzfs_test_mode=unit` by default. Implement minimal code to reach green (tests must pass). Then re-run the
    [Change Validation Workflow](#change-validation-workflow).
-
    - For truly trivial, mechanical changes (e.g., fixing a typo in an existing test name or log message), you may treat
      existing tests as sufficient and skip adding new tests, but you MUST still run the
      [Change Validation Workflow](#change-validation-workflow). Err on the side of treating tasks as non‑trivial.
@@ -250,7 +245,7 @@ Before committing any changes, you MUST follow this exact sequence:
 ## How to Find and Fix Bugs
 
 - **Analyze:** If you are tasked to identify or fix a bug, collect, combine and analyze error logs, related issues, bug
-  reports, recent changes, git diffs, and external data. Think hard to understand *why* the bug occurs, not just *what*
+  reports, recent changes, git diffs, and external data. Think hard to understand _why_ the bug occurs, not just _what_
   it does.
 - **Analyze Complex Bugs:** Before claiming a complex bug, meticulously cross-check and validate it against the existing
   unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug" covered by a
@@ -271,8 +266,8 @@ Before committing any changes, you MUST follow this exact sequence:
 - **Fit In:** New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
   `bzfs_tests/itest/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included
   in the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
-- **Place Expected before Actual value:** When calling unittest `assert*Equal()` methods, ensure that the *first*
-  argument is the *expected* value, and the *second* argument is the *actual* value, not the other way round.
+- **Place Expected before Actual value:** When calling unittest `assert*Equal()` methods, ensure that the _first_
+  argument is the _expected_ value, and the _second_ argument is the _actual_ value, not the other way round.
 - Integration tests should not use mocking or stubbing; use the real unmodified APIs/CLIs instead.
 
 ## How to Write Code
@@ -284,9 +279,9 @@ Before committing any changes, you MUST follow this exact sequence:
   before the change. For example, NEVER add code comments that mention what you added or deleted or changed, NEVER add
   'used to do X, now does Y'. Instead, formulate code comments such that they are useful to readers who care about the
   current version but do not know or care about prior versions.
-- **Default to Immutability (except in test classes):** To reduce complexity, mark *new* long‑lived variables as `Final`
-  (module globals, class attributes, and `self.*` fields set in `__init__`) unless they must rebind. Mark *new* classes
-  `@final` and *new* dataclasses with `frozen=True` unless mutation or subclassing is required by design.
+- **Default to Immutability (except in test classes):** To reduce complexity, mark _new_ long‑lived variables as `Final`
+  (module globals, class attributes, and `self.*` fields set in `__init__`) unless they must rebind. Mark _new_ classes
+  `@final` and _new_ dataclasses with `frozen=True` unless mutation or subclassing is required by design.
 - **Linter Suppressions: Last Resort Only:**
   - Do not add `# noqa:`, `# type:` annotations, etc, unless the linter cannot be satisfied in a reasonable way, in
     which case keep the annotation on the specific line and append a brief comment explaining the reason (≤ 10 words).
