@@ -26,7 +26,7 @@ default_install_hook_types:
   - commit-msg
 repos:
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.0
+    rev: v8.30.1
     hooks:                              # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
       - id: gitleaks                    # defaults to: gitleaks git --pre-commit --redact --staged --verbose
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -59,14 +59,14 @@ repos:
         language: golang
         entry: shfmt
         types: [shell]
-        args: [                         # See https://github.com/mvdan/sh/blob/v3.12.0/cmd/shfmt/shfmt.1.scd
+        args: [                         # See https://github.com/mvdan/sh/blob/v3.13.0/cmd/shfmt/shfmt.1.scd
           --write,                      # Change files instead of printing to stdout
           --indent=4,                   # Use 4-space indentation for shell scripts
           --keep-padding,               # Preserve comment padding
           --space-redirects,            # Keep space after redirection operators
           --case-indent,                # Indent switch cases
         ]
-        additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@v3.12.0]
+        additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@v3.13.0]
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:
@@ -101,7 +101,7 @@ repos:
         stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
       # config options like `force_grid_wrap` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.7
+    rev: v0.15.8
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
@@ -120,7 +120,7 @@ repos:
         entry: pyrefly infer --containers=true
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         language: python
-        additional_dependencies: ['pyrefly==0.56.0']
+        additional_dependencies: ['pyrefly==0.57.1']
         types: [python]
         pass_filenames: false
       - id: pyrefly-check
@@ -128,7 +128,7 @@ repos:
         entry: pyrefly check
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         language: python
-        additional_dependencies: ['pyrefly==0.56.0']
+        additional_dependencies: ['pyrefly==0.57.1']
         types: [python]
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -173,7 +173,7 @@ repos:
       - id: forbid-ambiguous-characters
         name: "forbid ambiguous characters"
         language: pygrep
-        entry: '…|—|–|“|”|‘|’|→'             # replace ambiguous with unambiguous characters (em dash, curly quotes, etc)
+        entry: '…|—|–|“|”|‘|’|→'                # replace ambiguous with unambiguous characters (em dash, curly quotes, etc)
         exclude: '^\.pre-commit-config\.yaml$'
         types_or: [python, shell, markdown, yaml, toml]
   - repo: local
@@ -200,7 +200,7 @@ repos:
   - repo: https://github.com/psf/black
     rev: 25.11.0
     hooks:
-      - id: black                  # Run `black` Python code formatter
+      - id: black                               # Run `black` Python code formatter
       # style options like `line_length` live in pyproject.toml
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.10.0
