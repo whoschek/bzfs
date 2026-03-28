@@ -13,6 +13,11 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/bzfs
+    permissions:
+      id-token: write # for PyPI's trusted publishing
     steps:
       - uses: actions/checkout@v6
         with:
@@ -30,6 +35,4 @@ jobs:
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # aka v1.13.0; see https://github.com/pypa/gh-action-pypi-publish
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
           verbose: true
