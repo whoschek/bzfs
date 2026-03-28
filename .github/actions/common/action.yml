@@ -34,7 +34,7 @@ runs:
       shell: bash
       run: echo ${{ github.sha }}
     - name: Set up Python ${{ inputs.python-version }}
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # aka v6.2.0
       with:
         python-version: ${{ inputs.python-version }}
     - name: Install test dependencies

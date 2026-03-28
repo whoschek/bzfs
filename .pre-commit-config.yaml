@@ -84,9 +84,9 @@ repos:
       - id: actionlint                  # Validate semantics (and some syntax) of GitHub Workflow YAML files
         args: [--shellcheck=.venv/bin/shellcheck]
   # - repo: https://github.com/woodruffw/zizmor-pre-commit  # also see https://github.com/zizmorcore/zizmor
-  #   rev: v1.22.0
+  #   rev: v1.23.1
   #   hooks:
-  #     - id: zizmor                     # Validate syntax of GitHub Workflow YAML files
+  #     - id: zizmor                              # Validate syntax of GitHub Workflow YAML files
   #       args: [--fix=all]
   - repo: https://github.com/PyCQA/docformatter
     rev: v1.7.7

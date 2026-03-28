@@ -340,3 +340,6 @@ python-version = "3.9"
 #errors = { deprecated = "error" }
 #project-includes = ["**/bzfs_*/**"]
 project-excludes = ["bzfs_testbed/bzfs_job_testbed.py", "**/.venv/**"]
+
+[tool.uv]
+exclude-newer = "7 days"

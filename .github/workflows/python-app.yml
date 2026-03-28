@@ -115,7 +115,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: &actions_checkout actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # aka v6.0.2
         with:
           persist-credentials: false
       - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -153,11 +153,13 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Show iteration info ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-        run: echo "Now running iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}"
+        run: echo "Now running iteration ${MATRIX_ITERATION} of ${NUM_RUNS}"
+        env:
+          MATRIX_ITERATION: ${{ matrix.iteration }}
       - name: Upgrade zfs kernel + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
@@ -217,7 +219,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Upgrade zfs kernel + userland to specific upstream zfs version
@@ -265,7 +267,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Upgrade zfs kernel + userland to specific upstream zfs version
@@ -313,7 +315,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Upgrade zfs kernel + userland to specific upstream zfs version
@@ -361,7 +363,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Upgrade zfs kernel + userland to specific upstream zfs version
@@ -408,7 +410,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -448,7 +450,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -498,7 +500,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -541,7 +543,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Run tests via Lima
@@ -564,7 +566,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Run tests via Lima
@@ -587,7 +589,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Run tests via Lima
@@ -610,7 +612,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Run tests via Lima
@@ -633,12 +635,12 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: vmactions/freebsd-vm@v1 # see https://github.com/vmactions/freebsd-vm
+        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@4807432c7cab1c3f97688665332c0b932062d31f # aka v1.4.3; see https://github.com/vmactions/freebsd-vm
         with:
           release: "15.0"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
@@ -658,12 +660,12 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: vmactions/freebsd-vm@v1 # see https://github.com/vmactions/freebsd-vm
+        uses: *vmactions_freebsd_vm
         with:
           release: "14.3"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
@@ -683,12 +685,12 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: vmactions/freebsd-vm@v1.3.8 # see https://github.com/vmactions/freebsd-vm
+        uses: vmactions/freebsd-vm@ba6bedee4a4884da2b782a41a64329a1c8e42ffb # aka v1.3.8; see https://github.com/vmactions/freebsd-vm
         with:
           release: "13.5"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
@@ -718,81 +720,81 @@ jobs:
       - test_freebsd_14_3
       - test_freebsd_13_5
     steps:
-      - uses: actions/checkout@v6
+      - uses: *actions_checkout
         with:
           persist-credentials: false
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: &actions_download_artifact actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # aka v8.0.1
         with:
           name: coverage-test_ubuntu_24_04_hpnssh
           path: coverage-test_ubuntu_24_04_hpnssh
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_4
           path: coverage-test_ubuntu_24_04_zfs_2_4
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_4_latest
           path: coverage-test_ubuntu_24_04_zfs_2_4_latest
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_3
           path: coverage-test_ubuntu_24_04_zfs_2_3
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_2
           path: coverage-test_ubuntu_24_04_zfs_2_2
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_ubuntu_24_04
           path: coverage-test_ubuntu_24_04
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_ubuntu_22_04
           path: coverage-test_ubuntu_22_04
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_ubuntu_22_04_zfs_0_8
           path: coverage-test_ubuntu_22_04_zfs_0_8
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_almalinux_10_zfs_2_4_hpnssh
           path: coverage-test_almalinux_10_zfs_2_4_hpnssh
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_almalinux_10_zfs_2_3
           path: coverage-test_almalinux_10_zfs_2_3
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_almalinux_9_zfs_2_2
           path: coverage-test_almalinux_9_zfs_2_2
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_almalinux_9_zfs_2_2_hpnssh
           path: coverage-test_almalinux_9_zfs_2_2_hpnssh
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_freebsd_15_0
           path: coverage-test_freebsd_15_0
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_freebsd_14_3
           path: coverage-test_freebsd_14_3
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-test_freebsd_13_5
           path: coverage-test_freebsd_13_5
@@ -827,7 +829,7 @@ jobs:
       BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
     steps:
       - name: Download combined coverage artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: coverage-combine_coverage_reports
           path: site/branch
@@ -845,7 +847,7 @@ jobs:
             rm -fr "site/$branchname"
           fi
       - name: Upload site to workflow run page
-        uses: actions/upload-artifact@v7 # see https://github.com/actions/upload-artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # aka v7.0.0; see https://github.com/actions/upload-artifact
         with:
           name: ${{ github.job }}
           include-hidden-files: true
@@ -870,25 +872,27 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Download website artifact
-        uses: actions/download-artifact@v8
+        uses: *actions_download_artifact
         with:
           name: generate_website
           path: generate_website
       - name: Setup Pages
-        uses: actions/configure-pages@v5 # see https://github.com/actions/configure-pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # aka v5.0.0; see https://github.com/actions/configure-pages
       - name: Upload website to GitHub Pages
-        uses: actions/upload-pages-artifact@v4 # see https://github.com/actions/upload-pages-artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # aka v4.0.0; see https://github.com/actions/upload-pages-artifact
         with:
           name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: generate_website
       - name: Deploy website to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4 # see https://github.com/actions/deploy-pages
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # aka v4.0.5; see https://github.com/actions/deploy-pages
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
       - name: "Display URL of GitHub Pages"
         run: |
-          echo "Uploaded website to GitHub Pages at ${{ steps.deployment.outputs.page_url }}"
+          echo "Uploaded website to GitHub Pages at ${STEPS_DEPLOYMENT_OUTPUTS_PAGE_URL}"
+        env:
+          STEPS_DEPLOYMENT_OUTPUTS_PAGE_URL: ${{ steps.deployment.outputs.page_url }}
 
 #  # GitHub honours the "on: schedule:" directive only on main branch. Use hack to run nightlies also on other branches:
 #  test_branch_1_1_x:

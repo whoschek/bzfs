@@ -30,9 +30,9 @@ runs:
   using: composite
   steps:
     - name: Set up Lima
-      uses: lima-vm/lima-actions/setup@v1 # see https://github.com/lima-vm/lima-actions
+      uses: lima-vm/lima-actions/setup@25af04b575e17da32eb5173456ef8afaf1a76bad # aka v1.1.0; see https://github.com/lima-vm/lima-actions
       with: # or manually install via `brew install lima` or equivalent
-        version: "v2.0.3"
+        version: "v2.1.0"
     - name: Start VM via Lima
       shell: bash
       env:
