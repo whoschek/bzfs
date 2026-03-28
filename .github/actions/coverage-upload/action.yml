@@ -16,16 +16,16 @@ name: Coverage Upload
 description: Upload coverage artifacts and badge for this job
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
-  - name: Upload coverage report to workflow run page
-    uses: actions/upload-artifact@v7  # see https://github.com/actions/upload-artifact
-    with:
-      name: coverage-${{ github.job }}
-      overwrite: true
-      include-hidden-files: true
-      path: |
-        htmlcov
-        coverage_report.txt
-        .coverage
-        badges
+    - name: Upload coverage report to workflow run page
+      uses: actions/upload-artifact@v7 # see https://github.com/actions/upload-artifact
+      with:
+        name: coverage-${{ github.job }}
+        overwrite: true
+        include-hidden-files: true
+        path: |
+          htmlcov
+          coverage_report.txt
+          .coverage
+          badges

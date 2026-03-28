@@ -20,9 +20,9 @@ name: Tests
 
 on:
   push:
-    branches: [ "main", "branch-1.23.x", "branch-1.22.x", "branch-1.21.x", "branch-1.20.x", "branch-1.19.x", "branch-1.18.x" ]
+    branches: ["main", "branch-1.23.x", "branch-1.22.x", "branch-1.21.x", "branch-1.20.x", "branch-1.19.x", "branch-1.18.x"]
   pull_request:
-    branches: [ "main", "branch-1.23.x", "branch-1.22.x", "branch-1.21.x", "branch-1.20.x", "branch-1.19.x", "branch-1.18.x" ]
+    branches: ["main", "branch-1.23.x", "branch-1.22.x", "branch-1.21.x", "branch-1.20.x", "branch-1.19.x", "branch-1.18.x"]
   workflow_dispatch:
     inputs:
       run_all_jobs:
@@ -33,23 +33,23 @@ on:
         description: "Name of job to run"
         type: choice
         options:
-        - test_ubuntu_24_04_fast
-        - test_ubuntu_24_04_hpnssh
-        - test_ubuntu_24_04_zfs_2_4
-        - test_ubuntu_24_04_zfs_2_4_latest
-        - test_ubuntu_24_04_zfs_2_3
-        - test_ubuntu_24_04_zfs_2_2
-        - test_ubuntu_24_04
-        - test_ubuntu_22_04
-        - test_ubuntu_22_04_zfs_0_8
-        - test_almalinux_10_zfs_2_4_hpnssh
-        - test_almalinux_10_zfs_2_3
-        - test_almalinux_9_zfs_2_2
-        - test_almalinux_9_zfs_2_2_hpnssh
-        - test_freebsd_15_0
-        - test_freebsd_14_3
-        - test_freebsd_13_5
-        - none
+          - test_ubuntu_24_04_fast
+          - test_ubuntu_24_04_hpnssh
+          - test_ubuntu_24_04_zfs_2_4
+          - test_ubuntu_24_04_zfs_2_4_latest
+          - test_ubuntu_24_04_zfs_2_3
+          - test_ubuntu_24_04_zfs_2_2
+          - test_ubuntu_24_04
+          - test_ubuntu_22_04
+          - test_ubuntu_22_04_zfs_0_8
+          - test_almalinux_10_zfs_2_4_hpnssh
+          - test_almalinux_10_zfs_2_3
+          - test_almalinux_9_zfs_2_2
+          - test_almalinux_9_zfs_2_2_hpnssh
+          - test_freebsd_15_0
+          - test_freebsd_14_3
+          - test_freebsd_13_5
+          - none
         default: "test_ubuntu_24_04_fast"
       job_names:
         description: "Names of jobs to run, e.g. 'test_ubuntu_24_04,test_almalinux_10_zfs_2_3,test_freebsd_15_0'"
@@ -59,36 +59,35 @@ on:
         description: "Name of test suite to run"
         type: choice
         options:
-        - unit
-        - smoke
-        - functional
-        - adhoc
-        - all
+          - unit
+          - smoke
+          - functional
+          - adhoc
+          - all
         default: all
       bzfs_test_mode_string:
         description: "bzfs_test_mode env var custom string"
         type: string
-        default: ""  # empty string means 'run all tests'
+        default: "" # empty string means 'run all tests'
       num_runs:
         description: "Number of times to run the jobs"
         type: string
         default: "1"
   schedule:
-    - cron: '5 8 * * *'  # Run nightly for main at 8:05am UTC,
-    # - cron: '0 3 * * *'  # Run nightly for branch-1.1.x at 3am UTC
-  workflow_call:  # Enables this workflow to be called by other workflows (incl. the same workflow from another branch)
+    - cron: "5 8 * * *" # Run nightly for main at 8:05am UTC,
+    # - cron: "0 3 * * *"  # Run nightly for branch-1.1.x at 3am UTC
+  workflow_call: # Enables this workflow to be called by other workflows (incl. the same workflow from another branch)
     inputs:
       is_external_call:
-        description: 'true if we are called from another workflow, false otherwise'
+        description: "true if we are called from another workflow, false otherwise"
         type: boolean
         required: false
         default: true
 
-
 permissions:
   contents: read
 
-env:  # it's sufficient to run smoke tests when dependabot is detected
+env: # it's sufficient to run smoke tests when dependabot is detected
   bzfs_test_mode: ${{ (github.actor == 'dependabot[bot]' && 'smoke') || (github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string) || (github.event.inputs.bzfs_test_mode != 'all' && github.event.inputs.bzfs_test_mode) || '' }}
   bzfs_test_no_run_quietly: "true"
   NUM_RUNS: ${{ github.event.inputs.num_runs != '' && github.event.inputs.num_runs || '1' }}
@@ -105,8 +104,7 @@ jobs:
           echo "Using bzfs_test_mode=$bzfs_test_mode"
           echo "iteration_test_matrix_output=[$(seq -s ',' 1 "$NUM_RUNS")]" >> "$GITHUB_OUTPUT"
 
-
-  test_ubuntu_24_04_fast:  # currently uses zfs-2.2.2
+  test_ubuntu_24_04_fast: # currently uses zfs-2.2.2
     needs: create_iteration_test_matrix
     if: (github.event_name != 'workflow_dispatch' && github.event.schedule != '0 3 * * *') || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_fast' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_fast')
     runs-on: ubuntu-24.04
@@ -117,35 +115,34 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/actions/common
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Run pre-commit
-      uses: ./.github/actions/pre-commit
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Run tests
-      run: |
-        ./test.sh
-        echo "bzfs-testrun-success"
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display ZFS version and Python version
+        run: |
+          id -u -n
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version |& head -n 1
+          command -v sh | xargs ls -l
+      - name: Run pre-commit
+        uses: ./.github/actions/pre-commit
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Run tests
+        run: |
+          ./test.sh
+          echo "bzfs-testrun-success"
 
-
-  test_ubuntu_24_04_hpnssh:  # currently uses zfs-2.2.9
+  test_ubuntu_24_04_hpnssh: # currently uses zfs-2.2.9
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_hpnssh' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_hpnssh')
     runs-on: ubuntu-24.04
@@ -156,61 +153,60 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Show iteration info ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      run: echo "Now running iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}"
-    - name: Upgrade zfs kernel + userland to specific upstream zfs version
-      run: |
-        # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
-        sudo add-apt-repository ppa:arter97/zfs-lts; sudo apt-get -y update
-        sudo apt-get -y install zfs-dkms
-        zfs --version
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Show iteration info ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        run: echo "Now running iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}"
+      - name: Upgrade zfs kernel + userland to specific upstream zfs version
+        run: |
+          # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
+          sudo add-apt-repository ppa:arter97/zfs-lts; sudo apt-get -y update
+          sudo apt-get -y install zfs-dkms
+          zfs --version
 
-        # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
-        sudo add-apt-repository ppa:rapier1/hpnssh
-        sudo apt-get -y update
-        sudo apt-get -y install hpnssh
-        hpnssh -V
+          # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
+          sudo add-apt-repository ppa:rapier1/hpnssh
+          sudo apt-get -y update
+          sudo apt-get -y install hpnssh
+          hpnssh -V
 
-        ./.github-workflow-scripts/install_ubuntu_24_04_pv_fr.sh
-    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/actions/common
-      with:
-        python-version: ${{ matrix.python-version }}
-        install-zfs: false
-        install-pv: false
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Run tests
-      run: |
-        if [ "${{ matrix.python-version }}" == "3.15-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
-        echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
-        export LC_ALL=fr_FR.UTF-8
-        dd if=/dev/zero bs=1k count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
-        dd if=/dev/zero bs=1k count=32 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
-        echo "Now running test.sh ..."
-        ./test.sh
-    - name: Run tests and generate code coverage
-      run: |
-        ./coverage.sh
-        echo "bzfs-testrun-success"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ matrix.python-version == '3.15-dev' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
-      uses: ./.github/actions/coverage-upload
+          ./.github-workflow-scripts/install_ubuntu_24_04_pv_fr.sh
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+          install-zfs: false
+          install-pv: false
+      - name: Display ZFS version and Python version
+        run: |
+          id -u -n
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version |& head -n 1
+          command -v sh | xargs ls -l
+      - name: Run tests
+        run: |
+          if [ "${{ matrix.python-version }}" == "3.15-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
+          echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
+          export LC_ALL=fr_FR.UTF-8
+          dd if=/dev/zero bs=1k count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
+          dd if=/dev/zero bs=1k count=32 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
+          echo "Now running test.sh ..."
+          ./test.sh
+      - name: Run tests and generate code coverage
+        run: |
+          ./coverage.sh
+          echo "bzfs-testrun-success"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ matrix.python-version == '3.15-dev' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_ubuntu_24_04_zfs_2_4:  # currently uses zfs-2.4.1
+  test_ubuntu_24_04_zfs_2_4: # currently uses zfs-2.4.1
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_4' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_4')
     runs-on: ubuntu-24.04
@@ -221,45 +217,44 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Upgrade zfs kernel + userland to specific upstream zfs version
-      run: |
-        # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
-        sudo add-apt-repository ppa:patrickdk/zfs; sudo apt-get -y update
-        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
-        sudo apt-get -y install zfs-dkms zfsutils-linux
-        zfs --version
-    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/actions/common
-      with:
-        python-version: ${{ matrix.python-version }}
-        install-zfs: false
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Run tests
-      run: |
-        ./test.sh
-    - name: Run tests and generate code coverage
-      run: |
-        ./coverage.sh
-        echo "bzfs-testrun-success"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Upgrade zfs kernel + userland to specific upstream zfs version
+        run: |
+          # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
+          sudo add-apt-repository ppa:patrickdk/zfs; sudo apt-get -y update
+          ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
+          sudo apt-get -y install zfs-dkms zfsutils-linux
+          zfs --version
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+          install-zfs: false
+      - name: Display ZFS version and Python version
+        run: |
+          id -u -n
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version |& head -n 1
+          command -v sh | xargs ls -l
+      - name: Run tests
+        run: |
+          ./test.sh
+      - name: Run tests and generate code coverage
+        run: |
+          ./coverage.sh
+          echo "bzfs-testrun-success"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_ubuntu_24_04_zfs_2_4_latest:  # currently uses zfs-2.4.1
+  test_ubuntu_24_04_zfs_2_4_latest: # currently uses zfs-2.4.1
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_4_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_4_latest')
     runs-on: ubuntu-24.04
@@ -270,44 +265,44 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Upgrade zfs kernel + userland to specific upstream zfs version
-      run: |
-        # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
-        sudo add-apt-repository ppa:satadru-umich/zfs-experimental; sudo apt-get -y update
-        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
-        sudo apt-get -y install zfs-dkms zfsutils-linux
-        zfs --version
-    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/actions/common
-      with:
-        python-version: ${{ matrix.python-version }}
-        install-zfs: false
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Run tests
-      run: |
-        ./test.sh
-    - name: Run tests and generate code coverage
-      run: |
-        ./coverage.sh
-        echo "bzfs-testrun-success"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Upgrade zfs kernel + userland to specific upstream zfs version
+        run: |
+          # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
+          sudo add-apt-repository ppa:satadru-umich/zfs-experimental; sudo apt-get -y update
+          ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
+          sudo apt-get -y install zfs-dkms zfsutils-linux
+          zfs --version
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+          install-zfs: false
+      - name: Display ZFS version and Python version
+        run: |
+          id -u -n
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version |& head -n 1
+          command -v sh | xargs ls -l
+      - name: Run tests
+        run: |
+          ./test.sh
+      - name: Run tests and generate code coverage
+        run: |
+          ./coverage.sh
+          echo "bzfs-testrun-success"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-  test_ubuntu_24_04_zfs_2_3:  # currently uses zfs-2.3.6
+  test_ubuntu_24_04_zfs_2_3: # currently uses zfs-2.3.6
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_3' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_3')
     runs-on: ubuntu-24.04
@@ -318,45 +313,44 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Upgrade zfs kernel + userland to specific upstream zfs version
-      run: |
-        # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.3-latest
-        sudo add-apt-repository ppa:weiers/openzfs-2.3-latest; sudo apt-get -y update
-        sudo apt-get -y install openzfs-zfs-dkms
-        zfs --version
-    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/actions/common
-      with:
-        python-version: ${{ matrix.python-version }}
-        install-zfs: false
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Run tests
-      run: |
-        export bzfs_subprocess_run_loglevel=10  # also log subprocess perf stats
-        ./test.sh
-    - name: Run tests and generate code coverage
-      run: |
-        ./coverage.sh
-        echo "bzfs-testrun-success"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ matrix.python-version == '3.14' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Upgrade zfs kernel + userland to specific upstream zfs version
+        run: |
+          # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.3-latest
+          sudo add-apt-repository ppa:weiers/openzfs-2.3-latest; sudo apt-get -y update
+          sudo apt-get -y install openzfs-zfs-dkms
+          zfs --version
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+          install-zfs: false
+      - name: Display ZFS version and Python version
+        run: |
+          id -u -n
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version |& head -n 1
+          command -v sh | xargs ls -l
+      - name: Run tests
+        run: |
+          export bzfs_subprocess_run_loglevel=10  # also log subprocess perf stats
+          ./test.sh
+      - name: Run tests and generate code coverage
+        run: |
+          ./coverage.sh
+          echo "bzfs-testrun-success"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ matrix.python-version == '3.14' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_ubuntu_24_04_zfs_2_2:  # currently uses zfs-2.2.9
+  test_ubuntu_24_04_zfs_2_2: # currently uses zfs-2.2.9
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_2' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_2')
     runs-on: ubuntu-24.04
@@ -367,44 +361,43 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Upgrade zfs kernel + userland to specific upstream zfs version
-      run: |
-        # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
-        sudo add-apt-repository ppa:arter97/zfs-lts; sudo apt-get -y update
-        sudo apt-get -y install zfs-dkms
-        zfs --version
-    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/actions/common
-      with:
-        python-version: ${{ matrix.python-version }}
-        install-zfs: false
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Run tests
-      run: |
-        ./test.sh
-    - name: Run tests and generate code coverage
-      run: |
-        ./coverage.sh
-        echo "bzfs-testrun-success"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Upgrade zfs kernel + userland to specific upstream zfs version
+        run: |
+          # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
+          sudo add-apt-repository ppa:arter97/zfs-lts; sudo apt-get -y update
+          sudo apt-get -y install zfs-dkms
+          zfs --version
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+          install-zfs: false
+      - name: Display ZFS version and Python version
+        run: |
+          id -u -n
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version |& head -n 1
+          command -v sh | xargs ls -l
+      - name: Run tests
+        run: |
+          ./test.sh
+      - name: Run tests and generate code coverage
+        run: |
+          ./coverage.sh
+          echo "bzfs-testrun-success"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_ubuntu_24_04:  # currently uses zfs-2.2.2
+  test_ubuntu_24_04: # currently uses zfs-2.2.2
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04')
     runs-on: ubuntu-24.04
@@ -415,37 +408,36 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/actions/common
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Run tests
-      run: |
-        ./test.sh
-    - name: Run tests and generate code coverage
-      run: |
-        ./coverage.sh
-        echo "bzfs-testrun-success"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display ZFS version and Python version
+        run: |
+          id -u -n
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version |& head -n 1
+          command -v sh | xargs ls -l
+      - name: Run tests
+        run: |
+          ./test.sh
+      - name: Run tests and generate code coverage
+        run: |
+          ./coverage.sh
+          echo "bzfs-testrun-success"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_ubuntu_22_04:   # currently uses zfs-2.1.5
+  test_ubuntu_22_04: # currently uses zfs-2.1.5
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_22_04' || contains(github.event.inputs.job_names, 'test_ubuntu_22_04')
     runs-on: ubuntu-22.04
@@ -456,47 +448,46 @@ jobs:
       fail-fast: false
     timeout-minutes: 150
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/actions/common
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Run pre-commit
-      uses: ./.github/actions/pre-commit
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Run tests
-      run: |
-        ./test.sh
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display ZFS version and Python version
+        run: |
+          id -u -n
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version |& head -n 1
+          command -v sh | xargs ls -l
+      - name: Run pre-commit
+        uses: ./.github/actions/pre-commit
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Run tests
+        run: |
+          ./test.sh
 
-        echo "Now running tests as root user"
-        sudo mkdir -p /root/.ssh
-        sudo cp -a "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub" /root/.ssh/
-        cat "$HOME/.ssh/id_rsa.pub" | sudo tee -a /root/.ssh/authorized_keys > /dev/null
-        sudo bzfs_test_mode="$bzfs_test_mode" ./test.sh
-    - name: Run tests and generate code coverage
-      run: |
-        ./coverage.sh
-        echo "bzfs-testrun-success"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ matrix.python-version == '3.10' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
-      uses: ./.github/actions/coverage-upload
+          echo "Now running tests as root user"
+          sudo mkdir -p /root/.ssh
+          sudo cp -a "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_rsa.pub" /root/.ssh/
+          cat "$HOME/.ssh/id_rsa.pub" | sudo tee -a /root/.ssh/authorized_keys > /dev/null
+          sudo bzfs_test_mode="$bzfs_test_mode" ./test.sh
+      - name: Run tests and generate code coverage
+        run: |
+          ./coverage.sh
+          echo "bzfs-testrun-success"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ matrix.python-version == '3.10' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_ubuntu_22_04_zfs_0_8:  # currently uses zfs-0.8.3
+  test_ubuntu_22_04_zfs_0_8: # currently uses zfs-0.8.3
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_22_04_zfs_0_8' || contains(github.event.inputs.job_names, 'test_ubuntu_22_04_zfs_0_8')
     runs-on: ubuntu-22.04
@@ -507,41 +498,40 @@ jobs:
       fail-fast: false
     timeout-minutes: 150
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/actions/common
-      with:
-        python-version: ${{ matrix.python-version }}
-        install-zfs: false
-    - name: Install zfs-0.8.x
-      run: |
-        ./.github-workflow-scripts/install_ubuntu_22_04_zfs_0_8_x.sh
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Run tests
-      run: |
-        ./test.sh
-    - name: Run tests and generate code coverage
-      run: |
-        ./coverage.sh
-        echo "bzfs-testrun-success"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+          install-zfs: false
+      - name: Install zfs-0.8.x
+        run: |
+          ./.github-workflow-scripts/install_ubuntu_22_04_zfs_0_8_x.sh
+      - name: Display ZFS version and Python version
+        run: |
+          id -u -n
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version |& head -n 1
+          command -v sh | xargs ls -l
+      - name: Run tests
+        run: |
+          ./test.sh
+      - name: Run tests and generate code coverage
+        run: |
+          ./coverage.sh
+          echo "bzfs-testrun-success"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_almalinux_10_zfs_2_4_hpnssh:  # currently uses almalinux-10.1, zfs-2.4.1, python-3.12
+  test_almalinux_10_zfs_2_4_hpnssh: # currently uses almalinux-10.1, zfs-2.4.1, python-3.12
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_10_zfs_2_4_hpnssh' || contains(github.event.inputs.job_names, 'test_almalinux_10_zfs_2_4_hpnssh')
     runs-on: ubuntu-24.04
@@ -551,21 +541,20 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run tests via Lima
-      uses: ./.github/actions/test-almalinux-lima
-      with:
-        alma_major_version: "10"
-        zfs_version: "zfs-2.4"
-        ssh_program: "hpnssh"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run tests via Lima
+        uses: ./.github/actions/test-almalinux-lima
+        with:
+          alma_major_version: "10"
+          zfs_version: "zfs-2.4"
+          ssh_program: "hpnssh"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_almalinux_10_zfs_2_3:  # currently uses almalinux-10.1, zfs-2.3.6, python-3.12
+  test_almalinux_10_zfs_2_3: # currently uses almalinux-10.1, zfs-2.3.6, python-3.12
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_10_zfs_2_3' || contains(github.event.inputs.job_names, 'test_almalinux_10_zfs_2_3')
     runs-on: ubuntu-24.04
@@ -575,21 +564,20 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run tests via Lima
-      uses: ./.github/actions/test-almalinux-lima
-      with:
-        alma_major_version: "10"
-        zfs_version: "zfs-2.3"
-        ssh_program: "ssh"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run tests via Lima
+        uses: ./.github/actions/test-almalinux-lima
+        with:
+          alma_major_version: "10"
+          zfs_version: "zfs-2.3"
+          ssh_program: "ssh"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_almalinux_9_zfs_2_2:  # currently uses almalinux-9.7, zfs-2.2.9, python-3.9
+  test_almalinux_9_zfs_2_2: # currently uses almalinux-9.7, zfs-2.2.9, python-3.9
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_9_zfs_2_2' || contains(github.event.inputs.job_names, 'test_almalinux_9_zfs_2_2')
     runs-on: ubuntu-24.04
@@ -599,21 +587,20 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run tests via Lima
-      uses: ./.github/actions/test-almalinux-lima
-      with:
-        alma_major_version: "9"
-        zfs_version: "zfs-2.2"
-        ssh_program: "ssh"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run tests via Lima
+        uses: ./.github/actions/test-almalinux-lima
+        with:
+          alma_major_version: "9"
+          zfs_version: "zfs-2.2"
+          ssh_program: "ssh"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_almalinux_9_zfs_2_2_hpnssh:  # currently uses almalinux-9.7, zfs-2.2.9, python-3.9
+  test_almalinux_9_zfs_2_2_hpnssh: # currently uses almalinux-9.7, zfs-2.2.9, python-3.9
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_9_zfs_2_2_hpnssh' || contains(github.event.inputs.job_names, 'test_almalinux_9_zfs_2_2_hpnssh')
     runs-on: ubuntu-24.04
@@ -623,21 +610,20 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run tests via Lima
-      uses: ./.github/actions/test-almalinux-lima
-      with:
-        alma_major_version: "9"
-        zfs_version: "zfs-2.2"
-        ssh_program: "hpnssh"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run tests via Lima
+        uses: ./.github/actions/test-almalinux-lima
+        with:
+          alma_major_version: "9"
+          zfs_version: "zfs-2.2"
+          ssh_program: "hpnssh"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_freebsd_15_0:  # currently uses zfs-2.4.0rcX
+  test_freebsd_15_0: # currently uses zfs-2.4.0rcX
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_15_0' || contains(github.event.inputs.job_names, 'test_freebsd_15_0')
     runs-on: ubuntu-24.04
@@ -647,23 +633,22 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      id: test
-      uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
-      with:
-        release: "15.0"
-        envs: "bzfs_test_mode bzfs_test_no_run_quietly"
-        run: |
-          ./.github-workflow-scripts/test_freebsd_14_1.sh
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        id: test
+        uses: vmactions/freebsd-vm@v1 # see https://github.com/vmactions/freebsd-vm
+        with:
+          release: "15.0"
+          envs: "bzfs_test_mode bzfs_test_no_run_quietly"
+          run: |
+            ./.github-workflow-scripts/test_freebsd_14_1.sh
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_freebsd_14_3:  # currently uses zfs-2.2.7
+  test_freebsd_14_3: # currently uses zfs-2.2.7
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_14_3' || contains(github.event.inputs.job_names, 'test_freebsd_14_3')
     runs-on: ubuntu-24.04
@@ -673,23 +658,22 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      id: test
-      uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
-      with:
-        release: "14.3"
-        envs: "bzfs_test_mode bzfs_test_no_run_quietly"
-        run: |
-          ./.github-workflow-scripts/test_freebsd_14_1.sh
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        id: test
+        uses: vmactions/freebsd-vm@v1 # see https://github.com/vmactions/freebsd-vm
+        with:
+          release: "14.3"
+          envs: "bzfs_test_mode bzfs_test_no_run_quietly"
+          run: |
+            ./.github-workflow-scripts/test_freebsd_14_1.sh
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
-
-  test_freebsd_13_5:  # currently uses zfs-2.1.15
+  test_freebsd_13_5: # currently uses zfs-2.1.15
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_13_5' || contains(github.event.inputs.job_names, 'test_freebsd_13_5')
     runs-on: ubuntu-24.04
@@ -699,23 +683,20 @@ jobs:
       fail-fast: false
     timeout-minutes: 110
     steps:
-    - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
-    - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      id: test
-      uses: vmactions/freebsd-vm@v1.3.8  # see https://github.com/vmactions/freebsd-vm
-      with:
-        release: "13.5"
-        envs: "bzfs_test_mode bzfs_test_no_run_quietly"
-        run: |
-         touch coverage_report.txt; ./.github-workflow-scripts/test_freebsd_13_3.sh
-    - name: Upload code coverage report to workflow run page
-      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
-      uses: ./.github/actions/coverage-upload
-
-
-
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        id: test
+        uses: vmactions/freebsd-vm@v1.3.8 # see https://github.com/vmactions/freebsd-vm
+        with:
+          release: "13.5"
+          envs: "bzfs_test_mode bzfs_test_no_run_quietly"
+          run: |
+            touch coverage_report.txt; ./.github-workflow-scripts/test_freebsd_13_3.sh
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
 
   combine_coverage_reports:
     if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
@@ -838,7 +819,6 @@ jobs:
       - name: Upload combined coverage report to workflow run page
         uses: ./.github/actions/coverage-upload
 
-
   generate_website:
     runs-on: ubuntu-24.04
     needs:
@@ -865,14 +845,13 @@ jobs:
             rm -fr "site/$branchname"
           fi
       - name: Upload site to workflow run page
-        uses: actions/upload-artifact@v7  # see https://github.com/actions/upload-artifact
+        uses: actions/upload-artifact@v7 # see https://github.com/actions/upload-artifact
         with:
           name: ${{ github.job }}
           include-hidden-files: true
           path: |
             #site
             site/${{ github.head_ref || github.ref_name }}
-
 
   upload_website_to_github_pages:
     # upload website only on nightlies or when full test suite ran (choice 'all'), on main, and no custom bzfs_test_mode_string override was used, and it's not a PR
@@ -883,8 +862,8 @@ jobs:
 
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
-      pages: write      # to deploy to Pages
-      id-token: write   # to verify the deployment originates from an appropriate source
+      pages: write # to deploy to Pages
+      id-token: write # to verify the deployment originates from an appropriate source
 
     environment:
       name: github-pages
@@ -896,21 +875,20 @@ jobs:
           name: generate_website
           path: generate_website
       - name: Setup Pages
-        uses: actions/configure-pages@v5  # see https://github.com/actions/configure-pages
+        uses: actions/configure-pages@v5 # see https://github.com/actions/configure-pages
       - name: Upload website to GitHub Pages
-        uses: actions/upload-pages-artifact@v4  # see https://github.com/actions/upload-pages-artifact
+        uses: actions/upload-pages-artifact@v4 # see https://github.com/actions/upload-pages-artifact
         with:
           name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: generate_website
       - name: Deploy website to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4  # see https://github.com/actions/deploy-pages
+        uses: actions/deploy-pages@v4 # see https://github.com/actions/deploy-pages
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
       - name: "Display URL of GitHub Pages"
         run: |
           echo "Uploaded website to GitHub Pages at ${{ steps.deployment.outputs.page_url }}"
-
 
 #  # GitHub honours the "on: schedule:" directive only on main branch. Use hack to run nightlies also on other branches:
 #  test_branch_1_1_x:

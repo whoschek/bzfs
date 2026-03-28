@@ -182,7 +182,7 @@ repos:
         types_or: [python, shell, markdown, yaml, toml]
   - repo: local
     hooks:
-      - id: prettier-markdown                   # Auto-format Markdown files via
+      - id: prettier-markdown                   # Auto-format Markdown files
         name: prettier (markdown)
         language: node
         entry: prettier
@@ -195,6 +195,17 @@ repos:
         ]
         exclude: '^(README.*|prd)\.md$'
         additional_dependencies: ['prettier@3.8.1']  # see https://github.com/prettier/prettier
+      - id: prettier-yaml                       # Auto-format YAML files
+        name: prettier (yaml)
+        language: node
+        entry: prettier
+        types: [yaml]
+        args: [
+          --write,
+          --print-width=125,
+        ]
+        exclude: '^\.pre-commit-config\.yaml$'
+        additional_dependencies: ["prettier@3.8.1"]  # see https://github.com/prettier/prettier
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.2
     hooks:

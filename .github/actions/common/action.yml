@@ -22,42 +22,42 @@ inputs:
   install-zfs:
     description: Install ZFS userland packages
     required: false
-    default: 'true'
+    default: "true"
   install-pv:
     description: Install pv package
     required: false
-    default: 'true'
+    default: "true"
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
-  - name: print latest_commit
-    shell: bash
-    run: echo ${{ github.sha }}
-  - name: Set up Python ${{ inputs.python-version }}
-    uses: actions/setup-python@v6
-    with:
-      python-version: ${{ inputs.python-version }}
-  - name: Install test dependencies
-    shell: bash
-    run: |
-      python3 -m pip install --upgrade pip
-      python3 -m pip install --upgrade "coverage[toml]==7.*"
-  - name: Install ssh + other dependencies
-    shell: bash
-    run: |
-      sudo apt-get -y update
-      sudo apt-get -y install zstd mbuffer
-      mkdir -p $HOME/.ssh
-      rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
-      ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N "" # create private key and public key
-      cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
-  - name: Install pv
-    if: ${{ inputs.install-pv == 'true' }}
-    shell: bash
-    run: |
-      sudo apt-get -y install pv
-  - name: Install zfs
-    if: ${{ inputs.install-zfs == 'true' }}
-    shell: bash
-    run: |
-      sudo apt-get -y install zfsutils-linux
+    - name: print latest_commit
+      shell: bash
+      run: echo ${{ github.sha }}
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install test dependencies
+      shell: bash
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install --upgrade "coverage[toml]==7.*"
+    - name: Install ssh + other dependencies
+      shell: bash
+      run: |
+        sudo apt-get -y update
+        sudo apt-get -y install zstd mbuffer
+        mkdir -p $HOME/.ssh
+        rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
+        ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N "" # create private key and public key
+        cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
+    - name: Install pv
+      if: ${{ inputs.install-pv == 'true' }}
+      shell: bash
+      run: |
+        sudo apt-get -y install pv
+    - name: Install zfs
+      if: ${{ inputs.install-zfs == 'true' }}
+      shell: bash
+      run: |
+        sudo apt-get -y install zfsutils-linux

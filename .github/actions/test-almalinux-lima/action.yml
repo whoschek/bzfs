@@ -29,70 +29,70 @@ inputs:
 runs:
   using: composite
   steps:
-  - name: Set up Lima
-    uses: lima-vm/lima-actions/setup@v1  # see https://github.com/lima-vm/lima-actions
-    with:                                # or manually install via `brew install lima` or equivalent
-      version: "v2.0.3"
-  - name: Start VM via Lima
-    shell: bash
-    env:
-      alma_major_version: ${{ inputs.alma_major_version }}
-    run: |
-      GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-$(pwd)}"
-      arch="$(uname -m)"
-      if [[ "$(uname -s)" == "Darwin" && "$arch" == "arm64" ]]; then
-        arch="aarch64"
-      fi
-      image_location="https://repo.almalinux.org/almalinux/${alma_major_version}/cloud/${arch}/images/AlmaLinux-${alma_major_version}-GenericCloud-latest.${arch}.qcow2"
-      # image_location="https://repo.almalinux.org/almalinux/10.1/cloud/${arch}/images/AlmaLinux-10-GenericCloud-10.1-20251125.0.${arch}.qcow2"
-      # image_location="https://repo.almalinux.org/almalinux/9.7/cloud/${arch}/images/AlmaLinux-9-GenericCloud-9.7-20251118.${arch}.qcow2"
-      cat > mylimavm.yaml <<EOF
-      arch: "$arch"
-      disk: "10GiB"
-      mountType: "reverse-sshfs"
-      images:
-      - location: "$image_location"
+    - name: Set up Lima
+      uses: lima-vm/lima-actions/setup@v1 # see https://github.com/lima-vm/lima-actions
+      with: # or manually install via `brew install lima` or equivalent
+        version: "v2.0.3"
+    - name: Start VM via Lima
+      shell: bash
+      env:
+        alma_major_version: ${{ inputs.alma_major_version }}
+      run: |
+        GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-$(pwd)}"
+        arch="$(uname -m)"
+        if [[ "$(uname -s)" == "Darwin" && "$arch" == "arm64" ]]; then
+          arch="aarch64"
+        fi
+        image_location="https://repo.almalinux.org/almalinux/${alma_major_version}/cloud/${arch}/images/AlmaLinux-${alma_major_version}-GenericCloud-latest.${arch}.qcow2"
+        # image_location="https://repo.almalinux.org/almalinux/10.1/cloud/${arch}/images/AlmaLinux-10-GenericCloud-10.1-20251125.0.${arch}.qcow2"
+        # image_location="https://repo.almalinux.org/almalinux/9.7/cloud/${arch}/images/AlmaLinux-9-GenericCloud-9.7-20251118.${arch}.qcow2"
+        cat > mylimavm.yaml <<EOF
         arch: "$arch"
-      mounts:
-      - location: "${GITHUB_WORKSPACE}"
-        mountPoint: "/testworkspace"
-        writable: true
-      EOF
-      limactl --version
-      limactl start --name=mylimavm --tty=false mylimavm.yaml
-  - name: Install ZFS and other dependencies
-    shell: bash
-    env:
-      zfs_version: ${{ inputs.zfs_version }}
-      ssh_program: ${{ inputs.ssh_program }}
-    run: |
-      limactl shell --workdir=/testworkspace mylimavm -- \
-        ./.github-workflow-scripts/install_almalinux_9.sh "$zfs_version" "$ssh_program"
-  - name: Display ZFS version and Python version
-    shell: bash
-    run: |
-      limactl shell --workdir=/testworkspace mylimavm -- bash -s <<'EOF'
-      set -euo pipefail
-      id -u -n
-      uname -a
-      cat /etc/redhat-release
-      zfs --version
-      python3 --version
-      ssh -V
-      zstd --version
-      pv --version | head -n 1
-      mbuffer --version |& head -n 1
-      command -v sh | xargs ls -l
-      df -h
-      EOF
-  - name: Run tests inside VM
-    shell: bash
-    env:
-      ssh_program: ${{ inputs.ssh_program }}
-    run: |
-      limactl shell --workdir=/testworkspace mylimavm -- env \
-        bzfs_test_mode="$bzfs_test_mode" \
-        bzfs_test_no_run_quietly="$bzfs_test_no_run_quietly" \
-        bzfs_test_ssh_program="$ssh_program" \
-        bash -lc './test.sh && PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate'
-      echo "bzfs-testrun-success"
+        disk: "10GiB"
+        mountType: "reverse-sshfs"
+        images:
+        - location: "$image_location"
+          arch: "$arch"
+        mounts:
+        - location: "${GITHUB_WORKSPACE}"
+          mountPoint: "/testworkspace"
+          writable: true
+        EOF
+        limactl --version
+        limactl start --name=mylimavm --tty=false mylimavm.yaml
+    - name: Install ZFS and other dependencies
+      shell: bash
+      env:
+        zfs_version: ${{ inputs.zfs_version }}
+        ssh_program: ${{ inputs.ssh_program }}
+      run: |
+        limactl shell --workdir=/testworkspace mylimavm -- \
+          ./.github-workflow-scripts/install_almalinux_9.sh "$zfs_version" "$ssh_program"
+    - name: Display ZFS version and Python version
+      shell: bash
+      run: |
+        limactl shell --workdir=/testworkspace mylimavm -- bash -s <<'EOF'
+        set -euo pipefail
+        id -u -n
+        uname -a
+        cat /etc/redhat-release
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+        df -h
+        EOF
+    - name: Run tests inside VM
+      shell: bash
+      env:
+        ssh_program: ${{ inputs.ssh_program }}
+      run: |
+        limactl shell --workdir=/testworkspace mylimavm -- env \
+          bzfs_test_mode="$bzfs_test_mode" \
+          bzfs_test_no_run_quietly="$bzfs_test_no_run_quietly" \
+          bzfs_test_ssh_program="$ssh_program" \
+          bash -lc './test.sh && PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate'
+        echo "bzfs-testrun-success"
