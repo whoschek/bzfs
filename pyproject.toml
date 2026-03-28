@@ -103,12 +103,6 @@ branch = true               # also flag conditionals that haven't visited all of
 include = ["bzfs_main/**/*.py"]
 omit = ["bzfs_tests/**/*.py", "**/__init__.py"]
 
-[tool.docformatter]         # auto-format Python docstrings to follow PEP 257 and wrap them to a specific line length
-wrap-summaries = 125        # summary / one-liner length; see https://docformatter.readthedocs.io/en/latest/usage.html
-wrap-descriptions = 125     # long-description line length
-force-wrap = false          # force descriptions to be wrapped even if it may result in a mess?
-in-place = true             # let pre-commit make changes to files instead of printing diffs
-
 [tool.black]
 line_length = 125
 target_version = ["py39", "py310", "py311", "py312", "py313", "py314"]
@@ -346,13 +340,3 @@ python-version = "3.9"
 #errors = { deprecated = "error" }
 #project-includes = ["**/bzfs_*/**"]
 project-excludes = ["bzfs_testbed/bzfs_job_testbed.py", "**/.venv/**"]
-
-[tool.codespell]  # Auto-fix typos
-skip = "bzfs_tests/*.py,bzfs_tests/itest/*.py,.venv*,dist*,*.egg-info*,htmlcov*"
-write-changes = true                      # let pre-commit make changes to files instead of printing diffs
-interactive = 0                           # no interactivity on making changes to files
-ignore-words-list = [                     # project-specific words that should not be treated as typos
-    "cach",
-    "grup",
-    "mut",
-]

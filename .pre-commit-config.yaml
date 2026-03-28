@@ -92,8 +92,12 @@ repos:
     rev: v1.7.7
     hooks:
       - id: docformatter  # Reformat Python docstrings to follow PEP 257 and wrap them to a specific line length
-        additional_dependencies: [tomli]
-        # config options like `wrap-summaries` live in pyproject.toml
+        args: [
+          "--in-place",                 # Let pre-commit make changes to files instead of printing diffs
+          "--wrap-summaries=125",       # Summary / one-liner length; see https://docformatter.readthedocs.io/en/latest/usage.html
+          "--wrap-descriptions=125",    # Long-description line length
+          # `force-wrap` remains at its default false: force descriptions to be wrapped even if it may result in a mess?
+        ]
   - repo: https://github.com/pycqa/isort
     rev: 6.1.0
     hooks:
@@ -178,15 +182,15 @@ repos:
         types_or: [python, shell, markdown, yaml, toml]
   - repo: local
     hooks:
-      - id: prettier-markdown              # Auto-format Markdown files via
+      - id: prettier-markdown                   # Auto-format Markdown files via
         name: prettier (markdown)
         language: node
         entry: prettier
         types: [markdown]
-        args: [                            # See https://prettier.io/docs/options
+        args: [                                 # See https://prettier.io/docs/options
           --write,
-          --print-width=120,               # Approximate mdformat --wrap=120
-          --prose-wrap=always,             # Wrap prose if it exceeds the print width
+          --print-width=120,
+          --prose-wrap=always,                  # Wrap prose if it exceeds the print width
           --embedded-language-formatting=auto,  # Keep Prettier's default embedded formatting
         ]
         exclude: '^(README.*|prd)\.md$'
@@ -194,9 +198,13 @@ repos:
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.2
     hooks:
-      - id: codespell  # Auto-fix typos; if you think this is in error, consider changing ignore-words-list in pyproject.toml
-        additional_dependencies: [tomli]
-        # config options like `ignore-words-list` live in pyproject.toml
+      - id: codespell  # Auto-fix typos; if you think this is in error, consider changing the ignore-words-list below
+        args: [
+          "--skip=bzfs_tests/*.py,bzfs_tests/itest/*.py,.venv*,dist*,*.egg-info*,htmlcov*",
+          "--write-changes",                    # Let pre-commit make changes to files instead of printing diffs
+          "--interactive=0",                    # No interactivity on making changes to files
+          "--ignore-words-list=cach,grup,mut",  # Project-specific words that should not be treated as typos
+        ]
   - repo: https://github.com/psf/black
     rev: 25.11.0
     hooks:
