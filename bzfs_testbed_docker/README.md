@@ -14,12 +14,11 @@
  specific language governing permissions and limitations
  under the License.-->
 
-# Docker Testbed Helpers
+# Docker Testbed
 
-This directory contains helper files for running `bzfs` inside a privileged Docker or nerdctl container on the local
-testbed. The intended environment is VMs created via
-[`../bzfs_testbed/lima_testbed.sh`](../bzfs_testbed/lima_testbed.sh) where ZFS and VM-to-VM SSH connectivity is already
-available.
+This directory contains helper files for running `bzfs` inside a Docker or nerdctl container on the local testbed. The
+intended environment is VMs created via [`../bzfs_testbed/lima_testbed.sh`](../bzfs_testbed/lima_testbed.sh) where ZFS
+and VM-to-VM SSH connectivity is already available.
 
 ## Files
 
