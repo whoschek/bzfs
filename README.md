@@ -38,6 +38,7 @@ recovery and high availability (DR/HA), scale-out deployments, and protection ag
 It handles the many edge cases that you will eventually run into over the course of your deployment.
 
 - [Introduction](#Introduction)
+- [System Overview for New Engineers](bzfs_docs/system_overview.md)
 - [Periodic Jobs with bzfs_jobrunner](#Periodic-Jobs-with-bzfs_jobrunner)
 - [Quickstart](#Quickstart)
 - [Installation](#Installation)
