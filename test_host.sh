@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#
+
 # Copyright 2024 Wolfgang Hoschek AT mac DOT com
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,11 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# shellcheck disable=SC2154
 
 # Copies the local repo to the given remote user@host:path (via rsync/ssh) and runs tests there (via ssh).
 # The path in user@host:path must be a relative path without dots to prevent accidents.
 # Expects params to be provided via bzfs_test_* env vars.
+
+# shellcheck disable=SC2154
 set -e
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 echo "Running tests on $bzfs_test_remote_userhost:$bzfs_test_remote_path ..."
