@@ -2,6 +2,10 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0] - Not yet released
+
+- [bzfs] Add [`Docker image`](bzfs_testbed_docker/README.md) and corresponding replication example.
+
 ## [1.19.0] - March 12, 2026
 
 - [bzfs] docs: Restructure and simplify READMEs.

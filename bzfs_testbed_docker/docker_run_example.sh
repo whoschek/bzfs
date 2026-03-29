@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+
+# Copyright 2024 Wolfgang Hoschek AT mac DOT com
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Configures and runs a basic example rootful bzfs docker container.
+# Run `up` on *each* of the testbed VMs to start containers everywhere, then run `runjob` once the peers are up.
+# Works out of the box on VMs created via ../lima_testbed.sh, except that it assumes that the $BZFS_DOCKER_IMAGE
+# is available - for example run `sudo ./docker_image.sh` on each testbed VM to first generate this prerequisite.
+#
+# If ~/bzfs/bzfs-config/cron.d exists, container startup copies its files into /etc/cron.d.
+# See ./cronjob_example for a documented cron file that periodically runs the same job as `runjob`.
+# If you change the image, managed cron files, port env vars or similar, run `down` and then `up` to recreate the
+# container.
+
+set -eo pipefail
+
+usage() {
+    prog_name="$(basename "$0")"
+    cat << EOF
+Usage: ${prog_name} up|down|shell|runjob [-v]|monitor [-v]
+
+Commands:
+  up            Create or start the container.
+  down          Remove the container if it exists.
+  shell         Enter an interactive shell in the container.
+  runjob        Run the example job in the container; add -v for verbose output.
+  monitor       Monitor snapshot age; add -v for verbose output.
+
+EOF
+}
+
+if [[ "$#" -eq 0 ]]; then
+    usage >&2
+    exit 2
+fi
+
+BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"  # e.g. 'docker.io/mydockerhubuser/bzfs:v1.19.0-ubuntu-24.04'
+BZFS_DOCKER_INSTALL_HPNSSH="${BZFS_DOCKER_INSTALL_HPNSSH:-false}"
+BZFS_CONTAINER_NAME="${BZFS_CONTAINER_NAME:-bzfs}"
+BZFS_HOST_PORT="${BZFS_HOST_PORT:-2222}"
+BZFS_JOBCONFIG="${BZFS_JOBCONFIG:-/bzfs/bzfs_testbed/bzfs_job_testbed.py}"
+
+# If enabled ban an IP for 15 minutes after 10 failed SSH authentications within 5 minutes.
+BZFS_FAIL2BAN_ENABLED="${BZFS_FAIL2BAN_ENABLED:-false}"
+BZFS_FAIL2BAN_BANTIME="${BZFS_FAIL2BAN_BANTIME:-15m}"
+BZFS_FAIL2BAN_MAXRETRY="${BZFS_FAIL2BAN_MAXRETRY:-10}"
+BZFS_FAIL2BAN_FINDTIME="${BZFS_FAIL2BAN_FINDTIME:-5m}"
+BZFS_FAIL2BAN_IGNOREIP="${BZFS_FAIL2BAN_IGNOREIP:-}"  # Example safe allowlist: '127.0.0.1/8 ::1'
+
+CONTAINER_USER_NAME="$(id -un)"
+CONTAINER_USER_UID="$(id -u)"
+CONTAINER_USER_GID="$(id -g)"
+CONTAINER_USER_HOME="$HOME"
+CONTAINER_HOST_HOME="${CONTAINER_USER_HOME}/${BZFS_CONTAINER_NAME}"
+DOCKER_CLI="${DOCKER_CLI:-$(command -v nerdctl || command -v docker)}"  # Lima includes nerdctl which is compatible w/ docker
+DOCKER_CLI="sudo $DOCKER_CLI"
+
+container_exec() {
+    $DOCKER_CLI exec --user="${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$BZFS_CONTAINER_NAME" ${1+"$@"}
+}
+
+require_running_container() {
+    if [[ "$($DOCKER_CLI inspect --format='{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+        echo "ERROR: Container '$BZFS_CONTAINER_NAME' is not running; use 'up' first" >&2
+        exit 1
+    fi
+}
+
+prepare_container_host_home() {
+    mkdir -p "$CONTAINER_HOST_HOME/bzfs-config/etc" "$CONTAINER_HOST_HOME/bzfs-config/cron.d"
+    mkdir -p "$CONTAINER_HOST_HOME/bzfs-job-logs" "$CONTAINER_HOST_HOME/bzfs-logs" "$CONTAINER_HOST_HOME/bzfs-var-log"
+    chmod u=rwx,go= "$CONTAINER_HOST_HOME/bzfs-job-logs" "$CONTAINER_HOST_HOME/bzfs-logs" "$CONTAINER_HOST_HOME/bzfs-var-log"
+
+    # configure /etc/ssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
+    etc_ssh_volume_source="$CONTAINER_HOST_HOME/bzfs-config/etc/ssh"
+    sudo rm -rf "$etc_ssh_volume_source"
+    sudo cp -a /etc/ssh "$etc_ssh_volume_source"
+
+    # configure /etc/hpnssh/ for the docker container, using /etc/ssh/ as template; will be bind-mounted
+    etc_hpnssh_volume_source="$CONTAINER_HOST_HOME/bzfs-config/etc/hpnssh"
+    sudo rm -rf "$etc_hpnssh_volume_source"
+    sudo cp -a /etc/ssh "$etc_hpnssh_volume_source"
+    sudo sed -i 's#/etc/ssh#/etc/hpnssh#g' "$etc_hpnssh_volume_source/sshd_config"  # change /etc/ssh to /etc/hpnssh
+
+    for sshd_config in "$etc_ssh_volume_source/sshd_config" "$etc_hpnssh_volume_source/sshd_config"; do
+        sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/Id' "$sshd_config"  # remove existing ports
+        sudo sed -i -E 's|^([[:space:]]*)Include([[:space:]]+)|\1# Include\2|I' "$sshd_config"  # comment out Include directives
+        # comment out any non-comment line that contains a PasswordAuthentication directive unless it says 'no'
+        sudo sed -i -E '/^[[:space:]]*#/!{/PasswordAuthentication/I{/^PasswordAuthentication no$/I! s/^/# /;}}' "$sshd_config"
+        sudo sed -i '1i PubkeyAuthentication yes' "$sshd_config"  # prepend explicit pubkey auth directive
+        sudo sed -i '1i PermitRootLogin no' "$sshd_config"  # prepend strict safe directive
+        sudo sed -i '1i KbdInteractiveAuthentication no' "$sshd_config"  # prepend strict safe directive
+        sudo sed -i '1i PasswordAuthentication no' "$sshd_config"  # prepend strict safe directive
+    done
+
+    if [[ "$BZFS_DOCKER_INSTALL_HPNSSH" == "true" ]]; then
+        sshd_config="$etc_hpnssh_volume_source/sshd_config"
+    else
+        sshd_config="$etc_ssh_volume_source/sshd_config"
+    fi
+    sudo sed -i "1i Port 2222" "$sshd_config"  # prepend port 2222
+    if [[ "$BZFS_HOST_PORT" != "2222" ]]; then
+        sudo sed -i "1i Port $BZFS_HOST_PORT" "$sshd_config"  # prepend internal port
+    fi
+}
+
+verbose=()
+if [[ "$2" == "-v" ]]; then
+    verbose+=("-v")
+fi
+
+case "$1" in
+    up)
+        prepare_container_host_home
+        $DOCKER_CLI image ls  # list all docker images in the local registry
+
+        # run container if it doesn't exist yet
+        if ! $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
+            $DOCKER_CLI run --detach \
+                --name="$BZFS_CONTAINER_NAME" \
+                --restart=unless-stopped \
+                --env="BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
+                --env="BZFS_CONTAINER_USER_UID=$CONTAINER_USER_UID" \
+                --env="BZFS_CONTAINER_USER_GID=$CONTAINER_USER_GID" \
+                --env="BZFS_CONTAINER_USER_HOME=$CONTAINER_USER_HOME" \
+                --env="BZFS_DOCKER_INSTALL_HPNSSH=$BZFS_DOCKER_INSTALL_HPNSSH" \
+                --env="BZFS_FAIL2BAN_ENABLED=$BZFS_FAIL2BAN_ENABLED" \
+                --env="BZFS_FAIL2BAN_BANTIME=$BZFS_FAIL2BAN_BANTIME" \
+                --env="BZFS_FAIL2BAN_MAXRETRY=$BZFS_FAIL2BAN_MAXRETRY" \
+                --env="BZFS_FAIL2BAN_FINDTIME=$BZFS_FAIL2BAN_FINDTIME" \
+                --env="BZFS_FAIL2BAN_IGNOREIP=$BZFS_FAIL2BAN_IGNOREIP" \
+                --env="BZFS_FAIL2BAN_PORT=2222" \
+                --publish="$BZFS_HOST_PORT:2222" \
+                --volume="$etc_ssh_volume_source:/etc/ssh:ro" \
+                --volume="$etc_hpnssh_volume_source:/etc/hpnssh:ro" \
+                --volume="$CONTAINER_USER_HOME/.ssh:/bzfs.ssh:ro" \
+                --volume="$CONTAINER_HOST_HOME/bzfs-config:/bzfs-config:ro" \
+                --volume="$CONTAINER_HOST_HOME/bzfs-job-logs:$CONTAINER_USER_HOME/bzfs-job-logs" \
+                --volume="$CONTAINER_HOST_HOME/bzfs-logs:$CONTAINER_USER_HOME/bzfs-logs" \
+                --volume="$CONTAINER_HOST_HOME/bzfs-var-log:/var/log" \
+                --volume=/etc/hostid:/etc/hostid:ro \
+                --volume=/etc/hostname:/etc/hostname:ro \
+                --uts=host \
+                --add-host="$(hostname):127.0.0.1" \
+                --device=/dev/zfs:/dev/zfs \
+                --privileged \
+                "$BZFS_DOCKER_IMAGE"
+        # start container if it isn't running yet aka if it has been stopped
+        elif [[ "$($DOCKER_CLI inspect --format='{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+            $DOCKER_CLI start "$BZFS_CONTAINER_NAME"
+        fi
+        ;;
+    down)
+        if $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
+            $DOCKER_CLI stop "$BZFS_CONTAINER_NAME"
+            $DOCKER_CLI rm "$BZFS_CONTAINER_NAME"
+        fi
+        ;;
+    shell)
+        require_running_container
+        $DOCKER_CLI exec -it \
+            --user="${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
+            --workdir="$CONTAINER_USER_HOME" \
+            "$BZFS_CONTAINER_NAME" \
+            bash -l
+        ;;
+    runjob)
+        require_running_container
+        container_exec zfs list  # verify
+        container_exec "$BZFS_JOBCONFIG" \
+            --create-src-snapshots --replicate  --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots \
+            "${verbose[@]}" \
+            --ssh-src-port="$BZFS_HOST_PORT" \
+            --ssh-dst-port="$BZFS_HOST_PORT"
+
+        # container_exec zfs list -t snapshot  # verify
+        ;;
+    monitor)
+        require_running_container
+        container_exec "$BZFS_JOBCONFIG" \
+            --monitor-src-snapshots --monitor-dst-snapshots \
+            "${verbose[@]}" \
+            --ssh-src-port="$BZFS_HOST_PORT" \
+            --ssh-dst-port="$BZFS_HOST_PORT"
+        ;;
+    -h | --help)
+        usage
+        exit 0
+        ;;
+    *)
+        echo "ERROR: Unknown argument: $1" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
+
+printf 'Success!\n'

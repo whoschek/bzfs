@@ -1,0 +1,8 @@
+# Example cron file for periodically running a bzfs job.
+# Replace `USER_HOME` and `USER_NAME` with your own values.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+HOME=USER_HOME
+
+* * * * * USER_NAME log_dir="$HOME/bzfs-job-logs/cron/$(date '+\%Y-\%m-\%d')" && log_file="$log_dir/cronjob_example_$(date '+\%Y-\%m-\%d_\%H-\%M-\%S').out" && mkdir -p "$log_dir" && /bzfs/bzfs_testbed/bzfs_job_testbed.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots --ssh-src-port=2222 --ssh-dst-port=2222 >> "$log_file" 2>&1
