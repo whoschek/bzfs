@@ -95,7 +95,7 @@ for i in "${!bzfs_docker_os_list[@]}"; do
     bzfs_docker_container="bzfs-$bzfs_docker_tag"
     if "$DOCKER_CLI" container inspect "$bzfs_docker_container" > /dev/null 2>&1; then
         echo "Removing existing $bzfs_docker_container ..."
-        "$DOCKER_CLI" rm -f "$bzfs_docker_container"
+        "$DOCKER_CLI" container rm -f "$bzfs_docker_container"
     fi
 
     container_build \
@@ -105,7 +105,7 @@ for i in "${!bzfs_docker_os_list[@]}"; do
     printf 'Built image %s from %s at tag %s\n' "$bzfs_docker_tag" "$BZFS_GIT_REMOTE" "$BZFS_GIT_TAG"
 
     # sanity check
-    "$DOCKER_CLI" run --rm --entrypoint bash "$bzfs_docker_tag" -lc '
+    "$DOCKER_CLI" container run --rm --entrypoint bash "$bzfs_docker_tag" -lc '
         set -euo pipefail
         command -v bzfs > /dev/null
         command -v bzfs_jobrunner > /dev/null

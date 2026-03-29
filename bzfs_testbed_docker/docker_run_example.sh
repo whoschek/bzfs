@@ -68,11 +68,11 @@ DOCKER_CLI="${DOCKER_CLI:-$(command -v nerdctl || command -v docker)}"  # Lima i
 DOCKER_CLI="sudo $DOCKER_CLI"
 
 container_exec() {
-    $DOCKER_CLI exec --user="${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$BZFS_CONTAINER_NAME" ${1+"$@"}
+    $DOCKER_CLI container exec --user="${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$BZFS_CONTAINER_NAME" ${1+"$@"}
 }
 
 require_running_container() {
-    if [[ "$($DOCKER_CLI inspect --format='{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+    if [[ "$($DOCKER_CLI container inspect --format='{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
         echo "ERROR: Container '$BZFS_CONTAINER_NAME' is not running; use 'up' first" >&2
         exit 1
     fi
@@ -128,7 +128,7 @@ case "$1" in
 
         # run container if it doesn't exist yet
         if ! $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
-            $DOCKER_CLI run --detach \
+            $DOCKER_CLI container run --detach \
                 --name="$BZFS_CONTAINER_NAME" \
                 --restart=unless-stopped \
                 --env="BZFS_CONTAINER_USER_NAME=$CONTAINER_USER_NAME" \
@@ -158,19 +158,19 @@ case "$1" in
                 --privileged \
                 "$BZFS_DOCKER_IMAGE"
         # start container if it isn't running yet aka if it has been stopped
-        elif [[ "$($DOCKER_CLI inspect --format='{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
-            $DOCKER_CLI start "$BZFS_CONTAINER_NAME"
+        elif [[ "$($DOCKER_CLI container inspect --format='{{.State.Running}}' "$BZFS_CONTAINER_NAME" 2> /dev/null)" != "true" ]]; then
+            $DOCKER_CLI container start "$BZFS_CONTAINER_NAME"
         fi
         ;;
     down)
         if $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
-            $DOCKER_CLI stop "$BZFS_CONTAINER_NAME"
-            $DOCKER_CLI rm "$BZFS_CONTAINER_NAME"
+            $DOCKER_CLI container stop "$BZFS_CONTAINER_NAME"
+            $DOCKER_CLI container rm "$BZFS_CONTAINER_NAME"
         fi
         ;;
     shell)
         require_running_container
-        $DOCKER_CLI exec -it \
+        $DOCKER_CLI container exec -it \
             --user="${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" \
             --workdir="$CONTAINER_USER_HOME" \
             "$BZFS_CONTAINER_NAME" \

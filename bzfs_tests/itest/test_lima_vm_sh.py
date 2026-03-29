@@ -476,7 +476,7 @@ class TestLimaVmScript(unittest.TestCase):
             docker_cli="$(command -v nerdctl || command -v docker)"
             env {docker_env_str} /bzfs/bzfs_testbed_docker/docker_run_example.sh up
 
-            if [[ "$(sudo "$docker_cli" inspect --format='{{{{.State.Running}}}}' bzfs)" != "true" ]]; then
+            if [[ "$(sudo "$docker_cli" container inspect --format='{{{{.State.Running}}}}' bzfs)" != "true" ]]; then
                 echo "ERROR: docker example container is not running" >&2
                 exit 1
             fi
@@ -511,7 +511,7 @@ class TestLimaVmScript(unittest.TestCase):
             docker_cli="$(command -v nerdctl || command -v docker)"
             tmpdir="$(mktemp -d)"
             container_bash() {
-                sudo "$docker_cli" exec bzfs bash -lc "$1"
+                sudo "$docker_cli" container exec bzfs bash -lc "$1"
             }
             cleanup() {
                 rm -rf "$tmpdir"
@@ -597,8 +597,8 @@ class TestLimaVmScript(unittest.TestCase):
             f"{log_prefix}+stop.log",
             r"""
             docker_cli="$(command -v nerdctl || command -v docker)"
-            sudo "$docker_cli" stop bzfs
-            if [[ "$(sudo "$docker_cli" inspect --format='{{.State.Running}}' bzfs)" == "true" ]]; then
+            sudo "$docker_cli" container stop bzfs
+            if [[ "$(sudo "$docker_cli" container inspect --format='{{.State.Running}}' bzfs)" == "true" ]]; then
                 echo "ERROR: docker example container is still running after docker stop" >&2
                 exit 1
             fi
