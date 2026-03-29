@@ -47,7 +47,7 @@ on:
           - test_almalinux_9_zfs_2_2
           - test_almalinux_9_zfs_2_2_hpnssh
           - test_freebsd_15_0
-          - test_freebsd_14_3
+          - test_freebsd_14_4
           - test_freebsd_13_5
           - none
         default: "test_ubuntu_24_04_fast"
@@ -640,7 +640,7 @@ jobs:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@4807432c7cab1c3f97688665332c0b932062d31f # aka v1.4.3; see https://github.com/vmactions/freebsd-vm
+        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@7ca82f79fe3078fecded6d3a2bff094995447bbd # aka v1.4.4; see https://github.com/vmactions/freebsd-vm
         with:
           release: "15.0"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
@@ -650,9 +650,9 @@ jobs:
         if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
 
-  test_freebsd_14_3: # currently uses zfs-2.2.7
+  test_freebsd_14_4: # currently uses zfs-2.2.9
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_14_3' || contains(github.event.inputs.job_names, 'test_freebsd_14_3')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_14_4' || contains(github.event.inputs.job_names, 'test_freebsd_14_4')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -667,7 +667,7 @@ jobs:
         id: test
         uses: *vmactions_freebsd_vm
         with:
-          release: "14.3"
+          release: "14.4"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
           run: |
             ./.github-workflow-scripts/test_freebsd_14_1.sh
@@ -717,7 +717,7 @@ jobs:
       - test_almalinux_9_zfs_2_2
       - test_almalinux_9_zfs_2_2_hpnssh
       - test_freebsd_15_0
-      - test_freebsd_14_3
+      - test_freebsd_14_4
       - test_freebsd_13_5
     steps:
       - uses: *actions_checkout
@@ -791,8 +791,8 @@ jobs:
       - name: Download coverage artifact
         uses: *actions_download_artifact
         with:
-          name: coverage-test_freebsd_14_3
-          path: coverage-test_freebsd_14_3
+          name: coverage-test_freebsd_14_4
+          path: coverage-test_freebsd_14_4
       - name: Download coverage artifact
         uses: *actions_download_artifact
         with:
