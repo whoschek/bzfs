@@ -97,8 +97,6 @@ shutdown_services() {
 ensure_container_user
 configure_fail2ban
 install_cron_jobs
-/usr/sbin/cron -f &
-cron_pid=$!
 
 mkdir -p /run/sshd
 docker_install_hpnssh="${BZFS_DOCKER_INSTALL_HPNSSH:?BZFS_DOCKER_INSTALL_HPNSSH must not be empty}"
@@ -108,6 +106,9 @@ else
     /usr/sbin/sshd -D -e 2>> /var/log/sshd.log &
 fi
 sshd_pid=$!
+
+/usr/sbin/cron -f &
+cron_pid=$!
 
 trap 'shutdown_services; exit 0' TERM INT
 wait -n "$cron_pid" "$sshd_pid" || true
