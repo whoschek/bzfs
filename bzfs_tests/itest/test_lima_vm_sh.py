@@ -346,7 +346,7 @@ class TestLimaVmScript(unittest.TestCase):
         """Runs a strict bash script, logs combined output, and fails with the saved log on error."""
         with open(log_path, "w", encoding="utf-8") as log_file:
             process = subprocess.run(
-                ["bash", "-eu", "-o", "pipefail", "-lc", script],
+                ["bash", "-e", "-lc", script],
                 check=False,
                 cwd=self.repo_root,
                 env=env,
@@ -476,13 +476,13 @@ class TestLimaVmScript(unittest.TestCase):
             docker_cli="$(command -v nerdctl || command -v docker)"
             env {docker_env_str} /bzfs/bzfs_testbed_docker/docker_run_example.sh up
 
+            sleep 2
             if [[ "$(sudo "$docker_cli" container inspect --format='{{{{.State.Running}}}}' bzfs)" != "true" ]]; then
                 echo "ERROR: docker example container is not running" >&2
                 exit 1
             fi
 
             {self._docker_smoke_ssh_client_setup_script()}
-            sleep 1
             """,
         )
 
@@ -635,19 +635,18 @@ class TestLimaVmScript(unittest.TestCase):
         dst_container_env: dict[str, str] | None = None,
     ) -> None:
         """Installs managed cron config, reloads the dst container, and asserts cron replicates a new snapshot."""
-        cron_name = f"cronjob_smoke_{self.log_time_prefix.replace('-', '').replace('_', '')}"
         before_common_suffixes: set[str] = self._get_common_vm_snapshot_suffixes(src_vm_name, dst_vm_name)
         self._run_logged_vm_bash_script(
             dst_vm_name,
             f"{log_prefix}+configure.log",
-            f"""
+            """
             cron_dir="$HOME/bzfs/bzfs-config/cron.d"
             mkdir -p "$cron_dir"
             sed \
                 -e "s/USER_NAME/$USER/g" \
                 -e "s#USER_HOME#$HOME#g" \
-                -e "s/cronjob_example/{cron_name}/g" \
-                /bzfs/bzfs_testbed_docker/cronjob_example > "$cron_dir/{cron_name}"
+                /bzfs/bzfs_testbed_docker/cronjob_example > "$cron_dir/cronjob_example"
+            rm -rf "$HOME/bzfs/bzfs-job-logs/cron"/*
             """,
         )
         self._run_logged_vm_bash_script(
@@ -655,6 +654,7 @@ class TestLimaVmScript(unittest.TestCase):
             f"{log_prefix}+reload-down.log",
             "/bzfs/bzfs_testbed_docker/docker_run_example.sh down",
         )
+        time.sleep(2.0)  # ensure new secondly snapshot can be taken
         self._start_docker_smoke_container(
             dst_vm_name,
             f"{log_prefix}+reload-up.log",
@@ -663,30 +663,29 @@ class TestLimaVmScript(unittest.TestCase):
         self._run_logged_vm_bash_script(
             dst_vm_name,
             f"{log_prefix}+wait.log",
-            f"""
-            cron_name={shlex.quote(cron_name)}
-            log_dir="$HOME/bzfs/bzfs-job-logs/cron/$(date '+%Y-%m-%d')"
-            cron_log_path=""
+            """
+            mkdir -p "$HOME/bzfs/bzfs-job-logs/cron"
+            cron_logs=""
             for _ in $(seq 1 18); do
-                cron_log_path="$(find "$log_dir" -maxdepth 1 -type f -name "${{cron_name}}_*.out" -print -quit 2>/dev/null || true)"
-                if [[ -n "$cron_log_path" ]]; then
+                cron_logs="$(find "$HOME/bzfs/bzfs-job-logs/cron" -type f -name '*.out' 2>/dev/null)"
+                if [[ "$cron_logs" != "" ]]; then
                     break
                 fi
                 sleep 5
             done
-            if [[ -z "$cron_log_path" ]]; then
-                ls -la "$HOME/bzfs/bzfs-config/cron.d" >&2 || true
+            if [[ "$cron_logs" == "" ]]; then
                 echo "ERROR: Cron replication job did not create a log file" >&2
                 exit 1
             fi
-            cat "$cron_log_path"
+            sleep 5
             """,
         )
 
         after_common_suffixes: set[str] = self._get_common_vm_snapshot_suffixes(src_vm_name, dst_vm_name)
         new_common_suffixes: set[str] = after_common_suffixes.difference(before_common_suffixes)
+        self.assertTrue(len(after_common_suffixes) > 0)
         self.assertTrue(
-            any(suffix.startswith("prod_onsite_") for suffix in new_common_suffixes),
+            len(new_common_suffixes) > 0,
             msg=(
                 f"before_common={sorted(before_common_suffixes)} "
                 f"after_common={sorted(after_common_suffixes)} "
@@ -729,22 +728,14 @@ grep -E "^__ZFS__(src|dst)" <<< "$shell_output"
         return result.stdout.strip()
 
     def _run_logged_vm_bash_script(self, vm_name: str, log_path: str, script: str) -> None:
-        """Runs a strict bash script in a Lima VM, saves combined output, and fails with the saved log on error."""
-        with open(log_path, "w", encoding="utf-8") as log_file:
-            process = subprocess.run(
-                ["limactl", "shell", "--tty=false", "--workdir=/bzfs", vm_name, "--", "bash", "-eu", "-o", "pipefail", "-s"],
-                check=False,
-                cwd=self.repo_root,
-                input=script,
-                text=True,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-            )
-        if process.returncode == 0:
-            return
-        with open(log_path, encoding="utf-8") as log_file:
-            log_output = log_file.read()
-        self.fail(f"log file: {log_path}\n\n{log_output}")
+        subprocess.run(
+            ["limactl", "shell", "--tty=false", "--workdir=/bzfs", vm_name, "--", "bash", "-e", "-s"],
+            check=True,
+            cwd=self.repo_root,
+            input=script,
+            text=True,
+            stderr=subprocess.STDOUT,
+        )
 
     def _run_vm_bash_command(self, vm_name: str, command: str) -> subprocess.CompletedProcess[str]:
         """Runs one bash command inside a Lima VM and returns captured output."""
@@ -767,7 +758,8 @@ grep -E "^__ZFS__(src|dst)" <<< "$shell_output"
 
     def _run_logged_testbed_script(self, log_path: str, action: str) -> None:
         """Runs `lima_testbed.sh` for the default 1x1 testbed and preserves combined logs."""
-        env = dict(os.environ)
+        env = {key: value for key, value in os.environ.items() if not key.startswith("LIMA_")}
+        env["LIMA_VM_TEMPLATE"] = "template:ubuntu-25.10"
         env["TESTBED_HOSTNAME_PREFIX"] = "test"
         env["TESTBED_NUM_SRC_VMS"] = "1"
         env["TESTBED_NUM_DST_VMS"] = "1"

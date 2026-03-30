@@ -252,6 +252,15 @@ jobs:
         run: |
           ./coverage.sh
           echo "bzfs-testrun-success"
+      - name: Set up Lima
+        uses: lima-vm/lima-actions/setup@25af04b575e17da32eb5173456ef8afaf1a76bad # aka v1.1.0; see https://github.com/lima-vm/lima-actions
+        with: # or manually install via `brew install lima` or equivalent
+          version: "v2.1.0"
+      - name: Run Docker smoke test via Lima
+        run: |
+          export bzfs_test_enable_lima_tests=true
+          export bzfs_test_names=bzfs_tests.itest.test_lima_vm_sh.TestLimaVmScript.test_docker_smoke
+          ./test.sh
       - name: Upload code coverage report to workflow run page
         if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
