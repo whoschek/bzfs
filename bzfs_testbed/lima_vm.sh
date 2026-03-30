@@ -176,7 +176,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     zfs --version
 
     # Run common preparation steps
-    sudo apt-get -y install python3 zstd mbuffer pv rsync ripgrep python3-venv
+    sudo apt-get -y install python3 zstd mbuffer pv cron rsync ripgrep python3-venv
     # sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo apt-get -y install npm bubblewrap && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 
