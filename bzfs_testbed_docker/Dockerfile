@@ -6,7 +6,10 @@ FROM ${BZFS_DOCKER_BASE_IMAGE}
 
 ARG BZFS_GIT_REMOTE=https://github.com/whoschek/bzfs.git
 ARG BZFS_GIT_TAG  # for example 'v1.19.0'
+
+# For hpnssh see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
 ARG BZFS_DOCKER_INSTALL_HPNSSH=true  # hpnssh is optional
+
 ARG DEBIAN_FRONTEND=noninteractive
 
 COPY docker_entrypoint.sh /usr/local/bin/docker_entrypoint.sh
@@ -25,9 +28,9 @@ RUN apt-get -y -qq update \
        fi \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --single-branch --branch "${BZFS_GIT_TAG}" "${BZFS_GIT_REMOTE}" /bzfs \
-    && ln -sf /bzfs/bzfs_main/bzfs /usr/local/bin/bzfs \
-    && ln -sf /bzfs/bzfs_main/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner \
+RUN git clone --single-branch --branch="$BZFS_GIT_TAG" "$BZFS_GIT_REMOTE" /bzfs \
+    && ln -s /bzfs/bzfs_main/bzfs /usr/local/bin/bzfs \
+    && ln -s /bzfs/bzfs_main/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner \
     && chmod u=rwx,go=rx /usr/local/bin/docker_entrypoint.sh
 
 WORKDIR /bzfs

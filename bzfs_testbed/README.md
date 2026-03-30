@@ -26,8 +26,5 @@ box. All default settings work out of the box.
 Then consider running the example replication jobconfig script [`bzfs_job_testbed.py`](bzfs_job_testbed.py) on the
 testbed, which also works out of the box.
 
-Or instead, simply tell Codex, Claude, or any comparable agent something like "Run the bzfs_job_testbed.py example
-replication script on the testbed." It will figure out the rest and do it.
-
 Advanced Option: If you want to run the example jobs in a docker container on the testbed VMs, see the usage guide in
 [`../bzfs_testbed_docker/README.md`](../bzfs_testbed_docker/README.md).

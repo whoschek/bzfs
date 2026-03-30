@@ -21,6 +21,7 @@
 #
 # If ~/bzfs/bzfs-config/cron.d exists, container startup copies its files into /etc/cron.d.
 # See ./cronjob_example for a documented cron file that periodically runs the same job as `runjob`.
+#
 # If you change the image, managed cron files, port env vars or similar, run `down` and then `up` to recreate the
 # container.
 

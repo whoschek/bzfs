@@ -19,8 +19,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   testbed with N source VMs and M destination VMs for testing, with ZFS and VM-to-VM SSH connectivity working out of the
   box. All default settings work out of the box. Also add example replication jobconfig script
   [`bzfs_job_testbed.py`](bzfs_testbed/bzfs_job_testbed.py) for use after running `lima_testbed.sh`, which also works
-  out of the box. With this in place, users can now simply tell Codex, Claude, or any comparable agent something like
-  "Run the bzfs_job_testbed.py example replication script on the testbed." It will figure out the rest and do it.
+  out of the box.
 - [bzfs] Add experimental Agent [skill](.agents/skills/bzfs-experimental-script-generator/SKILL.md) that can generate
   Bash or Python scripts that use `bzfs` and `bzfs_jobrunner` for custom ZFS replication workflows in a sandboxed test
   VM.
