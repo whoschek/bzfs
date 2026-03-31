@@ -554,6 +554,7 @@ usage: bzfs [-h]
             [--no-stream]
             [--no-resume-recv]
             [--create-bookmarks {all,hourly,minutely,secondly,none}]
+            [--create-dst-bookmarks]
             [--no-use-bookmark]
             [--ssh-cipher STRING]
             [--ssh-src-user STRING]
@@ -1838,6 +1839,15 @@ usage: bzfs [-h]
     --skip-replication --delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks
     notime 'all except latest 200' --include-snapshot-times-and-ranks 'anytime..90 days
     ago'`
+
+<!-- -->
+
+<div id="--create-dst-bookmarks"></div>
+
+**--create-dst-bookmarks**
+
+*  For each bookmark that --create-bookmarks creates on the source dataset also create a
+    corresponding bookmark on the destination dataset.
 
 <!-- -->
 

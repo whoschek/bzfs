@@ -291,6 +291,7 @@ class Params(MiniParams):
         self.no_stream: Final[bool] = args.no_stream
         self.resume_recv: Final[bool] = not args.no_resume_recv
         self.create_bookmarks: Final[str] = args.create_bookmarks
+        self.create_dst_bookmarks: Final[bool] = args.create_dst_bookmarks
         self.use_bookmark: Final[bool] = not args.no_use_bookmark
 
         self.src: Final[Remote] = Remote("src", args, self)  # src dataset, host and ssh options

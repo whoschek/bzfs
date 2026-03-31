@@ -2832,6 +2832,22 @@ class LocalTestCase(IntegrationTestCase):
         self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--create-bookmarks=all")
         self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2", "s3"])
         self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1", "s2", "s3"])
+        self.assert_bookmark_names(ibase.DST_ROOT_DATASET, [])
+
+    def test_create_zfs_bookmarks_existing_bookmark_with_create_dst_bookmarks(self) -> None:
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        if self.is_no_privilege_elevation():
+            self.skipTest("Creating bookmarks on dst needs extra permissions")
+        self.setup_basic()
+        first_snapshot = snapshots(ibase.SRC_ROOT_DATASET)[0]
+        first_tag = snapshot_name(first_snapshot)
+        create_bookmark(ibase.SRC_ROOT_DATASET, first_tag, first_tag)
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1"])
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--create-bookmarks=all", "--create-dst-bookmarks")
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2", "s3"])
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1", "s2", "s3"])
+        self.assert_bookmark_names(ibase.DST_ROOT_DATASET, ["s1", "s2", "s3"])
 
     @staticmethod
     def create_resumable_snapshots(lo: int, hi: int, size_in_bytes: int = 1024 * 1024) -> None:

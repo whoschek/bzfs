@@ -432,7 +432,7 @@ def _replicate_dataset_fully(
             job.dst_dataset_exists[dst_dataset] = True
         with job.stats_lock:
             job.num_snapshots_replicated += 1
-        _create_zfs_bookmarks(job, src, src_dataset, [oldest_src_snapshot])
+        _create_zfs_bookmarks_src_dst(job, src, src_dataset, dst, dst_dataset, [oldest_src_snapshot])
         _zfs_set(job, set_opts, dst, dst_dataset)
         dry_run_no_send = dry_run_no_send or p.dry_run
         retry_count = 0
@@ -546,13 +546,13 @@ def _replicate_dataset_incrementally(
             job.num_snapshots_replicated += curr_num_snapshots
         assert p.create_bookmarks
         if p.create_bookmarks == "all":
-            _create_zfs_bookmarks(job, src, src_dataset, to_snapshots)
+            _create_zfs_bookmarks_src_dst(job, src, src_dataset, dst, dst_dataset, to_snapshots)
         elif p.create_bookmarks != "none":
             threshold_millis: int = p.xperiods.label_milliseconds("_" + p.create_bookmarks)
             to_snapshots = [snap for snap in to_snapshots if p.xperiods.label_milliseconds(snap) >= threshold_millis]
             if i == len(steps_todo) - 1 and (len(to_snapshots) == 0 or to_snapshots[-1] != to_snap):
                 to_snapshots.append(to_snap)  # ensure latest common snapshot is bookmarked
-            _create_zfs_bookmarks(job, src, src_dataset, to_snapshots)
+            _create_zfs_bookmarks_src_dst(job, src, src_dataset, dst, dst_dataset, to_snapshots)
     _zfs_set(job, set_opts, dst, dst_dataset)
 
 
@@ -1018,6 +1018,19 @@ def _create_zfs_filesystem(job: Job, filesystem: str) -> None:
             if not p.dry_run:
                 job.dst_dataset_exists[parent] = True
         parent += "/"
+
+
+def _create_zfs_bookmarks_src_dst(
+    job: Job, src: Remote, src_dataset: str, dst: Remote, dst_dataset: str, src_snapshots: list[str]
+) -> None:
+    """Creates bookmarks for the given snapshots, using the 'zfs bookmark' CLI."""
+    _create_zfs_bookmarks(job, src, src_dataset, src_snapshots)
+    p = job.params
+    if p.create_dst_bookmarks:
+        dst_snapshots: list[str] = [
+            replace_prefix(snapshot, old_prefix=src_dataset, new_prefix=dst_dataset) for snapshot in src_snapshots
+        ]
+        _create_zfs_bookmarks(job, dst, dst_dataset, dst_snapshots)
 
 
 def _create_zfs_bookmarks(job: Job, remote: Remote, dataset: str, snapshots: list[str]) -> None:

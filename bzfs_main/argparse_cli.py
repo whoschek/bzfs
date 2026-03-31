@@ -1135,6 +1135,10 @@ than 300+60=360 minutes old) [critical]. Analog for minutely and daily snapshots
              "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks notime 'all except latest 200' "
              "--include-snapshot-times-and-ranks 'anytime..90 days ago'`\n\n")
     parser.add_argument(
+        "--create-dst-bookmarks", action="store_true",
+        help="For each bookmark that --create-bookmarks creates on the source dataset also create a corresponding bookmark "
+             "on the destination dataset.\n\n")
+    parser.add_argument(
         "--no-use-bookmark", action="store_true",
         help=f"For increased safety, in normal replication operation {PROG_NAME} replication also looks for bookmarks "
              "(in addition to snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
