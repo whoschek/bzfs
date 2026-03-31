@@ -62,14 +62,14 @@ BZFS_GIT_TAG=v1.19.0 sudo ./docker_image.sh
 
 ## Run the Example Container
 
-The example runner uses the local image tag from `BZFS_DOCKER_IMAGE`, defaulting to `v1.19.0-ubuntu-24.04`. Override it
-if you use a different tag or registry.
+The example runner uses the local image tag from `$BZFS_DOCKER_IMAGE`. If unset, it defaults to the latest stable `bzfs`
+tag with the OS suffix, for example `v1.19.0-ubuntu-24.04`. Override it if you use a different tag or registry.
 
 Bring the container up on each VM:
 
 ```bash
 cd bzfs_testbed_docker
-BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_run_example.sh up
+./docker_run_example.sh up
 ```
 
 The script forwards the host port `2222` to container port `2222`, which is where OpenSSH listens inside of the
@@ -78,7 +78,7 @@ container. To use `hpnsshd` instead, recreate the container with:
 ```bash
 cd bzfs_testbed_docker
 ./docker_run_example.sh down
-BZFS_DOCKER_INSTALL_HPNSSH=true BZFS_DOCKER_IMAGE=v1.19.0-ubuntu-24.04 ./docker_run_example.sh up
+BZFS_DOCKER_INSTALL_HPNSSH=true ./docker_run_example.sh up
 ```
 
 `up` performs the following:

@@ -47,11 +47,11 @@ if [[ "$#" -eq 0 ]]; then
     exit 2
 fi
 
-BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-v1.19.0-ubuntu-24.04}"  # e.g. 'docker.io/mydockerhubuser/bzfs:v1.19.0-ubuntu-24.04'
 BZFS_DOCKER_INSTALL_HPNSSH="${BZFS_DOCKER_INSTALL_HPNSSH:-false}"
 BZFS_CONTAINER_NAME="${BZFS_CONTAINER_NAME:-bzfs}"
 BZFS_HOST_PORT="${BZFS_HOST_PORT:-2222}"
 BZFS_JOBCONFIG="${BZFS_JOBCONFIG:-/bzfs/bzfs_testbed/bzfs_job_testbed.py}"
+BZFS_GIT_REMOTE="${BZFS_GIT_REMOTE:-https://github.com/whoschek/bzfs.git}"
 
 # If enabled ban an IP for 15 minutes after 10 failed SSH authentications within 5 minutes.
 BZFS_FAIL2BAN_ENABLED="${BZFS_FAIL2BAN_ENABLED:-false}"
@@ -70,6 +70,13 @@ DOCKER_CLI="sudo $DOCKER_CLI"
 
 container_exec() {
     $DOCKER_CLI container exec --user="${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$BZFS_CONTAINER_NAME" ${1+"$@"}
+}
+
+fetch_latest_stable_bzfs_tag() {
+    git ls-remote --refs --tags --sort='version:refname' "$BZFS_GIT_REMOTE" "refs/tags/v*" |
+        sed 's#^[^[:space:]]*[[:space:]]refs/tags/##' |
+        grep -E '^v[0-9]+([.][0-9]+)*$' |
+        tail -n 1
 }
 
 require_running_container() {
@@ -129,6 +136,7 @@ case "$1" in
 
         # run container if it doesn't exist yet
         if ! $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
+            BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-$(fetch_latest_stable_bzfs_tag)-ubuntu-24.04}"  # e.g. 'docker.io/mydockerhubuser/bzfs:v1.19.0-ubuntu-24.04'
             $DOCKER_CLI container run --detach \
                 --name="$BZFS_CONTAINER_NAME" \
                 --restart=unless-stopped \
