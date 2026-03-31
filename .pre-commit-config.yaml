@@ -26,11 +26,11 @@ default_install_hook_types:
   - commit-msg
 repos:
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.1
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # aka v8.30.1
     hooks:                              # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
       - id: gitleaks                    # defaults to: gitleaks git --pre-commit --redact --staged --verbose
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # aka v6.0.0
     hooks:
       - id: detect-private-key          # Prevent the accidental inclusion of private keys in your commits
       - id: check-merge-conflict        # Check that merge conflicts are not being committed
@@ -66,20 +66,20 @@ repos:
           --space-redirects,            # Keep space after redirection operators
           --case-indent,                # Indent switch cases
         ]
-        additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@v3.13.0]
+        additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@5c4d285c3e8fa3b85137b34cec5ce66b98d97bdc]  # aka v3.13.0
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
+    rev: 745eface02aef23e168a8afb6b5737818efbea95  # aka v0.11.0.1
     hooks:
       - id: shellcheck                  # Validate syntax of shell scripts
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.36.2
+    rev: f761d025eb06bcd6a45bf152ba3593c9b8ad9a9b  # aka 0.36.2
     hooks:
       - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
       - id: check-compose-spec          # Validate syntax of Docker Compose files
       - id: check-dependabot            # Validate syntax of Dependabot config files
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.11
+    rev: 393031adb9afb225ee52ae2ccd7a5af5525e03e8  # aka v1.7.11
     hooks:
       - id: actionlint                  # Validate semantics (and some syntax) of GitHub Workflow YAML files
         args: [--shellcheck=.venv/bin/shellcheck]
@@ -89,7 +89,7 @@ repos:
   #     - id: zizmor                              # Validate syntax of GitHub Workflow YAML files
   #       args: [--fix=all]
   - repo: https://github.com/PyCQA/docformatter
-    rev: v1.7.7
+    rev: e73b8ba0c1316be565983236c72e653ad44e6b66  # aka v1.7.7
     hooks:
       - id: docformatter  # Reformat Python docstrings to follow PEP 257 and wrap them to a specific line length
         args: [
@@ -99,44 +99,39 @@ repos:
           # `force-wrap` remains at its default false: force descriptions to be wrapped even if it may result in a mess?
         ]
   - repo: https://github.com/pycqa/isort
-    rev: 6.1.0
+    rev: ec0efaee4acfce198521e43caa3029b06cedd64a  # aka 6.1.0
     hooks:
       - id: isort                       # Reformat Python imports more precisely than ruff (via force_grid_wrap)
         stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
       # config options like `force_grid_wrap` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.8
+    rev: aca6d4c8045a504e2812ea4bedff1d0a09e437bc  # aka v0.15.8
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
   - repo: https://github.com/pycqa/pylint
-    rev: v4.0.5
+    rev: 88e1ab7545a4af4aea15c305a154c164a95ab842  # aka v4.0.5
     hooks:
       - id: pylint                      # Run `pylint` linter to check if there are problems in the Python source code
         name: pylint (cyclic imports, etc)
         stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
         files: '^(?!bzfs_tests/).*\.py$'  # Run on all Python files except bzfs_tests/
         # config options like `enable` live in pyproject.toml
-  - repo: local
+  - repo: https://github.com/facebook/pyrefly-pre-commit
+    rev: b12404a8c8109c337e78bae52ed68b42f2941f39  # aka 0.58.0
     hooks:
-      - id: pyrefly-infer
+      - id: pyrefly-check
+        alias: pyrefly-infer
         name: "pyrefly infer (auto-fix types)"
         entry: pyrefly infer --containers=true
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
-        language: python
-        additional_dependencies: ['pyrefly==0.57.1']
-        types: [python]
         pass_filenames: false
       - id: pyrefly-check
         name: "pyrefly check (type checking)"
-        entry: pyrefly check
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
-        language: python
-        additional_dependencies: ['pyrefly==0.57.1']
-        types: [python]
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+    rev: a66e98df7b4aeeb3724184b332785976d062b92e  # aka v1.19.1
     hooks:
       - id: mypy                             # Run `mypy` Python type checker
         exclude: '^\.git.*$'
@@ -205,9 +200,9 @@ repos:
           --print-width=125,
         ]
         exclude: '^\.pre-commit-config\.yaml$'
-        additional_dependencies: ["prettier@3.8.1"]  # see https://github.com/prettier/prettier
+        additional_dependencies: ['prettier@3.8.1']  # see https://github.com/prettier/prettier
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.2
+    rev: 2ccb47ff45ad361a21071a7eedda4c37e6ae8c5a  # aka v2.4.2
     hooks:
       - id: codespell  # Auto-fix typos; if you think this is in error, consider changing the ignore-words-list below
         args: [
@@ -217,12 +212,12 @@ repos:
           "--ignore-words-list=cach,grup,mut",  # Project-specific words that should not be treated as typos
         ]
   - repo: https://github.com/psf/black
-    rev: 25.11.0
+    rev: 05f0a8ce1f71fbb36e1e032d3b518c7b945089a2  # aka 25.11.0
     hooks:
       - id: black                               # Run `black` Python code formatter
       # style options like `line_length` live in pyproject.toml
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.10.0
+    rev: 9f3ec868c0429155a46b4819b625d47a8522a3d5  # aka v4.10.0
     hooks:
       - id: commitizen  # Check commit msg has the form `type(scope): description` per https://www.conventionalcommits.org
         stages: [commit-msg]

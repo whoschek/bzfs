@@ -465,7 +465,7 @@ class TestLimaVmScript(unittest.TestCase):
 
     def _start_docker_smoke_container(self, vm_name: str, log_path: str, extra_env: dict[str, str] | None = None) -> None:
         """Starts one Docker smoke container and waits for the SSH service it exposes."""
-        docker_env = {}
+        docker_env: dict[str, str] = {}
         if extra_env is not None:
             docker_env.update(extra_env)
         docker_env_str = " ".join(f"{key}={shlex.quote(value)}" for key, value in docker_env.items())
