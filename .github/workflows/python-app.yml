@@ -886,7 +886,7 @@ jobs:
           name: generate_website
           path: generate_website
       - name: Setup Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # aka v5.0.0; see https://github.com/actions/configure-pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # aka v6.0.0; see https://github.com/actions/configure-pages
       - name: Upload website to GitHub Pages
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # aka v4.0.0; see https://github.com/actions/upload-pages-artifact
         with:
@@ -894,7 +894,7 @@ jobs:
           path: generate_website
       - name: Deploy website to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # aka v4.0.5; see https://github.com/actions/deploy-pages
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # aka v5.0.0; see https://github.com/actions/deploy-pages
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
       - name: "Display URL of GitHub Pages"

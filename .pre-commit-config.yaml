@@ -82,7 +82,7 @@ repos:
       - id: check-compose-spec          # Validate syntax of Docker Compose files
       - id: check-dependabot            # Validate syntax of Dependabot config files
   - repo: https://github.com/rhysd/actionlint
-    rev: 393031adb9afb225ee52ae2ccd7a5af5525e03e8  # aka v1.7.11
+    rev: 914e7df21a07ef503a81201c76d2b11c789d3fca  # aka v1.7.12
     hooks:
       - id: actionlint                  # Validate semantics (and some syntax) of GitHub Workflow YAML files
         args: [--shellcheck=.venv/bin/shellcheck]
