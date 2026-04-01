@@ -72,8 +72,8 @@ container_exec() {
     $DOCKER_CLI container exec --user="${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$BZFS_CONTAINER_NAME" ${1+"$@"}
 }
 
-fetch_latest_stable_bzfs_tag() {
-    git ls-remote --refs --tags --sort='version:refname' "$BZFS_GIT_REMOTE" "refs/tags/v*" |
+fetch_latest_stable_bzfs_tag() {  # for example returns 'v1.19.0'
+    git ls-remote --refs --tags --sort='version:refname' "$BZFS_GIT_REMOTE" 'refs/tags/v*' |
         sed 's#^[^[:space:]]*[[:space:]]refs/tags/##' |
         grep -E '^v[0-9]+([.][0-9]+)*$' |
         tail -n 1

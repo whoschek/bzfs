@@ -33,8 +33,8 @@ BZFS_DOCKER_REGISTRY_PREFIX="${BZFS_DOCKER_REGISTRY_PREFIX:-}"  # e.g. 'docker.i
 BZFS_DOCKER_PLATFORMS="${BZFS_DOCKER_PLATFORMS:-linux/amd64,linux/arm64}" # remove one on "exec /bin/sh: exec format error"
 DOCKER_CLI="${DOCKER_CLI:-$(command -v nerdctl || command -v docker)}"  # Lima includes nerdctl which is compatible w/ docker
 
-fetch_latest_stable_bzfs_tag() {
-    git ls-remote --refs --tags --sort='version:refname' "$BZFS_GIT_REMOTE" "refs/tags/v*" |
+fetch_latest_stable_bzfs_tag() {  # for example returns 'v1.19.0'
+    git ls-remote --refs --tags --sort='version:refname' "$BZFS_GIT_REMOTE" 'refs/tags/v*' |
         sed 's#^[^[:space:]]*[[:space:]]refs/tags/##' |
         grep -E '^v[0-9]+([.][0-9]+)*$' |
         tail -n 1
@@ -120,13 +120,13 @@ for i in "${!bzfs_docker_os_list[@]}"; do
         if [[ "$BZFS_GIT_TAG" == "$latest_stable_bzfs_tag" ]]; then
             bzfs_docker_registry_tags+=(--tag "${bzfs_docker_registry_repo}:latest-${bzfs_docker_os}")
         fi
-        if [[ "$(basename "$DOCKER_CLI")" == "docker" ]]; then
+        if [[ "$(basename "$DOCKER_CLI")" != "nerdctl" ]]; then  # `docker` CLI
             container_build \
                 --platform "$BZFS_DOCKER_PLATFORMS" \
                 "${bzfs_docker_registry_tags[@]}" \
                 --push \
                 "$script_dir"
-        else  # workaround for the fact that nerdctl does not understand --push
+        else  # workaround for the fact that nerdctl does not understand --push (vs `docker` CLI)
             container_build \
                 --platform "$BZFS_DOCKER_PLATFORMS" \
                 "${bzfs_docker_registry_tags[@]}" \
