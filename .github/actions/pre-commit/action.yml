@@ -28,15 +28,19 @@ runs:
       shell: bash
       run: |
         python3 -m pip install --upgrade pip
+
         COOLDOWN_DAYS=7  # for background see https://nesbitt.io/2026/03/04/package-managers-need-to-cool-down.html
         export PIP_UPLOADED_PRIOR_TO="$(python3 -c "from datetime import datetime, timedelta, timezone; print((datetime.now(timezone.utc) - timedelta(days=$COOLDOWN_DAYS)).strftime('%Y-%m-%dT%H:%M:%SZ'))")"
         #export PIP_UPLOADED_PRIOR_TO="P${COOLDOWN_DAYS}D"  # requires pip >= 26.1
         export UV_EXCLUDE_NEWER="$COOLDOWN_DAYS days"
         export NPM_CONFIG_MIN_RELEASE_AGE=$COOLDOWN_DAYS
+
         python3 -m pip install -e '.[dev]'
+
         # In CI, disable pre-commit fail_fast so all hooks run and report.
         # This keeps local developer experience unchanged (fail_fast remains true in the repo config).
         sed -i 's/^fail_fast:\s*true/fail_fast: false/' .pre-commit-config.yaml
         echo "[CI] pre-commit fail_fast is now set to: $(grep '^fail_fast:' .pre-commit-config.yaml)"
+
         # Run all normal pre-commit hooks, plus the manual stage for CI-only checks such as cyclic import detection by pylint
         pre-commit run --all-files --hook-stage manual
