@@ -24,6 +24,9 @@ fail_fast: true                         # Abort on first failing hook
 default_install_hook_types:
   - pre-commit
   - commit-msg
+default_language_version:
+  golang: 1.26.1
+  node: lts                             # resolves to node >= v24, npm >= 11.11.0
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # aka v8.30.1
@@ -211,8 +214,8 @@ repos:
           "--interactive=0",                    # No interactivity on making changes to files
           "--ignore-words-list=cach,grup,mut",  # Project-specific words that should not be treated as typos
         ]
-  - repo: https://github.com/psf/black
-    rev: 05f0a8ce1f71fbb36e1e032d3b518c7b945089a2  # aka 25.11.0
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 2892f1f81088477370d4fbc56545c05d33d2493f  # aka 25.11.0
     hooks:
       - id: black                               # Run `black` Python code formatter
       # style options like `line_length` live in pyproject.toml
