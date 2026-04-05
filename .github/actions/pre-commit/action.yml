@@ -28,12 +28,16 @@ runs:
       shell: bash
       run: |
         python3 -m pip install --upgrade pip
+        python3 -m pip --version
 
         COOLDOWN_DAYS=7  # for background see https://nesbitt.io/2026/03/04/package-managers-need-to-cool-down.html
         export PIP_UPLOADED_PRIOR_TO="$(python3 -c "from datetime import datetime, timedelta, timezone; print((datetime.now(timezone.utc) - timedelta(days=$COOLDOWN_DAYS)).strftime('%Y-%m-%dT%H:%M:%SZ'))")"
         #export PIP_UPLOADED_PRIOR_TO="P${COOLDOWN_DAYS}D"  # requires pip >= 26.1
         export UV_EXCLUDE_NEWER="$COOLDOWN_DAYS days"
         export NPM_CONFIG_MIN_RELEASE_AGE=$COOLDOWN_DAYS
+        export NPM_CONFIG_IGNORE_SCRIPTS=true
+        export PIP_ONLY_BINARY=:all:
+        export PIP_NO_BINARY=argparse-manpage,untokenize  # not yet available as wheels
 
         python3 -m pip install -e '.[dev]'
 
