@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Runs the test suite.
+
 # shellcheck disable=SC2154
 set -e
 cd "$(dirname "$(realpath "$0")")"

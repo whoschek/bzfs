@@ -15,6 +15,9 @@
 # limitations under the License.
 # shellcheck disable=SC2154
 
+# Runs the test suite while collecting coverage metrics.
+# Prerequisites: See AGENTS.md section "How to Set up the Environment"
+
 set -e
 # Use tmpfs (RAM disk) as fast backing storage where available
 if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
@@ -26,13 +29,6 @@ echo "Now using TMPDIR: $TMPDIR"
 echo "Now using bzfs_test_mode: $bzfs_test_mode"
 
 cd "$(dirname "$(realpath "$0")")"
-
-if [ "$(uname -s)" = "FreeBSD" ]; then
-    echo "Running on FreeBSD"
-elif [ "$(which coverage 2> /dev/null)" = "" ]; then
-    python3 -m pip install --upgrade pip
-    python3 -m pip install --upgrade "coverage[toml]>=7.6"
-fi
 export PYTHON_LAZY_IMPORTS=normal  # PEP 810
 
 # see https://coverage.readthedocs.io/
@@ -41,6 +37,6 @@ python3 -m coverage report | tee coverage_report.txt
 python3 -m coverage html
 python3 -m coverage xml
 
-if [ "$(which zfs 2> /dev/null)" != "" ]; then
+if [ "$(command -v zfs 2> /dev/null)" != "" ]; then
     PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate
 fi

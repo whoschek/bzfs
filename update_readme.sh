@@ -1,25 +1,12 @@
 #!/usr/bin/env bash
+
 # Regenerate both README files from argparse help text and refresh shell completion.
+# Prerequisites: See AGENTS.md section "How to Set up the Environment"
+
 set -e
 cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
-
-# bzfs_main.* must be part of a virtual environment for `argparse-manpage` to work correctly
-tmp_venv=.venv-argparse-manpage
-if [ -d .venv ]; then
-    # shellcheck disable=SC1091
-    . .venv/bin/activate
-else
-    rm -rf $tmp_venv
-    python3 -m venv $tmp_venv
-    # shellcheck disable=SC1091
-    . $tmp_venv/bin/activate
-    python3 -m pip install --upgrade pip
-    python3 -m pip install -e '.[dev]'
-fi
 
 export NO_COLOR=1  # don't add color codes to generated man pages
 python3 -m bzfs_docs.update_readme bzfs_main.bzfs README.md
 python3 -m bzfs_docs.update_readme bzfs_main.bzfs_jobrunner README_bzfs_jobrunner.md
 python3 -m bash_completion_d.shell_completion_generator > ./bash_completion_d/bzfs-shell-completion
-
-rm -rf $tmp_venv
