@@ -1563,8 +1563,7 @@ class Job(MiniJob):
             log.info("Next scheduled snapshot times ...%s", text)
 
         # sort keys to ensure that we take snapshots for dailies before hourlies, and so on
-        label_indexes: dict[SnapshotLabel, int] = {label: k for k, label in enumerate(config_labels)}
-        datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
+        datasets_to_snapshot = {lbl: datasets_to_snapshot[lbl] for lbl in config_labels if lbl in datasets_to_snapshot}
         return datasets_to_snapshot
 
     def handle_minmax_snapshots(

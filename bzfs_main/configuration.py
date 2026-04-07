@@ -701,7 +701,6 @@ class CreateSrcSnapshotConfig:
 
         # Compute the schedule for upcoming periodic time events (suffix_durations). This event schedule is also used in
         # daemon mode via sleep_until_next_daemon_iteration()
-        suffixes: list[str] = []
         labels: list[SnapshotLabel] = []
         create_src_snapshots_plan: str = args.create_src_snapshots_plan or str({"bzfs": {"onsite": {"adhoc": 1}}})
         for org, target_periods in ast.literal_eval(create_src_snapshots_plan).items():
@@ -711,8 +710,8 @@ class CreateSrcSnapshotConfig:
                         die(f"--create-src-snapshots-plan: Period amount must be a non-negative integer: {period_amount}")
                     if period_amount > 0:
                         suffix: str = nsuffix(period_unit)
-                        suffixes.append(suffix)
                         labels.append(SnapshotLabel(prefix=nprefix(org), infix=ninfix(target), timestamp="", suffix=suffix))
+        suffixes: list[str] = list({label.suffix for label in labels})  # dedupe
         xperiods: SnapshotPeriods = p.xperiods
         if self.skip_create_src_snapshots:
             duration_amount, duration_unit = p.xperiods.suffix_to_duration0(p.daemon_frequency)
@@ -739,7 +738,7 @@ class CreateSrcSnapshotConfig:
                     )
             return duration_milliseconds, suffix
 
-        suffixes = sorted(suffixes, key=suffix_key, reverse=True)  # take snapshots for dailies before hourlies, and so on
+        suffixes.sort(key=suffix_key, reverse=True)  # take snapshots for dailies before hourlies, and so on
         self.suffix_durations: Final[dict[str, tuple[int, str]]] = {sfx: suffix_durations[sfx] for sfx in suffixes}  # sort
         suffix_indexes: dict[str, int] = {suffix: k for k, suffix in enumerate(suffixes)}
         labels.sort(key=lambda label: (suffix_indexes[label.suffix], label))  # take snapshots for dailies before hourlies
