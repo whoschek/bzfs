@@ -70,6 +70,9 @@ from datetime import (
     datetime,
     timezone,
 )
+from pathlib import (
+    Path,
+)
 from typing import (
     Callable,
 )
@@ -3113,39 +3116,42 @@ class TestSnapshotCache(AbstractTestCase):
         Design Rationale: Prevents cross-environment conflation when multiple ssh configs target same host/port.
         """
 
-        cfg_a = "/tmp/bzfs_ssh_config_a"  # only the basename constraint matters; file need not exist
-        cfg_b = "/tmp/bzfs_ssh_config_b"
-        with (
-            self.job_context(
-                [
-                    "--ssh-src-host",
-                    "127.0.0.1",
-                    "--ssh-dst-host",
-                    "127.0.0.1",
-                    "--ssh-dst-config-file",
-                    cfg_a,
-                    SRC_DATASET,
-                    DST_DATASET,
-                ]
-            ) as (job_a, _tmp_a),
-            self.job_context(
-                [
-                    "--ssh-src-host",
-                    "127.0.0.1",
-                    "--ssh-dst-host",
-                    "127.0.0.1",
-                    "--ssh-dst-config-file",
-                    cfg_b,
-                    SRC_DATASET,
-                    DST_DATASET,
-                ]
-            ) as (job_b, _tmp_b),
-        ):
-            job_a.params.dst.ssh_user_host = "u@h"
-            job_b.params.dst.ssh_user_host = "u@h"
-            label_a = self.replication_cache_label(job_a, DST_DATASET)
-            label_b = self.replication_cache_label(job_b, DST_DATASET)
-            self.assertNotEqual(label_a, label_b)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_a = os.path.join(tmpdir, "bzfs_ssh_config_a")
+            cfg_b = os.path.join(tmpdir, "bzfs_ssh_config_b")
+            Path(cfg_a).touch()
+            Path(cfg_b).touch()
+            with (
+                self.job_context(
+                    [
+                        "--ssh-src-host",
+                        "127.0.0.1",
+                        "--ssh-dst-host",
+                        "127.0.0.1",
+                        "--ssh-dst-config-file",
+                        cfg_a,
+                        SRC_DATASET,
+                        DST_DATASET,
+                    ]
+                ) as (job_a, _tmp_a),
+                self.job_context(
+                    [
+                        "--ssh-src-host",
+                        "127.0.0.1",
+                        "--ssh-dst-host",
+                        "127.0.0.1",
+                        "--ssh-dst-config-file",
+                        cfg_b,
+                        SRC_DATASET,
+                        DST_DATASET,
+                    ]
+                ) as (job_b, _tmp_b),
+            ):
+                job_a.params.dst.ssh_user_host = "u@h"
+                job_b.params.dst.ssh_user_host = "u@h"
+                label_a = self.replication_cache_label(job_a, DST_DATASET)
+                label_b = self.replication_cache_label(job_b, DST_DATASET)
+                self.assertNotEqual(label_a, label_b)
 
     def test_dataset_cache_namespace_prevents_collision_across_src_ssh_config_file(self) -> None:
         """Dataset-level '=' cache paths must differ across src ssh_config_file values.
@@ -3155,38 +3161,41 @@ class TestSnapshotCache(AbstractTestCase):
         Design Rationale: Avoids stale or incorrect cache reuse across distinct SSH configurations.
         """
 
-        cfg_a = "/tmp/bzfs_ssh_config_src_a"
-        cfg_b = "/tmp/bzfs_ssh_config_src_b"
-        dataset = SRC_DATASET
-        with (
-            self.job_context(
-                [
-                    "--ssh-src-host",
-                    "127.0.0.1",
-                    "--ssh-src-config-file",
-                    cfg_a,
-                    dataset,
-                    DST_DATASET,
-                ]
-            ) as (job_a, _tmp_a),
-            self.job_context(
-                [
-                    "--ssh-src-host",
-                    "127.0.0.1",
-                    "--ssh-src-config-file",
-                    cfg_b,
-                    dataset,
-                    DST_DATASET,
-                ]
-            ) as (job_b, _tmp_b),
-        ):
-            job_a.params.src.ssh_user_host = "u@h"
-            job_b.params.src.ssh_user_host = "u@h"
-            cache = SnapshotCache(job_a)
-            path_a = cache.last_modified_cache_file(job_a.params.src, dataset)
-            cache = SnapshotCache(job_b)
-            path_b = cache.last_modified_cache_file(job_b.params.src, dataset)
-            self.assertNotEqual(path_a, path_b)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_a = os.path.join(tmpdir, "bzfs_ssh_config_src_a")
+            cfg_b = os.path.join(tmpdir, "bzfs_ssh_config_src_b")
+            Path(cfg_a).touch()
+            Path(cfg_b).touch()
+            dataset = SRC_DATASET
+            with (
+                self.job_context(
+                    [
+                        "--ssh-src-host",
+                        "127.0.0.1",
+                        "--ssh-src-config-file",
+                        cfg_a,
+                        dataset,
+                        DST_DATASET,
+                    ]
+                ) as (job_a, _tmp_a),
+                self.job_context(
+                    [
+                        "--ssh-src-host",
+                        "127.0.0.1",
+                        "--ssh-src-config-file",
+                        cfg_b,
+                        dataset,
+                        DST_DATASET,
+                    ]
+                ) as (job_b, _tmp_b),
+            ):
+                job_a.params.src.ssh_user_host = "u@h"
+                job_b.params.src.ssh_user_host = "u@h"
+                cache = SnapshotCache(job_a)
+                path_a = cache.last_modified_cache_file(job_a.params.src, dataset)
+                cache = SnapshotCache(job_b)
+                path_b = cache.last_modified_cache_file(job_b.params.src, dataset)
+                self.assertNotEqual(path_a, path_b)
 
     def test_monitor_cache_scoped_by_alert_plan(self) -> None:
         """Monitor cache ("===") must be scoped by alert plan hash.

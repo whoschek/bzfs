@@ -17,6 +17,7 @@
 from __future__ import (
     annotations,
 )
+import errno
 import os
 import shutil
 import socket
@@ -368,24 +369,47 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_lock_file_name_distinguishes_ssh_config_files(self) -> None:
         """Distinct SSH config files must produce distinct periodic-job lock paths."""
-        common_args = ["src", "dst", "--ssh-src-host", "src-host", "--ssh-dst-host", "dst-host"]
-        args1 = self.argparser_parse_args(
-            common_args + ["--ssh-src-config-file=bzfs_ssh_config_a", "--ssh-dst-config-file=bzfs_ssh_config_a"]
-        )
-        params1 = self.make_params(args=args1, log_params=LogParams(args1))
-        args2 = self.argparser_parse_args(
-            common_args + ["--ssh-src-config-file=bzfs_ssh_config_b", "--ssh-dst-config-file=bzfs_ssh_config_b"]
-        )
-        params2 = self.make_params(args=args2, log_params=LogParams(args2))
-        self.assertNotEqual(params1.lock_file_name(), params2.lock_file_name())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_a = os.path.join(tmpdir, "bzfs_ssh_config_a")
+            cfg_b = os.path.join(tmpdir, "bzfs_ssh_config_b")
+            Path(cfg_a).touch()
+            Path(cfg_b).touch()
+            common_args = ["src", "dst", "--ssh-src-host", "src-host", "--ssh-dst-host", "dst-host"]
+            args1 = self.argparser_parse_args(
+                common_args + [f"--ssh-src-config-file={cfg_a}", f"--ssh-dst-config-file={cfg_a}"]
+            )
+            params1 = self.make_params(args=args1, log_params=LogParams(args1))
+            args2 = self.argparser_parse_args(
+                common_args + [f"--ssh-src-config-file={cfg_b}", f"--ssh-dst-config-file={cfg_b}"]
+            )
+            params2 = self.make_params(args=args2, log_params=LogParams(args2))
+            self.assertNotEqual(params1.lock_file_name(), params2.lock_file_name())
 
     def test_custom_ssh_config_file_must_match_file_name_pattern(self) -> None:
-        args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bzfs_ssh_config.cfg"])
-        self.make_params(args=args)
-
-        args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bad_file_name.cfg"])
-        with self.assertRaises(SystemExit):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            good_cfg = os.path.join(tmpdir, "bzfs_ssh_config.cfg")
+            Path(good_cfg).touch()
+            args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", good_cfg])
             self.make_params(args=args)
+
+            bad_cfg = os.path.join(tmpdir, "bad_file_name.cfg")
+            Path(bad_cfg).touch()
+            args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", bad_cfg])
+            with self.assertRaises(SystemExit):
+                self.make_params(args=args)
+
+    def test_custom_ssh_config_file_rejects_symlink(self) -> None:
+        """SSH config path validation must reject a symlinked top-level file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = os.path.join(tmpdir, "bzfs_ssh_config_real")
+            symlink = os.path.join(tmpdir, "bzfs_ssh_config_link")
+            Path(target).touch()
+            os.symlink(target, symlink)
+            args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", symlink])
+            with self.assertRaises(OSError) as cm:
+                self.make_params(args=args)
+            self.assertIn(cm.exception.errno, (errno.ELOOP, errno.EMLINK))
+            self.assertEqual(symlink, cm.exception.filename)
 
     def test_validate_snapshot_name(self) -> None:
         SnapshotLabel("foo_", "", "", "").validate_label("")

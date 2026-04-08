@@ -103,6 +103,7 @@ from bzfs_main.util.utils import (
     ninfix,
     nprefix,
     nsuffix,
+    open_nofollow,
     parse_duration_to_milliseconds,
     pid_exists,
     sha256_hex,
@@ -507,8 +508,11 @@ class Remote(MiniRemote):
         self.ssh_port: Final[int | None] = getattr(args, f"ssh_{loc}_port")
         self.ssh_config_file: Final[str | None] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
         if self.ssh_config_file and self.ssh_config_file != "none":
+            # `ssh -F none` will not read any config file per https://man7.org/linux/man-pages/man1/ssh.1.html
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
+            with open_nofollow(self.ssh_config_file, "rb"):
+                pass  # validate
         self.ssh_config_file_hash: Final[str] = (
             sha256_urlsafe_base64(os.path.abspath(self.ssh_config_file), padding=False) if self.ssh_config_file else ""
         )
