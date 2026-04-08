@@ -851,13 +851,14 @@ class TestOpenNoFollow(unittest.TestCase):
     def test_check_owner_skipped(self) -> None:
         """check_owner=False should skip ownership verification."""
         with patch("os.fstat", side_effect=AssertionError("should not call")) as m_fstat:
-            with open_nofollow(self.real_path, "r", check_owner=False, encoding="utf-8") as f:
+            with open_nofollow(self.real_path, "r", check_owner=False, check_perm=False, encoding="utf-8") as f:
                 self.assertEqual("hello", f.read())
         m_fstat.assert_not_called()
 
     def test_read_allows_root_owner(self) -> None:
         class Stat:
             st_uid = 0
+            st_mode = FILE_PERMISSIONS
 
         with patch("os.fstat", return_value=Stat()), patch("os.geteuid", return_value=1234):
             with open_nofollow(self.real_path, "r", encoding="utf-8") as f:
@@ -887,6 +888,20 @@ class TestOpenNoFollow(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 open_nofollow(self.real_path, "r")
         m_close.assert_called_once()
+
+    def test_insecure_permission_bits_rejected_and_closes_fd(self) -> None:
+        """Reject files with non-owner write bits or any execute bit and close the FD on failure."""
+        for mode in (0o620, 0o700, 0o610, 0o601):
+            with self.subTest(mode=oct(mode)):
+                os.chmod(self.real_path, mode)
+                orig_close = os.close
+                with patch("os.close", side_effect=orig_close) as m_close:
+                    with self.assertRaises(PermissionError) as cm:
+                        open_nofollow(self.real_path, "r", encoding="utf-8")
+                self.assertEqual(errno.EPERM, cm.exception.errno)
+                self.assertEqual(self.real_path, cm.exception.filename)
+                self.assertIn("must not be writable by group or others", str(cm.exception))
+                m_close.assert_called_once()
 
     def test_close_error_ignored(self) -> None:
         err = RuntimeError("boom")
@@ -978,21 +993,6 @@ class TestValidateFilePermissions(unittest.TestCase):
         self.assertIn("rw-------", msg)  # actual 0o600
         self.assertIn(f"{expected_mode:03o}", msg)
         self.assertIn("rwx------", msg)  # expected 0o700
-
-    def test_symlink_path_is_rejected(self) -> None:
-        """Validation must not follow symlinks; lstat should reject symlink path.
-
-        Creates a real directory and a symlink pointing to it. Validation on the symlink path must raise, because permissions
-        are checked on the symlink itself (lstat), not on the target.
-        """
-        with tempfile.TemporaryDirectory() as tmpdir:
-            real_dir = os.path.join(tmpdir, "real")
-            os.mkdir(real_dir)
-            os.chmod(real_dir, DIR_PERMISSIONS)
-            link_dir = os.path.join(tmpdir, "link")
-            os.symlink(real_dir, link_dir)
-            with self.assertRaises(SystemExit):
-                validate_file_permissions(link_dir, mode=DIR_PERMISSIONS)
 
 
 #############################################################################

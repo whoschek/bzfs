@@ -169,7 +169,7 @@ def tail(file: str, *, n: int, errors: str | None = None) -> Sequence[str]:
     """Return the last ``n`` lines of ``file`` without following symlinks."""
     if not os.path.isfile(file):
         return []
-    with open_nofollow(file, "r", encoding="utf-8", errors=errors, check_owner=False) as fd:
+    with open_nofollow(file, "r", encoding="utf-8", errors=errors, check_owner=False, check_perm=False) as fd:
         return deque(fd, maxlen=n)
 
 
@@ -302,15 +302,18 @@ def open_nofollow(
     *,
     perm: int = FILE_PERMISSIONS,
     check_owner: bool = True,
+    check_perm: bool = True,
     **kwargs: Any,
 ) -> IO[Any]:
     """Behaves exactly like built-in open(), except that it refuses to follow symlinks, i.e. raises OSError with
     errno.ELOOP/EMLINK if basename of path is a symlink.
 
-    Also, can specify custom permissions on O_CREAT, and verify ownership.
+    Also, can specify custom permissions on O_CREAT, and verify secure ownership and mode bits.
 
     If check_owner=True, write-capable opens require ownership by the effective UID; read-only opens also allow ownership by
     uid 0 (root). This allows safe reads of root-owned system files while preventing writes to files not owned by the caller.
+
+    If check_perm=True, the file must also not be writable by group or others, and must not be executable by anyone.
     """
     if not mode:
         raise ValueError("Must have exactly one of create/read/write/append mode and at most one plus")
@@ -327,13 +330,25 @@ def open_nofollow(
     flags |= os.O_NOFOLLOW | os.O_CLOEXEC
     fd: int = os.open(path, flags=flags, mode=perm)
     try:
+        stats: os.stat_result | None = None
         if check_owner:
-            st_uid: int = os.fstat(fd).st_uid
+            stats = os.fstat(fd)
+            st_uid: int = stats.st_uid
             if st_uid != os.geteuid():  # verify ownership is current effective UID
                 if (flags & (os.O_WRONLY | os.O_RDWR)) != 0:  # require that writer owns the file
                     raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()}", path)
                 elif st_uid != 0:  # it's ok for root to own a file that we'll merely read
                     raise PermissionError(errno.EPERM, f"{path!r} is owned by uid {st_uid}, not {os.geteuid()} or 0", path)
+        if check_perm:
+            stats = os.fstat(fd) if stats is None else stats
+            if (stats.st_mode & (stat.S_IWGRP | stat.S_IWOTH | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)) != 0:
+                st_mode: int = stat.S_IMODE(stats.st_mode)
+                raise PermissionError(
+                    errno.EPERM,
+                    f"{path!r} has permissions {st_mode:03o} aka {stat.filemode(st_mode)[1:]} "
+                    "but must not be writable by group or others, or executable by anyone",
+                    path,
+                )
         return os.fdopen(fd, mode, buffering=buffering, encoding=encoding, errors=errors, newline=newline, **kwargs)
     except Exception:
         try:

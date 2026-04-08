@@ -49,6 +49,7 @@ import bzfs_tests.test_snapshot_cache
 import bzfs_tests.test_test_host_sh
 import bzfs_tests.test_utils
 from bzfs_main.util.utils import (
+    UMASK,
     getenv_any,
 )
 from bzfs_tests.tools import (
@@ -120,8 +121,12 @@ def main() -> None:
 
     failfast = False if os.getenv("CI") else True  # no need to fail fast when running within GitHub Action
     print(f"Running in failfast mode: {failfast} ...")
-    result = unittest.TextTestRunner(failfast=failfast, verbosity=2, descriptions=False).run(suite)
-    sys.exit(not result.wasSuccessful())
+    prev_umask: int = os.umask(UMASK)
+    try:
+        result = unittest.TextTestRunner(failfast=failfast, verbosity=2, descriptions=False).run(suite)
+        sys.exit(not result.wasSuccessful())
+    finally:
+        os.umask(prev_umask)  # restore prior global state
 
 
 if __name__ == "__main__":
