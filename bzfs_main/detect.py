@@ -175,7 +175,8 @@ def detect_available_programs(job: Job) -> None:
                 programs["default_shell"] = default_shell
                 log.log(LOG_TRACE, f"available_programs[{key}][default_shell]: %s", default_shell)
                 ssh_user_host = p.src.ssh_user_host if key == "src" else p.dst.ssh_user_host if key == "dst" else ""
-                _validate_default_shell(default_shell, key, ssh_user_host)
+                if ssh_user_host:
+                    _validate_default_shell(default_shell, key, ssh_user_host)
             elif program.startswith("getconf_cpu_count-"):
                 programs.pop(program)
                 getconf_cpu_count: str = program[len("getconf_cpu_count-") :]
@@ -345,12 +346,14 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
 
 
 def _validate_default_shell(path_to_default_shell: str, location: str, ssh_user_host: str) -> None:
-    """Fails if the remote user uses csh or tcsh as the default shell."""
-    if path_to_default_shell in ("csh", "tcsh") or path_to_default_shell.endswith(("/csh", "/tcsh")):
+    """Fails for default shells that do not honor POSIX shell quoting."""
+    shell_name: str = path_to_default_shell.rsplit("/", maxsplit=1)[-1]
+    if shell_name in ("csh", "tcsh", "elvish", "fish", "nu", "nushell", "xonsh"):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
         die(
-            f"Cowardly refusing to proceed because {PROG_NAME} is not compatible with csh-style quoting of special "
-            f"characters. The safe workaround is to first manually set 'sh' instead of '{path_to_default_shell}' as "
-            f"the default shell of the Unix user on {location} host: {ssh_user_host or 'localhost'}, like so: "
+            f"Cowardly refusing to proceed because {PROG_NAME} requires POSIX shell quoting of special characters, "
+            f"but '{path_to_default_shell}' is incompatible. The safe workaround is to first manually set 'sh' "
+            f"instead of '{path_to_default_shell}' as the default shell of the Unix user on {location} host: "
+            f"{ssh_user_host or 'localhost'}, like so: "
             "chsh -s /bin/sh <YOURUSERNAME>"
         )

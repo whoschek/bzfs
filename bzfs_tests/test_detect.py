@@ -181,14 +181,24 @@ class TestDisableAndHelpers(AbstractTestCase):
         remote = Remote("src", args, p)
         _validate_default_shell("/bin/sh", remote.location, remote.ssh_user_host)
         _validate_default_shell("/bin/bash", remote.location, remote.ssh_user_host)
-        with self.assertRaises(SystemExit):
-            _validate_default_shell("/bin/csh", remote.location, remote.ssh_user_host)
-        with self.assertRaises(SystemExit):
-            _validate_default_shell("/bin/tcsh", remote.location, remote.ssh_user_host)
-        with self.assertRaises(SystemExit):
-            _validate_default_shell("csh", remote.location, remote.ssh_user_host)
-        with self.assertRaises(SystemExit):
-            _validate_default_shell("tcsh", remote.location, remote.ssh_user_host)
+        for shell in [
+            "csh",
+            "tcsh",
+            "elvish",
+            "fish",
+            "nu",
+            "nushell",
+            "xonsh",
+            "/bin/csh",
+            "/bin/tcsh",
+            "/usr/local/bin/elvish",
+            "/usr/local/bin/fish",
+            "/usr/local/bin/nu",
+            "/usr/local/bin/nushell",
+            "/opt/homebrew/bin/xonsh",
+        ]:
+            with self.assertRaises(SystemExit, msg=shell):
+                _validate_default_shell(shell, remote.location, remote.ssh_user_host)
 
 
 #############################################################################
@@ -342,30 +352,66 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         self.assertEqual("Linux", p.available_programs["src"]["os"])
         self.assertEqual("Linux", p.available_programs["dst"]["os"])
 
-    def test_detect_available_programs_dies_on_csh_default_shell(self) -> None:
-        """Ensures csh/tcsh default shells are rejected during detection.
+    def test_detect_available_programs_dies_on_incompatible_remote_default_shell(self) -> None:
+        """Ensures incompatible remote default shells are rejected during detection.
 
-        Assumes remote detection reports `default_shell-/bin/csh`.
-        Design rationale: detection must fail fast because bzfs relies on POSIX shell quoting semantics.
+        Detection must fail fast because bzfs relies on POSIX shell quoting semantics.
+        """
+        for shell in ["/bin/csh", "/usr/local/bin/fish", "/opt/homebrew/bin/elvish", "/opt/homebrew/bin/nushell"]:
+            job = self._setup_job()
+            p = job.params
+            p.src.ssh_host = "src.example.com"
+            p.src.ssh_user_host = "src.example.com"
+            p.dst.ssh_host = "dst.example.com"
+            p.dst.ssh_user_host = "dst.example.com"
+            p.available_programs["local"] = {"default_shell-/bin/sh": "", "sh": ""}
+
+            def my_detect_avail_programs_remote(
+                _job: bzfs.Job, _remote: Remote, _ssh_user_host: str, *, detected_shell: str = shell
+            ) -> dict[str, str]:
+                return {
+                    f"default_shell-{detected_shell}": "",
+                    "sh": "",
+                    "zfs": "2.2.4",
+                }
+
+            with (
+                patch.object(
+                    bzfs_main.detect, "_detect_available_programs_remote", side_effect=my_detect_avail_programs_remote
+                ),
+                patch.object(bzfs_main.detect, "_detect_zpool_features", return_value={}),
+                self.assertRaises(SystemExit, msg=shell) as cm,
+            ):
+                detect_available_programs(job)
+            self.assertIn("Cowardly refusing to proceed", str(cm.exception))
+
+    def test_detect_available_programs_allows_incompatible_local_default_shell(self) -> None:
+        """Ensures local-mode endpoints do not fail on non-POSIX login shells.
+
+        Assumes the local process and local-mode src/dst endpoints execute either direct argv or an explicit `sh -c`.
+        Design rationale: the login shell is only relevant when traversing an SSH remote-shell boundary.
         """
         job = self._setup_job()
         p = job.params
-        p.available_programs["local"] = {"default_shell-/bin/sh": "", "sh": ""}
+        available_progs = {
+            "default_shell-/usr/local/bin/fish": "",
+            "sh": "",
+            "zfs": "2.4.1",
+        }
+        p.available_programs["local"] = available_progs.copy()
 
-        def detect_remote(_job: bzfs.Job, _remote: Remote, _ssh_user_host: str) -> dict[str, str]:
-            return {
-                "default_shell-/bin/csh": "",
-                "sh": "",
-                "zfs": "2.2.4",
-            }
+        def my_detect_avail_programs_remote(_job: bzfs.Job, _remote: Remote, _ssh_user_host: str) -> dict[str, str]:
+            return available_progs.copy()
 
         with (
-            patch.object(bzfs_main.detect, "_detect_available_programs_remote", side_effect=detect_remote),
+            patch.object(bzfs_main.detect, "_detect_available_programs_remote", side_effect=my_detect_avail_programs_remote),
             patch.object(bzfs_main.detect, "_detect_zpool_features", return_value={}),
-            self.assertRaises(SystemExit) as cm,
         ):
             detect_available_programs(job)
-        self.assertIn("Cowardly refusing to proceed", str(cm.exception))
+
+        self.assertEqual("/usr/local/bin/fish", p.available_programs["local"]["default_shell"])
+        self.assertEqual("/usr/local/bin/fish", p.available_programs["src"]["default_shell"])
+        self.assertEqual("/usr/local/bin/fish", p.available_programs["dst"]["default_shell"])
 
 
 #############################################################################
