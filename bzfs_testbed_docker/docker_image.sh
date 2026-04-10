@@ -52,7 +52,10 @@ host_platform() {
 }
 
 container_build() {
-    "$DOCKER_CLI" build \
+    subcmd="$1"
+    shift
+    # shellcheck disable=SC2086
+    "$DOCKER_CLI" $subcmd build \
         --build-arg "BZFS_DOCKER_BASE_IMAGE=$bzfs_docker_base_image" \
         --build-arg "BZFS_DOCKER_INSTALL_HPNSSH=$BZFS_DOCKER_INSTALL_HPNSSH" \
         --build-arg "BZFS_GIT_REMOTE=$BZFS_GIT_REMOTE" \
@@ -98,7 +101,7 @@ for i in "${!bzfs_docker_os_list[@]}"; do
         "$DOCKER_CLI" container rm -f "$bzfs_docker_container"
     fi
 
-    container_build \
+    container_build "" \
         --platform "$(host_platform)" \
         --tag "$bzfs_docker_tag" \
         "$script_dir"
@@ -121,13 +124,17 @@ for i in "${!bzfs_docker_os_list[@]}"; do
             bzfs_docker_registry_tags+=(--tag "${bzfs_docker_registry_repo}:latest-${bzfs_docker_os}")
         fi
         if [[ "$(basename "$DOCKER_CLI")" != "nerdctl" ]]; then  # `docker` CLI
-            container_build \
+            if ! "$DOCKER_CLI" buildx inspect bzfs-multiarch > /dev/null 2>&1; then
+                "$DOCKER_CLI" buildx create --name bzfs-multiarch --driver docker-container --bootstrap
+            fi
+            container_build buildx \
+                --builder bzfs-multiarch \
                 --platform "$BZFS_DOCKER_PLATFORMS" \
                 "${bzfs_docker_registry_tags[@]}" \
                 --push \
                 "$script_dir"
         else  # workaround for the fact that nerdctl does not understand --push (vs `docker` CLI)
-            container_build \
+            container_build "" \
                 --platform "$BZFS_DOCKER_PLATFORMS" \
                 "${bzfs_docker_registry_tags[@]}" \
                 "$script_dir"
