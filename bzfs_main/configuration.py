@@ -403,7 +403,7 @@ class Params(MiniParams):
         return _fix_send_recv_opts(
             opts,
             exclude_long_opts={"--dryrun"},
-            exclude_short_opts="n",
+            exclude_short_opts="densFA",
             include_arg_opts={"-o", "-x"},
             preserve_properties=preserve_properties,
         )
