@@ -17,6 +17,7 @@
 from __future__ import (
     annotations,
 )
+import json
 import shlex
 import subprocess
 import threading
@@ -126,9 +127,63 @@ def _prepare_job(
             return True
 
     job = _make_job(
-        src=MagicMock(ssh_user_host=src_host),
-        dst=MagicMock(ssh_user_host=dst_host),
+        src=MagicMock(ssh_user_host=src_host, ssh_port=None, ssh_config_file=None),
+        dst=MagicMock(ssh_user_host=dst_host, ssh_port=None, ssh_config_file=None),
         shell_program="sh",
+        r2r_mode="off",
+        r2r_mode_requested="off",
+        is_program_available=MagicMock(side_effect=is_program_available),
+    )
+    job.src_properties = {"pool/ds": MagicMock(recordsize=1)}
+    job.inject_params = {}
+    return job
+
+
+def _prepare_r2r_job(
+    mode: str,
+    min_pipe_transfer_size: int,
+    zstd_available: bool,
+    use_ssh_options: bool,
+) -> MagicMock:
+    """Creates a Job mock for remote-to-remote pipeline assembly tests."""
+
+    def is_program_available(program: str, _loc: str) -> bool:
+        if program == "zstd":
+            return zstd_available
+        return program in {"sh", "pv", "mbuffer"}
+
+    src = MagicMock(
+        ssh_user_host="src-host",
+        ssh_port=2222 if use_ssh_options else None,
+        ssh_config_file="src_bzfs_ssh_config" if use_ssh_options else None,
+        ssh_extra_opts=(),
+        ssh_cipher="aes128-ctr" if use_ssh_options else None,
+        is_nonlocal=True,
+    )
+    dst = MagicMock(
+        ssh_user_host="dst-host",
+        ssh_port=3333 if use_ssh_options else None,
+        ssh_config_file="dst_bzfs_ssh_config" if use_ssh_options else None,
+        ssh_extra_opts=(),
+        ssh_cipher="aes256-ctr" if use_ssh_options else None,
+        is_nonlocal=True,
+    )
+    job = _make_job(
+        src=src,
+        dst=dst,
+        shell_program="sh",
+        ssh_program="ssh",
+        r2r_mode=mode,
+        r2r_mode_requested=mode,
+        min_pipe_transfer_size=min_pipe_transfer_size,
+        no_estimate_send_size=False,
+        compression_program="zstd",
+        compression_program_opts=["-3"],
+        mbuffer_program="mbuffer",
+        mbuffer_program_opts=["-q"],
+        pv_program="pv",
+        pv_program_opts=[],
+        log_params=MagicMock(pv_log_file="/tmp/test.pv", quiet=True),
         is_program_available=MagicMock(side_effect=is_program_available),
     )
     job.src_properties = {"pool/ds": MagicMock(recordsize=1)}
@@ -185,6 +240,86 @@ class TestQuoting(AbstractTestCase):
         self.assertTrue(seen)  # we should have seen src and dst
         self.assertTrue(all(not s.endswith("\\") for s in seen), f"_dquote saw trailing backslash: {seen!r}")
 
+    def test_prepare_r2r_pipeline_preserves_awkward_args_across_shell_layers(self) -> None:
+        """Verifies shell parsing preserves awkward argv without asserting exact quote syntax.
+
+        Assumptions: Remote-to-remote mode wraps the pipeline in multiple `sh -c` layers and may nest a remote `ssh`.
+
+        Design Rationale: Parse each shell layer with `shlex.split` and assert the original awkward arguments survive,
+        which checks quoting behavior without brittle string comparisons.
+        """
+        send_arg, recv_arg, level2 = self._prepare_r2r_quoted_pipeline(same_remote=False)
+        level3: list[str] = shlex.split(level2[2])
+        self.assertEqual(["sh", "-c"], level3[:2])
+        self.assertIn("ssh", level3)
+        self.assertIn("dst-host", level3)
+
+        send_tokens: list[str] = shlex.split(level3[2])
+        self.assertEqual(["zfs", "send", send_arg], send_tokens[:3])
+
+        remote_tokens: list[str] = shlex.split(level3[-1])
+        self.assertEqual(["sh", "-c"], remote_tokens[:2])
+
+        recv_tokens: list[str] = shlex.split(remote_tokens[2])
+        self.assertEqual(["zfs", "recv", recv_arg], recv_tokens[-3:])
+
+    def test_prepare_r2r_same_remote_pipeline_preserves_awkward_args_across_shell_layers(self) -> None:
+        """Verifies same-remote shell parsing preserves awkward argv without nested ssh."""
+        send_arg, recv_arg, level2 = self._prepare_r2r_quoted_pipeline(same_remote=True)
+        self.assertNotIn("ssh", level2[2])
+
+        pipeline_tokens: list[str] = shlex.split(level2[2])
+        self.assertEqual(["zfs", "send", send_arg], pipeline_tokens[:3])
+        self.assertEqual("|", pipeline_tokens[3])
+        self.assertEqual(["zfs", "recv", recv_arg], pipeline_tokens[4:7])
+        self.assertNotIn("ssh", pipeline_tokens)
+
+    def _prepare_r2r_quoted_pipeline(self, same_remote: bool) -> tuple[str, str, list[str]]:
+        """Builds one quoted r2r pipeline and returns preserved args plus outer shell tokens."""
+        send_arg = "send 'quote \\ slash"
+        recv_arg = "recv 'quote \\ slash"
+        job = _prepare_r2r_job(mode="push", min_pipe_transfer_size=0, zstd_available=True, use_ssh_options=True)
+
+        with patch("bzfs_main.replication.is_same_remote", return_value=same_remote):
+            src_pipe, local_pipe, dst_pipe = _prepare_zfs_send_receive(
+                job, "pool/ds", ["zfs", "send", send_arg], ["zfs", "recv", recv_arg], 1024, "1KiB"
+            )
+
+        self.assertEqual("", local_pipe)
+        self.assertEqual("", dst_pipe)
+
+        level1: list[str] = shlex.split(src_pipe)
+        self.assertEqual(1, len(level1))
+
+        level2: list[str] = shlex.split(level1[0])
+        self.assertEqual(["sh", "-c"], level2[:2])
+        return send_arg, recv_arg, level2
+
+    def test_prepare_r2r_same_remote_preserves_literal_dollar_and_backticks(self) -> None:
+        """Verifies same-remote r2r preserves literal metacharacters as argv and stdin data."""
+        payload = "$(uname)-`id`"
+        send_py = "import sys; sys.stdout.write(sys.argv[1])"
+        recv_py = 'import sys, json; print(json.dumps({"argv": sys.argv[1:], "stdin": sys.stdin.read()}))'
+        job = _prepare_r2r_job(mode="push", min_pipe_transfer_size=1024**2, zstd_available=False, use_ssh_options=False)
+
+        with patch("bzfs_main.replication.is_same_remote", return_value=True):
+            src_pipe, local_pipe, dst_pipe = _prepare_zfs_send_receive(
+                job,
+                "pool/ds",
+                ["python3", "-c", send_py, payload],
+                ["python3", "-c", recv_py, payload],
+                1,
+                "1B",
+            )
+
+        self.assertEqual("", local_pipe)
+        self.assertEqual("", dst_pipe)
+        remote_cmd = shlex.split(src_pipe)[0]
+        proc = subprocess.run(["sh", "-c", remote_cmd], capture_output=True, text=True, check=True)
+        result = json.loads(proc.stdout.strip())
+        self.assertEqual([payload], result["argv"])
+        self.assertEqual(payload, result["stdin"])
+
 
 ###############################################################################
 class TestResumeErrorParsing(AbstractTestCase):
@@ -217,6 +352,85 @@ class TestResumeErrorParsing(AbstractTestCase):
 ###############################################################################
 class TestReplication(AbstractTestCase):
     """Covers command builders and safety helpers in replication."""
+
+    def _assert_prepare_r2r_pipeline(
+        self,
+        mode: str,
+        same_remote: bool,
+        zstd_available: bool,
+        min_pipe_transfer_size: int,
+        use_ssh_options: bool,
+    ) -> None:
+        """Verifies pipeline components for one remote-to-remote replication variant."""
+        job = _prepare_r2r_job(
+            mode=mode,
+            min_pipe_transfer_size=min_pipe_transfer_size,
+            zstd_available=zstd_available,
+            use_ssh_options=use_ssh_options,
+        )
+        expects_network_pipeline = not same_remote and min_pipe_transfer_size == 0
+        expects_compression = expects_network_pipeline and zstd_available
+
+        with (
+            patch("bzfs_main.replication.is_same_remote", return_value=same_remote),
+            patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
+            patch("bzfs_main.replication._pv_cmd") as pv_cmd,
+        ):
+            src_pipe, local_pipe, dst_pipe = _prepare_zfs_send_receive(
+                job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1024, "1KiB"
+            )
+
+        self.assertEqual("", local_pipe)
+        self.assertEqual("", dst_pipe)
+        self.assertIn("sh -c", src_pipe)
+        self.assertIn("zfs send", src_pipe)
+        self.assertIn("zfs recv", src_pipe)
+        self.assertEqual(0, src_pipe.count("pv"))
+        pv_cmd.assert_not_called()
+
+        self.assertEqual(2 if expects_network_pipeline else 0, src_pipe.count("mbuffer"))
+        self.assertEqual(1 if expects_compression else 0, src_pipe.count("zstd -c"))
+        self.assertEqual(1 if expects_compression else 0, src_pipe.count("zstd -dc"))
+
+        if same_remote:
+            self.assertNotIn("src-host", src_pipe)
+            self.assertNotIn("dst-host", src_pipe)
+            self.assertNotIn("src_bzfs_ssh_config", src_pipe)
+            self.assertNotIn("dst_bzfs_ssh_config", src_pipe)
+            self.assertNotIn("aes128-ctr", src_pipe)
+            self.assertNotIn("aes256-ctr", src_pipe)
+            self.assertNotIn("-p 2222", src_pipe)
+            self.assertNotIn("-p 3333", src_pipe)
+            self.assertLess(src_pipe.index("zfs send"), src_pipe.index("zfs recv"))
+            return
+
+        if mode == "push":
+            self.assertNotIn("src-host", src_pipe)
+            self.assertIn("dst-host", src_pipe)
+            self.assertLess(src_pipe.index("zfs send"), src_pipe.index("dst-host"))
+            self.assertLess(src_pipe.index("dst-host"), src_pipe.rindex("zfs recv"))
+            if use_ssh_options:
+                self.assertIn("dst_bzfs_ssh_config", src_pipe)
+                self.assertIn("aes256-ctr", src_pipe)
+                self.assertIn("-p 3333", src_pipe)
+            else:
+                self.assertNotIn("dst_bzfs_ssh_config", src_pipe)
+                self.assertNotIn("aes256-ctr", src_pipe)
+                self.assertNotIn("-p 3333", src_pipe)
+        else:
+            self.assertEqual("pull", mode)
+            self.assertIn("src-host", src_pipe)
+            self.assertNotIn("dst-host", src_pipe)
+            self.assertLess(src_pipe.index("src-host"), src_pipe.index("zfs send"))
+            self.assertLess(src_pipe.index("zfs send"), src_pipe.rindex("zfs recv"))
+            if use_ssh_options:
+                self.assertIn("src_bzfs_ssh_config", src_pipe)
+                self.assertIn("aes128-ctr", src_pipe)
+                self.assertIn("-p 2222", src_pipe)
+            else:
+                self.assertNotIn("src_bzfs_ssh_config", src_pipe)
+                self.assertNotIn("aes128-ctr", src_pipe)
+                self.assertNotIn("-p 2222", src_pipe)
 
     def test_format_size(self) -> None:
         self.assertEqual("0B".rjust(7), _format_size(0))
@@ -868,6 +1082,28 @@ class TestReplication(AbstractTestCase):
         ):
             _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("'zfs recv'", dst)
+
+    def test_prepare_r2r_pipeline_components(self) -> None:
+        """Covers pull and push pipelines across remote identity, zstd, and threshold variants."""
+        for mode in ["pull", "push"]:
+            for use_ssh_options in [False, True]:
+                for same_remote in [False, True]:
+                    for zstd_available in [False, True]:
+                        for min_pipe_transfer_size in [0, 1024 * 1024]:
+                            with self.subTest(
+                                mode=mode,
+                                use_ssh_options=use_ssh_options,
+                                same_remote=same_remote,
+                                zstd_available=zstd_available,
+                                min_pipe_transfer_size=min_pipe_transfer_size,
+                            ):
+                                self._assert_prepare_r2r_pipeline(
+                                    mode=mode,
+                                    same_remote=same_remote,
+                                    zstd_available=zstd_available,
+                                    min_pipe_transfer_size=min_pipe_transfer_size,
+                                    use_ssh_options=use_ssh_options,
+                                )
 
     def test_replicate_dataset_e2e_skips_hourly_in_steps(self) -> None:
         """End-to-end verification that incremental replication planning never includes snapshots excluded by policy,

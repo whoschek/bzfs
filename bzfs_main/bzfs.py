@@ -104,6 +104,7 @@ from bzfs_main.configuration import (
     Params,
     Remote,
     SnapshotLabel,
+    resolve_r2r_mode,
 )
 from bzfs_main.detect import (
     DISABLE_PRG,
@@ -599,6 +600,7 @@ class Job(MiniJob):
             p.include_dataset_regexes = [(re.compile(r".*"), False)]
 
         detect_available_programs(self)
+        p.r2r_mode = resolve_r2r_mode(p)
 
         if is_zpool_feature_enabled_or_active(p, dst, "feature@large_blocks"):
             append_if_absent(p.curr_zfs_send_program_opts, "--large-block")

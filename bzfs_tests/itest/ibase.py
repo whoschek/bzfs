@@ -98,6 +98,8 @@ DST_POOL_NAME: Final[str] = "wb_dst"
 POOL_SIZE_BYTES_DEFAULT: Final[int] = 100 * 1024 * 1024
 ENCRYPTION_ALGO: Final[str] = "aes-256-gcm"
 CREATION_PREFIX: Final[str] = "bzfs_test:"
+SRC_HOST_ALIAS: Final[str] = "bzfs-src"
+DST_HOST_ALIAS: Final[str] = "bzfs-dst"
 
 # Global variables populated during setUp()
 SRC_POOL: str = ""
@@ -178,9 +180,19 @@ class IntegrationTestCase(ParametrizedTestCase):
 
         private_key_file = "id_rsa" if platform.system() == "Linux" else "testid_rsa"
         private_key_file = os.path.join(os.path.dirname(SSH_CONFIG_FILE), private_key_file)
-        fallback = "Fallback=no\n" if SSH_PROGRAM == "hpnssh" else ""  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
+        fallback = "Fallback=no" if SSH_PROGRAM == "hpnssh" else ""  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
+        ssh_config_str = (
+            f"IdentityFile {private_key_file}\n"
+            "StrictHostKeyChecking=no\n"
+            f"{fallback}\n"
+            f"Host {SRC_HOST_ALIAS}\n"
+            "    HostName 127.0.0.1\n"
+            f"Host {DST_HOST_ALIAS}\n"
+            "    HostName 127.0.0.1\n"
+            "Include /etc/ssh/ssh_config\n"
+        )
         with open(SSH_CONFIG_FILE, "w", encoding="utf-8") as fd:
-            fd.write(f"IdentityFile {private_key_file}\nStrictHostKeyChecking=no\n{fallback}Include /etc/ssh/ssh_config\n")
+            fd.write(ssh_config_str)
         os.chmod(SSH_CONFIG_FILE, mode=FILE_PERMISSIONS)  # chmod u=rw,go=
 
     # zpool list -o name|grep '^wb_'|xargs -n 1 -r --verbose zpool destroy; rm -fr /tmp/tmp* /run/user/$UID/bzfs/
@@ -261,23 +273,29 @@ class IntegrationTestCase(ParametrizedTestCase):
         spawn_process_per_job: bool | None = None,
         cache_snapshots: bool = False,
         force_stable_cache_namespace: bool = False,
+        src_host_str: str = "127.0.0.1",
+        dst_host_str: str = "127.0.0.1",
+        enable_ipv6: bool = getenv_bool("test_enable_IPv6", True),
+        port: str | None = getenv_any("test_ssh_port"),  # if sshd is on non-standard port: export bzfs_test_ssh_port=12345
     ) -> bzfs.Job | bzfs_jobrunner.Job:
-        port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(arguments)
-        src_host = [] if use_jobrunner else ["--ssh-src-host", "127.0.0.1"]
-        dst_host = [] if use_jobrunner else ["--ssh-dst-host", "127.0.0.1"]
+        src_host = [] if use_jobrunner else ["--ssh-src-host", src_host_str]
+        dst_host = [] if use_jobrunner else ["--ssh-dst-host", dst_host_str]
         ssh_dflt_port = "2222" if SSH_PROGRAM == "hpnssh" else "22"  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
         src_port = ["--ssh-src-port", ssh_dflt_port if port is None else str(port)]
         dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
         src_user = ["--ssh-src-user", os_username()]
         params = self.param
-        if params and params.get("ssh_mode") == "push":
+        ssh_mode: str = params.get("ssh_mode", "local") if params else "local"
+        is_r2r_mode: bool = ssh_mode in ("r2r-pull", "r2r-push")
+        effective_ssh_mode: str = "pull-push" if is_r2r_mode else ssh_mode
+        if effective_ssh_mode == "push":
             args += dst_host + dst_port
-        elif params and params.get("ssh_mode") == "pull":
+        elif effective_ssh_mode == "pull":
             args += src_host + src_port
-        elif params and params.get("ssh_mode") == "pull-push":
+        elif effective_ssh_mode == "pull-push":
             if (
-                getenv_bool("test_enable_IPv6", True)
+                enable_ipv6
                 and RNG.randint(0, 2) % 3 == 0
                 and not platform.platform().startswith("FreeBSD-")
                 and not SSH_PROGRAM == "hpnssh"
@@ -289,13 +307,21 @@ class IntegrationTestCase(ParametrizedTestCase):
             if params and "min_pipe_transfer_size" in params and int(params["min_pipe_transfer_size"]) == 0:
                 args += src_user
             args += ["--bwlimit=10000m"]
-        elif params and params.get("ssh_mode", "local") != "local":
-            raise ValueError("Unknown ssh_mode: " + params["ssh_mode"])
+        elif effective_ssh_mode != "local":
+            raise ValueError("Unknown ssh_mode: " + ssh_mode)
 
-        args += [
-            "--ssh-src-config-file=" + SSH_CONFIG_FILE,
-            "--ssh-dst-config-file=" + SSH_CONFIG_FILE,
-        ]
+        if is_r2r_mode:
+            has_r2r_mode: bool = any(arg == "--r2r" or arg.startswith("--r2r=") for arg in args)
+            if not has_r2r_mode:
+                r2r_mode: str = "pull" if ssh_mode == "r2r-pull" else "push"
+                args += [f"--r2r={r2r_mode}"]
+
+        has_src_cfg: bool = any(arg == "--ssh-src-config-file" or arg.startswith("--ssh-src-config-file=") for arg in args)
+        has_dst_cfg: bool = any(arg == "--ssh-dst-config-file" or arg.startswith("--ssh-dst-config-file=") for arg in args)
+        if not has_src_cfg:
+            args += ["--ssh-src-config-file=" + SSH_CONFIG_FILE]
+        if not has_dst_cfg:
+            args += ["--ssh-dst-config-file=" + SSH_CONFIG_FILE]
 
         for arg in args:
             assert "--retries" not in arg

@@ -18,6 +18,7 @@ from __future__ import (
     annotations,
 )
 import errno
+import logging
 import os
 import shutil
 import socket
@@ -32,6 +33,7 @@ from typing import (
     Any,
 )
 from unittest.mock import (
+    MagicMock,
     patch,
 )
 
@@ -43,6 +45,8 @@ from bzfs_main.configuration import (
     LogParams,
     Remote,
     SnapshotLabel,
+    is_same_remote,
+    resolve_r2r_mode,
 )
 from bzfs_main.util.utils import (
     UNIX_TIME_INFINITY_SECS,
@@ -800,6 +804,47 @@ class TestHelperFunctions(AbstractTestCase):
 #############################################################################
 class TestAdditionalHelpers(AbstractTestCase):
 
+    def make_r2r_params(
+        self,
+        *,
+        mode: str,
+        src_host: str = "",
+        dst_host: str = "",
+        src_port: int | None = None,
+        dst_port: int | None = None,
+        src_config_file: str | None = None,
+        dst_config_file: str | None = None,
+        skip_replication: bool = False,
+        available_program_locations: tuple[str, ...] = ("src", "dst"),
+    ) -> tuple[configuration.Params, MagicMock]:
+        """Builds Params for r2r tests with explicit endpoint and program state."""
+        cli_args = ["src", "dst", f"--r2r={mode}"]
+        if src_host:
+            cli_args += ["--ssh-src-host", src_host]
+        if dst_host:
+            cli_args += ["--ssh-dst-host", dst_host]
+        if src_port is not None:
+            cli_args += ["--ssh-src-port", str(src_port)]
+        if dst_port is not None:
+            cli_args += ["--ssh-dst-port", str(dst_port)]
+        if src_config_file is not None:
+            cli_args += ["--ssh-src-config-file", src_config_file]
+        if dst_config_file is not None:
+            cli_args += ["--ssh-dst-config-file", dst_config_file]
+        if skip_replication:
+            cli_args.append("--skip-replication")
+
+        args = self.argparser_parse_args(cli_args)
+        log = MagicMock(spec=logging.Logger)
+        log.isEnabledFor.side_effect = lambda level: level >= logging.INFO
+        params = self.make_params(args=args, log=log)
+        params.src.ssh_user_host = src_host
+        params.dst.ssh_user_host = dst_host
+        params.src.is_nonlocal = bool(src_host)
+        params.dst.is_nonlocal = bool(dst_host)
+        params.available_programs = {location: {"sh": "sh", "ssh": "ssh"} for location in available_program_locations}
+        return params, log
+
     def test_params_verbose_zfs_and_bwlimit(self) -> None:
         args = self.argparser_parse_args(["src", "dst", "-v", "-v", "--bwlimit", "20m"])
         params = self.make_params(args=args)
@@ -945,3 +990,190 @@ class TestAdditionalHelpers(AbstractTestCase):
 
             # The specific 'current' symlink may or may not exist; key expectation is no crash and log file created
             self.assertTrue(os.path.isfile(lp.log_file))
+
+    def test_resolve_r2r_mode_returns_off_when_replication_is_skipped(self) -> None:
+        """Skip-replication overrides any requested r2r mode without warning."""
+        params, log = self.make_r2r_params(mode="pull", src_host="src-host", dst_host="dst-host", skip_replication=True)
+        self.assertEqual("off", resolve_r2r_mode(params))
+        log.warning.assert_not_called()
+
+    def test_resolve_r2r_mode_returns_off_when_requested_mode_is_off(self) -> None:
+        """Explicit off short-circuits all remote-to-remote checks."""
+        params, log = self.make_r2r_params(mode="off", src_host="src-host", dst_host="dst-host")
+        self.assertEqual("off", resolve_r2r_mode(params))
+        log.warning.assert_not_called()
+
+    def test_resolve_r2r_mode_returns_off_for_local_replication(self) -> None:
+        """Local-to-local replication never needs r2r transport."""
+        params, log = self.make_r2r_params(mode="pull")
+        self.assertEqual("off", resolve_r2r_mode(params))
+        log.warning.assert_not_called()
+
+    def test_resolve_r2r_mode_warns_when_remote_sh_is_unavailable(self) -> None:
+        """Falls back when the remote shell required by the chosen r2r direction is missing."""
+        for mode, required_location, expected_host, available_locations in [
+            ("pull", "dst", "dst-host", ("src",)),
+            ("push", "src", "src-host", ("dst",)),
+        ]:
+            with self.subTest(mode=mode):
+                params, log = self.make_r2r_params(
+                    mode=mode,
+                    src_host="src-host",
+                    dst_host="dst-host",
+                    available_program_locations=available_locations,
+                )
+
+                self.assertEqual("off", resolve_r2r_mode(params))
+                log.warning.assert_called_once_with(
+                    f"--r2r={mode} requires sh on {required_location} host: {expected_host} "
+                    "for remote-to-remote replication; falling back to --r2r=off."
+                )
+
+    def test_resolve_r2r_mode_warns_when_remote_ssh_is_unavailable(self) -> None:
+        """Falls back when the nested ssh client required by the chosen r2r direction is missing."""
+        for mode, required_location, expected_host in [
+            ("pull", "dst", "dst-host"),
+            ("push", "src", "src-host"),
+        ]:
+            with self.subTest(mode=mode):
+                params, log = self.make_r2r_params(mode=mode, src_host="src-host", dst_host="dst-host")
+                params.available_programs[required_location].pop("ssh", None)
+
+                self.assertEqual("off", resolve_r2r_mode(params))
+                log.warning.assert_called_once_with(
+                    f"--r2r={mode} requires ssh on {required_location} host: {expected_host} "
+                    "for remote-to-remote replication; falling back to --r2r=off."
+                )
+
+    def test_resolve_r2r_mode_keeps_requested_mode_for_same_remote(self) -> None:
+        """Returns the requested mode when both endpoints resolve to the same remote."""
+        for mode in ["push", "pull"]:
+            with self.subTest(mode=mode):
+                params, log = self.make_r2r_params(
+                    mode=mode,
+                    src_host="user@example",
+                    dst_host="user@example",
+                    src_port=2222,
+                    dst_port=2222,
+                )
+
+                self.assertEqual(mode, resolve_r2r_mode(params))
+                log.warning.assert_not_called()
+
+    def test_resolve_r2r_mode_keeps_requested_mode_for_supported_remote_to_remote(self) -> None:
+        """Keeps the requested mode when remote-to-remote prerequisites are satisfied."""
+        for mode in ["push", "pull"]:
+            with self.subTest(mode=mode):
+                params, log = self.make_r2r_params(mode=mode, src_host="src-host", dst_host="dst-host")
+
+                self.assertEqual(mode, resolve_r2r_mode(params))
+                log.warning.assert_not_called()
+
+    def test_resolve_r2r_mode_returns_off_when_one_endpoint_is_local(self) -> None:
+        """Ignores r2r silently when either endpoint is local, regardless of remote shell availability."""
+        scenarios = [
+            ("pull", "", "dst-host", ("src",)),
+            ("push", "src-host", "", ("dst",)),
+        ]
+        for mode, src_host, dst_host, available_locations in scenarios:
+            with self.subTest(mode=mode):
+                params, log = self.make_r2r_params(
+                    mode=mode,
+                    src_host=src_host,
+                    dst_host=dst_host,
+                    available_program_locations=available_locations,
+                )
+                self.assertEqual("off", resolve_r2r_mode(params))
+                log.warning.assert_not_called()
+
+    def test_resolve_r2r_mode_rejects_remote_to_remote_config_file_combos(self) -> None:
+        """Disables r2r when the chosen direction requires an unsupported ssh config file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src_cfg = os.path.join(tmpdir, "bzfs_ssh_config_src")
+            dst_cfg = os.path.join(tmpdir, "bzfs_ssh_config_dst")
+            Path(src_cfg).touch()
+            Path(dst_cfg).touch()
+
+            scenarios = [
+                (
+                    "pull",
+                    src_cfg,
+                    None,
+                    "--r2r=pull cannot use --ssh-src-config-file for remote-to-remote ssh; cowardly falling back to --r2r=off.",
+                ),
+                (
+                    "push",
+                    None,
+                    dst_cfg,
+                    "--r2r=push cannot use --ssh-dst-config-file for remote-to-remote ssh; cowardly falling back to --r2r=off.",
+                ),
+            ]
+            for mode, src_config_file, dst_config_file, expected_warning in scenarios:
+                with self.subTest(mode=mode):
+                    params, log = self.make_r2r_params(
+                        mode=mode,
+                        src_host="src-host",
+                        dst_host="dst-host",
+                        src_config_file=src_config_file,
+                        dst_config_file=dst_config_file,
+                    )
+
+                    self.assertEqual("off", resolve_r2r_mode(params))
+                    log.warning.assert_called_once_with(expected_warning)
+
+    def test_is_same_remote_returns_true_for_local_endpoints(self) -> None:
+        """Treats two local endpoints as the same remote."""
+        params, _ = self.make_r2r_params(mode="pull")
+        self.assertTrue(is_same_remote(params.src, params.dst))
+
+    def test_is_same_remote_returns_true_when_remote_identity_matches(self) -> None:
+        """Matches identical user@host, port and ssh config tuples."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = os.path.join(tmpdir, "bzfs_ssh_config")
+            Path(cfg).touch()
+            params, _ = self.make_r2r_params(
+                mode="pull",
+                src_host="user@example",
+                dst_host="user@example",
+                src_port=2222,
+                dst_port=2222,
+                src_config_file=cfg,
+                dst_config_file=cfg,
+            )
+
+        self.assertTrue(is_same_remote(params.src, params.dst))
+
+    def test_is_same_remote_returns_false_when_remote_identity_differs(self) -> None:
+        """Distinguishes endpoints when host, port or ssh config file differ."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_a = os.path.join(tmpdir, "bzfs_ssh_config_a")
+            cfg_b = os.path.join(tmpdir, "bzfs_ssh_config_b")
+            Path(cfg_a).touch()
+            Path(cfg_b).touch()
+            scenarios = [
+                ("host", self.make_r2r_params(mode="pull", src_host="user@src", dst_host="user@dst")[0]),
+                (
+                    "port",
+                    self.make_r2r_params(
+                        mode="pull",
+                        src_host="user@example",
+                        dst_host="user@example",
+                        src_port=22,
+                        dst_port=2222,
+                    )[0],
+                ),
+                (
+                    "config",
+                    self.make_r2r_params(
+                        mode="pull",
+                        src_host="user@example",
+                        dst_host="user@example",
+                        src_config_file=cfg_a,
+                        dst_config_file=cfg_b,
+                    )[0],
+                ),
+            ]
+
+            for name, params in scenarios:
+                with self.subTest(field=name):
+                    self.assertFalse(is_same_remote(params.src, params.dst))

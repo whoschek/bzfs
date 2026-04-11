@@ -119,7 +119,7 @@ def suite() -> unittest.TestSuite:
                         suite.addTest(ParametrizedTestCase.parametrize(FullRemoteTestCase, params))
 
     if os.getuid() != 0 and not ttype.is_functional_test:
-        for ssh_mode in ["pull-push", "pull", "push"]:
+        for ssh_mode in ["pull-push", "pull", "push", "r2r-pull", "r2r-push"]:
             for min_pipe_transfer_size in [0]:
                 for affix in [""]:
                     for no_privilege_elevation in [True]:

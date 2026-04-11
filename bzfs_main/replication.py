@@ -48,6 +48,9 @@ from typing import (
 from bzfs_main.argparse_actions import (
     has_timerange_filter,
 )
+from bzfs_main.configuration import (
+    is_same_remote,
+)
 from bzfs_main.detect import (
     ZFS_VERSION_IS_AT_LEAST_2_1_0,
     ZFS_VERSION_IS_AT_LEAST_2_2_0,
@@ -566,14 +569,21 @@ def _prepare_zfs_send_receive(
 ) -> tuple[str, str, str]:
     """Constructs zfs send/recv pipelines with optional compression, mbuffer and pv."""
     p = job.params
+    src, dst = p.src, p.dst
     send_cmd_str: str = shlex.join(send_cmd)
     recv_cmd_str: str = shlex.join(recv_cmd)
+    src_has_shell: bool = p.is_program_available("sh", "src")
+    dst_has_shell: bool = p.is_program_available("sh", "dst")
+    same_remote: bool = is_same_remote(src, dst)
+    r2r_mode: str = p.r2r_mode
+    assert r2r_mode in ("off", "pull", "push"), r2r_mode
 
     if (
         p.is_program_available("zstd", "src")
         and p.is_program_available("zstd", "dst")
-        and p.is_program_available("sh", "src")
-        and p.is_program_available("sh", "dst")
+        and src_has_shell
+        and dst_has_shell
+        and (r2r_mode == "off" or not same_remote)
     ):
         compress_cmd_: str = _compress_cmd(p, "src", size_estimate_bytes)
         decompress_cmd_: str = _decompress_cmd(p, "dst", size_estimate_bytes)
@@ -581,23 +591,30 @@ def _prepare_zfs_send_receive(
         compress_cmd_, decompress_cmd_ = "cat", "cat"
 
     recordsize: int = abs(job.src_properties[src_dataset].recordsize)
-    src_buffer: str = _mbuffer_cmd(p, "src", size_estimate_bytes, recordsize)
-    dst_buffer: str = _mbuffer_cmd(p, "dst", size_estimate_bytes, recordsize)
-    local_buffer: str = _mbuffer_cmd(p, "local", size_estimate_bytes, recordsize)
+    src_buffer: str = "cat"
+    if r2r_mode == "off" or (src_has_shell and not same_remote):
+        src_buffer = _mbuffer_cmd(p, "src", size_estimate_bytes, recordsize)
+    dst_buffer: str = "cat"
+    if r2r_mode == "off" or (dst_has_shell and not same_remote):
+        dst_buffer = _mbuffer_cmd(p, "dst", size_estimate_bytes, recordsize)
+    local_buffer: str = "cat"
+    if r2r_mode == "off":
+        local_buffer = _mbuffer_cmd(p, "local", size_estimate_bytes, recordsize)
 
     pv_src_cmd: str = ""
     pv_dst_cmd: str = ""
     pv_loc_cmd: str = ""
-    if not p.src.ssh_user_host:
-        pv_src_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)
-    elif not p.dst.ssh_user_host:
-        pv_dst_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)
-    elif compress_cmd_ == "cat":
-        pv_loc_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)  # compression disabled
-    else:
-        # pull-push mode with compression enabled: reporting "percent complete" isn't straightforward because
-        # localhost observes the compressed data instead of the uncompressed data, so we disable the progress bar.
-        pv_loc_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human, disable_progress_bar=True)
+    if r2r_mode == "off":
+        if not p.src.ssh_user_host:
+            pv_src_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)
+        elif not p.dst.ssh_user_host:
+            pv_dst_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)
+        elif compress_cmd_ == "cat":
+            pv_loc_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)  # compression disabled
+        else:
+            # pull-push mode with compression enabled: reporting "percent complete" isn't straightforward because
+            # localhost observes the compressed data instead of the uncompressed data, so we disable the progress bar.
+            pv_loc_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human, disable_progress_bar=True)
 
     # assemble pipeline running on source leg
     src_pipe: str = ""
@@ -625,16 +642,17 @@ def _prepare_zfs_send_receive(
 
     # assemble pipeline running on middle leg between source and destination. only enabled for pull-push mode
     local_pipe: str = ""
-    if local_buffer != "cat":
-        local_pipe = f"{local_buffer}"
-    if pv_loc_cmd and pv_loc_cmd != "cat":
-        local_pipe = f"{local_pipe} | {pv_loc_cmd}"
+    if r2r_mode == "off":
         if local_buffer != "cat":
-            local_pipe = f"{local_pipe} | {local_buffer}"
-    if local_pipe.startswith(" |"):
-        local_pipe = local_pipe[2:]  # strip leading ' |' part
-    if local_pipe:
-        local_pipe = f"| {local_pipe}"
+            local_pipe = f"{local_buffer}"
+        if pv_loc_cmd and pv_loc_cmd != "cat":
+            local_pipe = f"{local_pipe} | {pv_loc_cmd}"
+            if local_buffer != "cat":
+                local_pipe = f"{local_pipe} | {local_buffer}"
+        if local_pipe.startswith(" |"):
+            local_pipe = local_pipe[2:]  # strip leading ' |' part
+        if local_pipe:
+            local_pipe = f"| {local_pipe}"
 
     # assemble pipeline running on destination leg
     dst_pipe: str = ""
@@ -660,16 +678,46 @@ def _prepare_zfs_send_receive(
     else:
         dst_pipe = recv_cmd_str
 
-    # If there's no support for shell pipelines, we can't do compression, mbuffering, monitoring and rate-limiting,
-    # so we fall back to simple zfs send/receive.
-    if not p.is_program_available("sh", "src"):
-        src_pipe = send_cmd_str
-    if not p.is_program_available("sh", "dst"):
-        dst_pipe = recv_cmd_str
+    if r2r_mode == "off":
+        # If there's no support for shell pipelines, we can't do compression, mbuffering, monitoring and rate-limiting,
+        # so we fall back to simple zfs send/receive.
+        if not src_has_shell:
+            src_pipe = send_cmd_str
+        if not dst_has_shell:
+            dst_pipe = recv_cmd_str
 
-    src_pipe = squote(p.src, src_pipe)
-    dst_pipe = squote(p.dst, dst_pipe)
-    return src_pipe, local_pipe, dst_pipe
+        src_pipe = squote(p.src, src_pipe)
+        dst_pipe = squote(p.dst, dst_pipe)
+        return src_pipe, local_pipe, dst_pipe
+
+    def nested_ssh_cmd(remote: Remote) -> str:
+        """Builds nested ssh command text for r2r leg."""
+        if same_remote:
+            # Perf: use local replication if initiator sees src+dst have same user@host, port and ssh configfile.
+            # Example: ssh alice@src.example.com "sh -c 'zfs send <src_dataset> | zfs receive <dst_dataset>'"
+            return ""
+        cmd: list[str] = [p.ssh_program] + list(remote.ssh_extra_opts)
+        if remote.ssh_config_file:
+            cmd += ["-F", remote.ssh_config_file]
+        if remote.ssh_cipher:
+            cmd += ["-c", remote.ssh_cipher]
+        if remote.ssh_port:
+            cmd += ["-p", str(remote.ssh_port)]
+        assert remote.ssh_user_host
+        cmd.append(remote.ssh_user_host)
+        return shlex.join(cmd)
+
+    if r2r_mode == "push":
+        # Example: ssh alice@src.example.com "sh -c 'zfs send ... | ssh bob@dst.example.com zfs receive ...'"
+        dst_pipe = dst_pipe if same_remote else shlex.quote(dst_pipe)
+        r2r_cmd = f"{src_pipe} | {nested_ssh_cmd(dst)} {dst_pipe}"
+    else:
+        assert r2r_mode == "pull", r2r_mode
+        # Example: ssh bob@dst.example.com "sh -c 'ssh alice@src.example.com zfs send ... | zfs receive ...'"
+        src_pipe = src_pipe if same_remote else shlex.quote(src_pipe)
+        r2r_cmd = f"{nested_ssh_cmd(src)} {src_pipe} | {dst_pipe}"
+    r2r_cmd = shlex.quote(p.shell_program + " -c " + shlex.quote(r2r_cmd))
+    return r2r_cmd, "", ""
 
 
 def _run_zfs_send_receive(
@@ -685,11 +733,13 @@ def _run_zfs_send_receive(
 ) -> None:
     """Executes a zfs send/receive pipeline between source and destination."""
     p, log = job.params, job.params.log
+    r2r_mode: str = p.r2r_mode
+    assert r2r_mode in ("off", "pull", "push"), r2r_mode
     pipes: tuple[str, str, str] = _prepare_zfs_send_receive(
         job, src_dataset, send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human
     )
     src_pipe, local_pipe, dst_pipe = pipes
-    conn_pool_name: str = DEDICATED if p.dedicated_tcp_connection_per_zfs_send else SHARED
+    conn_pool_name: str = DEDICATED if p.dedicated_tcp_connection_per_zfs_send and r2r_mode == "off" else SHARED
     src_conn_pool: ConnectionPool = p.connection_pools[p.src.location].pool(conn_pool_name)
     dst_conn_pool: ConnectionPool = p.connection_pools[p.dst.location].pool(conn_pool_name)
     with src_conn_pool.connection() as src_conn, dst_conn_pool.connection() as dst_conn:
@@ -697,9 +747,17 @@ def _run_zfs_send_receive(
         dst_conn.refresh_ssh_connection_if_necessary(job)
         src_ssh_cmd: str = " ".join(src_conn.ssh_cmd_quoted)
         dst_ssh_cmd: str = " ".join(dst_conn.ssh_cmd_quoted)
-        cmd: list[str] = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
+        if r2r_mode == "off":
+            cmd_str = f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"
+        elif r2r_mode == "push":
+            cmd_str = f"{src_ssh_cmd} {src_pipe}"
+        else:
+            assert r2r_mode == "pull"
+            cmd_str = f"{dst_ssh_cmd} {src_pipe}"
+
+        cmd = [p.shell_program_local, "-c", cmd_str]
         msg: str = "Would execute: %s" if dry_run_no_send else "Executing: %s"
-        log.debug(msg, cmd[2].lstrip())
+        log.debug(msg, cmd_str.lstrip())
         if not dry_run_no_send:
             try:
                 job.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)

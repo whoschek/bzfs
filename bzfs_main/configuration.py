@@ -293,6 +293,7 @@ class Params(MiniParams):
         self.resume_recv: Final[bool] = not args.no_resume_recv
         self.create_bookmarks: Final[str] = args.create_bookmarks
         self.use_bookmark: Final[bool] = not args.no_use_bookmark
+        self.r2r_mode_requested: Final[str] = args.r2r
 
         self.src: Final[Remote] = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst: Final[Remote] = Remote("dst", args, self)  # dst dataset, host and ssh options
@@ -359,6 +360,7 @@ class Params(MiniParams):
         self.tmp_include_dataset_regexes: RegexList = []  # deferred to validate_task() phase
         self.abs_exclude_datasets: list[str] = []  # deferred to validate_task() phase
         self.abs_include_datasets: list[str] = []  # deferred to validate_task() phase
+        self.r2r_mode: str = "off"  # deferred to validate_task() phase
 
         self.curr_zfs_send_program_opts: list[str] = []
         self.zfs_recv_ox_names: set[str] = set()
@@ -945,3 +947,66 @@ def _create_symlink(src: str, dst_dir: str, dst: str) -> None:
     """Creates dst symlink pointing to src using a relative path."""
     rel_path: str = os.path.relpath(src, start=dst_dir)
     os.symlink(src=rel_path, dst=os.path.join(dst_dir, dst))
+
+
+def resolve_r2r_mode(p: Params) -> str:
+    """Returns the effective r2r mode for the current task and emits fallback warnings."""
+    src, dst = p.src, p.dst
+    log = p.log
+    mode: str = p.r2r_mode_requested
+    assert mode in ("off", "pull", "push"), mode
+
+    if p.skip_replication:
+        return "off"
+
+    if mode == "off":
+        return "off"
+
+    if (not src.ssh_user_host) and (not dst.ssh_user_host):
+        return "off"  # we'll do local replication (there's no need for r2r)
+
+    if (not src.is_nonlocal) or (not dst.is_nonlocal):
+        return "off"  # at least one of them is local to this host (there's no need for r2r)
+
+    r: Remote = dst if mode == "pull" else src
+    if not p.is_program_available("sh", r.location):
+        log.warning(
+            f"--r2r={mode} requires sh on {r.location} host: {r.ssh_user_host or 'localhost'} for remote-to-remote "
+            "replication; falling back to --r2r=off."
+        )
+        return "off"
+
+    if is_same_remote(src, dst):  # are user@host, port, ssh_config file the same?
+        return mode  # perf: we'll do local replication on that host
+
+    if not p.is_program_available("ssh", r.location):
+        log.warning(
+            f"--r2r={mode} requires ssh on {r.location} host: {r.ssh_user_host or 'localhost'} "
+            "for remote-to-remote replication; falling back to --r2r=off."
+        )
+        return "off"
+
+    if mode == "pull" and src.ssh_config_file and src.ssh_config_file != "none":
+        log.warning(
+            "--r2r=pull cannot use --ssh-src-config-file for remote-to-remote ssh; cowardly falling back to --r2r=off."
+        )
+        return "off"
+
+    if mode == "push" and dst.ssh_config_file and dst.ssh_config_file != "none":
+        log.warning(
+            "--r2r=push cannot use --ssh-dst-config-file for remote-to-remote ssh; cowardly falling back to --r2r=off."
+        )
+        return "off"
+
+    return mode
+
+
+def is_same_remote(src: Remote, dst: Remote) -> bool:
+    """Returns whether this remote is the same as the other remote."""
+    if src.ssh_user_host == dst.ssh_user_host and not src.ssh_user_host:
+        return True  # both are local
+    return (
+        src.ssh_user_host == dst.ssh_user_host
+        and src.ssh_port == dst.ssh_port
+        and src.ssh_config_file == dst.ssh_config_file
+    )

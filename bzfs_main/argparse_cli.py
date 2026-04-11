@@ -1225,6 +1225,29 @@ than 300+60=360 minutes old) [critical]. Analog for minutely and daily snapshots
              "concurrent SSH session, effectively ignoring the value of the "
              "--max-concurrent-ssh-sessions-per-tcp-connection parameter in the ZFS send/receive case.\n\n")
     parser.add_argument(
+        "--r2r", choices=["off", "pull", "push"], default="off",
+        help="For remote-to-remote replication, controls whether the `zfs send` stream is relayed by the initiator "
+             "or transferred directly between source and destination in order to improve the throughput of bulk data "
+             "transfers (default: %(default)s). This option has no effect unless both replication endpoints are remote.\n\n"
+             "* `off`: Keeps existing pull-push behavior where the initiator acts as an intermediary that relays the "
+             "`zfs send` stream between source and destination, which can become a central bandwidth bottleneck.\n\n"
+             "Example: ssh alice@srchost 'zfs send ...' | ssh bob@dsthost 'zfs receive ...'\n\n"
+             "* `pull`: Tells the destination host to pull the `zfs send` stream directly from the source host. Requires "
+             "`sh` and `ssh` on the destination host, plus SSH setup such that the destination user@host can `ssh` into "
+             "the source host.\n\n"
+             "Example: ssh bob@dsthost \"sh -c 'ssh alice@srchost zfs send ... | zfs receive ...'\"\n\n"
+             "* `push`: Tells the source host to push the `zfs send` stream directly to the destination host. Requires "
+             "`sh` and `ssh` on the source host, plus SSH setup such that the source user@host can `ssh` into the "
+             "destination host.\n\n"
+             "Example: ssh alice@srchost \"sh -c 'zfs send ... | ssh bob@dsthost zfs receive ...'\"\n\n"
+             "*Note:* Orchestration still runs on the initiator; only the bulk data path changes. It is recommended to "
+             "also set `--ssh-src-user` and `--ssh-dst-user` explicitly in order to avoid potential confusion about which "
+             "SSH user account performs the nested remote-to-remote operation.\n\n"
+             f"*Note:* If the required nested `sh`/`ssh` do not exist, {PROG_NAME} falls back to `--r2r=off`. "
+             "`--r2r=pull` falls back to `--r2r=off` if `--ssh-src-config-file` is set to a non-empty value other than "
+             "`none`, and `--r2r=push` falls back to `--r2r=off` if `--ssh-dst-config-file` is set to a non-empty value "
+             "other than `none`. `--pv*` progress reporting and `--bwlimit` have no effect in r2r modes.\n\n")
+    parser.add_argument(
         "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
              "throughput at 100 MB/sec. Default is unlimited. Also see "

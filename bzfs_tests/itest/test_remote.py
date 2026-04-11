@@ -18,18 +18,29 @@ from __future__ import (
     annotations,
 )
 import os
+import platform
+import shutil
+import subprocess
+import tempfile
 from typing import (
+    Any,
+    Final,
     final,
 )
 
 import bzfs_main.detect
+from bzfs_main.configuration import (
+    resolve_r2r_mode,
+)
 from bzfs_main.util.utils import (
     DIE_STATUS,
+    getenv_any,
 )
 from bzfs_tests.itest import (
     ibase,
 )
 from bzfs_tests.itest.ibase import (
+    SSH_CONFIG_FILE,
     SSH_PROGRAM,
     IntegrationTestCase,
     is_pv_at_least_1_9_0,
@@ -44,9 +55,27 @@ from bzfs_tests.zfs_util import (
     dataset_exists,
 )
 
+# constants:
+PORT: Final[str] = getenv_any("test_ssh_port") or "22"
+R2R_REMOTE_RETRIES: Final[int] = 2
+
 
 #############################################################################
 class MinimalRemoteTestCase(IntegrationTestCase):
+
+    def supports_r2r_mode(self) -> bool:
+        """Returns true when this parametrized test case uses a remote-to-remote topology suitable for r2r."""
+        ssh_mode: str = self.param.get("ssh_mode", "local") if self.param else "local"
+        return (
+            ssh_mode in {"pull-push", "r2r-pull", "r2r-push"}
+            and os.geteuid() != 0
+            and not platform.platform().startswith("FreeBSD-")
+        )
+
+    def assert_r2r_endpoints_are_nonlocal(self, job: Any) -> None:
+        """Asserts that both endpoints are treated as remote to exercise real r2r behavior."""
+        self.assertTrue(job.params.src.is_nonlocal)
+        self.assertTrue(job.params.dst.is_nonlocal)
 
     def test_aaa_log_diagnostics_first(self) -> None:
         LocalTestCase(param=self.param).test_aaa_log_diagnostics_first()
@@ -65,6 +94,102 @@ class MinimalRemoteTestCase(IntegrationTestCase):
 
     def test_basic_replication_recursive_parallel(self) -> None:
         LocalTestCase(param=self.param).test_basic_replication_recursive_parallel()
+
+    def test_r2r_pull_local(self) -> None:
+        if not self.supports_r2r_mode():
+            self.skipTest("r2r requires remote-to-remote mode")
+        self.setup_basic()
+        job = self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--r2r=pull",
+            "--ssh-src-config-file=none",
+            "--ssh-dst-config-file=none",
+            port=PORT,
+            enable_ipv6=False,
+        )
+        self.assert_r2r_endpoints_are_nonlocal(job)
+        self.assertEqual("pull", resolve_r2r_mode(job.params))
+        self.assert_snapshots(ibase.DST_ROOT_DATASET, 3, "s")
+
+    def test_r2r_pull_remote(self) -> None:
+        if not self.supports_r2r_mode():
+            self.skipTest("r2r requires remote-to-remote mode")
+        self.setup_basic()
+        _seed_loopback_known_hosts(PORT)
+        job = self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--r2r=pull",
+            "--ssh-src-config-file=none",
+            "--ssh-dst-config-file=none",
+            src_host_str="127.0.0.1",
+            dst_host_str="127.0.0.2",
+            port=PORT,
+            enable_ipv6=False,
+            retries=R2R_REMOTE_RETRIES,
+        )
+        self.assert_r2r_endpoints_are_nonlocal(job)
+        self.assertEqual("pull", resolve_r2r_mode(job.params))
+        self.assert_snapshots(ibase.DST_ROOT_DATASET, 3, "s")
+
+    def test_r2r_push_local(self) -> None:
+        if not self.supports_r2r_mode():
+            self.skipTest("r2r requires remote-to-remote mode")
+        self.setup_basic()
+        job = self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--r2r=push",
+            "--ssh-src-config-file=none",
+            "--ssh-dst-config-file=none",
+            port=PORT,
+            enable_ipv6=False,
+        )
+        self.assert_r2r_endpoints_are_nonlocal(job)
+        self.assertEqual("push", resolve_r2r_mode(job.params))
+        self.assert_snapshots(ibase.DST_ROOT_DATASET, 3, "s")
+
+    def test_r2r_push_remote(self) -> None:
+        if not self.supports_r2r_mode():
+            self.skipTest("r2r requires remote-to-remote mode")
+        self.setup_basic()
+        _seed_loopback_known_hosts(PORT)
+        job = self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--r2r=push",
+            "--ssh-src-config-file=none",
+            "--ssh-dst-config-file=none",
+            src_host_str="127.0.0.1",
+            dst_host_str="127.0.0.2",
+            port=PORT,
+            enable_ipv6=False,
+            retries=R2R_REMOTE_RETRIES,
+        )
+        self.assert_r2r_endpoints_are_nonlocal(job)
+        self.assertEqual("push", resolve_r2r_mode(job.params))
+        self.assert_snapshots(ibase.DST_ROOT_DATASET, 3, "s")
+
+    def test_r2r_pull_falls_back_with_ssh_src_config_file(self) -> None:
+        """Verifies pull mode falls back when src uses a distinct ssh config file."""
+        if not self.supports_r2r_mode():
+            self.skipTest("r2r requires remote-to-remote mode")
+        self.setup_basic()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config2 = os.path.join(tmpdir, "test_bzfs_ssh_config_copy")
+            shutil.copy2(SSH_CONFIG_FILE, config2)
+            job = self.run_bzfs(
+                ibase.SRC_ROOT_DATASET,
+                ibase.DST_ROOT_DATASET,
+                "--r2r=pull",
+                f"--ssh-src-config-file={config2}",
+                port=PORT,
+                enable_ipv6=False,
+            )
+        self.assert_r2r_endpoints_are_nonlocal(job)
+        self.assertEqual("off", resolve_r2r_mode(job.params))
+        self.assert_snapshots(ibase.DST_ROOT_DATASET, 3, "s")
 
     def test_inject_unavailable_sudo(self) -> None:
         expected_error = DIE_STATUS if os.getuid() != 0 and not self.is_no_privilege_elevation() else 0
@@ -240,3 +365,23 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.assert_snapshots(ibase.DST_ROOT_DATASET + "/foo", 3, "t")
         self.assert_snapshots(ibase.DST_ROOT_DATASET + "/foo/a", 3, "u")
         self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET + "/foo/b"))  # b/c src has no snapshots
+
+
+#############################################################################
+def _seed_loopback_known_hosts(port: str) -> None:
+    """Seeds loopback host keys for tests that intentionally bypass the test ssh config."""
+    ssh_dir = os.path.dirname(SSH_CONFIG_FILE)
+    os.makedirs(ssh_dir, exist_ok=True)
+    known_hosts_file = os.path.join(ssh_dir, "known_hosts")
+    loopback_hosts = ("127.0.0.1", "127.0.0.2")
+    # `ssh-keygen -R` removes existing entries for this host identity from known_hosts before `keyscan` appends new entries.
+    for host in loopback_hosts:
+        for known_host in (host, f"[{host}]:{port}"):
+            cmd = ["ssh-keygen", "-R", known_host, "-f", known_hosts_file]
+            subprocess.run(cmd, check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    keyscan_cmd = ["ssh-keyscan", "-H"]
+    if port != "22":
+        keyscan_cmd += ["-p", port]
+    keyscan_cmd += list(loopback_hosts)
+    with open(known_hosts_file, "a", encoding="utf-8") as fd:
+        subprocess.run(keyscan_cmd, check=True, stdout=fd, stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
