@@ -40,16 +40,17 @@ d) from N source hosts to M destination hosts (pull or push or pull-push mode, N
 large, M=2 or M=3 are typical geo-replication factors)
 
 You can run this program on a single third-party host and have it talk to all source and
-destination hosts. That setup is convenient for basic use cases and testing. In many deployments,
-a cron job on each source host runs `bzfs_jobrunner` periodically to create new snapshots (via
---create-src-snapshots) and prune outdated snapshots and bookmarks on the source (via
---prune-src-snapshots and --prune-src-bookmarks), whereas another cron job on each destination
-host runs `bzfs_jobrunner` periodically to prune outdated destination snapshots (via
---prune-dst-snapshots), and to replicate the recently created snapshots from the source to the
-destination (via --replicate). A separate cron job on each source host and each destination host
-runs `bzfs_jobrunner` periodically to alert the user if the latest or oldest snapshot is somehow
-too old (via --monitor-src-snapshots and --monitor-dst-snapshots). The frequency of each
-activity can differ. Typical intervals range from N milliseconds to years.
+destination hosts. That setup is convenient for basic use cases and testing, and efficient with
+`--r2r=pull` or `--r2r=push`. In many deployments, a cron job on each source host runs
+`bzfs_jobrunner` periodically to create new snapshots (via --create-src-snapshots) and prune
+outdated snapshots and bookmarks on the source (via --prune-src-snapshots and
+--prune-src-bookmarks), whereas another cron job on each destination host runs `bzfs_jobrunner`
+periodically to prune outdated destination snapshots (via --prune-dst-snapshots), and to
+replicate the recently created snapshots from the source to the destination (via --replicate). A
+separate cron job on each source host and each destination host runs `bzfs_jobrunner`
+periodically to alert the user if the latest or oldest snapshot is somehow too old (via
+--monitor-src-snapshots and --monitor-dst-snapshots). The frequency of each activity can differ.
+Typical intervals range from N milliseconds to years.
 
 Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very
 same) shared file onto all source hosts and all destination hosts, and add crontab entries (or
@@ -197,7 +198,7 @@ usage: bzfs_jobrunner
 *  Replicate snapshots from the selected source hosts to the selected destinations hosts as
     necessary. For pull mode (recommended), this command should be called by a program (or cron
     job) running on each dst host; for push mode, on the src host; for pull-push mode on a
-    third-party host.
+    third-party host, maybe with `--r2r=pull` or `--r2r=push`.
 
 <!-- -->
 

@@ -150,7 +150,7 @@ d) from N source hosts to M destination hosts (pull or push or pull-push mode, N
 geo-replication factors)
 
 You can run this program on a single third-party host and have it talk to all source and destination hosts. That setup is
-convenient for basic use cases and testing.
+convenient for basic use cases and testing, and efficient with `--r2r=pull` or `--r2r=push`.
 In many deployments, a cron job on each source host runs `{PROG_NAME}` periodically to create new snapshots (via
 --create-src-snapshots) and prune outdated snapshots and bookmarks on the source (via --prune-src-snapshots and
 --prune-src-bookmarks), whereas another cron job on each destination host runs `{PROG_NAME}` periodically to prune
@@ -234,7 +234,8 @@ This is harmless because that extra process exits immediately with a message lik
         "--replicate", action="store_true",
         help="Replicate snapshots from the selected source hosts to the selected destinations hosts as necessary. For pull "
              "mode (recommended), this command should be called by a program (or cron job) running on each dst "
-             "host; for push mode, on the src host; for pull-push mode on a third-party host.\n\n")
+             "host; for push mode, on the src host; for pull-push mode on a third-party host, maybe with `--r2r=pull` "
+             "or `--r2r=push`.\n\n")
     parser.add_argument(
         "--prune-src-snapshots", action="store_true",
         help="Prune snapshots on the selected source hosts as necessary. Typically, this command should be called by a "

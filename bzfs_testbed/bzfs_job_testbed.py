@@ -287,6 +287,8 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 # extra_args += ["--localhost=bak-us-west"]
 # extra_args += ["--ssh-src-user=alice"]  # ssh username on src; for pull mode and pull-push mode
 # extra_args += ["--ssh-dst-user=root"]  # ssh username on dst; for push mode and pull-push mode
+# extra_args += ["--r2r=pull"]  # for pull-push mode; dst pulls the `zfs send` stream data directly from src
+# extra_args += ["--r2r=push"]  # for pull-push mode; src pushes the `zfs send` stream directly to dst
 # extra_args += ["--include-dataset", "foo", "zoo"]  # see bzfs --help
 # extra_args += ["--exclude-dataset", "bar", "baz"]
 # extra_args += ["--include-dataset-regex", "foo.*", "zoo.*"]
