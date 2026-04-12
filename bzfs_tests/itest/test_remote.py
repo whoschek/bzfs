@@ -57,7 +57,6 @@ from bzfs_tests.zfs_util import (
 
 # constants:
 PORT: Final[str] = getenv_any("test_ssh_port") or "22"
-R2R_REMOTE_RETRIES: Final[int] = 2
 
 
 #############################################################################
@@ -127,7 +126,6 @@ class MinimalRemoteTestCase(IntegrationTestCase):
             dst_host_str="127.0.0.2",
             port=PORT,
             enable_ipv6=False,
-            retries=R2R_REMOTE_RETRIES,
         )
         self.assert_r2r_endpoints_are_nonlocal(job)
         self.assertEqual("pull", resolve_r2r_mode(job.params))
@@ -165,7 +163,6 @@ class MinimalRemoteTestCase(IntegrationTestCase):
             dst_host_str="127.0.0.2",
             port=PORT,
             enable_ipv6=False,
-            retries=R2R_REMOTE_RETRIES,
         )
         self.assert_r2r_endpoints_are_nonlocal(job)
         self.assertEqual("push", resolve_r2r_mode(job.params))
@@ -369,19 +366,32 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
 #############################################################################
 def _seed_loopback_known_hosts(port: str) -> None:
-    """Seeds loopback host keys for tests that intentionally bypass the test ssh config."""
+    """Seeds loopback host keys via authenticated SSH.
+
+    Assumes loopback key-based auth is already configured by the integration testbed. Uses accept-new instead of
+    unauthenticated key scans because the guest sshd penalizes noauth probes and can drop later test connections.
+    """
     ssh_dir = os.path.dirname(SSH_CONFIG_FILE)
     os.makedirs(ssh_dir, exist_ok=True)
     known_hosts_file = os.path.join(ssh_dir, "known_hosts")
     loopback_hosts = ("127.0.0.1", "127.0.0.2")
-    # `ssh-keygen -R` removes existing entries for this host identity from known_hosts before `keyscan` appends new entries.
+    # `ssh-keygen -R` removes existing entries for this host identity from known_hosts before a fresh authenticated probe.
     for host in loopback_hosts:
         for known_host in (host, f"[{host}]:{port}"):
             cmd = ["ssh-keygen", "-R", known_host, "-f", known_hosts_file]
             subprocess.run(cmd, check=False, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    keyscan_cmd = ["ssh-keyscan", "-H"]
-    if port != "22":
-        keyscan_cmd += ["-p", port]
-    keyscan_cmd += list(loopback_hosts)
-    with open(known_hosts_file, "a", encoding="utf-8") as fd:
-        subprocess.run(keyscan_cmd, check=True, stdout=fd, stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for host in loopback_hosts:
+        cmd = [
+            SSH_PROGRAM,
+            "-n",
+            "-F",
+            "none",
+            "-oBatchMode=yes",
+            "-oStrictHostKeyChecking=accept-new",
+            f"-oUserKnownHostsFile={known_hosts_file}",
+            "-oConnectTimeout=5",
+        ]
+        if port != "22":
+            cmd += ["-p", port]
+        cmd += [host, "true"]
+        subprocess.run(cmd, check=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
