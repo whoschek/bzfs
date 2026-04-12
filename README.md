@@ -2041,8 +2041,11 @@ usage: bzfs [-h]
     *Note:* If the required nested `sh`/`ssh` do not exist, bzfs falls back to
     `--r2r=off`. `--r2r=pull` falls back to `--r2r=off` if `--ssh-src-config-file` is
     set to a non-empty value other than `none`, and `--r2r=push` falls back to `--r2r=off`
-    if `--ssh-dst-config-file` is set to a non-empty value other than `none`. `--pv*`
-    progress reporting and `--bwlimit` have no effect in r2r modes.
+    if `--ssh-dst-config-file` is set to a non-empty value other than `none`.
+
+    *Note:* `--pv*` progress reporting and `--bwlimit` have no effect in r2r modes. Use
+    `--mbuffer-program-opts` for bandwidth rate limiting instead. Example to cap throughput at
+    100 MB/sec: `--mbuffer-program-opts='-q -m 128M -r 100M -R 100M'`.
 
 <!-- -->
 
