@@ -735,6 +735,7 @@ def _run_zfs_send_receive(
     p, log = job.params, job.params.log
     r2r_mode: str = p.r2r_mode
     assert r2r_mode in ("off", "pull", "push"), r2r_mode
+    log.log(LOG_TRACE, "r2r_mode: %s", r2r_mode)
     pipes: tuple[str, str, str] = _prepare_zfs_send_receive(
         job, src_dataset, send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human
     )
