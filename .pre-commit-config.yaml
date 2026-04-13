@@ -25,7 +25,7 @@ default_install_hook_types:
   - pre-commit
   - commit-msg
 default_language_version:
-  golang: 1.26.1
+  golang: 1.26.2
   node: lts                             # Resolve to node >= v24, npm >= 11.11.0
 repos:
   - repo: https://github.com/gitleaks/gitleaks
@@ -62,14 +62,14 @@ repos:
         language: golang
         entry: shfmt
         types: [shell]
-        args: [                         # See https://github.com/mvdan/sh/blob/v3.13.0/cmd/shfmt/shfmt.1.scd
+        args: [                         # See https://github.com/mvdan/sh/blob/v3.13.1/cmd/shfmt/shfmt.1.scd
           --write,                      # Change files instead of printing to stdout
           --indent=4,                   # Use 4-space indentation for shell scripts
           --keep-padding,               # Preserve comment padding
           --space-redirects,            # Keep space after redirection operators
           --case-indent,                # Indent switch cases
         ]
-        additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@5c4d285c3e8fa3b85137b34cec5ce66b98d97bdc]  # aka v3.13.0
+        additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@2f3f5e36d9b0f8f14c998d50aa20a28832205ae8]  # aka v3.13.1
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: 745eface02aef23e168a8afb6b5737818efbea95  # aka v0.11.0.1
     hooks:
