@@ -101,6 +101,7 @@ def _make_params(**kwargs: object) -> MagicMock:
     """Creates a Params mock with split_args helper."""
     params = MagicMock()
     params.split_args.side_effect = lambda *parts: shlex.split(" ".join(str(p) for p in parts if p))
+    params.bwlimit = ""
     for key, value in kwargs.items():
         setattr(params, key, value)
     return params
@@ -448,17 +449,26 @@ class TestReplication(AbstractTestCase):
         )
         self.assertEqual("cat", _mbuffer_cmd(p, "src", 2, 1024))
 
-    def test_mbuffer_cmd_uses_mbuffer(self) -> None:
-        p = _make_params(
-            min_pipe_transfer_size=1,
-            src=MagicMock(is_nonlocal=True),
-            dst=MagicMock(is_nonlocal=False),
-            is_program_available=MagicMock(return_value=True),
-            mbuffer_program="mbuffer",
-            mbuffer_program_opts=["-O", "localhost:0"],
-            no_estimate_send_size=False,
-        )
-        self.assertEqual("mbuffer -s 2097152 -O localhost:0", _mbuffer_cmd(p, "src", 2, 4096))
+    def test_mbuffer_cmd_uses_bwlimit_for_send_and_receive(self) -> None:
+        """Verifies mbuffer uses the correct bwlimit flag for src and dst legs."""
+        cases = [
+            ("src", True, False, "-R"),
+            ("dst", False, True, "-r"),
+            ("local", True, True, "-r"),
+        ]
+        for loc, src_is_nonlocal, dst_is_nonlocal, rate_flag in cases:
+            with self.subTest(loc=loc):
+                p = _make_params(
+                    min_pipe_transfer_size=1,
+                    src=MagicMock(is_nonlocal=src_is_nonlocal),
+                    dst=MagicMock(is_nonlocal=dst_is_nonlocal),
+                    is_program_available=MagicMock(return_value=True),
+                    mbuffer_program="mbuffer",
+                    mbuffer_program_opts=["-m", "8M"],
+                    bwlimit="20m",
+                    no_estimate_send_size=False,
+                )
+                self.assertEqual(f"mbuffer -s 2097152 -m 8M {rate_flag} 20M", _mbuffer_cmd(p, loc, 2, 4096))
 
     def test_compress_cmd_returns_cat(self) -> None:
         p = _make_params(

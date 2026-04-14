@@ -311,8 +311,6 @@ class Params(MiniParams):
         for opt in {"-i", "-I", "-o", "-O", "-l", "-L", "-t", "-T", "-a", "-A"}.intersection(self.mbuffer_program_opts):
             die(f"--mbuffer-program-opts: {opt} is disallowed for security reasons.")
         self.bwlimit: Final[str] = self.validate_arg_str(args.bwlimit) if args.bwlimit else ""
-        if self.bwlimit:
-            self.mbuffer_program_opts.extend(["-R", self.bwlimit.upper()])
         self.ps_program: Final[str] = self._program_name(args.ps_program)
         self.pv_program: Final[str] = self._program_name(args.pv_program)
         self.pv_program_opts: Final[list[str]] = self.split_args(args.pv_program_opts)
