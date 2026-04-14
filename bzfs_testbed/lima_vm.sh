@@ -134,7 +134,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     if [[ ! -f ~/.bzfs_apt_update_done ]]; then
         echo "Now running 'apt-get update' ..."
         sudo apt-get -y -qq update
-        # sudo apt-get -y full-upgrade
+        # sudo apt-get -y dist-upgrade
         touch ~/.bzfs_apt_update_done
     fi
 

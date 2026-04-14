@@ -10,12 +10,11 @@ ARG BZFS_GIT_TAG  # for example 'v1.19.0'
 # For hpnssh see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
 ARG BZFS_DOCKER_INSTALL_HPNSSH=true  # hpnssh is optional
 
-ARG DEBIAN_FRONTEND=noninteractive
-
 COPY docker_entrypoint.sh /usr/local/bin/docker_entrypoint.sh
 
-RUN apt-get -y -qq update \
-    && apt-get -y full-upgrade \
+RUN export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -y -qq update \
+    && apt-get -y dist-upgrade \
     && apt-get -y install openssh-client openssh-server fail2ban \
     && apt-get -y install sudo cron python3 zstd mbuffer pv \
     && apt-get -y install git \
