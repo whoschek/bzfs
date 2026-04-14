@@ -310,6 +310,9 @@ class Params(MiniParams):
         self.mbuffer_program_opts: Final[list[str]] = self.split_args(args.mbuffer_program_opts)
         for opt in {"-i", "-I", "-o", "-O", "-l", "-L", "-t", "-T", "-a", "-A"}.intersection(self.mbuffer_program_opts):
             die(f"--mbuffer-program-opts: {opt} is disallowed for security reasons.")
+        self.bwlimit: Final[str] = self.validate_arg_str(args.bwlimit) if args.bwlimit else ""
+        if self.bwlimit:
+            self.mbuffer_program_opts.extend(["-R", self.bwlimit.upper()])
         self.ps_program: Final[str] = self._program_name(args.ps_program)
         self.pv_program: Final[str] = self._program_name(args.pv_program)
         self.pv_program_opts: Final[list[str]] = self.split_args(args.pv_program_opts)
@@ -317,8 +320,8 @@ class Params(MiniParams):
                        "-U", "--store-and-forward", "-d", "--watchfd", "-R", "--remote", "-P", "--pidfile"}  # fmt: skip
         for opt in bad_pv_opts.intersection(self.pv_program_opts):
             die(f"--pv-program-opts: {opt} is disallowed for security reasons.")
-        if args.bwlimit:
-            self.pv_program_opts.extend([f"--rate-limit={self.validate_arg_str(args.bwlimit)}"])
+        if self.bwlimit:
+            self.pv_program_opts.extend([f"--rate-limit={self.bwlimit}"])
         self.shell_program_local: Final[str] = "sh"
         self.shell_program: Final[str] = self._program_name(args.shell_program)
         self.ssh_program: str = self._program_name(args.ssh_program)

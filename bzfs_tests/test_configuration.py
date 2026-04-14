@@ -850,6 +850,7 @@ class TestAdditionalHelpers(AbstractTestCase):
         params = self.make_params(args=args)
         self.assertIn("-v", params.zfs_send_program_opts)
         self.assertIn("-v", params.zfs_recv_program_opts)
+        self.assertEqual(["-R", "20M"], params.mbuffer_program_opts[-2:])
         self.assertIn("--rate-limit=20m", params.pv_program_opts)
 
     def test_program_name_injections(self) -> None:

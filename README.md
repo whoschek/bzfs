@@ -2043,9 +2043,8 @@ usage: bzfs [-h]
     set to a non-empty value other than `none`, and `--r2r=push` falls back to `--r2r=off`
     if `--ssh-dst-config-file` is set to a non-empty value other than `none`.
 
-    *Note:* `--pv*` progress reporting and `--bwlimit` have no effect in r2r modes. Use
-    `--mbuffer-program-opts` for bandwidth rate limiting instead. Example to cap throughput at
-    100 MB/sec: `--mbuffer-program-opts='-q -m 128M -r 100M -R 100M'`.
+    *Note:* `--pv*` progress reporting options have no effect in r2r modes; progress
+    reporting is disabled.
 
 <!-- -->
 
@@ -2053,8 +2052,8 @@ usage: bzfs [-h]
 
 **--bwlimit** *STRING*
 
-*  Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example:
-    `100m` to cap throughput at 100 MB/sec. Default is unlimited. Also see
+*  Sets `pv` and `mbuffer` bandwidth rate limit for zfs send/receive data transfer
+    (optional). Example: `100m` to cap throughput at 100 MB/sec. Default is unlimited. Also see
     https://manpages.ubuntu.com/manpages/man1/pv.1.html
 
 <!-- -->

@@ -6,6 +6,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - [bzfs] Add [`Docker image`](bzfs_testbed_docker/README.md) and corresponding replication example.
 - [bzfs] Add [`--r2r`](README.md#--r2r) CLI option for efficient Remote-to-Remote replication bulk data transfers.
+- [bzfs] Make `--bwlimit` CLI option set the bandwidth rate limit also on `mbuffer` (not just on `pv`).
 - [bzfs_jobrunner] Add
   [`--repeat-if-took-more-than-seconds`](README_bzfs_jobrunner.md#--repeat-if-took-more-than-seconds) CLI option.
 - [bzfs] [security] Enhance validation of `--zfs-recv-program-opts` CLI option.
