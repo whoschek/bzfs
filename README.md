@@ -77,13 +77,13 @@ commands. These functions can also be used independently.
 The source can push to the destination, and the destination can pull from the source. bzfs runs on
 the initiator host, which can be the source host (push mode), destination host (pull mode), same
 host (local mode, no network, no ssh), or a third-party host that can SSH into source and
-destination (pull-push mode). In pull-push mode, the source `zfs send` stream is forwarded by
-the initiator directly to the destination `zfs receive`, without storing anything locally. For
-bulk data transfers, remote-to-remote mode (`--r2r=pull` or `--r2r=push`) can instead
-transfer the stream directly between source and destination to avoid making the initiator a
-bandwidth bottleneck. In this mode, bzfs does not need to be installed on source or destination;
-only the `zfs` CLI is required there. bzfs can run as root or as a non-root user via sudo or
-delegated `zfs allow` permissions.
+destination (pull-push mode). In pull-push mode, the source `zfs send` stream is relayed by the
+initiator to the destination `zfs receive`, without storing anything locally. For bulk data
+transfers, remote-to-remote mode (`--r2r=pull` or `--r2r=push`) can instead transfer the
+stream directly between source and destination to avoid making the initiator a bandwidth
+bottleneck. In this mode, bzfs does not need to be installed on source or destination; only the
+`zfs` CLI is required there. bzfs can run as root or as a non-root user via sudo or delegated
+`zfs allow` permissions.
 
 bzfs is written in Python and continuously tested with unit and integration tests on old and new
 ZFS versions, on multiple Linux and FreeBSD versions, and on all Python versions >= 3.9

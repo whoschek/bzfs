@@ -148,7 +148,7 @@ The source can push to the destination, and the destination can pull from the so
 runs on the initiator host, which can be the source host (push mode), destination host (pull mode),
 same host (local mode, no network, no ssh), or a third-party host that can SSH
 into source and destination (pull-push mode). In pull-push mode, the source `zfs send` stream is
-forwarded by the initiator directly to the destination `zfs receive`, without storing anything locally.
+relayed by the initiator to the destination `zfs receive`, without storing anything locally.
 For bulk data transfers, remote-to-remote mode (`--r2r=pull` or `--r2r=push`) can instead transfer the
 stream directly between source and destination to avoid making the initiator a bandwidth bottleneck. In
 this mode, {PROG_NAME} does not need to be installed on source or destination; only the `zfs` CLI is
