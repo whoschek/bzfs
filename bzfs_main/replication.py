@@ -903,7 +903,7 @@ def _mbuffer_cmd(p: Params, loc: str, size_estimate_bytes: int, recordsize: int)
         recordsize = max(recordsize, 2 * 1024 * 1024)
         mbuffer_program_opts: list[str] = [p.mbuffer_program, "-s", str(recordsize)] + p.mbuffer_program_opts
         if p.bwlimit:
-            mbuffer_program_opts.extend(["-R" if loc == "src" else "-r", p.bwlimit.upper()])
+            mbuffer_program_opts += ["-R" if loc == "src" else "-r", p.bwlimit.upper()]
         return shlex.join(mbuffer_program_opts)
     else:
         return "cat"
