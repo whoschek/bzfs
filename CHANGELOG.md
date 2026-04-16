@@ -2,11 +2,16 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.20.0] - Not yet released
+## [1.20.0] - April 15, 2026
 
 - [bzfs] Add [`Docker image`](bzfs_testbed_docker/README.md) and corresponding replication example.
 - [bzfs] Add [`--r2r`](README.md#--r2r) CLI option for efficient Remote-to-Remote replication bulk data transfers.
 - [bzfs] Make `--bwlimit` CLI option set the bandwidth rate limit also on `mbuffer` (not just on `pv`).
+- [bzfs] Improve `--zfs-recv-program-opts` usability by auto-skipping common `-o`/`-x` properties that are rejected as
+  invalid by `zfs receive` on zvols but accepted on filesystems, and vice versa. The new filtering enables mixed
+  filesystem and zvol replication in a single CLI command by automatically skipping only the zfs receive `-o`/`-x`
+  properties that are invalid for any given dataset type
+  ([52153517](https://github.com/whoschek/bzfs/commit/5215351754da8d6ad8726b641b6385ac1ea5abc2)).
 - [bzfs_jobrunner] Add
   [`--repeat-if-took-more-than-seconds`](README_bzfs_jobrunner.md#--repeat-if-took-more-than-seconds) CLI option.
 - [bzfs] [security] Enhance validation of `--zfs-recv-program-opts` CLI option.
@@ -18,6 +23,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Test VM: Add experimental option to install select ZFS release tags on Ubuntu.
 - [bzfs] Test VM: Various small improvements.
 - [bzfs] Also run nightly tests on FreeBSD-14.4.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.19.0...v1.20.0
 
 ## [1.19.0] - March 12, 2026
 
