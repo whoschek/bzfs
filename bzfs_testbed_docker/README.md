@@ -51,19 +51,19 @@ By default the script:
 
 - Determines the latest stable `bzfs` git tag from `https://github.com/whoschek/bzfs.git`.
 - Builds an image for the local host architecture.
-- Tags it as `<git-tag>-<os>`, for example `v1.19.0-ubuntu-24.04`.
+- Tags it as `<git-tag>-<os>`, for example `v1.20.0-ubuntu-24.04`.
 - Runs a sanity check that `bzfs` and `bzfs_jobrunner` start successfully.
 
 Useful overrides:
 
 ```bash
-BZFS_GIT_TAG=v1.19.0 sudo ./docker_image.sh
+BZFS_GIT_TAG=v1.20.0 sudo ./docker_image.sh
 ```
 
 ## Run the Example Container
 
 The example runner uses the local image tag from `$BZFS_DOCKER_IMAGE`. If unset, it defaults to the latest stable `bzfs`
-tag with the OS suffix, for example `v1.19.0-ubuntu-24.04`. Override it if you use a different tag or registry.
+tag with the OS suffix, for example `v1.20.0-ubuntu-24.04`. Override it if you use a different tag or registry.
 
 Bring the container up on each VM:
 

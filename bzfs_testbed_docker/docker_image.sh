@@ -18,7 +18,7 @@
 # If you want to publish the images to a registry such as Docker Hub after `docker login`, set
 # `BZFS_DOCKER_PUSH=true` and `BZFS_DOCKER_REGISTRY_PREFIX=...`.
 # The pushed image references are `${BZFS_DOCKER_REGISTRY_PREFIX}/bzfs:${BZFS_GIT_TAG}-${BZFS_DOCKER_OS}`,
-# for example `docker.io/mydockerhubuser/bzfs:v1.19.0-ubuntu-24.04`.
+# for example `docker.io/mydockerhubuser/bzfs:v1.20.0-ubuntu-24.04`.
 # Published images include both `linux/amd64` and `linux/arm64`.
 
 set -eo pipefail
@@ -33,7 +33,7 @@ BZFS_DOCKER_REGISTRY_PREFIX="${BZFS_DOCKER_REGISTRY_PREFIX:-}"  # e.g. 'docker.i
 BZFS_DOCKER_PLATFORMS="${BZFS_DOCKER_PLATFORMS:-linux/amd64,linux/arm64}" # remove one on "exec /bin/sh: exec format error"
 DOCKER_CLI="${DOCKER_CLI:-$(command -v nerdctl || command -v docker)}"  # Lima includes nerdctl which is compatible w/ docker
 
-fetch_latest_stable_bzfs_tag() {  # for example returns 'v1.19.0'
+fetch_latest_stable_bzfs_tag() {  # for example returns 'v1.20.0'
     git ls-remote --refs --tags --sort='version:refname' "$BZFS_GIT_REMOTE" 'refs/tags/v*' |
         sed 's#^[^[:space:]]*[[:space:]]refs/tags/##' |
         grep -E '^v[0-9]+([.][0-9]+)*$' |

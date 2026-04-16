@@ -72,7 +72,7 @@ container_exec() {
     $DOCKER_CLI container exec --user="${CONTAINER_USER_UID}:${CONTAINER_USER_GID}" "$BZFS_CONTAINER_NAME" ${1+"$@"}
 }
 
-fetch_latest_stable_bzfs_tag() {  # for example returns 'v1.19.0'
+fetch_latest_stable_bzfs_tag() {  # for example returns 'v1.20.0'
     git ls-remote --refs --tags --sort='version:refname' "$BZFS_GIT_REMOTE" 'refs/tags/v*' |
         sed 's#^[^[:space:]]*[[:space:]]refs/tags/##' |
         grep -E '^v[0-9]+([.][0-9]+)*$' |
@@ -136,7 +136,7 @@ case "$1" in
 
         # run container if it doesn't exist yet
         if ! $DOCKER_CLI container inspect "$BZFS_CONTAINER_NAME" > /dev/null 2>&1; then
-            BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-$(fetch_latest_stable_bzfs_tag)-ubuntu-24.04}"  # e.g. 'docker.io/mydockerhubuser/bzfs:v1.19.0-ubuntu-24.04'
+            BZFS_DOCKER_IMAGE="${BZFS_DOCKER_IMAGE:-$(fetch_latest_stable_bzfs_tag)-ubuntu-24.04}"  # e.g. 'docker.io/mydockerhubuser/bzfs:v1.20.0-ubuntu-24.04'
             $DOCKER_CLI container run --detach \
                 --name="$BZFS_CONTAINER_NAME" \
                 --restart=unless-stopped \
