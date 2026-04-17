@@ -56,7 +56,7 @@ from bzfs_tests.zfs_util import (
 )
 
 # constants:
-PORT: Final[str] = getenv_any("test_ssh_port") or "2222" if getenv_any("test_ssh_program", "ssh") == "hpnssh" else "22"
+PORT: Final[str] = getenv_any("test_ssh_port") or ("2222" if SSH_PROGRAM == "hpnssh" else "22")
 
 
 #############################################################################
