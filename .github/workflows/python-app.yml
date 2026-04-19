@@ -699,7 +699,7 @@ jobs:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: vmactions/freebsd-vm@ba6bedee4a4884da2b782a41a64329a1c8e42ffb # aka v1.3.8; see https://github.com/vmactions/freebsd-vm
+        uses: vmactions/freebsd-vm@7ca82f79fe3078fecded6d3a2bff094995447bbd # aka v1.3.8; see https://github.com/vmactions/freebsd-vm
         with:
           release: "13.5"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
@@ -889,7 +889,7 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # aka v6.0.0; see https://github.com/actions/configure-pages
       - name: Upload website to GitHub Pages
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # aka v4.0.0; see https://github.com/actions/upload-pages-artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # aka v4.0.0; see https://github.com/actions/upload-pages-artifact
         with:
           name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: generate_website
