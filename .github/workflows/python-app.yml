@@ -649,7 +649,7 @@ jobs:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@7ca82f79fe3078fecded6d3a2bff094995447bbd # aka v1.4.4; see https://github.com/vmactions/freebsd-vm
+        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@d1e65811565151536c0c894fff74f06351ed26e6 # aka v1.4.5; see https://github.com/vmactions/freebsd-vm
         with:
           release: "15.0"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
@@ -699,7 +699,7 @@ jobs:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: vmactions/freebsd-vm@ba6bedee4a4884da2b782a41a64329a1c8e42ffb # aka v1.3.8; see https://github.com/vmactions/freebsd-vm
+        uses: *vmactions_freebsd_vm
         with:
           release: "13.5"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
@@ -857,7 +857,7 @@ jobs:
             rm -fr "site/$branchname"
           fi
       - name: Upload site to workflow run page
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # aka v7.0.0; see https://github.com/actions/upload-artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # aka v7.0.1; see https://github.com/actions/upload-artifact
         with:
           name: ${{ github.job }}
           include-hidden-files: true
@@ -889,7 +889,7 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # aka v6.0.0; see https://github.com/actions/configure-pages
       - name: Upload website to GitHub Pages
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # aka v4.0.0; see https://github.com/actions/upload-pages-artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # aka v5.0.0; see https://github.com/actions/upload-pages-artifact
         with:
           name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: generate_website
