@@ -27,6 +27,7 @@ from subprocess import (
     PIPE,
 )
 from typing import (
+    Final,
     cast,
     final,
 )
@@ -60,6 +61,7 @@ from bzfs_tests.itest import (
 )
 from bzfs_tests.itest.ibase import (
     SSH_CONFIG_FILE,
+    SSH_DEFAULT_PORT,
     SSH_PROGRAM,
     IntegrationTestCase,
 )
@@ -67,6 +69,9 @@ from bzfs_tests.tools import (
     gc_disabled,
     stop_on_failure_subtest,
 )
+
+# constants:
+_PORT: Final[str] = getenv_any("test_ssh_port") or SSH_DEFAULT_PORT
 
 
 #############################################################################
@@ -88,7 +93,7 @@ class TestSSHLatency(IntegrationTestCase):
 
         ssh_opts_list = list(p.src.ssh_extra_opts) + ["-oStrictHostKeyChecking=no"]
         ssh_opts_list += ["-S", os.path.join(p.src.ssh_exit_on_shutdown_socket_dir, "bzfs_test_ssh_socket")]
-        ssh_opts_list += ["-p", cast(str, getenv_any("test_ssh_port", "22"))]
+        ssh_opts_list += ["-p", _PORT]
 
         private_key_file2 = os.path.join(get_home_directory(), ".ssh", "testid_rsa")
         src_private_key2 = ["-i", private_key_file2]
@@ -196,7 +201,7 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
 
     def test_master_dies_then_recovers_via_refresh(self) -> None:
         username = pwd.getpwuid(os.getuid()).pw_name
-        ssh_port = int(cast(str, getenv_any("test_ssh_port", "22")))
+        ssh_port = int(_PORT)
         args = bzfs.argument_parser().parse_args(args=["src", "dst"])
         log_params = LogParams(args)
         log = bzfs_main.loggers.get_logger(

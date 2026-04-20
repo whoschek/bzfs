@@ -41,6 +41,7 @@ from bzfs_tests.itest import (
 )
 from bzfs_tests.itest.ibase import (
     SSH_CONFIG_FILE,
+    SSH_DEFAULT_PORT,
     SSH_PROGRAM,
     IntegrationTestCase,
     is_pv_at_least_1_9_0,
@@ -56,7 +57,7 @@ from bzfs_tests.zfs_util import (
 )
 
 # constants:
-PORT: Final[str] = getenv_any("test_ssh_port") or ("2222" if SSH_PROGRAM == "hpnssh" else "22")
+_PORT: Final[str] = getenv_any("test_ssh_port") or SSH_DEFAULT_PORT
 
 
 #############################################################################
@@ -104,7 +105,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
             "--r2r=pull",
             "--ssh-src-config-file=none",
             "--ssh-dst-config-file=none",
-            port=PORT,
+            port=_PORT,
             enable_ipv6=False,
         )
         self.assert_r2r_endpoints_are_nonlocal(job)
@@ -115,7 +116,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
         if not self.supports_r2r_mode():
             self.skipTest("r2r requires remote-to-remote mode")
         self.setup_basic()
-        _seed_loopback_known_hosts(PORT)
+        _seed_loopback_known_hosts(_PORT)
         job = self.run_bzfs(
             ibase.SRC_ROOT_DATASET,
             ibase.DST_ROOT_DATASET,
@@ -124,7 +125,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
             "--ssh-dst-config-file=none",
             src_host_str="127.0.0.1",
             dst_host_str="127.0.0.2",
-            port=PORT,
+            port=_PORT,
             enable_ipv6=False,
         )
         self.assert_r2r_endpoints_are_nonlocal(job)
@@ -141,7 +142,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
             "--r2r=push",
             "--ssh-src-config-file=none",
             "--ssh-dst-config-file=none",
-            port=PORT,
+            port=_PORT,
             enable_ipv6=False,
         )
         self.assert_r2r_endpoints_are_nonlocal(job)
@@ -152,7 +153,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
         if not self.supports_r2r_mode():
             self.skipTest("r2r requires remote-to-remote mode")
         self.setup_basic()
-        _seed_loopback_known_hosts(PORT)
+        _seed_loopback_known_hosts(_PORT)
         job = self.run_bzfs(
             ibase.SRC_ROOT_DATASET,
             ibase.DST_ROOT_DATASET,
@@ -161,7 +162,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
             "--ssh-dst-config-file=none",
             src_host_str="127.0.0.1",
             dst_host_str="127.0.0.2",
-            port=PORT,
+            port=_PORT,
             enable_ipv6=False,
         )
         self.assert_r2r_endpoints_are_nonlocal(job)
@@ -181,7 +182,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
                 ibase.DST_ROOT_DATASET,
                 "--r2r=pull",
                 f"--ssh-src-config-file={config2}",
-                port=PORT,
+                port=_PORT,
                 enable_ipv6=False,
             )
         self.assert_r2r_endpoints_are_nonlocal(job)

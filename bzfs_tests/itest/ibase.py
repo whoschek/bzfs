@@ -118,6 +118,7 @@ SSH_CONFIG_FILE: Final[str] = os.path.join(get_home_directory(), ".ssh", "test_b
 RNG: Final[random.Random] = random.Random(12345)
 
 SSH_PROGRAM: Final[str] = cast(str, getenv_any("test_ssh_program", "ssh"))  # also works with "hpnssh"
+SSH_DEFAULT_PORT: Final[str] = "2222" if SSH_PROGRAM == "hpnssh" else "22"  # see https://www.psc.edu/hpn-ssh-home/hpn-readme
 SUDO_CMD: Final[list[str]] = ["sudo", "-n"] if getenv_bool("test_enable_sudo", True) and os.getuid() != 0 else []
 set_sudo_cmd(SUDO_CMD)
 
@@ -281,8 +282,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         args = list(arguments)
         src_host = [] if use_jobrunner else ["--ssh-src-host", src_host_str]
         dst_host = [] if use_jobrunner else ["--ssh-dst-host", dst_host_str]
-        ssh_dflt_port = "2222" if SSH_PROGRAM == "hpnssh" else "22"  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
-        src_port = ["--ssh-src-port", ssh_dflt_port if port is None else str(port)]
+        src_port = ["--ssh-src-port", SSH_DEFAULT_PORT if port is None else str(port)]
         dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
         src_user = ["--ssh-src-user", os_username()]
         params = self.param
