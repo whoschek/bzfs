@@ -75,7 +75,7 @@ repos:
     hooks:
       - id: shellcheck                  # Validate syntax of shell scripts
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: f761d025eb06bcd6a45bf152ba3593c9b8ad9a9b  # aka 0.36.2
+    rev: 13614ab716a3113145f1294ed259d9fbe5678ff3  # aka 0.37.1
     hooks:
       - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
       - id: check-github-actions        # Validate syntax of GitHub Action YAML files
@@ -87,7 +87,7 @@ repos:
       - id: actionlint                  # Validate semantics (and some syntax) of GitHub Workflow YAML files
         args: [--shellcheck=.venv/bin/shellcheck]
   # - repo: https://github.com/woodruffw/zizmor-pre-commit  # also see https://github.com/zizmorcore/zizmor
-  #   rev: v1.23.1
+  #   rev: a4727cbbcd26d7098e96b9cb738169b59711ae51  # aka v1.24.1
   #   hooks:
   #     - id: zizmor                              # Validate syntax of GitHub Workflow YAML files
   #       args: [--fix=all]
