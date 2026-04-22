@@ -622,7 +622,7 @@ def _prepare_zfs_send_receive(
         # for testing; initially forward some bytes and then fail
         src_pipe = f"{src_pipe} | dd bs=64 count=1 2>/dev/null && false"
     if job.inject_params.get("inject_src_pipe_garble", False):
-        src_pipe = f"{src_pipe} | base64"  # for testing; forward garbled bytes
+        src_pipe = f"{src_pipe} | gzip -1 -c -n"  # for testing; forward garbled bytes
     if pv_src_cmd and pv_src_cmd != "cat":
         src_pipe = f"{src_pipe} | {pv_src_cmd}"
     if compress_cmd_ != "cat":
@@ -666,7 +666,7 @@ def _prepare_zfs_send_receive(
         # interrupt zfs receive for testing retry/resume; initially forward some bytes and then stop forwarding
         dst_pipe = f"{dst_pipe} | dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES} 2>/dev/null"
     if job.inject_params.get("inject_dst_pipe_garble", False):
-        dst_pipe = f"{dst_pipe} | base64"  # for testing; forward garbled bytes
+        dst_pipe = f"{dst_pipe} | gzip -1 -c -n"  # for testing; forward garbled bytes
     if dst_pipe.startswith(" |"):
         dst_pipe = dst_pipe[2:]  # strip leading ' |' part
     if job.inject_params.get("inject_dst_receive_error", False):

@@ -876,7 +876,7 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
             src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertIn("base64", src)
+        self.assertIn("gzip", src)
 
     def test_prepare_src_send_error_injected(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -927,7 +927,7 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
             _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertIn("base64", dst)
+        self.assertIn("gzip", dst)
 
     def test_prepare_dst_receive_error_injected(self) -> None:
         def avail(prog: str, loc: str) -> bool:
