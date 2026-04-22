@@ -61,7 +61,6 @@ from bzfs_tests.itest import (
 )
 from bzfs_tests.itest.ibase import (
     SSH_CONFIG_FILE,
-    SSH_DEFAULT_PORT,
     SSH_PROGRAM,
     IntegrationTestCase,
 )
@@ -71,7 +70,7 @@ from bzfs_tests.tools import (
 )
 
 # constants:
-_PORT: Final[str] = getenv_any("test_ssh_port") or SSH_DEFAULT_PORT
+_PORT: Final[str] = getenv_any("test_ssh_port") or "22"
 
 
 #############################################################################
