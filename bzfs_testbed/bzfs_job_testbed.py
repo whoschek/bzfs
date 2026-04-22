@@ -36,8 +36,7 @@ import pwd
 import subprocess
 import sys
 
-parser = argparse.ArgumentParser(
-    description="""
+parser = argparse.ArgumentParser(description="""
 Jobconfig script that generates deployment specific parameters to manage periodic ZFS snapshot creation, replication,
 pruning, and monitoring, across a fleet of N source hosts and M destination hosts, using one shared fleet-wide jobconfig
 script.
@@ -53,8 +52,7 @@ destination hosts, which is convenient for basic use cases and for testing.
 This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the
 actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach. A plain Python script offers flexible, readable
 customization without needing a separate configuration format.
-"""
-)
+""")
 known_args, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_jobrunner`
 if len(unknown_args) == 0:
     print(

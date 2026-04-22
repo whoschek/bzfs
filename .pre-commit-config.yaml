@@ -134,7 +134,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: a66e98df7b4aeeb3724184b332785976d062b92e  # aka v1.19.1
+    rev: 0f369d245750787ce34997d464ed9605391a5283  # aka v1.20.1
     hooks:
       - id: mypy                             # Run `mypy` Python type checker
         exclude: '^\.git.*$'
@@ -215,7 +215,7 @@ repos:
           "--ignore-words-list=cach,grup,mut",  # Project-specific words that should not be treated as typos
         ]
   - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: 2892f1f81088477370d4fbc56545c05d33d2493f  # aka 25.11.0
+    rev: fa505ab9c3e0fedafe1709fd7ac2b5f8996c670d  # aka 26.3.1
     hooks:
       - id: black                               # Run `black` Python code formatter
       # style options like `line_length` live in pyproject.toml
