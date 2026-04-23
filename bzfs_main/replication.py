@@ -1235,10 +1235,11 @@ def _incremental_send_steps_wrapper(
 def _add_recv_property_options(
     job: Job, full_send: bool, recv_opts: list[str], dataset: str, cache: dict[tuple[str, str, str], dict[str, str | None]]
 ) -> tuple[list[str], list[str]]:
-    """Reads the ZFS properties of the given src dataset; Appends zfs recv -o and -x values to recv_opts according to CLI
-    params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""
+    """Reads the ZFS properties of the given src dataset; Appends zfs recv -o and -x values to a recv_opts copy according to
+    CLI params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""
     is_volume: bool = job.src_properties[dataset].recordsize < 0
     p = job.params
+    recv_opts = recv_opts.copy()
     set_opts: list[str] = []
     x_names: list[str] = p.zfs_recv_x_names
     x_names_set: set[str] = set(x_names)
@@ -1283,7 +1284,7 @@ def _add_recv_property_options(
                 else:
                     assert config is p.zfs_set_config
                     set_opts.append(f"{propname}={props[propname]}")
-    _sanitize_recv_opts_for_dataset_type(recv_opts, is_volume=is_volume)
+    recv_opts = _sanitize_recv_opts_for_dataset_type(recv_opts, is_volume=is_volume)
     return recv_opts, set_opts
 
 
@@ -1314,9 +1315,9 @@ _ZFS_RECV_O_PROPS_FILESYSTEM_ONLY: Final[frozenset[str]] = frozenset(
 )
 
 
-def _sanitize_recv_opts_for_dataset_type(recv_opts: list[str], *, is_volume: bool) -> None:
-    """Drops `zfs receive` `-o/-x` props that `zfs receive` rejects for this dataset type. Keeps props for which `zfs
-    receive` emits harmless warnings.
+def _sanitize_recv_opts_for_dataset_type(recv_opts: list[str], *, is_volume: bool) -> list[str]:
+    """Drops `zfs receive` `-o/-x` properties that `zfs receive` rejects as an error for this dataset type. Keeps properties
+    for which `zfs receive` emits only (harmless) warnings.
 
     For example:
     drop -o canmount=<value> on zvols
@@ -1326,22 +1327,25 @@ def _sanitize_recv_opts_for_dataset_type(recv_opts: list[str], *, is_volume: boo
     keep -x mountpoint on zvols
     keep -o/-x volmode on filesystems
     """
+    results: list[str] = []
     i = 0
-    while i + 1 < len(recv_opts):
+    while i < len(recv_opts):
         opt: str = recv_opts[i]
-        if opt not in ("-o", "-x"):
-            i += 1
+        i += 1
+        if i >= len(recv_opts) or opt not in ("-o", "-x"):
+            results.append(opt)
             continue
-        arg: str = recv_opts[i + 1]
+        arg: str = recv_opts[i]
+        i += 1
         propname: str = arg.split("=", 1)[0] if opt == "-o" else arg
         if is_volume:
             inapplicable_props = _ZFS_RECV_O_PROPS_FILESYSTEM_ONLY if opt == "-o" else _ZFS_RECV_X_PROPS_FILESYSTEM_ONLY
         else:
             inapplicable_props = _ZFS_RECV_O_PROPS_VOLUME_ONLY if opt == "-o" else _ZFS_RECV_X_PROPS_VOLUME_ONLY
-        if propname in inapplicable_props:
-            del recv_opts[i : i + 2]  # drop this property on this dataset type (but retain it on other dataset types)
-        else:
-            i += 2
+        if propname not in inapplicable_props:  # retain this property on this dataset type
+            results.append(opt)
+            results.append(arg)
+    return results
 
 
 def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:

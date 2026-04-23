@@ -58,6 +58,7 @@ from bzfs_main.replication import (
     _prepare_zfs_send_receive,
     _pv_cmd,
     _recv_resume_token,
+    _sanitize_recv_opts_for_dataset_type,
     _zfs_get,
     _zfs_set,
     replicate_dataset,
@@ -705,6 +706,33 @@ class TestReplication(AbstractTestCase):
         self.assertEqual({"prop": "val"}, result1)
         self.assertEqual(result1, result2)
         mock_run_ssh_command.assert_called_once()
+
+    def test_sanitize_recv_opts_for_dataset_type_returns_new_list(self) -> None:
+        recv_opts = [
+            "-u",
+            "-o",
+            "devices=off",
+            "-o",
+            "canmount=noauto",
+            "-x",
+            "devices",
+            "-x",
+            "mountpoint",
+            "-o",
+            "volmode=none",
+            "-x",
+            "casesensitivity",
+            "-o",
+            "recordsize=128K",
+        ]
+        self.assertEqual(
+            ["-u", "-x", "devices", "-x", "mountpoint", "-o", "volmode=none"],
+            _sanitize_recv_opts_for_dataset_type(recv_opts, is_volume=True),
+        )
+
+    def test_sanitize_recv_opts_for_dataset_type_keeps_trailing_standalone_flags(self) -> None:
+        recv_opts = ["-u", "-F"]
+        self.assertEqual(["-u", "-F"], _sanitize_recv_opts_for_dataset_type(recv_opts, is_volume=False))
 
     def test_prepare_src_local_pv(self) -> None:
         def avail(prog: str, loc: str) -> bool:
