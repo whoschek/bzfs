@@ -189,9 +189,9 @@ At a high level, one replication task follows this sequence:
 
 The implementation of those mechanics lives primarily in:
 
-- [bzfs_main/bzfs.py](/Users/hoschek/unix/cloud/repos/bzfs/bzfs_main/bzfs.py)
-- [bzfs_main/replication.py](/Users/hoschek/unix/cloud/repos/bzfs/bzfs_main/replication.py)
-- [bzfs_main/incremental_send_steps.py](/Users/hoschek/unix/cloud/repos/bzfs/bzfs_main/incremental_send_steps.py)
+- [bzfs_main/bzfs.py](../bzfs_main/bzfs.py)
+- [bzfs_main/replication.py](../bzfs_main/replication.py)
+- [bzfs_main/incremental_send_steps.py](../bzfs_main/incremental_send_steps.py)
 
 # Why Performance Looks the Way It Does
 
@@ -221,21 +221,19 @@ inherently conditional:
 - the same fleet-wide policy often needs small computed adjustments.
 
 Using Python keeps the configuration expressive while staying easy to version-control, diff, and review. The example
-entry point is
-[bzfs_testbed/bzfs_job_testbed.py](/Users/hoschek/unix/cloud/repos/bzfs/bzfs_testbed/bzfs_job_testbed.py).
+entry point is [bzfs_testbed/bzfs_job_testbed.py](../bzfs_testbed/bzfs_job_testbed.py).
 
 # Where to Start Reading the Code
 
 If you want to understand the system quickly, read in this order:
 
-1. [README.md](/Users/hoschek/unix/cloud/repos/bzfs/README.md) for the product-level view.
-2. [README_bzfs_jobrunner.md](/Users/hoschek/unix/cloud/repos/bzfs/README_bzfs_jobrunner.md) for fleet orchestration.
-3. [bzfs_main/bzfs.py](/Users/hoschek/unix/cloud/repos/bzfs/bzfs_main/bzfs.py) top docstring for execution flow.
-4. [bzfs_main/bzfs_jobrunner.py](/Users/hoschek/unix/cloud/repos/bzfs/bzfs_main/bzfs_jobrunner.py) top docstring for
-   orchestration flow.
-5. [bzfs_main/replication.py](/Users/hoschek/unix/cloud/repos/bzfs/bzfs_main/replication.py) for replication behavior.
-6. [bzfs_main/snapshot_cache.py](/Users/hoschek/unix/cloud/repos/bzfs/bzfs_main/snapshot_cache.py) for the performance
-   and correctness trade-offs in snapshot caching.
+1. [README.md](../README.md) for the product-level view.
+2. [README_bzfs_jobrunner.md](../README_bzfs_jobrunner.md) for fleet orchestration.
+3. [bzfs_main/bzfs.py](../bzfs_main/bzfs.py) top docstring for execution flow.
+4. [bzfs_main/bzfs_jobrunner.py](../bzfs_main/bzfs_jobrunner.py) top docstring for orchestration flow.
+5. [bzfs_main/replication.py](../bzfs_main/replication.py) for replication behavior.
+6. [bzfs_main/snapshot_cache.py](../bzfs_main/snapshot_cache.py) for the performance and correctness trade-offs in
+   snapshot caching.
 
 # Operational Shape of a Real Deployment
 
