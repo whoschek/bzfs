@@ -14,262 +14,324 @@
  specific language governing permissions and limitations
  under the License.-->
 
-# Why bzfs exists
+# Why bzfs
 
-`bzfs` exists because ZFS gives you powerful primitives for durability and replication, but it does not give you an
-operationally complete replication system out of the box.
+ZFS gives operators excellent storage primitives: immutable snapshots, incremental send streams, receive-side rollback
+semantics, bookmarks, holds, properties, and delegated administration. Those primitives are deliberately low level. They
+do not decide which snapshots should exist, which destinations should receive them, which old state is safe to delete,
+which interrupted transfer can be resumed, or how a fleet should keep doing the same work correctly every second or
+minute for years.
 
-At small scale, a human can remember which snapshots to create, which ones are safe to prune, which destination is
-behind, which host should pull or push, and which interrupted transfer can be resumed safely. At fleet scale, that turns
-into a reliability problem. The hard part is not calling `zfs send` once. The hard part is making snapshot creation,
-replication, pruning, monitoring, retries, and recovery behave predictably across many datasets and hosts, every day,
-under partial failure.
+`bzfs` exists because the difficult part of replication is not the first successful `zfs send`. The difficult part is
+the thousandth run, after hosts have rebooted, networks have dropped, retention policy has changed, operators have made
+manual repairs, datasets have grown new descendants, and the destination is not quite in the state the next incremental
+send expects.
 
-This repository exists to close that gap:
+The project turns native ZFS operations into a repeatable disaster-recovery and high-availability workflow:
 
-- It turns raw ZFS primitives into a repeatable disaster-recovery and high-availability workflow.
-- It keeps the system safe under interruption, retries, divergence, and operator mistakes.
-- It stays lightweight enough to run in barebones server environments with no required Python dependencies.
-- It preserves direct access to native ZFS semantics instead of hiding them behind a heavy control plane.
+- make source snapshots on policy,
+- replicate selected snapshots to one or more destinations,
+- preserve enough ancestry to continue incremental replication safely,
+- prune snapshots and bookmarks without destroying the only useful base,
+- monitor whether expected snapshots are being successfully created, replicated, and pruned on schedule,
+- keep the whole system observable through ordinary CLIs, logs, dry runs, and ZFS state.
 
-The guiding idea is simple: prefer explicit, inspectable automation over clever hidden state.
+The design keeps the system understandable by using ZFS itself as the source of truth. There is no required daemon,
+external database, custom replication format, or hidden control plane. The project composes ordinary Unix processes,
+`zfs`, `ssh`, and Python code into an idempotent automation layer that can run on minimal hosts.
 
-# What Problem the System Solves
+# The System in One Sentence
 
-The system manages the full lifecycle of replicated ZFS snapshots:
+`bzfs` is the execution engine that makes one source/destination ZFS snapshot tree converge safely, while
+`bzfs_jobrunner` is the fleet scheduler that expands a shared policy file into repeated `bzfs` invocations across many
+source and destination hosts.
 
-- create source snapshots on a schedule,
-- replicate them incrementally to one or more destinations,
-- prune snapshots and bookmarks according to retention policy,
-- monitor whether expected snapshots are appearing on time,
-- recover cleanly from interrupted transfers.
+# The Problem Space
 
-That makes the system useful for:
+The system is built for environments where ZFS replication is operational infrastructure, not an occasional maintenance
+command. Typical deployments use it for backup, disaster recovery, warm standbys, geographically distributed replicas,
+removable backup targets, or low-latency replication for selected datasets.
 
-- backup,
-- disaster recovery,
-- hot or warm standbys,
-- fan-out replication to multiple regions,
-- high-frequency low-latency replication for selected datasets.
+That problem has several separate concerns:
 
-Without this layer, operators usually end up with brittle shell scripts, one-off cron jobs, unclear retention rules, and
-recovery procedures that are only understood by the person who wrote them.
+- Snapshot creation: take snapshots at the cadence implied by policy.
+- Snapshot selection: include only the datasets and snapshot labels that belong to a given operation.
+- Replication: send only the data needed to move the destination from its current state toward the source.
+- Retention: delete old snapshots and bookmarks according to policy without breaking future incremental sends.
+- Monitoring: alert when the newest or oldest matching snapshot violates the expected age window.
+- Recovery: retry, resume, or conservatively fall back after partial failure.
 
-# System in One Sentence
+The important point for new engineers is that replication correctness is a state problem, not a command-construction
+problem. The code spends most of its care on discovering the real state of source and destination, proving that a send
+is safe, and recovering when reality changes underneath a run.
 
-`bzfs` is the data-plane engine that performs safe ZFS snapshot operations, and `bzfs_jobrunner` is the control-plane
-orchestrator that decides which hosts and dataset pairs should run those operations on a schedule.
+# ZFS Concepts Used by This Project
 
-# The Core Design Choice
+You do not need to be a ZFS expert to start reading the code, but these concepts explain most design decisions.
 
-This project deliberately splits the system into two layers:
+## Datasets and Dataset Trees
 
-## `bzfs`: the execution engine
+A ZFS dataset is the unit that contains files, child datasets, snapshots, and properties. A recursive `bzfs` run treats
+a root dataset plus selected descendants as a dataset tree. Many bugs in replication tools come from thinking about a
+single dataset when the real deployment has a tree whose descendants can appear, disappear, or be filtered
+independently.
 
-`bzfs` is responsible for the mechanics:
+## Snapshots
 
-- listing datasets and snapshots,
-- filtering what is in scope,
-- deciding whether replication should be full or incremental,
-- choosing efficient `zfs send -i` or `zfs send -I` steps,
-- invoking `zfs send`, `zfs receive`, `ssh`, and optional helper tools,
-- handling retries, progress reporting, rollback checks, resumable receive state, and deletion.
+A snapshot is an immutable point-in-time view of one dataset. A snapshot name is useful for humans and policy, but the
+name alone is not a proof of identity. Two pools can contain snapshots with the same name that do not describe the same
+block history.
 
-It is designed to be usable directly as a standalone CLI.
+## GUIDs
 
-## `bzfs_jobrunner`: the fleet orchestrator
+ZFS assigns snapshots GUIDs. `bzfs` uses GUIDs when it needs to decide whether source and destination share the same
+logical snapshot. Names and timestamps drive filtering, retention, and observability; GUIDs protect the incremental
+replication base.
 
-`bzfs_jobrunner` is responsible for policy execution across many hosts:
+## Creation Time and `createtxg`
 
-- selecting source hosts and destination hosts,
-- mapping logical replication targets to real hosts,
-- expanding a shared job configuration into concrete `bzfs` invocations,
-- coordinating periodic workflows such as create, replicate, prune, and monitor.
+`creation` is a UTC timestamp. `createtxg` is the transaction group in which the snapshot was created. `createtxg` is
+precise for ordering snapshots within one pool, while `creation` remains meaningful across pools. The implementation is
+careful about when each property is the right ordering signal.
 
-It does not replace `bzfs`. It repeatedly composes and launches it.
+## Latest Common Snapshot or Bookmark
 
-## Why the split matters
-
-This split keeps the system easier to reason about:
-
-- the replication engine stays close to ZFS semantics,
-- the orchestration layer can evolve without entangling core transfer logic,
-- a user can adopt only `bzfs`, or can adopt the full fleet workflow with `bzfs_jobrunner`,
-- failures are easier to localize because policy and execution are separate concerns.
-
-# The Mental Model
-
-A new engineer should hold this picture in mind:
-
-1. A source dataset tree contains snapshots.
-2. Snapshot names encode policy-relevant information such as organization, target, timestamp, and period.
-3. `bzfs` compares source and destination state to find the latest common snapshot or bookmark.
-4. If no common basis exists, it performs a full send of the oldest selected source snapshot.
-5. If a common basis exists, it performs one or more incremental sends until the destination catches up.
-6. Separate flows can create new snapshots, prune old snapshots, prune bookmarks, compare trees, or monitor staleness.
-7. `bzfs_jobrunner` runs these flows repeatedly across many hosts using one shared Python job config.
-
-The system is therefore not "a backup script." It is a state convergence engine for snapshot trees.
-
-# The Important Domain Concepts
-
-## Dataset tree
-
-A dataset may contain descendant datasets. Many operations are recursive, so the real unit of work is often a dataset
-tree, not a single dataset.
-
-## Snapshot identity
-
-Snapshot names are useful, but GUIDs matter for correctness. The system uses GUID-aware logic when it needs to know
-whether two snapshots are truly the same snapshot across source and destination.
-
-## Latest common snapshot
-
-Incremental replication depends on a shared basis. The most recent common snapshot or bookmark is the anchor from which
-further sends can proceed safely.
+Incremental replication needs a common base. If source and destination share snapshot `A`, source can send the changes
+from `A` to a later snapshot `B`. `bzfs` searches for the latest common source item, where the item may be a snapshot or
+a bookmark, then plans the send steps from that basis.
 
 ## Bookmarks
 
-Bookmarks are lighter-weight than snapshots and can still serve as an incremental base. They improve safety and space
-efficiency in retention workflows.
+A bookmark is small ZFS metadata that records enough ancestry to serve as the source side of a later incremental send.
+It does not contain user data. Bookmarks let the source delete old snapshots earlier while still preserving the ability
+to replicate incrementally, as long as the destination still has the corresponding base snapshot.
 
-## Targets
+## Resumable Receive Tokens
 
-Snapshot names can encode logical targets such as `onsite`, `offsite`, or `us-west`. A job configuration maps those
-logical targets to real destination hosts. That indirection is what lets one snapshot policy fan out to multiple
-deployments cleanly.
+When `zfs receive -s` leaves an interrupted receive behind, ZFS can expose a receive-resume token. `bzfs` can use that
+token with `zfs send -t` to avoid retransmitting already received bytes. The code must also know when stale resumable
+state blocks the next valid receive and should be cleared.
 
-## Retention plans
+# The Two Executables
 
-Creation, pruning, and monitoring are policy-driven. The job config defines how many `minutely`, `hourly`, `daily`, and
-other classes of snapshots should exist on source, destination, or as bookmarks.
+The project intentionally has two CLIs because the two layers have different correctness boundaries.
 
-# The Safety Model
+## `bzfs`
 
-The system is built around a few invariants.
+`bzfs` is the direct ZFS engine. It can be used alone. It handles:
 
-## Source is normally treated as read-only
+- parsing one source and one destination scope,
+- listing source and destination datasets, snapshots, bookmarks, and properties,
+- applying include and exclude filters,
+- finding the latest common snapshot or bookmark by GUID,
+- deciding whether the next send is full, incremental with `-i`, or incremental with `-I`,
+- running `zfs send`, `zfs receive`, `ssh`, and optional helper programs,
+- creating snapshots, creating bookmarks, deleting selected snapshots or datasets, comparing trees, and monitoring
+  snapshot age,
+- retrying transient failures and handling resumable receive state.
 
-Unless explicitly asked to create or prune snapshots or bookmarks, `bzfs` treats the source as something to read from,
-not something to mutate.
+If you are debugging whether one dataset should replicate, start with `bzfs`.
 
-## Destination is normally append-only
+## `bzfs_jobrunner`
 
-Normal replication adds newer snapshots. Destructive actions on the destination are explicit options, not implicit
-cleanup.
+`bzfs_jobrunner` is the fleet orchestration layer. It is intentionally thinner than `bzfs`. It handles:
 
-## Recovery must be idempotent
+- reading one shared Python job configuration,
+- selecting the source and destination hosts relevant to this invocation,
+- mapping logical snapshot targets such as `onsite` or `us-west` to real destination hosts,
+- computing root dataset pairs and destination roots,
+- forwarding concrete work to `bzfs`,
+- running periodic actions such as create, replicate, prune, and monitor across many hosts.
 
-A partially failed run should not force manual repair in the common case. The next run should be able to retry, resume,
-or conservatively fall back without corrupting the replication flow.
+If you are debugging why a host did or did not run a job, start with `bzfs_jobrunner` and the job config.
 
-## Native ZFS semantics stay visible
+# The Shared Job Configuration
 
-This system does not invent its own replication format. It uses `zfs send` and `zfs receive`, plus bookmarks,
-properties, and resumable receive support. That keeps behavior close to the platform underneath it.
+The job config is Python because fleet policy is conditional in practice. Hostnames, destination roots, target mappings,
+retention windows, and monitoring thresholds often need small computed differences. A Python file keeps that logic
+version-controlled and reviewable without adding a custom language.
 
-## Dry runs must be inspectable
+The example is [bzfs_testbed/bzfs_job_testbed.py](../bzfs_testbed/bzfs_job_testbed.py). It defines the main policy
+objects:
 
-The project logs the commands it would execute so an operator can understand and replay them manually.
+- `root_dataset_pairs`: source dataset roots and destination-relative roots.
+- `src_hosts`: source hosts that own production datasets.
+- `dst_hosts`: destination hosts and the logical targets they should receive.
+- `retain_dst_targets`: target mappings used when pruning destination snapshots.
+- `dst_root_datasets`: per-destination prefixes for replicated datasets.
+- `src_snapshot_plan`, `src_bookmark_plan`, and `dst_snapshot_plan`: retention and creation policy.
+- `monitor_snapshot_plan`: freshness and retention-age expectations.
 
-# How a Replication Run Works
+A common deployment copies the same job config to all hosts. Source hosts run creation and source pruning actions.
+Destination hosts run replication and destination pruning actions. Monitoring may run on either side or from a central
+host. There is no required always-on coordinator.
 
-At a high level, one replication task follows this sequence:
+# The Replication Mental Model
 
-1. Determine the source dataset and the corresponding destination dataset.
-2. List source snapshots and bookmarks, and destination snapshots.
-3. Filter both sides according to dataset and snapshot policy.
-4. Find the latest common snapshot or bookmark.
-5. If required, check whether destination rollback or reconciliation is necessary.
-6. If there is no common basis, perform a full replication step.
-7. If there is a common basis, compute the smallest efficient sequence of incremental send steps.
-8. Execute `zfs send` and `zfs receive`, optionally across SSH with buffering, compression, progress reporting, and
-   resumable receive support.
-9. Update caches and logs so later runs can avoid unnecessary work.
+A single replication task is a convergence loop for one source dataset and its matching destination dataset:
 
-The implementation of those mechanics lives primarily in:
+1. Resolve the source dataset and destination dataset names.
+2. List source snapshots and, when enabled, source bookmarks.
+3. List destination snapshots.
+4. Filter source items by dataset policy, snapshot regexes, time windows, and rank windows.
+5. Compare GUIDs to find the latest common source snapshot or bookmark.
+6. If the destination has incompatible newer state, either stop or apply explicitly requested reconciliation.
+7. If there is no common base, perform a full send of the oldest selected source snapshot.
+8. If there is a common base, compute the smallest safe sequence of incremental send steps.
+9. Run `zfs send` and `zfs receive`, with SSH, compression, buffering, progress reporting, and resumable receive support
+   when configured and available.
+10. Create bookmarks and update conservative caches so future runs can do less work.
 
-- [bzfs_main/bzfs.py](../bzfs_main/bzfs.py)
-- [bzfs_main/replication.py](../bzfs_main/replication.py)
-- [bzfs_main/incremental_send_steps.py](../bzfs_main/incremental_send_steps.py)
+The core implementation is split as follows:
 
-# Why Performance Looks the Way It Does
+- [bzfs_main/bzfs.py](../bzfs_main/bzfs.py): CLI entry point, job setup, task orchestration, filters, creation,
+  comparison, monitoring, retries, SSH command execution, and parallel task handling.
+- [bzfs_main/replication.py](../bzfs_main/replication.py): full and incremental replication for one dataset.
+- [bzfs_main/incremental_send_steps.py](../bzfs_main/incremental_send_steps.py): minimal `-i` and `-I` send-step
+  planning, including bookmark and resumable-send limitations.
+- [bzfs_main/filter.py](../bzfs_main/filter.py): dataset and snapshot filtering.
+- [bzfs_main/snapshot_cache.py](../bzfs_main/snapshot_cache.py): cache fast paths guarded by ZFS properties.
+- [bzfs_main/bzfs_jobrunner.py](../bzfs_main/bzfs_jobrunner.py): fleet-level job expansion and subjob coordination.
 
-The project is optimized for environments where command startup cost, SSH latency, and repeated `zfs list` calls become
-real bottlenecks.
+# Safety Invariants
 
-Several design choices follow from that:
+These are the invariants to protect when changing the code.
 
-- dataset and snapshot processing is parallelized,
-- command arguments are batched to stay under operating-system limits,
-- progress is aggregated across multiple concurrent transfers,
-- snapshot metadata can be cached using ZFS `snapshots_changed` plus small local inode-backed cache files,
-- optional helper tools such as `pv`, `zstd`, and `mbuffer` are used when available but are never required.
+## Source Mutation Is Explicit
 
-The cache design is intentionally conservative: cache hits are an optimization, not a source of truth. If trust in the
-cache is not justified, the system falls back to live ZFS queries.
+Replication normally reads from the source. Source-side mutation happens only through explicit actions such as creating
+snapshots, creating bookmarks, pruning source snapshots, or pruning source bookmarks.
 
-# Why the Job Configuration Is Python
+## Destination Destruction Is Explicit
 
-The shared job configuration is a Python script rather than a custom DSL or static YAML schema because the problem is
-inherently conditional:
+Normal replication appends newer destination snapshots. Deleting destination snapshots, deleting datasets, rolling back,
+or reconciling divergence must be requested through options whose effect can be inspected through dry runs and logs.
 
-- hosts vary,
-- targets vary,
-- destination roots vary,
-- retention policies vary,
-- the same fleet-wide policy often needs small computed adjustments.
+## Incremental Sends Require a Proven Base
 
-Using Python keeps the configuration expressive while staying easy to version-control, diff, and review. The example
-entry point is [bzfs_testbed/bzfs_job_testbed.py](../bzfs_testbed/bzfs_job_testbed.py).
+The latest common snapshot or bookmark is a correctness boundary. If the code cannot prove a common basis, it must not
+pretend an incremental send is safe. It should perform a full send when allowed, stop, or ask the configured destructive
+reconciliation path to make the destination compatible.
 
-# Where to Start Reading the Code
+## Retry Must Preserve Idempotence
 
-If you want to understand the system quickly, read in this order:
+The next run after a crash, timeout, SSH failure, process kill, or interrupted receive should be able to make progress
+without manual repair in ordinary cases. This is why retry logic, receive-resume token handling, and conservative
+fallbacks matter.
 
-1. [README.md](../README.md) for the product-level view.
-2. [README_bzfs_jobrunner.md](../README_bzfs_jobrunner.md) for fleet orchestration.
-3. [bzfs_main/bzfs.py](../bzfs_main/bzfs.py) top docstring for execution flow.
-4. [bzfs_main/bzfs_jobrunner.py](../bzfs_main/bzfs_jobrunner.py) top docstring for orchestration flow.
-5. [bzfs_main/replication.py](../bzfs_main/replication.py) for replication behavior.
-6. [bzfs_main/snapshot_cache.py](../bzfs_main/snapshot_cache.py) for the performance and correctness trade-offs in
-   snapshot caching.
+## Caches Are Evidence, Not Truth
 
-# Operational Shape of a Real Deployment
+The snapshot cache exists to avoid expensive `zfs list` calls. It is trusted only when live ZFS `snapshots_changed`
+values, maturity checks, and cache-internal timestamps agree. A cache miss may cost time; a false cache hit would risk
+correctness, so the design prefers fallback.
 
-Most real deployments look like this:
+## Native ZFS Semantics Stay Visible
 
-- source hosts create snapshots locally,
-- destination hosts pull replicas from sources,
-- each side prunes its own state according to policy,
-- monitoring runs separately and alerts when latest or oldest snapshots violate age expectations,
-- one shared job config is copied across the fleet and filtered by local hostname at runtime.
+The system does not serialize hidden replication state into an external database. Operators can inspect ZFS datasets,
+snapshots, bookmarks, properties, holds, resume tokens, logs, and dry-run commands directly.
 
-This approach avoids a heavyweight always-on coordinator. The system relies on regular scheduled invocations and the
-idempotence of the underlying workflows.
+# Performance Model
 
-# What This System Does Not Try to Be
+The project is optimized for large dataset trees and repeated scheduled runs. The main costs are command startup, SSH
+latency, `zfs list` latency, send-stream bandwidth, and destination receive time.
 
-It is not a new storage layer. It is not an opaque backup appliance. It is not a daemon-heavy control plane with a
-database and agents everywhere.
+Important performance choices:
 
-It is a disciplined automation layer over native ZFS behavior.
+- work is parallelized across independent datasets where safe,
+- command arguments are batched to stay under OS limits,
+- source and destination snapshot lists are fetched in parallel where possible,
+- `createtxg`, `creation`, and GUID fields are requested only when needed,
+- progress from parallel sends is aggregated for operator visibility,
+- optional `pv`, `zstd`, and `mbuffer` integrations are auto-detected rather than required,
+- `--cache-snapshots` uses ZFS `snapshots_changed` and small inode timestamp files to skip redundant list operations.
 
-# The 3 Questions Every New Engineer Will Ask
+Performance features must never weaken the safety model. In this codebase, a fast path should be treated as a proof that
+the slow path would have produced the same decision. If that proof is not available, use the slow path.
 
-## 1. Why are there two CLIs instead of one?
+# Failure Model
 
-Because they solve different problems. `bzfs` is the execution engine for one concrete operation over one source and
-destination scope. `bzfs_jobrunner` is the fleet policy layer that repeatedly constructs and launches those operations
-across many hosts.
+The system assumes realistic production failure modes:
 
-## 2. What is the real unit of correctness: snapshot names, timestamps, or GUIDs?
+- source or destination hosts may reboot,
+- SSH sessions may drop,
+- cron or systemd may start a later run after an earlier run failed,
+- another operator or tool may create or delete snapshots,
+- a receive may be left with a resumable token,
+- a destination may have snapshots unknown to the source,
+- some optional helper tools may not be installed,
+- old ZFS versions may lack a feature that newer versions have.
 
-GUIDs are the strongest identity signal across replication boundaries. Names and times matter for policy, filtering,
-retention, and observability, but safe incremental replication ultimately depends on finding a true common basis.
+The response should be conservative. `bzfs` should either continue from a known-safe base, resume a transfer that ZFS
+shows to be resumable, clear stale receive state when that is the correct recovery, or stop with enough context for an
+operator to act.
 
-## 3. Why does the project spend so much effort on retries, caching, and resumable state?
+# What the System Is Not
+
+`bzfs` is not a storage engine, not a backup appliance, not a daemon-first platform, and not an opaque scheduler backed
+by a database. It is a disciplined automation layer over native ZFS operations.
+
+That constraint is intentional. It keeps deployments simple, makes dry runs meaningful, and lets an operator reason from
+the same commands the system executes.
+
+# How to Read the Repository
+
+Start in this order if you have no context:
+
+1. [README.md](../README.md): user-facing `bzfs` behavior and CLI surface.
+2. [README_bzfs_jobrunner.md](../README_bzfs_jobrunner.md): periodic fleet workflow.
+3. [bzfs_testbed/bzfs_job_testbed.py](../bzfs_testbed/bzfs_job_testbed.py): a concrete job configuration.
+4. [bzfs_main/bzfs.py](../bzfs_main/bzfs.py): direct engine entry point and job execution flow.
+5. [bzfs_main/replication.py](../bzfs_main/replication.py): the core replication algorithm.
+6. [bzfs_main/incremental_send_steps.py](../bzfs_main/incremental_send_steps.py): send-step planning.
+7. [bzfs_main/snapshot_cache.py](../bzfs_main/snapshot_cache.py): cache correctness and performance trade-offs.
+8. [bzfs_main/bzfs_jobrunner.py](../bzfs_main/bzfs_jobrunner.py): fleet orchestration.
+
+When changing behavior, read the corresponding tests under [bzfs_tests](../bzfs_tests). Unit tests cover most policy and
+planning logic. Integration tests exercise real ZFS behavior where mocks would hide important semantics.
+
+# How to Reason About Changes
+
+Use this checklist before changing replication behavior:
+
+- What source and destination ZFS state can exist before this code runs?
+- Which state is authoritative: snapshot name, GUID, creation time, `createtxg`, `snapshots_changed`, or resume token?
+- Does the change preserve the latest-common-snapshot invariant?
+- What happens if the process dies before, during or after each external command?
+- What happens if the next run sees partial state left by this run?
+- Does a dry run show enough for an operator to understand the action?
+- Does the fast path have the same decision boundary as the slow path?
+
+Most mistakes in this kind of software come from optimizing for the common case before proving the recovery case.
+
+# The 5 Questions Every New Engineer Will Ask
+
+## 1. Why are there two CLIs?
+
+Because they operate at different layers. `bzfs` is the engine for one concrete source/destination operation. It owns
+ZFS correctness. `bzfs_jobrunner` is the policy expander for a fleet. It decides which host pairs, dataset roots,
+targets, and actions should produce concrete `bzfs` invocations.
+
+## 2. Where does the truth live?
+
+In ZFS. The job config declares desired policy, and cache files may provide performance evidence, but live ZFS state is
+authoritative for correctness. When there is disagreement, the code should re-list, re-check GUIDs and properties, or
+stop instead of trusting stale local assumptions.
+
+## 3. How does `bzfs` decide what to send?
+
+It lists eligible source snapshots and bookmarks, lists destination snapshots, filters source items by policy, compares
+GUIDs to find the latest common base, checks destination compatibility, then chooses a full send or a minimal sequence
+of incremental `-i` and `-I` sends. Snapshot names drive policy; GUIDs protect correctness.
+
+## 4. Why does the project spend so much effort on retries, caching, and resumable state?
 
 Because the target environment is not a toy workflow. Long-running replication over SSH will eventually be interrupted,
 large fleets will eventually make repeated `zfs list` calls expensive, and a DR/HA system that cannot recover cleanly
 from partial failure is not production-ready.
+
+## 5. Where should I start when debugging a failed run?
+
+First look at the log files and decide which layer failed. If the wrong work was selected, inspect the job config and
+`bzfs_jobrunner` arguments. If the right work was selected but replication failed, inspect the `bzfs` dry-run output,
+source and destination snapshot GUIDs, latest common snapshot or bookmark, destination rollback state, receive-resume
+token, and the exact failed `zfs send` / `zfs receive` command.
