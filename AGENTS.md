@@ -229,6 +229,33 @@ Before committing any changes, you MUST follow this exact sequence:
 
 # Guidelines and Best Practices
 
+## How to Write Tests
+
+- **Add High-Value Tests:** Focus on adding meaningful tests for critical logic, happy path, edge cases, error paths and
+  invariants. Tests should be specific, readable, robust (not flaky), thread-safe and deterministic.
+- **Fit In:** New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
+  `bzfs_tests/itest/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included
+  in the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
+- **Place Expected before Actual value:** When calling unittest `assert*Equal()` methods, ensure that the _first_
+  argument is the _expected_ value, and the _second_ argument is the _actual_ value, not the other way round.
+- Integration tests should not use mocking or stubbing; use the real unmodified APIs/CLIs instead.
+
+## How to Write Code
+
+- **docstrings:** For every module, class, function, or method you **add or semantically modify**, attach a docstring ≤
+  80 words that concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this implementation was
+  chosen).
+- **Do not add Historic Code Comments**: NEVER add code comments that describe how your change relates to the state
+  before the change. For example, NEVER add code comments that mention what you added or deleted or changed, NEVER add
+  'used to do X, now does Y'. Instead, formulate code comments such that they are useful to readers who care about the
+  current version but do not know or care about prior versions.
+- **Default to Immutability (except in test classes):** To reduce complexity, mark _new_ long‑lived variables as `Final`
+  (module globals, class attributes, and `self.*` fields set in `__init__`) unless they must rebind. Mark _new_ classes
+  `@final` and _new_ dataclasses with `frozen=True` unless mutation or subclassing is required by design.
+- **Linter Suppressions: Last Resort Only:**
+  - Do not add `# noqa:`, `# type:` annotations, etc, unless the linter cannot be satisfied in a reasonable way, in
+    which case keep the annotation on the specific line and append a brief comment explaining the reason (≤ 10 words).
+
 ## How to Report Bugs
 
 1. If you encounter a bug, formulate a clear and concise description of what the bug is, and the symptoms and conditions
@@ -259,33 +286,6 @@ Before committing any changes, you MUST follow this exact sequence:
   You have plenty of time; go slow and make sure everything is correct.
 - **Test First, Then Fix:** Use TDD: You MUST follow the sequence of steps described above in
   [Core Software Development Workflow](#core-software-development-workflow).
-
-## How to Write Tests
-
-- **Add High-Value Tests:** Focus on adding meaningful tests for critical logic, happy path, edge cases, error paths and
-  invariants. Tests should be specific, readable, robust (not flaky), thread-safe and deterministic.
-- **Fit In:** New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
-  `bzfs_tests/itest/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included
-  in the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
-- **Place Expected before Actual value:** When calling unittest `assert*Equal()` methods, ensure that the _first_
-  argument is the _expected_ value, and the _second_ argument is the _actual_ value, not the other way round.
-- Integration tests should not use mocking or stubbing; use the real unmodified APIs/CLIs instead.
-
-## How to Write Code
-
-- **docstrings:** For every module, class, function, or method you **add or semantically modify**, attach a docstring ≤
-  80 words that concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this implementation was
-  chosen).
-- **Do not add Historic Code Comments**: NEVER add code comments that describe how your change relates to the state
-  before the change. For example, NEVER add code comments that mention what you added or deleted or changed, NEVER add
-  'used to do X, now does Y'. Instead, formulate code comments such that they are useful to readers who care about the
-  current version but do not know or care about prior versions.
-- **Default to Immutability (except in test classes):** To reduce complexity, mark _new_ long‑lived variables as `Final`
-  (module globals, class attributes, and `self.*` fields set in `__init__`) unless they must rebind. Mark _new_ classes
-  `@final` and _new_ dataclasses with `frozen=True` unless mutation or subclassing is required by design.
-- **Linter Suppressions: Last Resort Only:**
-  - Do not add `# noqa:`, `# type:` annotations, etc, unless the linter cannot be satisfied in a reasonable way, in
-    which case keep the annotation on the specific line and append a brief comment explaining the reason (≤ 10 words).
 
 ## How to Refactor
 
