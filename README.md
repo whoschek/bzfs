@@ -31,7 +31,7 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-Why bzfs? bzfs is a CLI built for highly reliable and scalable near real-time ZFS snapshot replication
+bzfs is a CLI built for highly reliable and scalable near real-time ZFS snapshot replication
 with minimal operational complexity. It reliably replicates ZFS datasets in parallel using zfs send/receive
 and ssh, and can operate at sub-second intervals across large fleets of hosts. It safely supports disaster
 recovery and high availability (DR/HA), scale-out deployments, and protection against data loss or ransomware.
