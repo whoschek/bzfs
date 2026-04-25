@@ -734,6 +734,10 @@ class TestReplication(AbstractTestCase):
         recv_opts = ["-u", "-F"]
         self.assertEqual(["-u", "-F"], _sanitize_recv_opts_for_dataset_type(recv_opts, is_volume=False))
 
+    def test_sanitize_recv_opts_for_dataset_type_keeps_trailing_erroneous_flags(self) -> None:
+        recv_opts = ["-u", "-o"]
+        self.assertEqual(["-u", "-o"], _sanitize_recv_opts_for_dataset_type(recv_opts, is_volume=False))
+
     def test_prepare_src_local_pv(self) -> None:
         def avail(prog: str, loc: str) -> bool:
             return prog == "sh"

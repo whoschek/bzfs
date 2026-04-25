@@ -1327,21 +1327,23 @@ def _sanitize_recv_opts_for_dataset_type(recv_opts: list[str], *, is_volume: boo
     keep -x mountpoint on zvols
     keep -o/-x volmode on filesystems
     """
+    if is_volume:
+        inapplicable_props_dict = {"-o": _ZFS_RECV_O_PROPS_FILESYSTEM_ONLY, "-x": _ZFS_RECV_X_PROPS_FILESYSTEM_ONLY}
+    else:
+        inapplicable_props_dict = {"-o": _ZFS_RECV_O_PROPS_VOLUME_ONLY, "-x": _ZFS_RECV_X_PROPS_VOLUME_ONLY}
+
     results: list[str] = []
     i = 0
     while i < len(recv_opts):
         opt: str = recv_opts[i]
         i += 1
-        if i >= len(recv_opts) or opt not in ("-o", "-x"):
+        inapplicable_props: frozenset[str] | None = inapplicable_props_dict.get(opt)
+        if inapplicable_props is None or i >= len(recv_opts):
             results.append(opt)
             continue
         arg: str = recv_opts[i]
         i += 1
         propname: str = arg.split("=", 1)[0] if opt == "-o" else arg
-        if is_volume:
-            inapplicable_props = _ZFS_RECV_O_PROPS_FILESYSTEM_ONLY if opt == "-o" else _ZFS_RECV_X_PROPS_FILESYSTEM_ONLY
-        else:
-            inapplicable_props = _ZFS_RECV_O_PROPS_VOLUME_ONLY if opt == "-o" else _ZFS_RECV_X_PROPS_VOLUME_ONLY
         if propname not in inapplicable_props:  # retain this property on this dataset type
             results.append(opt)
             results.append(arg)
