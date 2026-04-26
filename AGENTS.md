@@ -109,7 +109,8 @@ To understand the system's architecture and features, follow these steps:
   - Explicitly report that the command was not run, why, and that validation is therefore incomplete.
   - Do not claim or imply that validation somehow passed.
   - **Stop** making further code changes.
-  - **Do not run** additional verification commands for this task.
+  - **Do not run** additional verification commands for this task (except for read-only diagnostics to characterize the
+    blocker).
   - **Ask the User how to proceed**.
 
 # Change Validation Workflow
@@ -181,23 +182,27 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
 
 4. **Decompose complex tasks into effective subtasks:** Before starting to implement code, estimate the size of the
    effort including the time you'll need to get the task done, to avoid biting off too much in any given iteration. If
-   the task is complex, break it into smaller subtasks with bounded scope, preserving causal dependencies. Choose the
-   scope of the first subtask such that it is challenging but feasible in ~5-10 minutes. Defer the remaining tasks to
+   the task is complex, break it into smaller subtasks. Each subtask must include 1) bounded scope, 2) a concise
+   description of end-to-end behavior, 3) explicit acceptance criteria, 4) test specs, and 5) a list of causal
+   dependencies (**Blocked by**). Prefer vertical subtasks that exercise all affected layers end-to-end over horizontal
+   single-layer slices. Choose the scope of the first subtask such that it is challenging but feasible in ~5-10 minutes
+   (and not blocked by another subtask; merge subtasks or split them further as necessary). Defer the remaining tasks to
    the next iteration by outputting them into the backlog for Step 8 ("Iterate"). Track the backlog and the chosen
    (first) subtask (e.g., via `update_plan` if available).
 
 5. **Write Tests First:** Using **TDD**, translate the chosen subtask's test specs into test code. Then run to see red
-   (tests must initially fail as expected) using the [Change Validation Workflow](#change-validation-workflow) with
-   `bzfs_test_mode=unit` by default. Implement minimal code to reach green (tests must pass). Then re-run the
+   (tests must initially fail as expected) using only steps 1-3 of the
+   [Change Validation Workflow](#change-validation-workflow) with `bzfs_test_mode=unit` by default. Implement minimal
+   code to reach green (tests must pass). Then re-run the full
    [Change Validation Workflow](#change-validation-workflow).
    - For truly trivial, mechanical changes (e.g., fixing a typo in an existing test name or log message), you may treat
-     existing tests as sufficient and skip adding new tests, but you MUST still run the
+     existing tests as sufficient and skip adding new tests, but you MUST still run the full
      [Change Validation Workflow](#change-validation-workflow). Err on the side of treating tasks as non‑trivial.
 
-6. **Refactor:** Improve the design and quality of the code changes while keeping tests green, then re-run the
+6. **Refactor:** Improve the design and quality of the code changes while keeping tests green, then re-run the full
    [Change Validation Workflow](#change-validation-workflow).
 
-7. **Write User Documentation:** If necessary, specify and apply user-facing doc changes, then re-run the
+7. **Write User Documentation:** If necessary, specify and apply user-facing doc changes, then re-run the full
    [Change Validation Workflow](#change-validation-workflow).
 
 8. **Iterate:** Report the tasks that are not yet complete or currently still in the backlog, and repeat the workflow
@@ -278,12 +283,9 @@ Before committing any changes, you MUST follow this exact sequence:
 - **Analyze Complex Bugs:** Before claiming a complex bug, meticulously cross-check and validate it against the existing
   unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug" covered by a
   passing test indicates a flawed analysis.
-- **Use Tree of Thought with Verbalized Sampling for Complex Bugs:** Simultaneously explore five completely distinct
-  promising approaches (use subagents aka `spawn_agent` tool liberally if available-specifically, spawn 5 subagents to
-  independently explore the 5 approaches), and include their corresponding numeric probabilities in your response,
-  sampled from the full distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver
-  success, and explain your choice. **Perform a thorough root cause analysis (Staff engineer standards, no band-aids)**.
-  You have plenty of time; go slow and make sure everything is correct.
+- **Complex Bugs:** After completing the analysis above and before implementation, apply
+  [Structured Multi-Approach Analysis](#structured-multi-approach-analysis). **Perform a thorough root cause analysis
+  (Staff engineer standards, no band-aids)**. You have plenty of time; go slow and make sure everything is correct.
 - **Test First, Then Fix:** Use TDD: You MUST follow the sequence of steps described above in
   [Core Software Development Workflow](#core-software-development-workflow).
 
@@ -295,11 +297,8 @@ Your goal is to improve quality with zero functional regressions.
   summarizing the intended actions and changes, chosen tool, and validation steps. You have plenty of time; go slow and
   make sure everything is correct.
 
-- **Tree of Thought with Verbalized Sampling for Complex Refactors:** Simultaneously explore five completely distinct
-  promising approaches (use subagents aka `spawn_agent` tool liberally if available, spawn 5 subagents to independently
-  explore the 5 approaches), and include their corresponding numeric probabilities in your response, sampled from the
-  full distribution. Evaluate the pros/cons of each approach. Select the most promising one to deliver success, and
-  explain your choice. Then methodically execute each step of your plan.
+- **Complex Refactors:** After writing the refactor plan and before changing code, apply
+  [Structured Multi-Approach Analysis](#structured-multi-approach-analysis).
 
 - **Preserve Public APIs:** Do not change CLI options.
 
@@ -314,6 +313,21 @@ Your goal is to improve quality with zero functional regressions.
 
 - **Keep Tests Green:** Run the test suite after each small batch of changes to ensure everything stays green at each
   step.
+
+## Structured Multi-Approach Analysis
+
+Use this for complex bugs, high-risk refactors, and ambiguous design choices. Before implementing, compare 2 to 5
+materially different approaches. For each approach, summarize the core idea, supporting evidence from the repo or
+failing behavior, key benefits and risks, validation strategy, and impact on `bzfs` safety invariants such as
+idempotence, resumability, snapshot/GUID correctness, CLI compatibility, and partial-failure recovery.
+
+Then select one approach and briefly explain why it is the best fit. Keep the analysis concise and evidence-based:
+provide a decision record with the assumptions, tradeoffs, evidence, and conclusion needed for review. If one approach
+is clearly forced by the code, tests, or user request, state that and proceed without artificial alternatives.
+
+Use subagents aka the `spawn_agent` tool (or parallel investigation) only when available and when the delegated
+questions are independent, bounded, and useful enough to justify the coordination cost. Do not hand off the next task
+that the main agent must understand before it can continue, and do not duplicate work already covered locally.
 
 ## How to Add Dependencies
 
