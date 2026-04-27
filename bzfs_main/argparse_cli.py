@@ -255,11 +255,11 @@ tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_minutely```
 
 ```$ {PROG_NAME} root@host1:tank1/foo/bar root@host2:tank2/boo/bar```
 
-* Same example in pull-push mode with remote-to-remote transfer via `--r2r=pull`:
+* Same example with direct remote-to-remote transfer via `--r2r=pull`:
 
 ```$ {PROG_NAME} --r2r=pull root@host1:tank1/foo/bar root@host2:tank2/boo/bar```
 
-* Same example in pull-push mode with remote-to-remote transfer via `--r2r=push`:
+* Same example with direct remote-to-remote transfer via `--r2r=push`:
 
 ```$ {PROG_NAME} --r2r=push root@host1:tank1/foo/bar root@host2:tank2/boo/bar```
 

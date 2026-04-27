@@ -55,8 +55,7 @@ The `bzfs` project consists of two primary command-line tools:
 
 To understand the system's architecture and features, follow these steps:
 
-- **High-Level Docs:** Read `README.md`, `README_bzfs_jobrunner.md`, and `bzfs_docs/system_overview.md` to understand
-  the purpose, features, and usage.
+- **High-Level Docs:** Read `README.md` and `README_bzfs_jobrunner.md` to understand the purpose, features, and usage.
 - **Job Configuration:** Study `bzfs_testbed/bzfs_job_testbed.py` to understand how `bzfs_jobrunner` is configured.
 - **End-to-End Testbed:** Read `bzfs_testbed/README.md`, `bzfs_testbed/lima_vm.sh`, and `bzfs_testbed/lima_testbed.sh`
   to understand how to operate the local VM testbed.

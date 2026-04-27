@@ -221,7 +221,7 @@ $ bzfs root@host1:tank1/foo/bar root@host2:tank2/boo/bar
 ```
 
 
-* Same example in pull-push mode with remote-to-remote transfer via `--r2r=pull`:
+* Same example with direct remote-to-remote transfer via `--r2r=pull`:
 
 
 ```
@@ -229,7 +229,7 @@ $ bzfs --r2r=pull root@host1:tank1/foo/bar root@host2:tank2/boo/bar
 ```
 
 
-* Same example in pull-push mode with remote-to-remote transfer via `--r2r=push`:
+* Same example with direct remote-to-remote transfer via `--r2r=push`:
 
 
 ```
