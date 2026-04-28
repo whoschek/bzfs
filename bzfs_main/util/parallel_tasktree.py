@@ -241,7 +241,7 @@ class ParallelTaskTree:
         self._empty_barrier: Final[_TreeNode] = _make_tree_node("empty_barrier", "empty_barrier", {})  # immutable!
         self._datasets_set: Final[SortedInterner[str]] = SortedInterner(datasets)  # reduces memory footprint
         if executors is None:
-            is_parallel: bool = max_workers > 1 and len(datasets) > 1 and has_siblings(datasets)  # siblings can run in par
+            is_parallel: bool = max_workers > 1 and has_siblings(datasets)  # siblings can run in parallel
 
             def _default_executor_factory() -> Executor:
                 return ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()

@@ -226,7 +226,14 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(has_siblings(["a", "b"]))
         self.assertTrue(has_siblings(["a", "a/b", "a/d"]))
         self.assertTrue(has_siblings(["a", "a/b", "a/b/c", "a/b/d"]))
+        self.assertTrue(has_siblings(["a", "b/c"]))  # multiple root datasets can be processed in parallel
+        self.assertTrue(has_siblings(["a/b", "d"]))  # multiple root datasets can be processed in parallel
+        self.assertTrue(has_siblings(["a/b", "d/e"]))  # multiple root datasets can be processed in parallel
         self.assertTrue(has_siblings(["a/b/c", "d/e/f"]))  # multiple root datasets can be processed in parallel
+        self.assertTrue(has_siblings(["a/b/c/d", "a/b/e/f"]))
+        self.assertTrue(has_siblings(["a", "a/b", "a/b/c", "a/b/e"]))
+        self.assertTrue(has_siblings(["a", "a/b", "a/b/c/d", "a/b/e/f"]))
+        self.assertTrue(has_siblings(["a", "a/b/c/d", "a/b/e/f"]))
         self.assertFalse(has_siblings(["a", "a/b/c"]))
         self.assertFalse(has_siblings(["a", "a/b/c/d"]))
         self.assertTrue(has_siblings(["a", "a/b/c", "a/b/d"]))
