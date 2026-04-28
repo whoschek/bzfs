@@ -49,6 +49,7 @@ from bzfs_main.util.retry import (
     RetryTerminationError,
 )
 from bzfs_main.util.utils import (
+    Comparable,
     TaskTiming,
     dry,
     human_readable_duration,
@@ -62,6 +63,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     process_dataset: Callable[
         [str, str, Retry], bool  # lambda: dataset, tid, Retry; return False to skip subtree; must be thread-safe
     ],
+    priority: Callable[[str], Comparable] = lambda dataset: dataset,  # lexicographical order by default
     skip_tree_on_error: Callable[[str], bool],  # lambda: dataset # called on error; return True to skip subtree on error
     skip_on_error: str = "fail",
     max_workers: int = os.cpu_count() or 1,
@@ -142,6 +144,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         log=log,
         datasets=datasets,
         process_dataset=_process_dataset,
+        priority=priority,
         max_workers=max_workers,
         interval_nanos=interval_nanos,
         timing=timing,

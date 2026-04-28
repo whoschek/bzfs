@@ -226,7 +226,7 @@ class ParallelTaskTree:
         has_barrier: Final[bool] = any(barrier_name in dataset.split(COMPONENT_SEPARATOR) for dataset in datasets)
         assert (enable_barriers is not False) or not has_barrier, "Barrier seen in datasets but barriers explicitly disabled"
 
-        self._barriers_enabled: Final[bool] = bool(has_barrier or enable_barriers)
+        self._barriers_enabled: Final[bool] = has_barrier or bool(enable_barriers)
         self._barrier_name: Final[str] = barrier_name
         self._log: Final[logging.Logger] = log
         self._datasets: Final[list[str]] = datasets
@@ -295,7 +295,7 @@ class ParallelTaskTree:
                 nonlocal todo_futures
                 done_futures: set[Future[CompletionCallback]]
                 done_futures, todo_futures = concurrent.futures.wait(todo_futures, wait_timeout, return_when=FIRST_COMPLETED)
-                for done_future in done_futures:
+                for done_future in sorted(done_futures, key=lambda future: future_to_node[future].dataset):
                     done_node: _TreeNode = future_to_node.pop(done_future)
                     c_callback: CompletionCallback = done_future.result()  # does not block as processing already completed
                     c_callback_result: CompletionCallbackResult = c_callback(todo_futures)
@@ -338,14 +338,18 @@ class ParallelTaskTree:
         """Enqueues child nodes for start of processing (using iteration to avoid potentially hitting recursion limits)."""
         stack: list[_TreeNode] = [node]
         while stack:
-            current_node: _TreeNode = stack.pop()
-            for child, grandchildren in current_node.children.items():  # as processing of parent has now completed
-                child_abs_dataset: str = self._join_dataset(current_node.dataset, child)
-                child_node: _TreeNode = _make_tree_node(self._priority(child_abs_dataset), child_abs_dataset, grandchildren)
-                if child_abs_dataset in self._datasets_set:
-                    heapq.heappush(self._priority_queue, child_node)  # make it available for start of processing
-                else:  # it's an intermediate node that has no job attached; pass the enqueue operation
-                    stack.append(child_node)  # ... recursively down the tree
+            child_node: _TreeNode = stack.pop()
+            if child_node is not node and child_node.dataset in self._datasets_set:
+                heapq.heappush(
+                    self._priority_queue,
+                    _make_tree_node(self._priority(child_node.dataset), child_node.dataset, child_node.children),
+                )
+            else:
+                # it's an intermediate node with no job attached, or an initial node; pass enqueue recursively down the tree.
+                # child_node stores children in reverse lexicographic order; LIFO pop restores lexicogr. priority() traversal
+                for child, grandchildren in child_node.children.items():
+                    child_abs_dataset: str = self._join_dataset(child_node.dataset, child)
+                    stack.append(_make_tree_node(child_abs_dataset, child_abs_dataset, grandchildren))  # without priority()
 
     def _complete_dataset_with_barriers(self, node: _TreeNode, no_skip: bool) -> None:
         """After successful completion, enqueues children, opens barriers, and propagates completion upwards.
@@ -373,13 +377,14 @@ class ParallelTaskTree:
             """Returns number of jobs that were added to priority_queue for immediate start of processing."""
             n: int = 0
             children: _Tree = node.children
-            for child, grandchildren in children.items():
+            for child, grandchildren in reversed(children.items()):
                 abs_dataset: str = self._join_dataset(node.dataset, child)
-                child_node: _TreeNode = _make_tree_node(self._priority(abs_dataset), abs_dataset, grandchildren, parent=node)
+                child_node: _TreeNode = _make_tree_node(abs_dataset, abs_dataset, grandchildren, parent=node)
                 k: int
                 if child != self._barrier_name:
                     if abs_dataset in self._datasets_set:
                         # it's not a barrier; make job available for immediate start of processing
+                        child_node = _make_tree_node(self._priority(abs_dataset), abs_dataset, grandchildren, parent=node)
                         heapq.heappush(self._priority_queue, child_node)
                         k = 1
                     else:  # it's an intermediate node that has no job attached; pass the enqueue operation

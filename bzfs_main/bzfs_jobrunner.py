@@ -37,6 +37,7 @@ from __future__ import (
 )
 import argparse
 import contextlib
+import itertools
 import os
 import platform
 import pwd
@@ -52,6 +53,7 @@ from ast import (
 )
 from collections.abc import (
     Iterable,
+    Iterator,
 )
 from logging import (
     Logger,
@@ -986,6 +988,7 @@ class Job:
         sorted_subjobs: list[str] = sorted(subjobs.keys())
         spawn_process_per_job: bool = self.spawn_process_per_job
         log.log(LOG_TRACE, "%s: %s", "spawn_process_per_job", spawn_process_per_job)
+        subjob_priority: Iterator[int] = itertools.count()  # monotonically increasing sequence number
         if process_datasets_in_parallel_and_fault_tolerant(
             log=log,
             datasets=sorted_subjobs,
@@ -993,6 +996,7 @@ class Job:
                 subjobs[subjob], name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=spawn_process_per_job
             )
             == 0,
+            priority=lambda dataset: next(subjob_priority),
             skip_tree_on_error=lambda subjob: True,
             skip_on_error="dataset",
             max_workers=max_workers,

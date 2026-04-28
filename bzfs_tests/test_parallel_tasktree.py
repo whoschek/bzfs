@@ -17,6 +17,7 @@
 from __future__ import (
     annotations,
 )
+import itertools
 import logging
 import os
 import random
@@ -24,6 +25,9 @@ import string
 import threading
 import time
 import unittest
+from collections.abc import (
+    Iterator,
+)
 from concurrent.futures import (
     Future,
 )
@@ -569,33 +573,142 @@ class TestCustomPriorityOrder(unittest.TestCase):
         def priority(ds: str) -> tuple[int, str]:
             return (-sizes[ds], ds)
 
-        calls: list[str] = []
-
-        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
-            calls.append(dataset)
-
-            def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
-                return CompletionCallbackResult(no_skip=True, fail=False)
-
-            return _completion_callback
-
-        failed = run_parallel_tasktree(
-            log=log,
-            datasets=datasets,
-            process_dataset=process_dataset,
-            priority=priority,
-            max_workers=1,
-            enable_barriers=False,
-            is_test_mode=True,
-        )
-
-        self.assertFalse(failed)
         # Expected order determined by sizes while respecting dependencies:
         # Roots available initially: pick 's'(50) over 'r'(10); after 's', its children become available along with 'r'.
         # Pick 's/y'(60) over 'r'(10) and 's/x'(5); then 'r'(10) before the remaining 's/x'(5). After 'r', pick 'r/c'(40),
         # 'r/a'(30), 'r/b'(20), then last remaining 's/x'(5).
         expected = ["s", "s/y", "r", "r/c", "r/a", "r/b", "s/x"]
-        self.assertEqual(expected, calls)
+
+        def _run_testcase(enable_barriers: bool) -> None:
+            calls: list[str] = []
+
+            def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+                calls.append(dataset)
+
+                def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                    return CompletionCallbackResult(no_skip=True, fail=False)
+
+                return _completion_callback
+
+            failed = run_parallel_tasktree(
+                log=log,
+                datasets=datasets,
+                process_dataset=process_dataset,
+                priority=priority,
+                max_workers=1,
+                enable_barriers=enable_barriers,
+                is_test_mode=True,
+            )
+            self.assertFalse(failed)
+            self.assertEqual(expected, calls)
+
+        for enable_barriers in (False, True):
+            with self.subTest(enable_barriers=enable_barriers):
+                _run_testcase(enable_barriers)
+
+    def test_priority_uses_lexicographic_order_for_intermediate_nodes(self) -> None:
+        """The priority() callback is called in lexicographic order for datasets as they become available, even through
+        intermediate nodes."""
+        log = MagicMock(logging.Logger)
+        datasets: list[str] = [
+            "000000src-host/create-src-snapshots",
+            "000000src-host/create-src-snapshots/000000replicate",
+            "000001src-host/create-src-snapshots",
+            "000001src-host/create-src-snapshots/000000replicate",
+            "000002src-host/create-src-snapshots",
+            "000002src-host/create-src-snapshots/000000replicate",
+        ]
+        expected: list[str] = [
+            "000000src-host/create-src-snapshots",
+            "000001src-host/create-src-snapshots",
+            "000002src-host/create-src-snapshots",
+            "000000src-host/create-src-snapshots/000000replicate",
+            "000001src-host/create-src-snapshots/000000replicate",
+            "000002src-host/create-src-snapshots/000000replicate",
+        ]
+
+        def _run_testcase(enable_barriers: bool) -> None:
+            calls: list[str] = []
+
+            def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+                calls.append(dataset)
+
+                def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                    return CompletionCallbackResult(no_skip=True, fail=False)
+
+                return _completion_callback
+
+            priority: Iterator[int] = itertools.count()  # monotonically increasing sequence number
+            failed = run_parallel_tasktree(
+                log=log,
+                datasets=datasets,
+                process_dataset=process_dataset,
+                priority=lambda dataset: next(priority),
+                max_workers=1,
+                enable_barriers=enable_barriers,
+                is_test_mode=True,
+            )
+            self.assertFalse(failed)
+            self.assertEqual(expected, calls)
+
+        for enable_barriers in (False, True):
+            with self.subTest(enable_barriers=enable_barriers):
+                _run_testcase(enable_barriers)
+
+    def test_priority_uses_lexicographic_order_for_mixed_depth_intermediates(self) -> None:
+        """The priority() callback is called in lexicographic order for datasets as they become available, even through
+        mixed-depth intermediate nodes."""
+        log = MagicMock(logging.Logger)
+        datasets: list[str] = [
+            "000000src-host/create-src-snapshots",
+            "000000src-host/create-src-snapshots/w/x/foo",
+            "000000src-host/create-src-snapshots/y/boo",
+            "000000src-host/create-src-snapshots/y/foo",
+            "000000src-host/create-src-snapshots/z",
+            "000001src-host/create-src-snapshots",
+            "000001src-host/create-src-snapshots/foo",
+            "000002src-host/create-src-snapshots",
+            "000002src-host/create-src-snapshots/foo",
+        ]
+        expected: list[str] = [
+            "000000src-host/create-src-snapshots",
+            "000001src-host/create-src-snapshots",
+            "000002src-host/create-src-snapshots",
+            "000000src-host/create-src-snapshots/w/x/foo",
+            "000000src-host/create-src-snapshots/y/boo",
+            "000000src-host/create-src-snapshots/y/foo",
+            "000000src-host/create-src-snapshots/z",
+            "000001src-host/create-src-snapshots/foo",
+            "000002src-host/create-src-snapshots/foo",
+        ]
+
+        def _run_testcase(enable_barriers: bool) -> None:
+            calls: list[str] = []
+
+            def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+                calls.append(dataset)
+
+                def _completion_callback(todo_futures: set[Future[CompletionCallback]]) -> CompletionCallbackResult:
+                    return CompletionCallbackResult(no_skip=True, fail=False)
+
+                return _completion_callback
+
+            priority: Iterator[int] = itertools.count()  # monotonically increasing sequence number
+            failed = run_parallel_tasktree(
+                log=log,
+                datasets=datasets,
+                process_dataset=process_dataset,
+                priority=lambda dataset: next(priority),
+                max_workers=1,
+                enable_barriers=enable_barriers,
+                is_test_mode=True,
+            )
+            self.assertFalse(failed)
+            self.assertEqual(expected, calls)
+
+        for enable_barriers in (False, True):
+            with self.subTest(enable_barriers=enable_barriers):
+                _run_testcase(enable_barriers)
 
 
 def make_tree_node(dataset: str, children: _Tree, parent: _TreeNode | None = None) -> _TreeNode:
