@@ -1130,11 +1130,11 @@ class Comparable(Protocol):
     def __lt__(self, other: Any) -> bool: ...
 
 
-TComparable = TypeVar("TComparable", bound=Comparable)  # Generic type variable for elements stored in a SmallPriorityQueue
+TComparable = TypeVar("TComparable", bound=Comparable)  # Generic type variable for elements stored in UpdatablePriorityQueue
 
 
 @final
-class SmallPriorityQueue(Generic[TComparable]):
+class UpdatablePriorityQueue(Generic[TComparable]):
     """A priority queue that can handle updates to the priority of any element that is already contained in the queue, and
     does so very efficiently if there are a small number of elements in the queue (no more than thousands), as is the case
     for us.

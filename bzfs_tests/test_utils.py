@@ -85,13 +85,13 @@ from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     JobStats,
-    SmallPriorityQueue,
     SnapshotPeriods,
     Subprocesses,
     SynchronizedBool,
     SynchronizedDict,
     SynchronousExecutor,
     TaskTiming,
+    UpdatablePriorityQueue,
     _get_descendant_processes,
     append_if_absent,
     binary_search,
@@ -165,7 +165,7 @@ def suite() -> unittest.TestSuite:
         TestTerminateProcessSubtree,
         TestTerminationSignalHandler,
         TestJobStats,
-        TestSmallPriorityQueue,
+        TestUpdatablePriorityQueue,
         TestSynchronizedBool,
         TestSynchronizedDict,
         TestSynchronousExecutor,
@@ -1929,11 +1929,11 @@ class TestJobStats(unittest.TestCase):
 
 
 #############################################################################
-class TestSmallPriorityQueue(unittest.TestCase):
+class TestUpdatablePriorityQueue(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.pq: SmallPriorityQueue[int] = SmallPriorityQueue()
-        self.pq_reverse: SmallPriorityQueue[int] = SmallPriorityQueue(reverse=True)
+        self.pq: UpdatablePriorityQueue[int] = UpdatablePriorityQueue()
+        self.pq_reverse: UpdatablePriorityQueue[int] = UpdatablePriorityQueue(reverse=True)
 
     def test_basic(self) -> None:
         self.assertEqual(0, len(self.pq))
@@ -2069,7 +2069,7 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.assertTrue(v2a == v2b)
         self.assertTrue(v1 < v2a)
         self.assertTrue(v1 < v2b)
-        pq: SmallPriorityQueue[IntHolder] = SmallPriorityQueue()
+        pq: UpdatablePriorityQueue[IntHolder] = UpdatablePriorityQueue()
         pq.push(v2a)
         pq.push(v2b)
         pq.push(v1)
@@ -2105,7 +2105,7 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.assertTrue(v2a == v2b)
         self.assertTrue(v1 < v2a)
         self.assertTrue(v1 < v2b)
-        pq: SmallPriorityQueue[IntHolder] = SmallPriorityQueue(reverse=True)
+        pq: UpdatablePriorityQueue[IntHolder] = UpdatablePriorityQueue(reverse=True)
         pq.push(v2a)
         pq.push(v2b)
         pq.push(v1)

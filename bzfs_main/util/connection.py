@@ -96,8 +96,8 @@ from bzfs_main.util.retry import (
 from bzfs_main.util.utils import (
     LOG_TRACE,
     SHELL_CHARS_AND_SLASH,
-    SmallPriorityQueue,
     Subprocesses,
+    UpdatablePriorityQueue,
     die,
     get_home_directory,
     list_formatter,
@@ -509,7 +509,7 @@ class ConnectionPool:
         self._remote: Final[MiniRemote] = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self._capacity: Final[int] = max_concurrent_ssh_sessions_per_tcp_connection
         self._connpool_name: Final[str] = connpool_name
-        self._priority_queue: Final[SmallPriorityQueue[Connection]] = SmallPriorityQueue(
+        self._priority_queue: Final[UpdatablePriorityQueue[Connection]] = UpdatablePriorityQueue(
             reverse=True  # sorted by #free slots and last_modified
         )
         self._last_modified: int = 0  # monotonically increasing sequence number
