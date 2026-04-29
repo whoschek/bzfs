@@ -45,7 +45,7 @@ runs:
     - name: Install ssh + other dependencies
       shell: bash
       run: |
-        sudo apt-get -y update
+        ./.github-workflow-scripts/apt-get-update-with-retries.sh
         sudo apt-get -y install zstd mbuffer
         mkdir -p $HOME/.ssh
         rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub

@@ -133,7 +133,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     export DEBIAN_FRONTEND=noninteractive
     if [[ ! -f ~/.bzfs_apt_update_done ]]; then
         echo "Now running 'apt-get update' ..."
-        sudo apt-get -y -qq update
+        .github-workflow-scripts/apt-get-update-with-retries.sh -qq
         # sudo apt-get -y dist-upgrade
         touch ~/.bzfs_apt_update_done
     fi
@@ -141,7 +141,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     if [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then  # Ubuntu
         # Upgrade zfs kernel + userland to specific upstream zfs version
         # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
-        sudo add-apt-repository ppa:patrickdk/zfs; sudo apt-get -y update
+        .github-workflow-scripts/add-apt-repository-with-retries.sh ppa:patrickdk/zfs
         sudo apt-get -y install zfs-dkms
         # Ensure just-installed DKMS module is actually the loaded kernel module, and userland has same ZFS version as kernel
         sudo systemctl stop zfs-zed.service || true

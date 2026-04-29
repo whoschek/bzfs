@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 # Copyright 2024 Wolfgang Hoschek AT mac DOT com
 #
@@ -34,7 +34,8 @@ Pin: release n=focal
 Pin-Priority: 700
 EOF
 
-sudo apt-get update --quiet
+script_dir="$(dirname "$(realpath "$0")")"
+"${script_dir}/apt-get-update-with-retries.sh"
 
 echo "=== Installing zfs-0.8.x packages ==="
 sudo apt-get install -y --no-install-recommends zfs-dkms=0.8.3-1ubuntu12.18 zfsutils-linux=0.8.3-1ubuntu12.18

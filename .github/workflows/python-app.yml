@@ -163,13 +163,12 @@ jobs:
       - name: Upgrade zfs kernel + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
-          sudo add-apt-repository ppa:arter97/zfs-lts; sudo apt-get -y update
+          ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:arter97/zfs-lts
           sudo apt-get -y install zfs-dkms
           zfs --version
 
           # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
-          sudo add-apt-repository ppa:rapier1/hpnssh
-          sudo apt-get -y update
+          ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:rapier1/hpnssh
           sudo apt-get -y install hpnssh
           hpnssh -V
 
@@ -225,7 +224,7 @@ jobs:
       - name: Upgrade zfs kernel + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
-          sudo add-apt-repository ppa:patrickdk/zfs; sudo apt-get -y update
+          ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:patrickdk/zfs
           ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
           sudo apt-get -y install zfs-dkms zfsutils-linux
           zfs --version
@@ -286,7 +285,7 @@ jobs:
       - name: Upgrade zfs kernel + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
-          sudo add-apt-repository ppa:satadru-umich/zfs-experimental; sudo apt-get -y update
+          ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:satadru-umich/zfs-experimental
           ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
           sudo apt-get -y install zfs-dkms zfsutils-linux
           zfs --version
@@ -334,7 +333,7 @@ jobs:
       - name: Upgrade zfs kernel + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.3-latest
-          sudo add-apt-repository ppa:weiers/openzfs-2.3-latest; sudo apt-get -y update
+          ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:weiers/openzfs-2.3-latest
           sudo apt-get -y install openzfs-zfs-dkms
           zfs --version
       - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -382,7 +381,7 @@ jobs:
       - name: Upgrade zfs kernel + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
-          sudo add-apt-repository ppa:arter97/zfs-lts; sudo apt-get -y update
+          ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:arter97/zfs-lts
           sudo apt-get -y install zfs-dkms
           zfs --version
       - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
