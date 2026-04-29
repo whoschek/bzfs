@@ -19,9 +19,9 @@
 # ///
 #
 """
-* High-level orchestrator that calls `bzfs` as part of complex, periodic workflows to manage backup, replication, and pruning
-  jobs across a fleet of multiple source and destination hosts; driven by a fleet-wide job config file
-  (e.g., `bzfs_job_testbed.py`).
+* High-level orchestrator that calls `bzfs` as part of complex, periodic workflows to manage backup, replication, and
+  pruning jobs across a fleet of multiple source and destination hosts; driven by a fleet-wide job config file (e.g.,
+  `bzfs_job_testbed.py`).
 * Overview of the bzfs_jobrunner.py codebase:
 * The codebase starts with docs, definition of input data and associated argument parsing of CLI options/parameters.
 * Control flow starts in main(), far below ..., which kicks off a "Job".
@@ -1112,7 +1112,7 @@ class Job:
 
     @staticmethod
     def get_worst_exception(existing_code: int | None, new_code: int | None) -> int:
-        """Process exit code precedence is: fatal/non-monitor failure > monitor CRITICAL/WARNING > STILL_RUNNING > success."""
+        """Process exit code precedence: fatal/non-monitor failure > monitor CRITICAL/WARNING > STILL_RUNNING > success."""
         new_code = DIE_STATUS if new_code is None else new_code
         if existing_code is None:
             return new_code

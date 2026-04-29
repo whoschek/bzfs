@@ -246,7 +246,8 @@ class SnapshotCache:
                 pass  # harmless
 
     def update_last_modified_cache(self, datasets_to_snapshot: dict[SnapshotLabel, list[str]]) -> None:
-        """Perf: copy last-modified time of the source dataset into the local cache to reduce future 'zfs list -t snapshot' calls."""
+        """Perf: copy last-modified time of the source dataset into the local cache to reduce future 'zfs list -t snapshot'
+        calls."""
         p = self.job.params
         src = p.src
         src_datasets_set: set[str] = set()

@@ -91,15 +91,18 @@ repos:
   #   hooks:
   #     - id: zizmor                              # Validate syntax of GitHub Workflow YAML files
   #       args: [--fix=all]
-  - repo: https://github.com/PyCQA/docformatter
-    rev: e73b8ba0c1316be565983236c72e653ad44e6b66  # aka v1.7.7
+  - repo: https://github.com/DanielNoord/pydocstringformatter
+    rev: d5190a85272ddf6a3d14bfd88ab327f84aa2a0a7  # aka v0.7.5
     hooks:
-      - id: docformatter  # Reformat Python docstrings to follow PEP 257 and wrap them to a specific line length
-        args: [
-          "--in-place",                 # Let pre-commit make changes to files instead of printing diffs
-          "--wrap-summaries=125",       # Summary / one-liner length; see https://docformatter.readthedocs.io/en/latest/usage.html
-          "--wrap-descriptions=125",    # Long-description line length
-          # `force-wrap` remains at its default false: force descriptions to be wrapped even if it may result in a mess?
+      - id: pydocstringformatter        # Reformat Python docstrings and wrap them to a specific line length
+        args: [                         # see https://pydocstringformatter.readthedocs.io/en/latest/usage.html
+          "--write",                    # Let pre-commit make changes to files instead of printing diffs
+          "--max-line-length=126",      # Summary / long-description length
+          "--linewrap-full-docstring",  # Wrap full docstrings, matching the prior prose wrapping intent
+          "--no-split-summary-body",    # Avoid inferring prose structure from punctuation
+          "--no-capitalize-first-letter", # Preserve author-written capitalization
+          "--no-final-period",          # Preserve author-written wording and punctuation
+          "--no-closing-quotes",        # Don't fix the position of the closing quotes
         ]
   - repo: https://github.com/pycqa/isort
     rev: ec0efaee4acfce198521e43caa3029b06cedd64a  # aka 6.1.0
