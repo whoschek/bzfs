@@ -1324,7 +1324,7 @@ class LocalTestCase(IntegrationTestCase):
         src_foo_a = create_filesystem(src_foo, d2)
         t1 = fix(d2 + "snap")
         take_snapshot(src_foo_a, fix(t1))
-        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--recursive", "-v", "-v", "-v")
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--recursive", "-v", "-v", "-v", retries=2)
         self.assertTrue(dataset_exists(ibase.DST_ROOT_DATASET + "/" + d1))
         self.assert_snapshot_names(ibase.DST_ROOT_DATASET + "/" + d1, [s1])
         self.assertTrue(dataset_exists(ibase.DST_ROOT_DATASET + "/" + d1 + "/" + d2))
@@ -1370,7 +1370,6 @@ class LocalTestCase(IntegrationTestCase):
                         ibase.DST_ROOT_DATASET,
                         ibase.SRC_ROOT_DATASET,
                         ibase.DST_ROOT_DATASET,
-                        "-v",
                         "-v",
                         "-v",
                         dry_run=(i == 0),
