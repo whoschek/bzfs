@@ -45,6 +45,7 @@ from bzfs_tests.itest.ibase import (
     SSH_PROGRAM,
     IntegrationTestCase,
     is_pv_at_least_1_9_0,
+    is_pv_at_most_1_10_5,
 )
 from bzfs_tests.itest.test_local import (
     LocalTestCase,
@@ -267,21 +268,32 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
     def test_zfs_set_via_set_include(self) -> None:
         LocalTestCase(param=self.param).test_zfs_set_via_set_include()
 
+    def _is_bad_pv_version(self) -> bool:
+        return is_pv_at_least_1_9_0() and is_pv_at_most_1_10_5()
+
     def test_inject_src_pipe_fail(self) -> None:
+        if self._is_bad_pv_version():
+            self.skipTest("Workaround for pv pipeline hang")
         self.inject_pipe_error("inject_src_pipe_fail", expected_error=[1, DIE_STATUS])
 
     def test_inject_src_pipe_garble(self) -> None:
-        if is_pv_at_least_1_9_0():
-            self.skipTest("workaround for zfs send-receive pipeline hang")
+        if self._is_bad_pv_version():
+            self.skipTest("workaround for pv pipeline hang")
         self.inject_pipe_error("inject_src_pipe_garble")
 
     def test_inject_dst_pipe_garble(self) -> None:
+        if self._is_bad_pv_version():
+            self.skipTest("workaround for pv pipeline hang")
         self.inject_pipe_error("inject_dst_pipe_garble")
 
     def test_inject_src_send_error(self) -> None:
+        if self._is_bad_pv_version():
+            self.skipTest("workaround for pv pipeline hang")
         self.inject_pipe_error("inject_src_send_error")
 
     def test_inject_dst_receive_error(self) -> None:
+        if self._is_bad_pv_version():
+            self.skipTest("workaround for pv pipeline hang")
         self.inject_pipe_error("inject_dst_receive_error", expected_error=2)
 
     def inject_pipe_error(self, flag: str, expected_error: int | list[int] = 1) -> None:
