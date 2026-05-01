@@ -19,7 +19,6 @@ set -euo pipefail
 
 sudo apt-get -y install gettext locales language-pack-fr
 
-#PV_VERSION="git-main"
 PV_VERSION="1.9.31"
 #PV_VERSION="1.9.25"
 #PV_VERSION="1.9.15"
@@ -27,13 +26,16 @@ PV_VERSION="1.9.31"
 #PV_VERSION="1.8.14"
 #PV_VERSION="1.8.5"
 #PV_VERSION="-"
+#PV_VERSION="git:v1.10.5"
+GIT_REPO=https://codeberg.org/ivarch/pv.git
 if [ "$PV_VERSION" != "-" ]; then
     echo "pv ${PV_VERSION} is being installed with French localization ..."
-    sudo apt-get -y install build-essential autopoint
+    sudo apt-get -y install build-essential autopoint autoconf
     WORKDIR=$(mktemp -d)
     cd "$WORKDIR"
-    if [ "$PV_VERSION" == "git-main" ]; then
-        git clone https://codeberg.org/ivarch/pv.git
+    if [[ "$PV_VERSION" == git:* ]]; then
+        git_ref="${PV_VERSION#git:}"  # strip 'git:' prefix
+        git clone --branch="$git_ref" "$GIT_REPO"
         cd pv
     else
         PV_URL="https://www.ivarch.com/programs/sources/pv-${PV_VERSION}.tar.gz"
@@ -47,6 +49,8 @@ if [ "$PV_VERSION" != "-" ]; then
     sudo make install --quiet
     echo "✓ pv ${PV_VERSION} installed with French localization."
     pv --version
+    #sudo apt-get -y install tmux valgrind  # for pv test suite
+    #make check  # run pv test suite
 
     sudo locale-gen fr_FR.UTF-8
     locale
