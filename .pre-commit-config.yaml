@@ -26,7 +26,6 @@ default_install_hook_types:
   - commit-msg
 default_language_version:
   golang: 1.26.2
-  node: lts                             # Resolve to node >= v24, npm >= 11.11.0
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # aka v8.30.1
@@ -185,8 +184,9 @@ repos:
     hooks:
       - id: prettier-markdown                   # Auto-format Markdown files
         name: prettier (markdown)
-        language: node
-        entry: prettier
+        language: system
+        entry: tools/prettier
+        require_serial: true
         types: [markdown]
         args: [                                 # See https://prettier.io/docs/cli and https://prettier.io/docs/options
           --check,
@@ -196,11 +196,11 @@ repos:
           --embedded-language-formatting=auto,  # Keep Prettier's default embedded formatting
         ]
         exclude: '^(README.*|prd)\.md$'
-        additional_dependencies: ['prettier@3.8.3']  # see https://github.com/prettier/prettier
       - id: prettier-yaml                       # Auto-format YAML files
         name: prettier (yaml)
-        language: node
-        entry: prettier
+        language: system
+        entry: tools/prettier
+        require_serial: true
         types: [yaml]
         args: [
           --check,
@@ -208,7 +208,6 @@ repos:
           --print-width=125,
         ]
         exclude: '^\.pre-commit-config\.yaml$'
-        additional_dependencies: ['prettier@3.8.3']  # see https://github.com/prettier/prettier
   - repo: https://github.com/codespell-project/codespell
     rev: 2ccb47ff45ad361a21071a7eedda4c37e6ae8c5a  # aka v2.4.2
     hooks:
