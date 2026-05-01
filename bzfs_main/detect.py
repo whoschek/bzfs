@@ -345,6 +345,11 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
+def is_version_at_most(version_str: str, max_version_str: str) -> bool:
+    """Checks if the version string is at most the maximum version string."""
+    return tuple(map(int, version_str.split("."))) <= tuple(map(int, max_version_str.split(".")))
+
+
 def _validate_default_shell(path_to_default_shell: str, location: str, ssh_user_host: str) -> None:
     """Fails for default shells that do not honor POSIX shell quoting."""
     shell_name: str = path_to_default_shell.rsplit("/", maxsplit=1)[-1]

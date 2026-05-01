@@ -40,6 +40,8 @@ from bzfs_main.detect import (
     RemoteConfCacheItem,
     _validate_default_shell,
     detect_available_programs,
+    is_version_at_least,
+    is_version_at_most,
 )
 from bzfs_main.util.connection import (
     DEDICATED,
@@ -58,12 +60,45 @@ from bzfs_tests.tools import (
 #############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
+        TestVersionComparison,
         TestRemoteConfCache,
         TestDisableAndHelpers,
         TestDetectAvailablePrograms,
         TestDetectAvailableProgramsRemote,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
+
+
+#############################################################################
+class TestVersionComparison(AbstractTestCase):
+
+    def test_is_version_at_least(self) -> None:
+        self.assertFalse(is_version_at_least("0.9.9", "1.0.0"))
+        self.assertTrue(is_version_at_least("1.0.0", "1.0.0"))
+        self.assertTrue(is_version_at_least("1.0.1", "1.0.0"))
+
+        self.assertFalse(is_version_at_least("0.11.9", "1.10.5"))
+        self.assertFalse(is_version_at_least("1.9.9", "1.10.5"))
+        self.assertFalse(is_version_at_least("1.10.0", "1.10.5"))
+        self.assertFalse(is_version_at_least("1.10.4", "1.10.5"))
+        self.assertTrue(is_version_at_least("1.10.5", "1.10.5"))
+        self.assertTrue(is_version_at_least("1.10.6", "1.10.5"))
+        self.assertTrue(is_version_at_least("1.11.0", "1.10.5"))
+        self.assertTrue(is_version_at_least("2.0.0", "1.10.5"))
+
+    def test_is_version_at_most(self) -> None:
+        self.assertTrue(is_version_at_most("0.9.9", "1.0.0"))
+        self.assertTrue(is_version_at_most("1.0.0", "1.0.0"))
+        self.assertFalse(is_version_at_most("1.0.1", "1.0.0"))
+
+        self.assertTrue(is_version_at_most("0.11.9", "1.10.5"))
+        self.assertTrue(is_version_at_most("1.9.9", "1.10.5"))
+        self.assertTrue(is_version_at_most("1.10.0", "1.10.5"))
+        self.assertTrue(is_version_at_most("1.10.4", "1.10.5"))
+        self.assertTrue(is_version_at_most("1.10.5", "1.10.5"))
+        self.assertFalse(is_version_at_most("1.10.6", "1.10.5"))
+        self.assertFalse(is_version_at_most("1.11.0", "1.10.5"))
+        self.assertFalse(is_version_at_most("2.0.0", "1.10.5"))
 
 
 #############################################################################

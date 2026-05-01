@@ -59,6 +59,7 @@ from bzfs_main import (
 )
 from bzfs_main.detect import (
     is_version_at_least,
+    is_version_at_most,
 )
 from bzfs_main.replication import (
     INJECT_DST_PIPE_FAIL_KBYTES,
@@ -686,6 +687,11 @@ def is_zfs_at_least_2_1_0() -> bool:
 def is_pv_at_least_1_9_0() -> bool:
     ver = pv_version()
     return is_version_at_least(ver, "1.9.0")
+
+
+def is_pv_at_most_1_10_5() -> bool:
+    ver = pv_version()
+    return is_version_at_most(ver, "1.10.5")
 
 
 def pv_version() -> str:
