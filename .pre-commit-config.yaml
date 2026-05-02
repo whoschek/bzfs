@@ -188,7 +188,8 @@ repos:
         language: node
         entry: prettier
         types: [markdown]
-        args: [                                 # See https://prettier.io/docs/options
+        args: [                                 # See https://prettier.io/docs/cli and https://prettier.io/docs/options
+          --check,
           --write,
           --print-width=120,
           --prose-wrap=always,                  # Wrap prose if it exceeds the print width
@@ -202,6 +203,7 @@ repos:
         entry: prettier
         types: [yaml]
         args: [
+          --check,
           --write,
           --print-width=125,
         ]
