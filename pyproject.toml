@@ -60,7 +60,7 @@ dev = [  # for development only
   "commitizen==4.10.1",             # see https://github.com/commitizen-tools/commitizen
   "pre-commit==4.6.0 ; python_version >= '3.10'",  # see https://github.com/pre-commit/pre-commit
   "black==26.3.1 ; python_version >= '3.10'",      # see https://github.com/psf/black
-  "ruff==0.15.11",                  # see https://github.com/astral-sh/ruff
+  "ruff==0.15.12",                                 # see https://github.com/astral-sh/ruff
   "coverage==7.10.7 ; python_version < '3.10'",    # see https://github.com/nedbat/coveragepy
   "coverage==7.13.5 ; python_version >= '3.10'",   # see https://github.com/nedbat/coveragepy
   "mypy==v1.20.2 ; python_version >= '3.10'",      # see https://github.com/python/mypy
