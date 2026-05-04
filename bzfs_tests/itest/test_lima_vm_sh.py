@@ -93,19 +93,20 @@ class TestLimaVmScript(unittest.TestCase):
         test_suffix = uuid.uuid4().hex[:8]
         target_vm = f"bzfs-lima-{test_suffix}-target"
         other_vm = f"bzfs-lima-{test_suffix}-other"
+        script_env = {"LIMA_VM_UPGRADE": "false"}
 
         with self._cleanup_vms(target_vm, other_vm):
             # Scenario 0: no existing test VMs.
             self.assertIsNone(self._get_vm_status(target_vm))
             self.assertIsNone(self._get_vm_status(other_vm))
-            result_zero = self._run_script_once(vm_name=target_vm)
+            result_zero = self._run_script_once(vm_name=target_vm, extra_env=script_env)
             self.assertEqual(1, self._count_command_calls(result_zero.calls, "create"))
             self.assertEqual(1, self._count_command_calls(result_zero.calls, "start"))
             self.assertEqual("Running", self._get_vm_status(target_vm))
             self.assertIsNone(self._get_vm_status(other_vm))
 
             # Scenario 1: one existing running test VM (target).
-            result_one = self._run_script_once(vm_name=target_vm)
+            result_one = self._run_script_once(vm_name=target_vm, extra_env=script_env)
             self.assertEqual(0, self._count_command_calls(result_one.calls, "create"))
             self.assertEqual(0, self._count_command_calls(result_one.calls, "start"))
             self.assertEqual("Running", self._get_vm_status(target_vm))
@@ -116,7 +117,7 @@ class TestLimaVmScript(unittest.TestCase):
             self._set_vm_running(target_vm, running=False)
             self.assertEqual("Stopped", self._get_vm_status(target_vm))
             self.assertEqual("Running", self._get_vm_status(other_vm))
-            result_two = self._run_script_once(vm_name=target_vm)
+            result_two = self._run_script_once(vm_name=target_vm, extra_env=script_env)
             self.assertEqual(0, self._count_command_calls(result_two.calls, "create"))
             self.assertEqual(1, self._count_command_calls(result_two.calls, "start"))
             self.assertEqual("Running", self._get_vm_status(target_vm))

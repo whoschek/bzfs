@@ -33,6 +33,7 @@ LIMA_VM_RECREATE="${LIMA_VM_RECREATE:-false}"  # to init VM from scratch
 LIMA_VM_PROTECT="${LIMA_VM_PROTECT:-false}"  # 'true' prohibits accidental deletion of this VM
 LIMA_VM_NETWORK="${LIMA_VM_NETWORK:-lima:user-v2}"  # lima:user-v2 network enables VM-to-VM connectivity
 LIMA_VM_MOUNT_TYPE="${LIMA_VM_MOUNT_TYPE:-}"  # empty (the default) lets `limactl` pick a good mount type
+LIMA_VM_UPGRADE="${LIMA_VM_UPGRADE:-true}"  # update all installed packages to their latest available versions on first boot?
 LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0 picks random unused port;
                                      # host box: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM
                                      # guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM loopback
@@ -44,6 +45,7 @@ LIMA_WORKDIR=/bzfs  # this is also the dir where $LIMA_HOST_WORKDIR is mounted w
 LIMA_WORKDIR_WRITABLE="${LIMA_WORKDIR_WRITABLE:-false}"  # false=read-only, true=read-write shared with host
   # 'false' is for running tests only. 'true' enables repo file changes, e.g. for limited sharing with a sandboxed AI agent.
 LIMA_ZFS_VERSION="${LIMA_ZFS_VERSION:-}"  # can be empty (use the default ZFS version) or "zfs-2.4"
+LIMA_START_TIMEOUT="${LIMA_START_TIMEOUT:-1m}"
 
 # Install Lima if it isn't already installed
 if ! command -v limactl > /dev/null 2>&1; then
@@ -102,7 +104,7 @@ fi
 # Start VM if it isn't already running
 if [[ "$(limactl list --tty=false --format='{{.Status}}' "$LIMA_VM_NAME")" != "Running" ]]; then
     # limactl edit --tty=false "$LIMA_VM_NAME" --set=".mounts += [{\"location\":\"$HOME/repos\",\"mountPoint\":\"/repos\",\"writable\":false}]"
-    limactl start --tty=false "$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="${LIMA_START_TIMEOUT:-1m}" \
+    limactl start --tty=false "$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="$LIMA_START_TIMEOUT" \
         --progress="${LIMA_START_PROGRESS:-false}" --log-level="${LIMA_START_LOGLEVEL:-info}"
 fi
 LIMA_SSH_PORT="$(limactl list --tty=false --format="{{.SSHLocalPort}}" "$LIMA_VM_NAME")"
@@ -113,6 +115,29 @@ set -eo pipefail
 sudo mkdir -p /etc/cloud/cloud.cfg.d
 sudo sh -c 'printf "ssh_deletekeys: false\n" > /etc/cloud/cloud.cfg.d/99-lima-preserve-ssh-hostkeys.cfg'
 EOF
+
+if [[ "$LIMA_VM_UPGRADE" == "true" ]]; then
+    if ! limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -lc 'test -f ~/.bzfs_distro_upgrade_done'; then
+        echo "Now upgrading VM ..."
+        limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -s << 'EOF'
+
+set -eo pipefail
+if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
+    sudo dnf clean all && sudo dnf -y upgrade --refresh
+elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
+    export DEBIAN_FRONTEND=noninteractive
+    .github-workflow-scripts/apt-get-update-with-retries.sh -qq
+    sudo apt-get -y dist-upgrade
+fi
+EOF
+
+        echo "Now rebooting VM ..."
+        limactl stop --tty=false "$LIMA_VM_NAME"
+        limactl start --tty=false "$LIMA_VM_NAME" --ssh-port="$LIMA_SSH_PORT" --timeout="$LIMA_START_TIMEOUT" \
+            --progress="${LIMA_START_PROGRESS:-false}" --log-level="${LIMA_START_LOGLEVEL:-info}"
+        limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -lc 'touch ~/.bzfs_distro_upgrade_done'
+    fi
+fi
 
 # Prepare VM
 limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
@@ -135,7 +160,6 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     if [[ ! -f ~/.bzfs_apt_update_done ]]; then
         echo "Now running 'apt-get update' ..."
         .github-workflow-scripts/apt-get-update-with-retries.sh -qq
-        # sudo apt-get -y dist-upgrade
         touch ~/.bzfs_apt_update_done
     fi
 
