@@ -26,6 +26,7 @@ import platform
 import shlex
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -4201,9 +4202,17 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_snapshots(ibase.DST_ROOT_DATASET + "/foo/a", 3, "u")
 
     def test_syslog(self) -> None:
+        """Verifies local syslog delivery when Ubuntu exposes a readable syslog file and socket."""
         syslog_path = "/var/log/syslog"
-        if "Ubuntu" not in platform.version() or not os.path.exists(syslog_path) or not os.access(syslog_path, os.R_OK):
-            self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
+        syslog_socket = "/dev/log"
+        if (
+            "Ubuntu" not in platform.version()
+            or not os.path.exists(syslog_path)
+            or not os.access(syslog_path, os.R_OK)
+            or not os.path.exists(syslog_socket)
+            or not stat.S_ISSOCK(os.stat(syslog_socket).st_mode)
+        ):
+            self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known and readable")
         for i in range(2):
             if i > 0:
                 self.tearDownAndSetup()
@@ -4214,28 +4223,33 @@ class LocalTestCase(IntegrationTestCase):
                     ibase.SRC_ROOT_DATASET,
                     ibase.DST_ROOT_DATASET,
                     *verbose,
-                    "--log-syslog-address=/dev/log",
+                    "--log-syslog-address=" + syslog_socket,
                     "--log-syslog-socktype=UDP",
                     "--log-syslog-facility=2",
                     "--log-syslog-level=TRACE",
                     "--log-syslog-prefix=" + syslog_prefix,
                     "--skip-replication",
                 )
-                lines = list(utils.tail(syslog_path, n=100, errors="surrogateescape"))
-                k = -1
-                for kk, line in enumerate(lines):
-                    if syslog_prefix in line and "Log file is:" in line:
-                        k = kk
-                self.assertGreaterEqual(k, 0)
-                lines = lines[k:]
                 found_msg = False
-                for line in lines:
-                    if syslog_prefix in line:
-                        if i == 0:
-                            found_msg = found_msg or " [T] " in line
-                        else:
-                            found_msg = found_msg or " [D] " in line
-                            self.assertNotIn(" [T] ", line)
+                k = -1
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline and not found_msg:
+                    lines = list(utils.tail(syslog_path, n=100, errors="surrogateescape"))
+                    k = -1
+                    for kk, line in enumerate(lines):
+                        if syslog_prefix in line and "Log file is:" in line:
+                            k = kk
+                    if k >= 0:
+                        for line in lines[k:]:
+                            if syslog_prefix in line:
+                                if i == 0:
+                                    found_msg = found_msg or " [T] " in line
+                                else:
+                                    found_msg = found_msg or " [D] " in line
+                                    self.assertNotIn(" [T] ", line)
+                    if not found_msg:
+                        time.sleep(0.2)
+                self.assertGreaterEqual(k, 0)
                 self.assertTrue(found_msg, "No bzfs syslog message was found")
 
     def test_main(self) -> None:
