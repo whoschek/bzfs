@@ -13,6 +13,24 @@ ARG BZFS_DOCKER_INSTALL_HPNSSH=true  # hpnssh is optional
 COPY docker_entrypoint.sh /usr/local/bin/docker_entrypoint.sh
 
 RUN export DEBIAN_FRONTEND=noninteractive \
+    && run_with_retries() { \
+           retries=3; \
+           retry_sleep_secs=5; \
+           attempt=1; \
+           while true; do \
+               if "$@"; then \
+                   break; \
+               fi; \
+               if [ "$attempt" -gt "$retries" ]; then \
+                   echo "error: $* failed after $attempt attempts" >&2; \
+                   exit 1; \
+               fi; \
+               echo "$* failed; retrying $attempt/$retries in ${retry_sleep_secs}s ..." >&2; \
+               sleep "$retry_sleep_secs"; \
+               retry_sleep_secs="$((retry_sleep_secs * 2))"; \
+               attempt="$((attempt + 1))"; \
+           done; \
+       } \
     && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -y -qq update \
     && apt-get -y dist-upgrade \
     && apt-get -y install openssh-client openssh-server fail2ban \
@@ -21,7 +39,7 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install zfsutils-linux \
     && if [ "$BZFS_DOCKER_INSTALL_HPNSSH" = "true" ]; then \
            apt-get -y install software-properties-common; \
-           add-apt-repository -y --no-update ppa:rapier1/hpnssh; \
+           run_with_retries add-apt-repository -y --no-update ppa:rapier1/hpnssh; \
            apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -y -qq update; \
            apt-get -y install hpnssh-client hpnssh-server; \
        fi \
