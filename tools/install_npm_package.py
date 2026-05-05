@@ -32,12 +32,10 @@ import sys
 import tarfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import (
     Path,
-)
-from urllib.parse import (
-    urlsplit,
 )
 
 
@@ -53,7 +51,7 @@ def main() -> None:
     assert package_version
     assert package_tarball_url
     assert expected_sha256
-    tarball_name = urlsplit(package_tarball_url).path.rsplit("/", 1)[-1]  # e.g. "prettier-3.8.3.tgz"
+    tarball_name = urllib.parse.urlsplit(package_tarball_url).path.rsplit("/", 1)[-1]  # e.g. "prettier-3.8.3.tgz"
     if not tarball_name:
         raise SystemExit(f"Missing tarball filename in package_tarball_url: {package_tarball_url}")
 
@@ -71,18 +69,27 @@ def main() -> None:
 
     # download
     install_dir.mkdir(parents=True, exist_ok=True)
-    max_attempts = 3
-    for attempt in range(1, max_attempts + 1):
+    retries = 3
+    retry_sleep_secs = 5
+    attempt = 1
+    while True:
+        if not package_tarball_url.startswith("https://"):
+            raise SystemExit(f"Invalid scheme in package_tarball_url: {package_tarball_url}")
         try:
-            if not package_tarball_url.startswith("https://"):
-                raise SystemExit(f"Invalid scheme in package_tarball_url: {package_tarball_url}")
             with urllib.request.urlopen(package_tarball_url, timeout=30) as response:  # noqa: S310
                 tarball.write_bytes(response.read())
             break
         except (TimeoutError, urllib.error.URLError):
-            if attempt == max_attempts:
+            if attempt > retries:
+                print(f"ERROR: {package_tarball_url} download failed after {attempt} attempts", file=sys.stderr)
                 raise
-            time.sleep(attempt)
+            print(
+                f"ERROR: {package_tarball_url} download failed; retrying {attempt}/{retries} in {retry_sleep_secs}s ...",
+                file=sys.stderr,
+            )
+            time.sleep(retry_sleep_secs)
+            retry_sleep_secs = retry_sleep_secs * 2  # exponential backoff
+            attempt += 1
 
     # verify checksum
     actual_sha256 = hashlib.sha256(tarball.read_bytes()).hexdigest()
