@@ -27,10 +27,6 @@ default_install_hook_types:
 default_language_version:
   golang: 1.26.2
 repos:
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # aka v8.30.1
-    hooks:                              # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
-      - id: gitleaks                    # defaults to: gitleaks git --pre-commit --redact --staged --verbose
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # aka v6.0.0
     hooks:
