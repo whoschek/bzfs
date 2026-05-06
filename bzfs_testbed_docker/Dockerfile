@@ -22,10 +22,10 @@ RUN export DEBIAN_FRONTEND=noninteractive \
                    break; \
                fi; \
                if [ "$attempt" -gt "$retries" ]; then \
-                   echo "error: $* failed after $attempt attempts" >&2; \
+                   echo "error: $* failed after ${attempt} attempts" >&2; \
                    exit 1; \
                fi; \
-               echo "$* failed; retrying $attempt/$retries in ${retry_sleep_secs}s ..." >&2; \
+               echo "$* failed; retrying ${attempt}/${retries} in ${retry_sleep_secs}s ..." >&2; \
                sleep "$retry_sleep_secs"; \
                retry_sleep_secs="$((retry_sleep_secs * 2))"; \
                attempt="$((attempt + 1))"; \

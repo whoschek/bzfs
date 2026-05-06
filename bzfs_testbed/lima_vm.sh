@@ -25,7 +25,7 @@
 # shellcheck disable=SC2154
 set -eo pipefail
 LIMA_VM_TEMPLATE="${LIMA_VM_TEMPLATE:-template:ubuntu-24.04}"  # see `limactl create --list-templates` for available options
-LIMA_VM_NAME="${LIMA_VM_NAME:-mylimavm}"  # see `limactl ls` for the name of all existing VMs
+LIMA_VM_NAME="${LIMA_VM_NAME:-mylimavm}"  # see `limactl list` for the name of all existing VMs
 LIMA_VM_DISK="${LIMA_VM_DISK:-15}"  # GiB
 LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(4, #cores)
 LIMA_VM_MEMORY="${LIMA_VM_MEMORY:-4}"  # GiB
@@ -123,7 +123,8 @@ if [[ "$LIMA_VM_UPGRADE" == "true" ]]; then
 
 set -eo pipefail
 if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
-    sudo dnf clean all && sudo dnf -y upgrade --refresh
+    sudo dnf -y clean all
+    sudo dnf -y upgrade --refresh
 elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     export DEBIAN_FRONTEND=noninteractive
     .github-workflow-scripts/apt-get-update-with-retries.sh -qq
@@ -154,7 +155,7 @@ if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     sudo dnf -y install rsync ripgrep
     sudo dnf --setopt=install_weak_deps=False -y install nodejs  # for https://github.com/prettier/prettier via pre-commit
     # sudo dnf -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
-    # sudo dnf -y install npm bubblewrap && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
+    # sudo dnf -y install npm bubblewrap; sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     export DEBIAN_FRONTEND=noninteractive
     if [[ ! -f ~/.bzfs_apt_update_done ]]; then
@@ -204,7 +205,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     sudo apt-get -y install python3 zstd mbuffer pv cron rsync ripgrep python3-venv
     sudo apt-get -y install --no-install-recommends nodejs  # for https://github.com/prettier/prettier via pre-commit
     # sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
-    # sudo apt-get -y install npm bubblewrap && sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
+    # sudo apt-get -y install npm bubblewrap; sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 
     mkdir -p --mode=u=rwx,go= "$HOME/.ssh"
     mkdir -p --mode=u=rwx,go= "$HOME/.ssh/bzfs"
