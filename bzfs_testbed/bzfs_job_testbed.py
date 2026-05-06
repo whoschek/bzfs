@@ -361,6 +361,7 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 # extra_args += ["--jobrunner-dryrun"]  # print what operations would happen if the command were to be executed for real
 # extra_args += ["--jobrunner-log-level=DEBUG"]  # default is INFO
 # extra_args += ["--jobrunner-log-level=TRACE"]  # default is INFO
+# os.environ["BZFS_UV_PYTHON"] = "3.14"  # launch python via `uv`
 
 
 # Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is considered high frequency.
@@ -389,7 +390,6 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 
 
 cmd = ["bzfs_jobrunner"]
-# cmd = ["uv", "run", "--no-project", "bzfs_jobrunner"]  # alternatively launch python via `uv`
 cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-hosts={src_hosts}"]
 cmd += [f"--dst-hosts={dst_hosts}"]

@@ -152,7 +152,7 @@ limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
 set -eo pipefail
 if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     .github-workflow-scripts/install_almalinux_9.sh "${LIMA_ZFS_VERSION:-zfs-2.4}" "$LIMA_SSH_PROGRAM"
-    sudo dnf -y install rsync ripgrep
+    sudo dnf -y install rsync curl ripgrep
     sudo dnf --setopt=install_weak_deps=False -y install nodejs  # for https://github.com/prettier/prettier via pre-commit
     # sudo dnf -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo dnf -y install npm bubblewrap; sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
@@ -202,7 +202,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     zfs --version
 
     # Run common preparation steps
-    sudo apt-get -y install python3 zstd mbuffer pv cron rsync ripgrep python3-venv
+    sudo apt-get -y install python3 zstd mbuffer pv cron rsync curl ripgrep python3-venv
     sudo apt-get -y install --no-install-recommends nodejs  # for https://github.com/prettier/prettier via pre-commit
     # sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo apt-get -y install npm bubblewrap; sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
@@ -261,6 +261,14 @@ read -r -a shadow_subdirs <<< "${LIMA_SHADOW_SUBDIRS:-}"
 for subdir in "${shadow_subdirs[@]}"; do
     setup_bind_mount "$HOME/.bzfs-lima/$subdir" "$(pwd)/$subdir"  # enable guest VM to have its own venv, hooks, etc
 done
+
+if ! command -v uv > /dev/null 2>&1; then  # see https://docs.astral.sh/uv/getting-started/installation/
+    uv_install_script="$(mktemp)"
+    curl -fsSL --retry 999 --retry-delay 5 --retry-max-time 60 --retry-all-errors \
+        --output "$uv_install_script" https://astral.sh/uv/0.11.8/install.sh
+    sh "$uv_install_script"
+    rm -f "$uv_install_script"
+fi
 
 # Display ZFS version and Python version
 id -u -n

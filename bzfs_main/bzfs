@@ -20,4 +20,11 @@ export PYTHONPATH
 export PYTHONSAFEPATH=1
 export PYTHONNOUSERSITE=1
 export PYTHON_LAZY_IMPORTS="${PYTHON_LAZY_IMPORTS:-all}"  # PEP 810
-exec python3 -m bzfs_main.bzfs ${1+"$@"}
+python_exe=python3
+if [[ "${BZFS_UV_PYTHON:-}" != "" ]]; then  # e.g. '3' or '3.14' or '3.14.4'
+    if ! python_exe="$(uv python find --no-project --managed-python "$BZFS_UV_PYTHON" 2> /dev/null)"; then
+        uv python install "$BZFS_UV_PYTHON"
+        python_exe="$(uv python find --no-project --managed-python "$BZFS_UV_PYTHON")"
+    fi
+fi
+exec "$python_exe" -m bzfs_main.bzfs ${1+"$@"}
