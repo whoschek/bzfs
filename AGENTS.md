@@ -5,9 +5,8 @@ contributions; compliance is mandatory.
 
 # Persona
 
-You are a world-class software engineering AI agent. `bzfs` is mission-critical systems software. You must show
-exceptional attention to detail about both the correctness and quality of your work, including the safety and
-reliability of your code.
+`bzfs` is mission-critical systems software. You must show exceptional attention to detail about both the correctness
+and quality of your work, including the safety and reliability of your code.
 
 Your expertise includes:
 
@@ -82,9 +81,6 @@ To understand the system's architecture and features, follow these steps:
   and correct any errors or inconsistencies (without needing to be asked).
 - To track progress, maintain a task list where you list the status of prior tasks and action items, and planned actions
   needed for the project (skip this for simple Q&A).
-- For non-trivial multi-step tasks, maintain a visible task list (via the `update_plan` tool if available) with exactly
-  one step marked as `in_progress`; mark completed steps promptly before starting a new step, and avoid repeating the
-  full plan in messages. Summarize the change and highlight the next step instead.
 
 # How to Set up the Environment
 
@@ -164,13 +160,13 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
        - If said `spec.md` does not exist, you MUST stop and ask the User how to proceed.
        - Else, transform the requirements/specifications in said `spec.md` into an implementation plan that is effective
          and safe to execute for an AI agent. To do so, analyze the current repo + code, and consider using tools such
-         as skills, subagents, and `request_user_input` tool, if available. NEVER write any code in this phase. Write
-         the resulting plan into `<path/to/plan.md>`.
+         as skills and subagents if available. NEVER write any code in this phase. Write the resulting plan into
+         `<path/to/plan.md>`.
      - To understand what needs to be done read `<path/to/plan.md>`.
      - Update `<path/to/plan.md>` whenever any of these change: plan, goals, constraints/assumptions, key decisions,
        lessons, steps, progress state (Done/Now/Next). `<path/to/plan.md>` is the canonical source of truth for the plan
        and progress. If the `update_plan` tool is available, prevent `update_plan` from diverging by updating it to a
-       brief high-level synthesis of `<path/to/plan.md>` (max 5-7 steps + statuses).
+       brief high-level synthesis of `<path/to/plan.md>` (max 5-7 steps).
      - Execute the plan in `<path/to/plan.md>` (subject to `AGENTS.md` rules) by continuing the workflow with Step 2
        ("Stop if Already Done").
 
@@ -187,7 +183,7 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
    single-layer slices. Choose the scope of the first subtask such that it is challenging but feasible in ~5-10 minutes
    (and not blocked by another subtask; merge subtasks or split them further as necessary). Defer the remaining tasks to
    the next iteration by outputting them into the backlog for Step 8 ("Iterate"). Track the backlog and the chosen
-   (first) subtask (e.g., via `update_plan` if available).
+   (first) subtask.
 
 5. **Write Tests First:** Using **TDD**, translate the chosen subtask's test specs into test code. Then run to see red
    (tests must initially fail as expected) using only steps 1-3 of the
@@ -246,9 +242,9 @@ Before committing any changes, you MUST follow this exact sequence:
 
 ## How to Write Code
 
-- **docstrings:** For every module, class, function, or method you **add or semantically modify**, attach a docstring ≤
-  80 words that concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this implementation was
-  chosen).
+- **docstrings:** For every module, class, function, or public method you **add or semantically modify**, attach a
+  docstring ≤ 80 words that concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this
+  implementation was chosen).
 - **Do not add Historic Code Comments**: NEVER add code comments that describe how your change relates to the state
   before the change. For example, NEVER add code comments that mention what you added or deleted or changed, NEVER add
   'used to do X, now does Y'. Instead, formulate code comments such that they are useful to readers who care about the
@@ -279,9 +275,8 @@ Before committing any changes, you MUST follow this exact sequence:
 - **Analyze:** If you are tasked to identify or fix a bug, collect, combine and analyze error logs, related issues, bug
   reports, recent changes, git diffs, and external data. Think hard to understand _why_ the bug occurs, not just _what_
   it does.
-- **Analyze Complex Bugs:** Before claiming a complex bug, meticulously cross-check and validate it against the existing
-  unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug" covered by a
-  passing test indicates a flawed analysis.
+- **Cross-check:** Cross-check suspected bugs against existing tests; if a passing test appears to cover the behavior,
+  explain why the test does not disprove the bug before changing code.
 - **Complex Bugs:** After completing the analysis above and before implementation, apply
   [Structured Multi-Approach Analysis](#structured-multi-approach-analysis). **Perform a thorough root cause analysis
   (Staff engineer standards, no band-aids)**. You have plenty of time; go slow and make sure everything is correct.
@@ -324,9 +319,9 @@ Then select one approach and briefly explain why it is the best fit. Keep the an
 provide a decision record with the assumptions, tradeoffs, evidence, and conclusion needed for review. If one approach
 is clearly forced by the code, tests, or user request, state that and proceed without artificial alternatives.
 
-Use subagents aka the `spawn_agent` tool (or parallel investigation) only when available and when the delegated
-questions are independent, bounded, and useful enough to justify the coordination cost. Do not hand off the next task
-that the main agent must understand before it can continue, and do not duplicate work already covered locally.
+Use subagents aka the `spawn_agent` tool (or parallel investigation) when the delegated questions are concrete, bounded,
+self-contained, can run in parallel, and are useful enough to justify the coordination cost. Do not hand off the next
+task that the main agent must understand before it can continue, and do not duplicate work already covered locally.
 
 ## How to Add Dependencies
 
