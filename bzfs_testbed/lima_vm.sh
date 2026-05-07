@@ -266,6 +266,12 @@ if ! command -v uv > /dev/null 2>&1; then  # see https://docs.astral.sh/uv/getti
     uv_install_script="$(mktemp)"
     curl -fsSL --retry 999 --retry-delay 5 --retry-max-time 60 --retry-all-errors \
         --output "$uv_install_script" https://astral.sh/uv/0.11.8/install.sh
+    expected_sha256='facbed3a7e2750df3aef698537c6d50869b025a58bdd13154cfdcc2f30354ca2'
+    actual_sha256="$(cat "$uv_install_script" | sha256sum -b | sed 's/[[:blank:]].*//')"
+    if [[ "$actual_sha256" != "$expected_sha256" ]]; then
+        echo "ERROR: sha256 mismatch for uv ${uv_install_script}: ${actual_sha256} != ${expected_sha256}" >&2
+        exit 1
+    fi
     sh "$uv_install_script"
     rm -f "$uv_install_script"
 fi
