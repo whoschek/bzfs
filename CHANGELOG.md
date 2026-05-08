@@ -2,6 +2,15 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.0] - Not yet released
+
+- [bzfs, bzfs_jobrunner] Make it possible to launch with other Python versions, via `uv`; this does not apply to
+  commands installed via `pip`. Example: `export BZFS_UV_PYTHON=3.14` or `export BZFS_UV_PYTHON=3.14.4`
+- [bzfs_jobrunner] Improve fairness in large fan-out runs by preferring breadth-first ordering for runnable subjobs.
+- [test VM] Add `LIMA_VM_UPGRADE` env var to control whether all installed packages are updated to their latest
+  available versions on first boot; default is `true`.
+- Improve docs.
+
 ## [1.20.0] - April 15, 2026
 
 - [bzfs] Add [`Docker image`](bzfs_testbed_docker/README.md) and corresponding replication example.
