@@ -1618,7 +1618,7 @@ class Job(MiniJob):
                 dataset = interner.interned(dataset)
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
                     extract_fields(line) for line in group
-                )  # perf: sorted() is fast because Timsort is close to O(N) for nearly sorted input, which is our case
+                )  # perf: sorted() is fast because Powersort is close to O(N) for nearly sorted input, which is our case
                 assert len(snapshots) > 0
                 datasets_with_snapshots.add(dataset)
                 snapshot_names: tuple[str, ...] = tuple(snapshot[2] for snapshot in snapshots)
