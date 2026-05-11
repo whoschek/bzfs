@@ -21,7 +21,8 @@ Purpose:
 - Prevent accidental retries: the loop retries only when the developer explicitly raises a ``RetryableError``, which reduces
   the risk of retrying non-idempotent operations.
 - Provide a thread-safe, fast implementation; avoid shared RNG contention.
-- Provide both sync and async API, both with the same semantics, except async API awaits ``fn`` and uses non-blocking sleep.
+- Provide both sync and async API, both with the same semantics, except the async API awaits ``fn``, awaitable
+  ``before_attempt`` / ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` results, and non-blocking sleep.
 - Avoid unnecessary complexity and add zero dependencies beyond the Python standard library. Everything you need is in this
   single Python file.
 
@@ -68,9 +69,9 @@ Expert Configuration:
 - If ``RetryPolicy.max_previous_outcomes > 0``, you can use ``RetryableError(..., attachment=...)`` to carry domain-specific
   state from a failed attempt to the next attempt via ``retry.previous_outcomes``. This pattern helps if attempt N+1 is a
   function of attempt N or all prior attempts (e.g., switching endpoints or resuming from an offset).
-- Use ``RetryTemplate`` as a 'bag of knobs' configuration template for functions that shall be retried in similar ways.
+- Use ``[Async]RetryTemplate`` as a bag-of-knobs configuration template for functions that shall be retried in similar ways.
 - Or package up all knobs plus a ``fn(retry: Retry)`` function into a self-contained auto-retrying higher level function by
-  constructing a ``RetryTemplate`` object (which is a ``Callable`` function itself).
+  constructing a ``[Async]RetryTemplate`` object (which is a ``Callable`` function itself).
 - To keep calling code retry-transparent, set ``RetryPolicy.reraise=True`` (the default) *and* raise retryable failures as
   ``raise RetryableError(...) from exc``. Client code now won't notice whether call_with_retries* is used or not.
 - To make exhaustion observable to calling code, set ``RetryPolicy.reraise=False``: by default call_with_retries* now always
@@ -129,6 +130,8 @@ from __future__ import (
 )
 import argparse
 import dataclasses
+import functools
+import inspect
 import logging
 import random
 import threading
@@ -154,7 +157,6 @@ from typing import (
     Union,
     cast,
     final,
-    overload,
 )
 
 if TYPE_CHECKING:
@@ -369,13 +371,14 @@ async def call_with_retries_async(
     *,
     backoff: BackoffStrategy = full_jitter_backoff_strategy,  # computes delay time before next retry attempt, after failure
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic, e.g. time
-    before_attempt: Callable[[Retry], int] = before_attempt_noop,  # e.g. wait due to rate limiting or internal backpressure
-    after_attempt: Callable[[AttemptOutcome], None] = after_attempt_log_failure,  # e.g. record metrics and/or custom logging
-    on_retryable_error: Callable[[AttemptOutcome], None] = noop,  # e.g. count failures (RetryableError) caught by retry loop
-    on_exhaustion: Callable[[AttemptOutcome], _T] = on_exhaustion_raise,  # raise error or return fallback value
+    before_attempt: Callable[[Retry], int | Awaitable[int]] = before_attempt_noop,  # e.g rate limiting/internal backpressure
+    after_attempt: Callable[[AttemptOutcome], None | Awaitable[None]] = after_attempt_log_failure,  # e.g. metrics/logging
+    on_retryable_error: Callable[[AttemptOutcome], None | Awaitable[None]] = noop,  # e.g. count RetryableError failures
+    on_exhaustion: Callable[[AttemptOutcome], _T | Awaitable[_T]] = on_exhaustion_raise,  # raise error or return fallback
     log: logging.Logger | None = None,  # set this to ``None`` to disable logging
 ) -> _T:
-    """Async version of call_with_retries() with the same semantics except it awaits ``fn`` and uses non-blocking sleep."""
+    """Async version of call_with_retries() with the same semantics except it awaits ``fn``, awaitable ``before_attempt`` /
+    ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` results and non-blocking sleep."""
     rng: random.Random | None = None
     retry_count: int = 0
     idle_nanos: int = 0
@@ -393,7 +396,7 @@ async def call_with_retries_async(
         )
         try:
             if before_attempt is not before_attempt_noop:
-                before_attempt_sleep_nanos: int = before_attempt(retry)
+                before_attempt_sleep_nanos: int = await _await_result(before_attempt(retry))
                 assert before_attempt_sleep_nanos >= 0, before_attempt_sleep_nanos
                 if before_attempt_sleep_nanos > 0:
                     await sleep(before_attempt_sleep_nanos, retry)  # e.g. wait due to rate limiting or internal backpressure
@@ -407,7 +410,7 @@ async def call_with_retries_async(
             if after_attempt is not after_attempt_log_failure:
                 elapsed_nanos: int = monotonic_ns() - call_start_nanos
                 outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, None, elapsed_nanos, 0, result)
-                after_attempt(outcome)
+                await _await_result(after_attempt(outcome))
             return result
         except RetryableError as retryable_error:
             elapsed_nanos = monotonic_ns() - call_start_nanos
@@ -415,7 +418,7 @@ async def call_with_retries_async(
             giveup_reason: object | None = None
             sleep_nanos: int = 0
             outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
-            on_retryable_error(outcome)  # e.g. count failures (RetryableError) caught by retry loop
+            await _await_result(on_retryable_error(outcome))  # e.g. count RetryableError failures
             if retry_count < policy.max_retries and elapsed_nanos < policy.max_elapsed_nanos:
                 if policy.max_sleep_nanos == 0 and backoff is full_jitter_backoff_strategy:
                     pass  # perf: e.g. spin-before-block
@@ -431,7 +434,7 @@ async def call_with_retries_async(
                 if sleep_nanos > 0:
                     outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
                 if (not is_terminated(retry)) and (giveup_reason := giveup(outcome)) is None:
-                    after_attempt(outcome)
+                    await _await_result(after_attempt(outcome))
                     await sleep(sleep_nanos, retry)
                     idle_nanos += sleep_nanos
                     if not is_terminated(retry):
@@ -444,8 +447,15 @@ async def call_with_retries_async(
             outcome = AttemptOutcome(
                 retry, False, True, is_terminated(retry), giveup_reason, elapsed_nanos, sleep_nanos, retryable_error
             )
-            after_attempt(outcome)
-            return on_exhaustion(outcome)  # raise error or return fallback value
+            await _await_result(after_attempt(outcome))
+            return await _await_result(on_exhaustion(outcome))  # raise error or return fallback value
+
+
+async def _await_result(result: _T | Awaitable[_T]) -> _T:
+    """Returns a callback result, awaiting it first when it is awaitable."""
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 
 def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) -> Callable[[AttemptOutcome], None]:
@@ -460,6 +470,19 @@ def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) ->
             handler(outcome)
 
     return _after_attempt
+
+
+def multi_after_attempt_async(
+    handlers: Iterable[Callable[[AttemptOutcome], None | Awaitable[None]]],
+) -> Callable[[AttemptOutcome], Awaitable[None]]:
+    """Async version of ``multi_after_attempt()``."""
+    handlers = tuple(handlers)
+
+    async def _after_attempt_async(outcome: AttemptOutcome) -> None:
+        for handler in handlers:
+            await _await_result(handler(outcome))
+
+    return _after_attempt_async
 
 
 def any_giveup(handlers: Iterable[Callable[[AttemptOutcome], object | None]]) -> Callable[[AttemptOutcome], object | None]:
@@ -1029,22 +1052,80 @@ class RetryTemplate(Generic[_T]):
             log=None if log is NO_LOGGER else self.log if log is None else log,
         )
 
-    async def call_with_retries_async(
+    def wraps(self, fn: Callable[..., _R]) -> Callable[..., _R]:
+        """Returns a wrapper function that forwards all arguments to ``fn`` and retries it using this template; thread-safe.
+
+        Example Usage:
+            def fn(x: int) -> int:
+                return x * 2
+            func: Callable[[int], int] = retry_template.wraps(fn)
+            y: int = func(5)  # returns 10
+        """
+
+        @functools.wraps(fn)
+        def wrapped(*args: Any, **kwargs: Any) -> Any:
+            return self.call_with_retries(fn=lambda _retry: fn(*args, **kwargs))
+
+        return wrapped
+
+
+#############################################################################
+@dataclass(frozen=True)
+@final
+class AsyncRetryTemplate(Generic[_T]):
+    """Async version of ``RetryTemplate`` with the same semantics except it awaits ``fn``, awaitable ``before_attempt`` /
+    ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` results and non-blocking sleep."""
+
+    fn: Callable[[Retry], Awaitable[_T]] = _fn_not_implemented  # set this to make the RetryTemplate object itself callable
+    policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
+    backoff: BackoffStrategy = full_jitter_backoff_strategy  # computes delay time before next retry attempt, after failure
+    giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic, e.g. time
+    before_attempt: Callable[[Retry], int | Awaitable[int]] = before_attempt_noop  # e.g. rate limiting/internal backpressure
+    after_attempt: Callable[[AttemptOutcome], None | Awaitable[None]] = after_attempt_log_failure  # e.g. metrics/logging
+    on_retryable_error: Callable[[AttemptOutcome], None | Awaitable[None]] = noop  # e.g. count RetryableError failures
+    on_exhaustion: Callable[[AttemptOutcome], _T | Awaitable[_T]] = on_exhaustion_raise  # raise or fallback
+    log: logging.Logger | None = None  # set this to ``None`` to disable logging
+
+    def copy(self, **override_kwargs: Any) -> AsyncRetryTemplate[_T]:
+        """Creates a new object copying an existing one with the specified fields overridden for customization; thread-safe.
+
+        Example usage: retry_template.copy(policy=policy.copy(max_sleep_secs=2, max_elapsed_secs=10), log=None)
+        """
+        return dataclasses.replace(self, **override_kwargs)
+
+    async def __call__(self) -> _T:
+        """Invokes ``self.fn`` via the call_with_retries_async() retry loop using the stored parameters; thread-safe.
+
+        Example Usage: result: str = await retry_template.copy(fn=...)()
+        """
+        return await call_with_retries_async(
+            fn=self.fn,
+            policy=self.policy,
+            backoff=self.backoff,
+            giveup=self.giveup,
+            before_attempt=self.before_attempt,
+            after_attempt=self.after_attempt,
+            on_retryable_error=self.on_retryable_error,
+            on_exhaustion=self.on_exhaustion,
+            log=self.log,
+        )
+
+    async def call_with_retries(
         self,
         fn: Callable[[Retry], Awaitable[_R]],
         policy: RetryPolicy | None = None,
         *,
         backoff: BackoffStrategy | None = None,
         giveup: Callable[[AttemptOutcome], object | None] | None = None,
-        before_attempt: Callable[[Retry], int] | None = None,
-        after_attempt: Callable[[AttemptOutcome], None] | None = None,
-        on_retryable_error: Callable[[AttemptOutcome], None] | None = None,
-        on_exhaustion: Callable[[AttemptOutcome], _R] | None = None,
+        before_attempt: Callable[[Retry], int | Awaitable[int]] | None = None,
+        after_attempt: Callable[[AttemptOutcome], None | Awaitable[None]] | None = None,
+        on_retryable_error: Callable[[AttemptOutcome], None | Awaitable[None]] | None = None,
+        on_exhaustion: Callable[[AttemptOutcome], _R | Awaitable[_R]] | None = None,
         log: logging.Logger | None = None,  # pass NO_LOGGER to override template logger and disable logging for this call
     ) -> _R:
         """Invokes ``fn`` via the call_with_retries_async() retry loop using the stored or overridden params; thread-safe.
 
-        Example Usage: result: str = await retry_template.call_with_retries_async(fn=...)
+        Example Usage: result: str = await retry_template.call_with_retries(fn=...)
         """
         return await call_with_retries_async(
             fn=fn,
@@ -1055,44 +1136,28 @@ class RetryTemplate(Generic[_T]):
             after_attempt=self.after_attempt if after_attempt is None else after_attempt,
             on_retryable_error=self.on_retryable_error if on_retryable_error is None else on_retryable_error,
             on_exhaustion=(
-                cast(Callable[[AttemptOutcome], _R], self.on_exhaustion) if on_exhaustion is None else on_exhaustion
+                cast("Callable[[AttemptOutcome], _R | Awaitable[_R]]", self.on_exhaustion)
+                if on_exhaustion is None
+                else on_exhaustion
             ),
             log=None if log is NO_LOGGER else self.log if log is None else log,
         )
 
-    @overload
-    def wraps(self, fn: Callable[..., Awaitable[_R]]) -> Callable[..., Awaitable[_R]]: ...
-
-    @overload
-    def wraps(self, fn: Callable[..., _R]) -> Callable[..., _R]: ...
-
-    def wraps(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+    def wraps(self, fn: Callable[..., Awaitable[_R]]) -> Callable[..., Awaitable[_R]]:
         """Returns a wrapper function that forwards all arguments to ``fn`` and retries it using this template; thread-safe.
 
         Example Usage:
-            def fn(x: int) -> int:
+            async def fn(x: int) -> int:
                 return x * 2
-            func: Callable[[int], int] = retry_template.wraps(fn)
-            y: int = func(5)  # returns 10
+            func: Callable[[int], Awaitable[int]] = retry_template.wraps(fn)
+            y: int = await func(5)  # returns 10
         """
-        import functools
-        import inspect
 
-        target_fn: Callable[..., Any] = fn.func if isinstance(fn, functools.partial) else fn
-        if inspect.iscoroutinefunction(target_fn) or inspect.iscoroutinefunction(type(target_fn).__call__):
+        @functools.wraps(fn)
+        async def wrapped_async(*args: Any, **kwargs: Any) -> Any:
+            return await self.call_with_retries(fn=lambda _retry: fn(*args, **kwargs))
 
-            @functools.wraps(fn)
-            async def wrapped_async(*args: Any, **kwargs: Any) -> Any:
-                return await self.call_with_retries_async(fn=lambda _retry: fn(*args, **kwargs))
-
-            return wrapped_async
-        else:
-
-            @functools.wraps(fn)
-            def wrapped(*args: Any, **kwargs: Any) -> Any:
-                return self.call_with_retries(fn=lambda _retry: fn(*args, **kwargs))
-
-            return wrapped
+        return wrapped_async
 
 
 #############################################################################

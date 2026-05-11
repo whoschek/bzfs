@@ -40,24 +40,26 @@ from unittest.mock import (
 
 from bzfs_main.util.retry import (
     NO_LOGGER,
+    AsyncRetryTemplate,
     AttemptOutcome,
     Retry,
     RetryableError,
     RetryConfig,
     RetryError,
     RetryPolicy,
-    RetryTemplate,
     RetryTiming,
     before_attempt_noop,
     call_with_retries_async,
+    multi_after_attempt_async,
 )
 
 
 #############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
-        TestCallWithRetriesAsync,
-        TestRetryTemplateWrapsAsync,
+        TestAsyncCallWithRetries,
+        TestAsyncRetryTemplateCall,
+        TestAsyncRetryTemplateWraps,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -99,7 +101,7 @@ async def asyncio_await_with_timeout(awaitable: Awaitable[_T], timeout_nanos: in
 
 
 #############################################################################
-class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
+class TestAsyncCallWithRetries(unittest.IsolatedAsyncioTestCase):
     """Unit tests for call_with_retries_async()."""
 
     async def test_sleep_async_delegates_to_asyncio_sleep(self) -> None:
@@ -270,6 +272,148 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([0], after_attempt_calls)
         mock_sleep_async.assert_not_awaited()
 
+    async def test_call_with_retries_async_awaits_async_after_attempt(self) -> None:
+        """Ensures async after_attempt() is awaited for failed and successful attempts."""
+        retry_policy = RetryPolicy(max_retries=1, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
+        events: list[tuple[bool, bool, int]] = []
+
+        async def fn(retry: Retry) -> str:
+            if retry.count == 0:
+                raise RetryableError("fail") from ValueError("boom")
+            return "ok"
+
+        async def after_attempt(outcome: AttemptOutcome) -> None:
+            await asyncio.sleep(0)
+            events.append((outcome.is_success, outcome.is_exhausted, outcome.retry.count))
+
+        actual = await call_with_retries_async(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
+
+        self.assertEqual("ok", actual)
+        self.assertEqual([(False, False, 0), (True, False, 1)], events)
+
+    async def test_call_with_retries_async_awaits_async_after_attempt_on_exhaustion(self) -> None:
+        """Ensures async after_attempt() is awaited for the terminal exhausted outcome."""
+        retry_policy = RetryPolicy.no_retries().copy(reraise=False)
+        events: list[tuple[bool, bool, int]] = []
+
+        async def fn(_retry: Retry) -> None:
+            raise RetryableError("fail")
+
+        async def after_attempt(outcome: AttemptOutcome) -> None:
+            await asyncio.sleep(0)
+            events.append((outcome.is_success, outcome.is_exhausted, outcome.retry.count))
+
+        with self.assertRaises(RetryError):
+            await call_with_retries_async(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
+
+        self.assertEqual([(False, True, 0)], events)
+
+    async def test_call_with_retries_async_async_after_attempt_retryable_error_on_success_retries(self) -> None:
+        """Ensures async after_attempt() can raise RetryableError on success to trigger a retry."""
+        retry_policy = RetryPolicy(max_retries=3, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
+        fn_calls: list[int] = []
+        after_attempt_events: list[tuple[bool, bool, int]] = []
+        raised_once: bool = False
+
+        async def fn(retry: Retry) -> str:
+            fn_calls.append(retry.count)
+            return "ok"
+
+        async def after_attempt(outcome: AttemptOutcome) -> None:
+            nonlocal raised_once
+            await asyncio.sleep(0)
+            after_attempt_events.append((outcome.is_success, outcome.is_exhausted, outcome.retry.count))
+            if outcome.is_success and not raised_once:
+                raised_once = True
+                raise RetryableError("retry from async after_attempt")
+
+        actual = await call_with_retries_async(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
+
+        self.assertTrue(raised_once)
+        self.assertEqual("ok", actual)
+        self.assertEqual([0, 1], fn_calls)
+        self.assertEqual([(True, False, 0), (False, False, 0), (True, False, 1)], after_attempt_events)
+
+    async def test_call_with_retries_async_async_after_attempt_cancelled_error_propagates(self) -> None:
+        """Ensures asyncio.CancelledError from async after_attempt() propagates without retrying."""
+        retry_policy = RetryPolicy(max_retries=3, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
+        fn_calls: list[int] = []
+        after_attempt_calls: list[int] = []
+
+        async def fn(retry: Retry) -> str:
+            fn_calls.append(retry.count)
+            return "ok"
+
+        async def after_attempt(outcome: AttemptOutcome) -> None:
+            after_attempt_calls.append(outcome.retry.count)
+            raise asyncio.CancelledError()
+
+        with self.assertRaises(asyncio.CancelledError):
+            await call_with_retries_async(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
+
+        self.assertEqual([0], fn_calls)
+        self.assertEqual([0], after_attempt_calls)
+
+    async def test_multi_after_attempt_async_runs_sync_and_async_handlers_in_order(self) -> None:
+        """Ensures multi_after_attempt_async() awaits mixed sync and async handlers in order."""
+        retry_policy = RetryPolicy(max_retries=1, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
+        events: list[tuple[str, bool, int]] = []
+
+        async def fn(retry: Retry) -> str:
+            if retry.count == 0:
+                raise RetryableError("fail") from ValueError("boom")
+            return "ok"
+
+        def handler1(outcome: AttemptOutcome) -> None:
+            events.append(("sync", outcome.is_success, outcome.retry.count))
+
+        async def handler2(outcome: AttemptOutcome) -> None:
+            await asyncio.sleep(0)
+            events.append(("async", outcome.is_success, outcome.retry.count))
+
+        actual = await call_with_retries_async(
+            fn,
+            policy=retry_policy,
+            after_attempt=multi_after_attempt_async([handler1, handler2]),
+            log=None,
+        )
+
+        self.assertEqual("ok", actual)
+        self.assertEqual(
+            [
+                ("sync", False, 0),
+                ("async", False, 0),
+                ("sync", True, 1),
+                ("async", True, 1),
+            ],
+            events,
+        )
+
+    async def test_multi_after_attempt_async_cancelled_error_propagates(self) -> None:
+        """Ensures multi_after_attempt_async() propagates cancellation and stops later handlers."""
+        retry_policy = RetryPolicy.no_retries()
+        events: list[str] = []
+
+        async def fn(_retry: Retry) -> str:
+            return "ok"
+
+        async def handler1(_outcome: AttemptOutcome) -> None:
+            events.append("before-cancel")
+            raise asyncio.CancelledError()
+
+        def handler2(_outcome: AttemptOutcome) -> None:
+            events.append("must-not-run")
+
+        with self.assertRaises(asyncio.CancelledError):
+            await call_with_retries_async(
+                fn,
+                policy=retry_policy,
+                after_attempt=multi_after_attempt_async([handler1, handler2]),
+                log=None,
+            )
+
+        self.assertEqual(["before-cancel"], events)
+
     async def test_call_with_retries_async_giveup_stops_retries(self) -> None:
         """Ensures giveup() stops retries immediately and custom after_attempt disables default logging."""
         retry_policy = RetryPolicy(
@@ -361,6 +505,102 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([0], before_attempt_calls)
         self.assertEqual([0], fn_calls)
         self.assertEqual([(123, 0)], sleeps)
+
+    async def test_call_with_retries_async_awaits_async_before_attempt(self) -> None:
+        """Ensures async before_attempt() is awaited and its returned sleep duration is used."""
+        retry_policy = RetryPolicy.no_retries()
+        before_attempt_calls: list[int] = []
+        sleeps: list[tuple[int, int]] = []
+        fn_calls: list[int] = []
+
+        async def before_attempt(retry: Retry) -> int:
+            await asyncio.sleep(0)
+            before_attempt_calls.append(retry.count)
+            return 123
+
+        async def sleep_async(sleep_nanos: int, retry: Retry) -> None:
+            sleeps.append((sleep_nanos, retry.count))
+
+        async def fn(retry: Retry) -> str:
+            fn_calls.append(retry.count)
+            return "ok"
+
+        retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep_async=sleep_async))
+        self.assertEqual(
+            "ok",
+            await call_with_retries_async(
+                fn,
+                policy=retry_policy,
+                before_attempt=before_attempt,
+                log=None,
+            ),
+        )
+        self.assertEqual([0], before_attempt_calls)
+        self.assertEqual([0], fn_calls)
+        self.assertEqual([(123, 0)], sleeps)
+
+    async def test_call_with_retries_async_async_before_attempt_runs_for_each_attempt(self) -> None:
+        """Ensures async before_attempt() runs before each fn(retry) invocation, including retries."""
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=10,
+        )
+        before_attempt_calls: list[int] = []
+        sleeps: list[int] = []
+        fn_calls: list[int] = []
+
+        async def before_attempt(retry: Retry) -> int:
+            await asyncio.sleep(0)
+            before_attempt_calls.append(retry.count)
+            return 0 if retry.count == 0 else 7
+
+        async def sleep_async(sleep_nanos: int, _retry: Retry) -> None:
+            if sleep_nanos != 0:
+                sleeps.append(sleep_nanos)
+
+        async def fn(retry: Retry) -> str:
+            fn_calls.append(retry.count)
+            if retry.count == 0:
+                raise RetryableError("fail", retry_immediately_once=False)
+            return "ok"
+
+        retry_policy = retry_policy.copy(timing=RetryTiming().copy(sleep_async=sleep_async))
+        self.assertEqual(
+            "ok",
+            await call_with_retries_async(
+                fn,
+                policy=retry_policy,
+                backoff=lambda ctx: (0, ctx.curr_max_sleep_nanos),
+                before_attempt=before_attempt,
+                log=None,
+            ),
+        )
+        self.assertEqual([0, 1], before_attempt_calls)
+        self.assertEqual([0, 1], fn_calls)
+        self.assertEqual([7], sleeps)
+
+    async def test_call_with_retries_async_async_before_attempt_cancelled_error_propagates(self) -> None:
+        """Ensures asyncio.CancelledError from async before_attempt() propagates without invoking fn."""
+        retry_policy = RetryPolicy.no_retries()
+        before_attempt_calls: list[int] = []
+        fn_calls: list[int] = []
+
+        async def before_attempt(retry: Retry) -> int:
+            before_attempt_calls.append(retry.count)
+            raise asyncio.CancelledError()
+
+        async def fn(retry: Retry) -> str:
+            fn_calls.append(retry.count)
+            return "ok"
+
+        with self.assertRaises(asyncio.CancelledError):
+            await call_with_retries_async(fn, policy=retry_policy, before_attempt=before_attempt, log=None)
+
+        self.assertEqual([0], before_attempt_calls)
+        self.assertEqual([], fn_calls)
 
     async def test_call_with_retries_async_before_attempt_is_invoked_for_each_attempt(self) -> None:
         """Ensures before_attempt runs before each fn(retry) invocation, including retries."""
@@ -786,6 +1026,34 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await call_with_retries_async(fn, policy=RetryPolicy.no_retries(), log=None)
 
+    async def test_call_with_retries_async_awaits_async_on_exhaustion(self) -> None:
+        """Ensures async on_exhaustion() can return a fallback value."""
+        calls: list[int] = []
+        outcomes: list[AttemptOutcome] = []
+
+        async def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            raise RetryableError("fail") from ValueError("boom")
+
+        async def on_exhaustion(outcome: AttemptOutcome) -> str:
+            await asyncio.sleep(0)
+            outcomes.append(outcome)
+            return "fallback"
+
+        actual = await call_with_retries_async(
+            fn,
+            policy=RetryPolicy.no_retries(),
+            on_exhaustion=on_exhaustion,
+            log=None,
+        )
+
+        self.assertEqual("fallback", actual)
+        self.assertEqual([0], calls)
+        self.assertEqual(1, len(outcomes))
+        self.assertTrue(outcomes[0].is_exhausted)
+        self.assertEqual(0, outcomes[0].retry.count)
+        self.assertIsInstance(outcomes[0].result, RetryableError)
+
     async def test_call_with_retries_async_on_retryable_error_called_once_per_failure(self) -> None:
         """Ensures on_retryable_error runs once for each RetryableError raised by fn()."""
         retry_policy = RetryPolicy(
@@ -816,6 +1084,35 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([0, 1], seen_counts)
         self.assertEqual([False, False], seen_exhausted_flags)
+
+    async def test_call_with_retries_async_awaits_async_on_retryable_error(self) -> None:
+        """Ensures async on_retryable_error runs once for each RetryableError raised by fn()."""
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=10,
+            reraise=False,
+        )
+        seen_counts: list[int] = []
+
+        async def on_retryable_error(outcome: AttemptOutcome) -> None:
+            await asyncio.sleep(0)
+            seen_counts.append(outcome.retry.count)
+
+        async def fn(_retry: Retry) -> str:
+            raise RetryableError("fail") from ValueError("boom")
+
+        with self.assertRaises(RetryError):
+            await call_with_retries_async(
+                fn,
+                policy=retry_policy,
+                on_retryable_error=on_retryable_error,
+                log=None,
+            )
+
+        self.assertEqual([0, 1], seen_counts)
 
     async def test_call_with_retries_async_does_not_swallow_cancelled_error(self) -> None:
         """Ensures asyncio.CancelledError propagates immediately and is not treated as a retryable failure.
@@ -874,7 +1171,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
         def after_attempt(outcome: AttemptOutcome) -> None:
             outcomes.append(outcome)
 
-        template: RetryTemplate[str] = RetryTemplate(
+        template: AsyncRetryTemplate[str] = AsyncRetryTemplate(
             policy=retry_policy,
             before_attempt=before_attempt,
             after_attempt=after_attempt,
@@ -891,7 +1188,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             calls.clear()
             before_attempt_calls.clear()
             outcomes.clear()
-            actual = await template.call_with_retries_async(fn)
+            actual = await template.call_with_retries(fn)
             self.assertEqual("hello", actual)
             self.assertEqual([0], calls)
             self.assertEqual([0], before_attempt_calls)
@@ -903,7 +1200,7 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
             calls.clear()
             before_attempt_calls.clear()
             outcomes.clear()
-            actual = await template.call_with_retries_async(fn, log=NO_LOGGER)
+            actual = await template.call_with_retries(fn, log=NO_LOGGER)
             self.assertEqual("hello", actual)
             self.assertEqual([0], calls)
             self.assertEqual([0], before_attempt_calls)
@@ -1095,7 +1392,143 @@ class TestCallWithRetriesAsync(unittest.IsolatedAsyncioTestCase):
 
 
 #############################################################################
-class TestRetryTemplateWrapsAsync(unittest.IsolatedAsyncioTestCase):
+class TestAsyncRetryTemplateCall(unittest.IsolatedAsyncioTestCase):
+    """Unit tests for the async callable facade of AsyncRetryTemplate."""
+
+    async def test_default_fn_raises_not_implemented_error(self) -> None:
+        """Ensures the default async template callable requires an explicit fn."""
+        template: AsyncRetryTemplate = AsyncRetryTemplate()
+        with self.assertRaises(NotImplementedError) as ctx:
+            await template()
+        self.assertEqual("Provide fn when calling RetryTemplate", str(ctx.exception))
+
+    async def test_retry_template_is_callable_and_runs(self) -> None:
+        """Ensures AsyncRetryTemplate.__call__() retries using its stored parameters."""
+        calls: list[int] = []
+
+        async def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            if retry.count == 0:
+                raise RetryableError("transient")
+            return "ok"
+
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+        after_attempts: list[bool] = []
+
+        async def after_attempt(outcome: AttemptOutcome) -> None:
+            after_attempts.append(outcome.is_success)
+
+        template: AsyncRetryTemplate[str] = AsyncRetryTemplate(
+            fn=fn,
+            policy=retry_policy,
+            after_attempt=after_attempt,
+            log=None,
+        )
+
+        self.assertTrue(callable(template))
+        self.assertEqual("ok", await template())
+        self.assertEqual([0, 1], calls)
+        self.assertEqual([False, True], after_attempts)
+
+        retrying: AsyncRetryTemplate = AsyncRetryTemplate(policy=retry_policy, after_attempt=after_attempt, log=None)
+
+        async def _fn(retry: Retry) -> str:
+            return "hello"
+
+        actual1: str = await retrying.copy(fn=_fn)()
+        self.assertEqual("hello", actual1)
+
+        actual2: str = await retrying.call_with_retries(_fn)
+        self.assertEqual("hello", actual2)
+
+        actual3: str = await retrying.call_with_retries(_fn, policy=retrying.policy)
+        self.assertEqual("hello", actual3)
+
+        actual4: str = await retrying.call_with_retries(_fn, policy=None)
+        self.assertEqual("hello", actual4)
+
+        actual5: str = await retrying.call_with_retries(lambda retry: _fn(retry), log=NO_LOGGER)
+        self.assertEqual("hello", actual5)
+
+        self.assertIsNotNone(str(retrying))
+        self.assertNotEqual("", str(retrying))
+
+    async def test_retry_template_awaits_async_on_exhaustion(self) -> None:
+        """Ensures AsyncRetryTemplate awaits an async on_exhaustion callback."""
+        calls: list[int] = []
+        outcomes: list[AttemptOutcome] = []
+
+        async def fn(retry: Retry) -> str:
+            calls.append(retry.count)
+            raise RetryableError("fail") from ValueError("boom")
+
+        async def on_exhaustion(outcome: AttemptOutcome) -> str:
+            await asyncio.sleep(0)
+            outcomes.append(outcome)
+            return "fallback"
+
+        template: AsyncRetryTemplate[str] = AsyncRetryTemplate(
+            fn=fn,
+            policy=RetryPolicy.no_retries(),
+            on_exhaustion=on_exhaustion,
+            log=None,
+        )
+
+        self.assertEqual("fallback", await template())
+        self.assertEqual("fallback", await template.call_with_retries(fn))
+        self.assertEqual([0, 0], calls)
+        self.assertEqual(2, len(outcomes))
+        self.assertTrue(all(outcome.is_exhausted for outcome in outcomes))
+        self.assertEqual([0, 0], [outcome.retry.count for outcome in outcomes])
+
+    async def test_retry_template_awaits_async_on_retryable_error(self) -> None:
+        """Ensures AsyncRetryTemplate awaits async on_retryable_error defaults and overrides."""
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=10,
+            reraise=False,
+        )
+        template_counts: list[int] = []
+        override_counts: list[int] = []
+
+        async def fn(_retry: Retry) -> str:
+            raise RetryableError("fail") from ValueError("boom")
+
+        async def template_on_retryable_error(outcome: AttemptOutcome) -> None:
+            await asyncio.sleep(0)
+            template_counts.append(outcome.retry.count)
+
+        async def override_on_retryable_error(outcome: AttemptOutcome) -> None:
+            await asyncio.sleep(0)
+            override_counts.append(outcome.retry.count)
+
+        template: AsyncRetryTemplate[str] = AsyncRetryTemplate(
+            fn=fn,
+            policy=retry_policy,
+            on_retryable_error=template_on_retryable_error,
+            log=None,
+        )
+
+        with self.assertRaises(RetryError):
+            await template()
+        with self.assertRaises(RetryError):
+            await template.call_with_retries(fn, on_retryable_error=override_on_retryable_error)
+
+        self.assertEqual([0, 1], template_counts)
+        self.assertEqual([0, 1], override_counts)
+
+
+#############################################################################
+class TestAsyncRetryTemplateWraps(unittest.IsolatedAsyncioTestCase):
 
     async def test_wraps_async_function_retries_and_passes_args(self) -> None:
         calls: list[tuple[int, int]] = []
@@ -1116,7 +1549,37 @@ class TestRetryTemplateWrapsAsync(unittest.IsolatedAsyncioTestCase):
             max_sleep_secs=0,
             max_elapsed_secs=1,
         )
-        template: RetryTemplate = RetryTemplate(policy=retry_policy, log=None)
+        template: AsyncRetryTemplate = AsyncRetryTemplate(policy=retry_policy, log=None)
+        wrapped: Callable[[int], Awaitable[int]] = template.wraps(fn)
+
+        actual: int = await wrapped(5)
+        self.assertEqual(10, actual)
+        self.assertEqual([(0, 5), (1, 5)], calls)
+
+    async def test_wraps_awaitable_returning_function_retries_and_passes_args(self) -> None:
+        """Ensures wraps() accepts synchronous callables that return awaitables."""
+        calls: list[tuple[int, int]] = []
+        retry_count = 0
+
+        async def async_impl(x: int) -> int:
+            nonlocal retry_count
+            calls.append((retry_count, x))
+            retry_count += 1
+            if retry_count == 1:
+                raise RetryableError("fail")
+            return x * 2
+
+        def fn(x: int) -> Awaitable[int]:
+            return async_impl(x)
+
+        retry_policy = RetryPolicy(
+            max_retries=1,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1,
+        )
+        template: AsyncRetryTemplate = AsyncRetryTemplate(policy=retry_policy, log=None)
         wrapped: Callable[[int], Awaitable[int]] = template.wraps(fn)
 
         actual: int = await wrapped(5)
@@ -1147,7 +1610,7 @@ class TestRetryTemplateWrapsAsync(unittest.IsolatedAsyncioTestCase):
             max_sleep_secs=0,
             max_elapsed_secs=1,
         )
-        template: RetryTemplate[int] = RetryTemplate(policy=retry_policy, log=None)
+        template: AsyncRetryTemplate[int] = AsyncRetryTemplate(policy=retry_policy, log=None)
         wrapped: Callable[[int], Awaitable[int]] = template.wraps(MyAsyncCallable())
 
         actual: int = await wrapped(5)
@@ -1178,7 +1641,7 @@ class TestRetryTemplateWrapsAsync(unittest.IsolatedAsyncioTestCase):
             max_sleep_secs=0,
             max_elapsed_secs=1,
         )
-        template: RetryTemplate = RetryTemplate(policy=retry_policy, log=None)
+        template: AsyncRetryTemplate = AsyncRetryTemplate(policy=retry_policy, log=None)
         wrapped: Callable[[], Awaitable[int]] = template.wraps(functools.partial(MyAsyncCallable(), 5))
 
         actual: int = await wrapped()
@@ -1205,7 +1668,7 @@ class TestRetryTemplateWrapsAsync(unittest.IsolatedAsyncioTestCase):
             max_sleep_secs=0,
             max_elapsed_secs=1,
         )
-        template: RetryTemplate = RetryTemplate(policy=retry_policy, log=None)
+        template: AsyncRetryTemplate = AsyncRetryTemplate(policy=retry_policy, log=None)
         wrapped: Callable[[], Awaitable[int]] = template.wraps(functools.partial(fn, 5))
 
         actual: int = await wrapped()
