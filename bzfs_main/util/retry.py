@@ -197,6 +197,16 @@ def no_giveup(outcome: AttemptOutcome) -> object | None:
     return None  # don't give up retrying
 
 
+def giveup_if_backoff_exceeds_deadline(outcome: AttemptOutcome) -> object | None:
+    """Implementation of ``giveup`` callback for call_with_retries() that gives up if the computed backoff sleep exceeds the
+    ``RetryPolicy.max_elapsed_secs`` deadline; thread-safe."""
+    return (
+        None
+        if outcome.elapsed_nanos + outcome.sleep_nanos < outcome.retry.policy.max_elapsed_nanos
+        else "backoff exceeds deadline"
+    )
+
+
 def before_attempt_noop(retry: Retry) -> int:
     """Default implementation of ``before_attempt`` callback for call_with_retries(); does nothing; thread-safe."""
     return 0

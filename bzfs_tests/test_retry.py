@@ -53,6 +53,7 @@ from bzfs_main.util.retry import (
     before_attempt_noop,
     call_with_exception_handlers,
     call_with_retries,
+    giveup_if_backoff_exceeds_deadline,
     multi_after_attempt,
     no_giveup,
     raise_retryable_error_from,
@@ -514,6 +515,56 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertTrue(after_attempt_events[0].is_exhausted)
         self.assertFalse(after_attempt_events[0].is_terminated)
         self.assertEqual("circuit breaker triggered", after_attempt_events[0].giveup_reason)
+
+    def test_giveup_if_backoff_exceeds_deadline_stops_before_sleep(self) -> None:
+        """Ensures giveup_if_backoff_exceeds_deadline() avoids sleeping past the elapsed-time budget."""
+        sleep = MagicMock()
+        retry_policy = RetryPolicy(
+            max_retries=5,
+            min_sleep_secs=0,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_elapsed_secs=1e-6,
+            reraise=False,
+            timing=RetryTiming(
+                monotonic_ns=MagicMock(side_effect=[0, 100, 150, 950]),
+                sleep=sleep,
+            ),
+        )
+        after_attempt_events: list[AttemptOutcome] = []
+
+        def fn(retry: Retry) -> str:
+            raise RetryableError("fail") from ValueError(f"boom {retry.count}")
+
+        def backoff(_context: BackoffContext) -> tuple[int, int]:
+            return 80, 0
+
+        def after_attempt(outcome: AttemptOutcome) -> None:
+            after_attempt_events.append(outcome)
+
+        def on_exhaustion(outcome: AttemptOutcome) -> str:
+            self.assertEqual("backoff exceeds deadline", outcome.giveup_reason)
+            return "fallback"
+
+        actual = call_with_retries(
+            fn=fn,
+            policy=retry_policy,
+            backoff=backoff,
+            giveup=giveup_if_backoff_exceeds_deadline,
+            after_attempt=after_attempt,
+            on_exhaustion=on_exhaustion,
+            log=None,
+        )
+
+        self.assertEqual("fallback", actual)
+        self.assertEqual(2, len(after_attempt_events))
+        self.assertFalse(after_attempt_events[0].is_exhausted)
+        self.assertIsNone(after_attempt_events[0].giveup_reason)
+        self.assertEqual(80, after_attempt_events[0].sleep_nanos)
+        self.assertTrue(after_attempt_events[1].is_exhausted)
+        self.assertEqual("backoff exceeds deadline", after_attempt_events[1].giveup_reason)
+        self.assertEqual(0, after_attempt_events[1].sleep_nanos)
+        self.assertEqual(1, sleep.call_count)
 
     def test_call_with_retries_giveup_reason_in_retry_error(self) -> None:
         """Ensures giveup_reason is surfaced via RetryError when reraise is disabled."""
