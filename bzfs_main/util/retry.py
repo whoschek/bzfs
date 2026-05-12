@@ -378,7 +378,9 @@ async def call_with_retries_async(
     log: logging.Logger | None = None,  # set this to ``None`` to disable logging
 ) -> _T:
     """Async version of call_with_retries() with the same semantics except it awaits ``fn``, awaitable ``before_attempt`` /
-    ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` results and non-blocking sleep."""
+    ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` results and non-blocking sleep. Note that ``backoff``,
+    ``giveup``, and ``RetryTiming.is_terminated`` are not async as they are intentionally fast **synchronous** decisions;
+    they must not block."""
     rng: random.Random | None = None
     retry_count: int = 0
     idle_nanos: int = 0
@@ -1074,7 +1076,9 @@ class RetryTemplate(Generic[_T]):
 @final
 class AsyncRetryTemplate(Generic[_T]):
     """Async version of ``RetryTemplate`` with the same semantics except it awaits ``fn``, awaitable ``before_attempt`` /
-    ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` results and non-blocking sleep."""
+    ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` results and non-blocking sleep. Note that ``backoff``,
+    ``giveup``, and ``RetryTiming.is_terminated`` are not async as they are intentionally fast **synchronous** decisions;
+    they must not block."""
 
     fn: Callable[[Retry], Awaitable[_T]] = _fn_not_implemented  # set this to make the RetryTemplate object itself callable
     policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
