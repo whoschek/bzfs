@@ -1063,7 +1063,7 @@ class RetryTemplate(Generic[_T]):
         """
 
         @functools.wraps(fn)
-        def wrapped(*args: Any, **kwargs: Any) -> Any:
+        def wrapped(*args: Any, **kwargs: Any) -> _R:
             return self.call_with_retries(fn=lambda _retry: fn(*args, **kwargs))
 
         return wrapped
@@ -1136,7 +1136,7 @@ class AsyncRetryTemplate(Generic[_T]):
             after_attempt=self.after_attempt if after_attempt is None else after_attempt,
             on_retryable_error=self.on_retryable_error if on_retryable_error is None else on_retryable_error,
             on_exhaustion=(
-                cast("Callable[[AttemptOutcome], _R | Awaitable[_R]]", self.on_exhaustion)
+                cast(Callable[[AttemptOutcome], Union[_R, Awaitable[_R]]], self.on_exhaustion)
                 if on_exhaustion is None
                 else on_exhaustion
             ),
@@ -1154,7 +1154,7 @@ class AsyncRetryTemplate(Generic[_T]):
         """
 
         @functools.wraps(fn)
-        async def wrapped_async(*args: Any, **kwargs: Any) -> Any:
+        async def wrapped_async(*args: Any, **kwargs: Any) -> _R:
             return await self.call_with_retries(fn=lambda _retry: fn(*args, **kwargs))
 
         return wrapped_async
