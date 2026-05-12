@@ -321,13 +321,8 @@ def call_with_retries(
                 )
             timing.on_before_attempt(retry)
             result: _T = fn(retry)  # Call the target function and supply retry attempt number and other metadata
-            if after_attempt is not after_attempt_log_failure:
-                elapsed_nanos: int = monotonic_ns() - call_start_nanos
-                outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, None, elapsed_nanos, 0, result)
-                after_attempt(outcome)
-            return result
         except RetryableError as retryable_error:
-            elapsed_nanos = monotonic_ns() - call_start_nanos
+            elapsed_nanos: int = monotonic_ns() - call_start_nanos
             is_terminated: Callable[[Retry], bool] = timing.is_terminated
             giveup_reason: object | None = None
             sleep_nanos: int = 0
@@ -363,6 +358,12 @@ def call_with_retries(
             )
             after_attempt(outcome)
             return on_exhaustion(outcome)  # raise error or return fallback value
+        else:  # success
+            if after_attempt is not after_attempt_log_failure:
+                elapsed_nanos = monotonic_ns() - call_start_nanos
+                outcome = AttemptOutcome(retry, True, False, False, None, elapsed_nanos, 0, result)
+                after_attempt(outcome)
+            return result
 
 
 async def call_with_retries_async(
@@ -409,13 +410,8 @@ async def call_with_retries_async(
                 )
             timing.on_before_attempt(retry)
             result: _T = await fn(retry)  # Call the target function and supply retry attempt number and other metadata
-            if after_attempt is not after_attempt_log_failure:
-                elapsed_nanos: int = monotonic_ns() - call_start_nanos
-                outcome: AttemptOutcome = AttemptOutcome(retry, True, False, False, None, elapsed_nanos, 0, result)
-                await _await_result(after_attempt(outcome))
-            return result
         except RetryableError as retryable_error:
-            elapsed_nanos = monotonic_ns() - call_start_nanos
+            elapsed_nanos: int = monotonic_ns() - call_start_nanos
             is_terminated: Callable[[Retry], bool] = timing.is_terminated
             giveup_reason: object | None = None
             sleep_nanos: int = 0
@@ -451,6 +447,12 @@ async def call_with_retries_async(
             )
             await _await_result(after_attempt(outcome))
             return await _await_result(on_exhaustion(outcome))  # raise error or return fallback value
+        else:  # success
+            if after_attempt is not after_attempt_log_failure:
+                elapsed_nanos = monotonic_ns() - call_start_nanos
+                outcome = AttemptOutcome(retry, True, False, False, None, elapsed_nanos, 0, result)
+                await _await_result(after_attempt(outcome))
+            return result
 
 
 async def _await_result(result: _T | Awaitable[_T]) -> _T:

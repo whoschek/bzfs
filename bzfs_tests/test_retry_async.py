@@ -224,30 +224,6 @@ class TestAsyncCallWithRetries(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(1, mock_sleep_async.await_count)
         backoff_strategy.assert_not_called()
 
-    async def test_call_with_retries_async_after_attempt_retryable_error_on_success_retries(self) -> None:
-        """Ensures raising RetryableError from after_attempt() on a successful attempt triggers a retry."""
-        retry_policy = RetryPolicy(max_retries=3, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
-        fn_calls: list[int] = []
-        after_attempt_events: list[tuple[bool, bool, int]] = []
-        raised_once: bool = False
-
-        async def fn(retry: Retry) -> str:
-            fn_calls.append(retry.count)
-            return "ok"
-
-        def after_attempt(outcome: AttemptOutcome) -> None:
-            nonlocal raised_once
-            after_attempt_events.append((outcome.is_success, outcome.is_exhausted, outcome.retry.count))
-            if outcome.is_success and not raised_once:
-                raised_once = True
-                raise RetryableError("retry from after_attempt")
-
-        actual = await call_with_retries_async(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
-        self.assertTrue(raised_once)
-        self.assertEqual("ok", actual)
-        self.assertEqual([0, 1], fn_calls)
-        self.assertEqual([(True, False, 0), (False, False, 0), (True, False, 1)], after_attempt_events)
-
     async def test_call_with_retries_async_after_attempt_retryable_error_on_failure_aborts(self) -> None:
         """Ensures raising RetryableError from after_attempt() on failure aborts without additional retries."""
         retry_policy = RetryPolicy(max_retries=3, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
@@ -307,32 +283,6 @@ class TestAsyncCallWithRetries(unittest.IsolatedAsyncioTestCase):
             await call_with_retries_async(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
 
         self.assertEqual([(False, True, 0)], events)
-
-    async def test_call_with_retries_async_async_after_attempt_retryable_error_on_success_retries(self) -> None:
-        """Ensures async after_attempt() can raise RetryableError on success to trigger a retry."""
-        retry_policy = RetryPolicy(max_retries=3, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
-        fn_calls: list[int] = []
-        after_attempt_events: list[tuple[bool, bool, int]] = []
-        raised_once: bool = False
-
-        async def fn(retry: Retry) -> str:
-            fn_calls.append(retry.count)
-            return "ok"
-
-        async def after_attempt(outcome: AttemptOutcome) -> None:
-            nonlocal raised_once
-            await asyncio.sleep(0)
-            after_attempt_events.append((outcome.is_success, outcome.is_exhausted, outcome.retry.count))
-            if outcome.is_success and not raised_once:
-                raised_once = True
-                raise RetryableError("retry from async after_attempt")
-
-        actual = await call_with_retries_async(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
-
-        self.assertTrue(raised_once)
-        self.assertEqual("ok", actual)
-        self.assertEqual([0, 1], fn_calls)
-        self.assertEqual([(True, False, 0), (False, False, 0), (True, False, 1)], after_attempt_events)
 
     async def test_call_with_retries_async_async_after_attempt_cancelled_error_propagates(self) -> None:
         """Ensures asyncio.CancelledError from async after_attempt() propagates without retrying."""

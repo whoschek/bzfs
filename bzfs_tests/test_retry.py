@@ -443,30 +443,6 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertIsInstance(retry_error.__cause__.__cause__, ValueError)
         self.assertEqual("boom", str(retry_error.__cause__.__cause__))
 
-    def test_call_with_retries_after_attempt_retryable_error_on_success_retries(self) -> None:
-        """Ensures raising RetryableError from after_attempt() on a successful attempt triggers a retry."""
-        retry_policy = RetryPolicy(max_retries=3, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
-        fn_calls: list[int] = []
-        after_attempt_events: list[tuple[bool, bool, int]] = []
-        raised_once: bool = False
-
-        def fn(retry: Retry) -> str:
-            fn_calls.append(retry.count)
-            return "ok"
-
-        def after_attempt(outcome: AttemptOutcome) -> None:
-            nonlocal raised_once
-            after_attempt_events.append((outcome.is_success, outcome.is_exhausted, outcome.retry.count))
-            if outcome.is_success and not raised_once:
-                raised_once = True
-                raise RetryableError("retry from after_attempt")
-
-        actual = call_with_retries(fn, policy=retry_policy, after_attempt=after_attempt, log=None)
-        self.assertTrue(raised_once)
-        self.assertEqual("ok", actual)
-        self.assertEqual([0, 1], fn_calls)
-        self.assertEqual([(True, False, 0), (False, False, 0), (True, False, 1)], after_attempt_events)
-
     def test_call_with_retries_after_attempt_retryable_error_on_failure_aborts(self) -> None:
         """Ensures raising RetryableError from after_attempt() on failure aborts without additional retries."""
         retry_policy = RetryPolicy(max_retries=3, min_sleep_secs=0, initial_max_sleep_secs=0, max_sleep_secs=0)
