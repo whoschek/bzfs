@@ -9,6 +9,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs_jobrunner] Improve fairness in large fan-out runs by preferring breadth-first ordering for runnable subjobs.
 - [test VM] Add `LIMA_VM_UPGRADE` env var to control whether all installed packages are updated to their latest
   available versions on first boot; default is `true`.
+- [bzfs] Also run nightly CI tests on zfs-2.4.2 and zfs-2.3.7.
 - Improve docs.
 
 ## [1.20.0] - April 15, 2026
