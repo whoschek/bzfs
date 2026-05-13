@@ -60,6 +60,34 @@ runs:
         EOF
         limactl --version
         limactl start --name=mylimavm --tty=false mylimavm.yaml
+        # limactl create --tty=false \
+        #     --name=mylimavm \
+        #     --disk=10 \
+        #     --set=".mounts = []" \
+        #     --set=".mounts += [{\"location\":\"$GITHUB_WORKSPACE\",\"mountPoint\":\"/testworkspace\",\"writable\":true}]" \
+        #     --mount-type=reverse-sshfs \
+        #     "template:almalinux-${alma_major_version}"
+        # limactl start --tty=false mylimavm
+    - name: Upgrade VM distro packages
+      shell: bash
+      run: |
+        echo "Now upgrading VM ..."
+        limactl shell --tty=false --workdir=/testworkspace mylimavm -- bash -s << 'EOF'
+
+        set -eo pipefail
+        if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
+            sudo dnf -y clean all
+            sudo dnf -y upgrade --refresh
+        elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
+            export DEBIAN_FRONTEND=noninteractive
+            .github-workflow-scripts/apt-get-update-with-retries.sh -qq
+            sudo apt-get -y dist-upgrade
+        fi
+        EOF
+
+        echo "Now rebooting VM ..."
+        limactl stop --tty=false mylimavm
+        limactl start --tty=false mylimavm
     - name: Install ZFS and other dependencies
       shell: bash
       env:
