@@ -586,7 +586,7 @@ class TestReplication(AbstractTestCase):
     def test_recv_resume_token_disabled(self) -> None:
         job = _make_job(resume_recv=False, log=MagicMock())
         job.dst_dataset_exists = {"pool/ds": True}
-        token, send_opts, recv_opts = _recv_resume_token(job, "pool/ds", 0)
+        token, send_opts, recv_opts = _recv_resume_token(job, "pool/ds")
         self.assertIsNone(token)
         self.assertEqual([], send_opts)
         self.assertEqual([], recv_opts)
@@ -596,7 +596,7 @@ class TestReplication(AbstractTestCase):
         log = MagicMock()
         job = _make_job(resume_recv=True, log=log)
         job.dst_dataset_exists = {"pool/ds": True}
-        token, send_opts, recv_opts = _recv_resume_token(job, "pool/ds", 0)
+        token, send_opts, recv_opts = _recv_resume_token(job, "pool/ds")
         self.assertIsNone(token)
         self.assertEqual([], send_opts)
         self.assertEqual([], recv_opts)
@@ -614,7 +614,7 @@ class TestReplication(AbstractTestCase):
         )
         job.dst_dataset_exists = {"pool/ds": True}
         with patch.object(job, "run_ssh_command", return_value="tok\n") as mock_run_ssh_command:
-            token, send_opts, recv_opts = _recv_resume_token(job, "pool/ds", 0)
+            token, send_opts, recv_opts = _recv_resume_token(job, "pool/ds")
         self.assertEqual("tok", token)
         self.assertEqual(["-t", "tok"], send_opts)
         self.assertEqual(["-s"], recv_opts)

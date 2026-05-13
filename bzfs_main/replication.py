@@ -126,7 +126,6 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     replication, see bzfs.py:replicate_datasets()."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
-    retry_count: int = retry.count
     dst_dataset: str = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
     log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
@@ -168,7 +167,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     dry_run_no_send: bool = False
     if not latest_common_src_snapshot:
         # no common snapshot exists; delete all dst snapshots and perform a full send of the oldest selected src snapshot
-        full_result: tuple[str, bool, bool, int] = _replicate_dataset_fully(
+        full_result: tuple[str, bool, bool] = _replicate_dataset_fully(
             job,
             src_dataset,
             dst_dataset,
@@ -179,11 +178,10 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
             props_cache,
             dry_run_no_send,
             done_checking,
-            retry_count,
             tid,
         )
         # we have now created a common snapshot
-        latest_common_src_snapshot, dry_run_no_send, done_checking, retry_count = full_result
+        latest_common_src_snapshot, dry_run_no_send, done_checking = full_result
     if latest_common_src_snapshot:
         # finally, incrementally replicate all selected snapshots from latest common snapshot until latest src snapshot
         _replicate_dataset_incrementally(
@@ -197,7 +195,6 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
             props_cache,
             dry_run_no_send,
             done_checking,
-            retry_count,
             tid,
         )
     return True
@@ -368,9 +365,8 @@ def _replicate_dataset_fully(
     props_cache: dict[tuple[str, str, str], dict[str, str | None]],
     dry_run_no_send: bool,
     done_checking: bool,
-    retry_count: int,
     tid: str,
-) -> tuple[str, bool, bool, int]:
+) -> tuple[str, bool, bool]:
     """On replication, deletes all dst snapshots and performs a full send of the oldest selected src snapshot, which in turn
     creates a common snapshot; error out if not permitted."""
     p, log = job.params, job.params.log
@@ -408,7 +404,7 @@ def _replicate_dataset_fully(
                 if dst_dataset_parent:
                     _create_zfs_filesystem(job, dst_dataset_parent)
 
-        recv_resume_token_result: tuple[str | None, list[str], list[str]] = _recv_resume_token(job, dst_dataset, retry_count)
+        recv_resume_token_result: tuple[str | None, list[str], list[str]] = _recv_resume_token(job, dst_dataset)
         recv_resume_token, send_resume_opts, recv_resume_opts = recv_resume_token_result
         curr_size: int = _estimate_send_size(job, src, dst_dataset, recv_resume_token, oldest_src_snapshot)
         humansize: str = _format_size(curr_size)
@@ -438,9 +434,8 @@ def _replicate_dataset_fully(
         _create_zfs_bookmarks(job, src, src_dataset, [oldest_src_snapshot])
         _zfs_set(job, set_opts, dst, dst_dataset)
         dry_run_no_send = dry_run_no_send or p.dry_run
-        retry_count = 0
 
-    return latest_common_src_snapshot, dry_run_no_send, done_checking, retry_count
+    return latest_common_src_snapshot, dry_run_no_send, done_checking
 
 
 def _replicate_dataset_incrementally(
@@ -454,7 +449,6 @@ def _replicate_dataset_incrementally(
     props_cache: dict[tuple[str, str, str], dict[str, str | None]],
     dry_run_no_send: bool,
     done_checking: bool,
-    retry_count: int,
     tid: str,
 ) -> None:
     """Incrementally replicates all selected snapshots from latest common snapshot until latest src snapshot."""
@@ -495,7 +489,7 @@ def _replicate_dataset_incrementally(
         # bookmark whose snapshot has been deleted on src.
         return  # nothing more tbd
 
-    recv_resume_token_result: tuple[str | None, list[str], list[str]] = _recv_resume_token(job, dst_dataset, retry_count)
+    recv_resume_token_result: tuple[str | None, list[str], list[str]] = _recv_resume_token(job, dst_dataset)
     recv_resume_token, send_resume_opts, recv_resume_opts = recv_resume_token_result
     recv_opts: list[str] = p.zfs_recv_program_opts.copy() + recv_resume_opts
     recv_opts, set_opts = _add_recv_property_options(job, False, recv_opts, src_dataset, props_cache)
@@ -860,7 +854,7 @@ def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr:
     return False
 
 
-def _recv_resume_token(job: Job, dst_dataset: str, retry_count: int) -> tuple[str | None, list[str], list[str]]:
+def _recv_resume_token(job: Job, dst_dataset: str) -> tuple[str | None, list[str], list[str]]:
     """Gets recv_resume_token ZFS property from dst_dataset and returns corresponding opts to use for send+recv."""
     p, log = job.params, job.params.log
     if not p.resume_recv:
