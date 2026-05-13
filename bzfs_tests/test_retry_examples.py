@@ -116,7 +116,7 @@ def retry_after_or_fallback_strategy(
             retry_after_nanos += context.rng.randint(0, max_jitter_nanos)
             sleep_nanos = retry_after_nanos
         if honor_max_elapsed_secs:
-            remaining_nanos: int = max(0, context.retry.policy.max_elapsed_nanos - context.elapsed_nanos)
+            remaining_nanos: int = max(0, context.retry.policy.max_elapsed_nanos - context.elapsed_nanos - 1)
             sleep_nanos = min(sleep_nanos, remaining_nanos)
         return sleep_nanos, curr_max_sleep_nanos
 
@@ -151,7 +151,7 @@ def retry_after_backoff_strategy(
             retry_after_nanos += context.rng.randint(0, max_jitter_nanos)
             sleep_nanos = max(sleep_nanos, retry_after_nanos)
         if honor_max_elapsed_secs:
-            remaining_nanos: int = max(0, context.retry.policy.max_elapsed_nanos - context.elapsed_nanos)
+            remaining_nanos: int = max(0, context.retry.policy.max_elapsed_nanos - context.elapsed_nanos - 1)
             sleep_nanos = min(sleep_nanos, remaining_nanos)
         return sleep_nanos, curr_max_sleep_nanos
 
@@ -179,7 +179,7 @@ def max_elapsed_backoff_strategy(delegate: BackoffStrategy = full_jitter_backoff
 
     def _strategy(context: BackoffContext) -> tuple[int, int]:
         sleep_nanos, curr_max_sleep_nanos = delegate(context)
-        remaining_nanos: int = max(0, context.retry.policy.max_elapsed_nanos - context.elapsed_nanos)
+        remaining_nanos: int = max(0, context.retry.policy.max_elapsed_nanos - context.elapsed_nanos - 1)
         sleep_nanos = min(sleep_nanos, remaining_nanos)
         return sleep_nanos, curr_max_sleep_nanos
 
@@ -658,7 +658,7 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         )
         elapsed_nanos: int = policy.max_elapsed_nanos - 300
 
-        for retry_after_nanos, expected_sleep_nanos in [(500, 300), (50, 100)]:
+        for retry_after_nanos, expected_sleep_nanos in [(500, 300 - 1), (50, 100)]:
             with self.subTest(retry_after_nanos=retry_after_nanos):
                 err = RetryableError("fail")
                 setattr(err, "retry_after_nanos", retry_after_nanos)  # noqa: B010
@@ -737,7 +737,7 @@ class TestMiscBackoffStrategies(unittest.TestCase):
         elapsed_nanos = policy.max_elapsed_nanos - 300
         context = BackoffContext(retry, 123, rng, elapsed_nanos, err)
         sleep_nanos, next_curr_max = backoff_strategy(context)
-        self.assertEqual(300, sleep_nanos)
+        self.assertEqual(300 - 1, sleep_nanos)
         self.assertEqual(222, next_curr_max)
         delegate.assert_called_once()
         (delegate_context,) = delegate.call_args.args
