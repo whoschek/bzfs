@@ -116,6 +116,7 @@ sudo mkdir -p /etc/cloud/cloud.cfg.d
 sudo sh -c 'printf "ssh_deletekeys: false\n" > /etc/cloud/cloud.cfg.d/99-lima-preserve-ssh-hostkeys.cfg'
 EOF
 
+# Optionally, update all installed packages (including the Linux kernel) to their latest stable available versions
 if [[ "$LIMA_VM_UPGRADE" == "true" ]]; then
     if ! limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -lc 'test -f ~/.bzfs_distro_upgrade_done'; then
         echo "Now upgrading VM ..."
