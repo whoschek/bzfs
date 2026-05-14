@@ -82,7 +82,6 @@ from bzfs_main.util.utils import (
     SynchronousExecutor,
     TaskTiming,
     has_duplicates,
-    has_siblings,
 )
 
 # constants:
@@ -237,11 +236,13 @@ class ParallelTaskTree:
         self._timing: Final[TaskTiming] = timing
         self._is_test_mode: Final[bool] = is_test_mode
         self._priority_queue: Final[list[_TreeNode]] = []
-        self._tree: Final[_Tree] = _build_dataset_tree(datasets)  # tree consists of nested dictionaries and is immutable
+        tree, has_siblings = _build_dataset_tree(datasets)  # tree consists of nested dictionaries and is immutable
+        self._tree: Final[_Tree] = tree
+        self._has_siblings: Final[bool] = has_siblings
         self._empty_barrier: Final[_TreeNode] = _make_tree_node("empty_barrier", "empty_barrier", {})  # immutable!
         self._datasets_set: Final[SortedInterner[str]] = SortedInterner(datasets)  # reduces memory footprint
         if executors is None:
-            is_parallel: bool = max_workers > 1 and has_siblings(datasets)  # siblings can run in parallel
+            is_parallel: bool = max_workers > 1 and has_siblings  # siblings can run in parallel
 
             def _default_executor_factory() -> Executor:
                 return ThreadPoolExecutor(max_workers) if is_parallel else SynchronousExecutor()
@@ -470,10 +471,11 @@ def _make_tree_node(priority: Comparable, dataset: str, children: _Tree, parent:
 _Tree = dict[str, "_Tree"]  # Type alias
 
 
-def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
+def _build_dataset_tree(sorted_datasets: list[str]) -> tuple[_Tree, bool]:
     """Takes as input a sorted list of datasets and returns a (reverse) sorted directory tree containing the same dataset
     names, in the form of nested dicts; This converts the dataset list into a dependency tree."""
     tree: _Tree = {}
+    has_siblings: bool = False
     interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint
     shared_empty_leaf: _Tree = {}  # tree with shared empty leafs has ~30% lower memory footprint than non-compacted version
 
@@ -486,7 +488,8 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> _Tree:
             if child is None:
                 child = {} if i < k else shared_empty_leaf  # sharing is safe as the tree is treated as immutable henceforth
                 assert current is not shared_empty_leaf
+                has_siblings = has_siblings or len(current) > 0
                 component = interner.intern(component)
                 current[component] = child
             current = child
-    return tree
+    return tree, has_siblings

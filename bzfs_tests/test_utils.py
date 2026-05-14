@@ -215,30 +215,6 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertFalse(is_descendant("pool/fs-backup", "pool/fs"))
         self.assertTrue(is_descendant("pool/fs", "pool"))
 
-    def test_has_siblings(self) -> None:
-        def has_siblings(sorted_datasets: list[str]) -> bool:
-            return utils.has_siblings(sorted_datasets, is_test_mode=True)
-
-        self.assertFalse(has_siblings([]))
-        self.assertFalse(has_siblings(["a"]))
-        self.assertFalse(has_siblings(["a", "a/b"]))
-        self.assertFalse(has_siblings(["a", "a/b", "a/b/c"]))
-        self.assertTrue(has_siblings(["a", "b"]))
-        self.assertTrue(has_siblings(["a", "a/b", "a/d"]))
-        self.assertTrue(has_siblings(["a", "a/b", "a/b/c", "a/b/d"]))
-        self.assertTrue(has_siblings(["a", "b/c"]))  # multiple root datasets can be processed in parallel
-        self.assertTrue(has_siblings(["a/b", "d"]))  # multiple root datasets can be processed in parallel
-        self.assertTrue(has_siblings(["a/b", "d/e"]))  # multiple root datasets can be processed in parallel
-        self.assertTrue(has_siblings(["a/b/c", "d/e/f"]))  # multiple root datasets can be processed in parallel
-        self.assertTrue(has_siblings(["a/b/c/d", "a/b/e/f"]))
-        self.assertTrue(has_siblings(["a", "a/b", "a/b/c", "a/b/e"]))
-        self.assertTrue(has_siblings(["a", "a/b", "a/b/c/d", "a/b/e/f"]))
-        self.assertTrue(has_siblings(["a", "a/b/c/d", "a/b/e/f"]))
-        self.assertFalse(has_siblings(["a", "a/b/c"]))
-        self.assertFalse(has_siblings(["a", "a/b/c/d"]))
-        self.assertTrue(has_siblings(["a", "a/b/c", "a/b/d"]))
-        self.assertTrue(has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
-
     def test_dataset_paths(self) -> None:
         self.assertEqual(list(dataset_paths("a")), ["a"])
         self.assertEqual(list(dataset_paths("a/b/c")), ["a", "a/b", "a/b/c"])

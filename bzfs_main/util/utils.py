@@ -425,20 +425,6 @@ def has_duplicates(sorted_list: list[Any]) -> bool:
     return any(map(operator.eq, sorted_list, itertools.islice(sorted_list, 1, None)))
 
 
-def has_siblings(sorted_datasets: list[str], is_test_mode: bool = False) -> bool:
-    """Returns whether the (sorted) list of ZFS input datasets contains any siblings, that is, if any adjacent dataset is not
-    a descendant of the previous one."""
-    assert (not is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
-    assert (not is_test_mode) or not has_duplicates(sorted_datasets), "List contains duplicates"
-    previous: str = ""
-    for dataset in sorted_datasets:
-        assert dataset
-        if previous and not is_descendant(dataset, of_root_dataset=previous):
-            return True
-        previous = dataset
-    return False
-
-
 def dry(msg: str, is_dry_run: bool) -> str:
     """Prefix ``msg`` with 'Dry' when in dry-run mode."""
     return "Dry " + msg if is_dry_run else msg

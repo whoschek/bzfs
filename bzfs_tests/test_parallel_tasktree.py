@@ -116,11 +116,11 @@ class TestBuildTree(unittest.TestCase):
         return {key: self._reverse_tree(value) for key, value in reversed(tree.items())}
 
     def build_tree(self, datasets: list[str]) -> dict[str, Any]:
-        return self._reverse_tree(_build_dataset_tree(datasets))
+        return self._reverse_tree(_build_dataset_tree(datasets)[0])
 
     def test_empty_leaf_nodes_are_shared(self) -> None:
         datasets = ["other", "pool/a", "pool/b/c"]
-        tree = _build_dataset_tree(datasets)
+        tree, _ = _build_dataset_tree(datasets)
         leaves = [
             tree["other"],
             tree["pool"]["a"],
@@ -131,7 +131,7 @@ class TestBuildTree(unittest.TestCase):
     def test_raw_tree_keys_descend(self) -> None:
         datasets = ["pool", "pool/dataset", "pool/dataset/sub", "pool/other", "pool/other/sub/child"]
         expected_tree = {"pool": {"other": {"sub": {"child": {}}}, "dataset": {"sub": {}}}}
-        tree = _build_dataset_tree(datasets)
+        tree, _ = _build_dataset_tree(datasets)
         self.assertEqual(expected_tree, tree)
 
     def test_basic_tree(self) -> None:
@@ -243,6 +243,30 @@ class TestBuildTree(unittest.TestCase):
         tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)
+
+    def test_x_has_siblings(self) -> None:
+        def has_siblings(sorted_datasets: list[str]) -> bool:
+            return _build_dataset_tree(sorted_datasets)[1]
+
+        self.assertFalse(has_siblings([]))
+        self.assertFalse(has_siblings(["a"]))
+        self.assertFalse(has_siblings(["a", "a/b"]))
+        self.assertFalse(has_siblings(["a", "a/b", "a/b/c"]))
+        self.assertTrue(has_siblings(["a", "b"]))
+        self.assertTrue(has_siblings(["a", "a/b", "a/d"]))
+        self.assertTrue(has_siblings(["a", "a/b", "a/b/c", "a/b/d"]))
+        self.assertTrue(has_siblings(["a", "b/c"]))  # multiple root datasets can be processed in parallel
+        self.assertTrue(has_siblings(["a/b", "d"]))  # multiple root datasets can be processed in parallel
+        self.assertTrue(has_siblings(["a/b", "d/e"]))  # multiple root datasets can be processed in parallel
+        self.assertTrue(has_siblings(["a/b/c", "d/e/f"]))  # multiple root datasets can be processed in parallel
+        self.assertTrue(has_siblings(["a/b/c/d", "a/b/e/f"]))
+        self.assertTrue(has_siblings(["a", "a/b", "a/b/c", "a/b/e"]))
+        self.assertTrue(has_siblings(["a", "a/b", "a/b/c/d", "a/b/e/f"]))
+        self.assertTrue(has_siblings(["a", "a/b/c/d", "a/b/e/f"]))
+        self.assertFalse(has_siblings(["a", "a/b/c"]))
+        self.assertFalse(has_siblings(["a", "a/b/c/d"]))
+        self.assertTrue(has_siblings(["a", "a/b/c", "a/b/d"]))
+        self.assertTrue(has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
 
 
 #############################################################################
