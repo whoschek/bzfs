@@ -87,6 +87,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 env: # it's sufficient to run smoke tests when dependabot is detected
   bzfs_test_mode: ${{ (github.actor == 'dependabot[bot]' && 'smoke') || (github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string) || (github.event.inputs.bzfs_test_mode != 'all' && github.event.inputs.bzfs_test_mode) || '' }}
   bzfs_test_no_run_quietly: "true"
@@ -99,7 +103,6 @@ jobs:
       iteration_test_matrix_output: ${{ steps.set_test_matrix.outputs.iteration_test_matrix_output }}
     steps:
       - id: set_test_matrix
-        shell: bash
         run: |
           echo "Using bzfs_test_mode=$bzfs_test_mode"
           echo "iteration_test_matrix_output=[$(seq -s ',' 1 "$NUM_RUNS")]" >> "$GITHUB_OUTPUT"

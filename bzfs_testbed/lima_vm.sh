@@ -152,7 +152,8 @@ limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- env \
 set -eo pipefail
 if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     .github-workflow-scripts/install_almalinux_9.sh "${LIMA_ZFS_VERSION:-zfs-2.4}" "$LIMA_SSH_PROGRAM"
-    sudo dnf -y install rsync curl ripgrep
+    sudo dnf -y install rsync curl
+    sudo dnf -y install ripgrep --enablerepo=epel
     sudo dnf --setopt=install_weak_deps=False -y install nodejs  # for https://github.com/prettier/prettier via pre-commit
     # sudo dnf -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo dnf -y install npm bubblewrap; sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
