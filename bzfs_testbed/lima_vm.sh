@@ -62,13 +62,14 @@ if [[ "$LIMA_VM_RECREATE" == "true" ]]; then
     limactl stop --tty=false --force "$LIMA_VM_NAME" || true
     limactl delete --tty=false --force "$LIMA_VM_NAME"  # by design fails with non-zero exit code if the VM is "protected"
 fi
-LIMA_HOST_SHADOW_DIR="$HOME/.bzfs-lima-empty-shadow"
+
 shadow_subdirs=(.venv .git/hooks)  # hide these host git repo subdirs from guest VM
 shadow_mount_args=()
 for subdir in "${shadow_subdirs[@]}"; do
-    mkdir -p "$LIMA_HOST_SHADOW_DIR/$subdir"
+    lima_host_shadow_dir="$HOME/.bzfs-lima-empty-shadow"
+    mkdir -p "$lima_host_shadow_dir/$subdir"
     mkdir -p "$LIMA_HOST_WORKDIR/$subdir"  # makes `mount` later succeed in guest VM even in read-only mode
-    shadow_mount_args+=(--set=".mounts += [{\"location\":\"$LIMA_HOST_SHADOW_DIR/$subdir\",\"mountPoint\":\"$LIMA_WORKDIR/$subdir\",\"writable\":false}]")
+    shadow_mount_args+=(--set=".mounts += [{\"location\":\"$lima_host_shadow_dir/$subdir\",\"mountPoint\":\"$LIMA_WORKDIR/$subdir\",\"writable\":false}]")
 done
 
 # Create VM if it doesn't already exist
@@ -167,7 +168,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     fi
 
     if [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then  # Ubuntu
-        # Upgrade zfs kernel + userland to specific upstream zfs version
+        # Upgrade zfs kernel module + userland to specific upstream zfs version
         # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
         .github-workflow-scripts/add-apt-repository-with-retries.sh ppa:patrickdk/zfs
         sudo apt-get -y install zfs-dkms
