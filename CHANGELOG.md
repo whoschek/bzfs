@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.21.0] - Not yet released
+## [1.21.0] - May 15, 2026
 
 - [bzfs, bzfs_jobrunner] Make it possible to launch with other Python versions, via `uv`; this does not apply to
   commands installed via `pip`. Example: `export BZFS_UV_PYTHON=3.14` or `export BZFS_UV_PYTHON=3.14.4`
@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   available versions on first boot; default is `true`.
 - [bzfs] Also run nightly CI tests on zfs-2.4.2 and zfs-2.3.7.
 - Improve docs.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.20.0...v1.21.0
 
 ## [1.20.0] - April 15, 2026
 
