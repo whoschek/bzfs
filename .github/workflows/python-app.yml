@@ -126,16 +126,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display ZFS version and Python version
-        run: |
-          id -u -n
-          uname -a
-          zfs --version
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version |& head -n 1
-          command -v sh | xargs ls -l
+        uses: ./.github/actions/print-versions
       - name: Run pre-commit
         uses: ./.github/actions/pre-commit
         with:
@@ -163,7 +154,7 @@ jobs:
         run: echo "Now running iteration ${MATRIX_ITERATION} of ${NUM_RUNS}"
         env:
           MATRIX_ITERATION: ${{ matrix.iteration }}
-      - name: Upgrade zfs kernel + userland to specific upstream zfs version
+      - name: Upgrade zfs kernel module + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
           ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:arter97/zfs-lts
@@ -183,16 +174,7 @@ jobs:
           install-zfs: false
           install-pv: false
       - name: Display ZFS version and Python version
-        run: |
-          id -u -n
-          uname -a
-          zfs --version
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version |& head -n 1
-          command -v sh | xargs ls -l
+        uses: ./.github/actions/print-versions
       - name: Run tests
         run: |
           if [ "${{ matrix.python-version }}" == "3.15-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
@@ -224,7 +206,7 @@ jobs:
       - uses: *actions_checkout
         with:
           persist-credentials: false
-      - name: Upgrade zfs kernel + userland to specific upstream zfs version
+      - name: Upgrade zfs kernel module + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
           ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:patrickdk/zfs
@@ -237,16 +219,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           install-zfs: false
       - name: Display ZFS version and Python version
-        run: |
-          id -u -n
-          uname -a
-          zfs --version
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version |& head -n 1
-          command -v sh | xargs ls -l
+        uses: ./.github/actions/print-versions
       - name: Run pre-commit
         uses: ./.github/actions/pre-commit
         with:
@@ -285,7 +258,7 @@ jobs:
       - uses: *actions_checkout
         with:
           persist-credentials: false
-      - name: Upgrade zfs kernel + userland to specific upstream zfs version
+      - name: Upgrade zfs kernel module + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
           ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:satadru-umich/zfs-experimental
@@ -298,16 +271,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           install-zfs: false
       - name: Display ZFS version and Python version
-        run: |
-          id -u -n
-          uname -a
-          zfs --version
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version |& head -n 1
-          command -v sh | xargs ls -l
+        uses: ./.github/actions/print-versions
       - name: Run tests
         run: |
           ./test.sh
@@ -333,7 +297,7 @@ jobs:
       - uses: *actions_checkout
         with:
           persist-credentials: false
-      - name: Upgrade zfs kernel + userland to specific upstream zfs version
+      - name: Upgrade zfs kernel module + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.3-latest
           ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:weiers/openzfs-2.3-latest
@@ -345,16 +309,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           install-zfs: false
       - name: Display ZFS version and Python version
-        run: |
-          id -u -n
-          uname -a
-          zfs --version
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version |& head -n 1
-          command -v sh | xargs ls -l
+        uses: ./.github/actions/print-versions
       - name: Run tests
         run: |
           export bzfs_subprocess_run_loglevel=10  # also log subprocess perf stats
@@ -381,7 +336,7 @@ jobs:
       - uses: *actions_checkout
         with:
           persist-credentials: false
-      - name: Upgrade zfs kernel + userland to specific upstream zfs version
+      - name: Upgrade zfs kernel module + userland to specific upstream zfs version
         run: |
           # see https://launchpad.net/~arter97/+archive/ubuntu/zfs-lts
           ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:arter97/zfs-lts
@@ -393,16 +348,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           install-zfs: false
       - name: Display ZFS version and Python version
-        run: |
-          id -u -n
-          uname -a
-          zfs --version
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version |& head -n 1
-          command -v sh | xargs ls -l
+        uses: ./.github/actions/print-versions
       - name: Run tests
         run: |
           ./test.sh
@@ -433,16 +379,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display ZFS version and Python version
-        run: |
-          id -u -n
-          uname -a
-          zfs --version
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version |& head -n 1
-          command -v sh | xargs ls -l
+        uses: ./.github/actions/print-versions
       - name: Run tests
         run: |
           ./test.sh
@@ -473,16 +410,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Display ZFS version and Python version
-        run: |
-          id -u -n
-          uname -a
-          zfs --version
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version |& head -n 1
-          command -v sh | xargs ls -l
+        uses: ./.github/actions/print-versions
       - name: Run pre-commit
         uses: ./.github/actions/pre-commit
         with:
@@ -527,16 +455,7 @@ jobs:
         run: |
           ./.github-workflow-scripts/install_ubuntu_22_04_zfs_0_8_x.sh
       - name: Display ZFS version and Python version
-        run: |
-          id -u -n
-          uname -a
-          zfs --version
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version |& head -n 1
-          command -v sh | xargs ls -l
+        uses: ./.github/actions/print-versions
       - name: Run tests
         run: |
           ./test.sh
