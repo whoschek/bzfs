@@ -260,7 +260,8 @@ def on_exhaustion_raise(outcome: AttemptOutcome) -> NoReturn:
     cause: BaseException | None = retryable_error.__cause__
     if policy.reraise and cause is not None:
         raise cause.with_traceback(cause.__traceback__)
-    raise RetryError(outcome=outcome) from retryable_error
+    else:
+        raise RetryError(outcome=outcome) from retryable_error
 
 
 def _update_previous_outcomes(
@@ -469,7 +470,8 @@ async def _await_result(result: _T | Awaitable[_T]) -> _T:
     """Returns a callback result, awaiting it first when it is awaitable."""
     if inspect.isawaitable(result):
         return await result
-    return result
+    else:
+        return result
 
 
 def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) -> Callable[[AttemptOutcome], None]:
