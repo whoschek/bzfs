@@ -31,17 +31,17 @@ RUN export DEBIAN_FRONTEND=noninteractive \
                attempt="$((attempt + 1))"; \
            done; \
        } \
-    && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -y -qq update \
+    && apt-get -y update --error-on=any -qq \
     && apt-get -y dist-upgrade \
     && apt-get -y install openssh-client openssh-server fail2ban \
     && apt-get -y install sudo cron python3 zstd mbuffer pv \
     && apt-get -y install git \
     && apt-get -y install zfsutils-linux \
     && if [ "$BZFS_DOCKER_INSTALL_HPNSSH" = "true" ]; then \
-           apt-get -y install software-properties-common; \
-           run_with_retries add-apt-repository -y --no-update ppa:rapier1/hpnssh; \
-           apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -y -qq update; \
-           apt-get -y install hpnssh-client hpnssh-server; \
+           apt-get -y install software-properties-common \
+           && run_with_retries add-apt-repository -y --no-update ppa:rapier1/hpnssh \
+           && apt-get -y update --error-on=any -qq \
+           && apt-get -y install hpnssh-client hpnssh-server; \
        fi \
     && rm -rf /var/lib/apt/lists/*
 

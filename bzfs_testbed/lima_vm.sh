@@ -130,7 +130,7 @@ if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     sudo dnf -y upgrade --refresh
 elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     export DEBIAN_FRONTEND=noninteractive
-    .github-workflow-scripts/apt-get-update-with-retries.sh -qq
+    .github-workflow-scripts/apt-get-update-with-retries.sh --error-on=any -qq
     sudo apt-get -y dist-upgrade
 fi
 EOF
