@@ -117,7 +117,8 @@ sudo mkdir -p /etc/cloud/cloud.cfg.d
 sudo sh -c 'printf "ssh_deletekeys: false\n" > /etc/cloud/cloud.cfg.d/99-lima-preserve-ssh-hostkeys.cfg'
 EOF
 
-# Optionally, update all installed packages (including the Linux kernel) to their latest stable available versions
+# Optionally, update all installed packages (including the Linux kernel) to their latest stable available versions within the
+# current release. It does not upgrade from one release (such as ubuntu-24.04) to another release (such as ubuntu-26.04).
 if [[ "$LIMA_VM_UPGRADE" == "true" ]]; then
     if ! limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -lc 'test -f ~/.bzfs_distro_upgrade_done'; then
         echo "Now upgrading VM ..."
@@ -167,7 +168,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
         touch ~/.bzfs_apt_update_done
     fi
 
-    if [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then  # Ubuntu
+    if [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then
         # Upgrade zfs kernel module + userland to specific upstream zfs version
         # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
         .github-workflow-scripts/add-apt-repository-with-retries.sh ppa:patrickdk/zfs
@@ -177,8 +178,8 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
         sudo modprobe --remove zfs || true
         sudo modprobe zfs
         sudo systemctl start zfs-zed.service
-    elif [[ "$LIMA_ZFS_VERSION" =~ ^tag:zfs-[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then  # Ubuntu
-        # EXPERIMENTAL 'tag:zfs-2.4.2', 'tag:zfs-2.3.7', 'tag:zfs-2.2.9'
+    elif [[ "$LIMA_ZFS_VERSION" =~ ^tag:zfs-[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+        # EXPERIMENTAL: build and install zfs from source via git 'tag:zfs-2.4.2', 'tag:zfs-2.3.7', 'tag:zfs-2.2.9'
         sudo apt-get -y install git
         upstream_zfs_git_tag="${LIMA_ZFS_VERSION#tag:}"  # strip 'tag:' prefix
         git ls-remote --tags --refs --exit-code https://github.com/openzfs/zfs.git "refs/tags/$upstream_zfs_git_tag" # verify
@@ -199,7 +200,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
             sudo apt-get -y install --fix-missing ../*.deb
             printf 'zfs\n' | sudo tee /etc/modules-load.d/zfs.conf > /dev/null  # autoload zfs module on reboot
         )
-    else  # Ubuntu
+    else
         sudo apt-get -y install zfsutils-linux
     fi
     zfs --version
