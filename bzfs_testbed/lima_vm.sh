@@ -197,6 +197,12 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
             ./configure
             make native-deb-utils
             rm ../openzfs-zfs-dracut_*.deb  # instead use initramfs
+
+            # Make it possible for `apt-get` to install a lower zfs kernel module version (such as zfs-2.3.7) even if
+            # a higher zfs kernel module version (such as zfs-2.4.1 on ubuntu-26.04) is already present on-disk.
+            sudo mkdir -p /usr/share/dkms/modules_to_force_install
+            printf 'zfs_version-override\n' | sudo tee /usr/share/dkms/modules_to_force_install/zfs > /dev/null
+
             sudo apt-get -y install --fix-missing ../*.deb
             printf 'zfs\n' | sudo tee /etc/modules-load.d/zfs.conf > /dev/null  # autoload zfs module on reboot
         )

@@ -151,7 +151,7 @@ class TestLimaVmScript(unittest.TestCase):
             self._assert_vm_can_ssh_host_by_name(source_vm=source_vm, target_host=target_vm)
 
     def test_smoke_test_and_zpool_survive_reboot_across_supported_templates(self) -> None:
-        """Ensures supported template and ZFS combinations pass smoke tests and survive reboot."""
+        """Ensures supported template/ZFS combinations pass smoke tests, survive reboot, and report expected ZFS versions."""
         env = {key: value for key, value in os.environ.items() if not key.startswith("LIMA_")}
         env["bzfs_test_mode"] = "smoke"
         env["bzfs_test_no_run_quietly"] = "true"
@@ -181,6 +181,7 @@ class TestLimaVmScript(unittest.TestCase):
                 run_env["LIMA_VM_NAME"] = vm_name
                 run_env["LIMA_VM_TEMPLATE"] = template
                 run_env["LIMA_ZFS_VERSION"] = zfs_version
+                run_env["LIMA_START_TIMEOUT"] = "3m"
                 version_name = zfs_version if zfs_version != "" else "default"
                 log_path = os.path.join(
                     log_dir, f"{self.log_time_prefix}+run{log_sequence:02d}+{template.replace('/','_')}+{version_name}.log"
@@ -189,8 +190,13 @@ class TestLimaVmScript(unittest.TestCase):
                     self._run_logged_bash_script(
                         log_path,
                         run_env,
+                        shlex.quote(self.script_path),
+                    )
+                    version_stdout: str = self.validate_zfs_version_string(zfs_version, None, vm_name)
+                    self._run_logged_bash_script(
+                        log_path,
+                        run_env,
                         f"""
-                        {shlex.quote(self.script_path)}
                         limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'truncate -s 100M ~/test_pool_smoke'
                         limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'sudo zpool create -f test-pool-smoke ~/test_pool_smoke'
                         limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'zpool list -H test-pool-smoke | grep -q .'
@@ -198,7 +204,38 @@ class TestLimaVmScript(unittest.TestCase):
                         limactl start --tty=false {shlex.quote(vm_name)} --timeout=1m
                         limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'zpool list -H test-pool-smoke | grep -q .'
                         """,
+                        log_mode="a",
                     )
+                    self.validate_zfs_version_string(zfs_version, version_stdout, vm_name)
+
+    def validate_zfs_version_string(self, zfs_version: str, prev_version_stdout: str | None, vm_name: str) -> str:
+        """Validates the output of `zfs --version` before and after reboot."""
+        version_stdout: str = self._run_limactl(
+            ["shell", "--tty=false", "--workdir=/", vm_name, "--", "zfs", "--version"], check=True
+        ).stdout
+        msg = f"zfs_version: {zfs_version}\nactual zfs --version stdout:\n{version_stdout}"
+
+        # `zfs --version` output after reboot must be the same as before reboot
+        if prev_version_stdout is not None:
+            self.assertEqual(prev_version_stdout, version_stdout, f"{msg}\nprev_version_stdout:\n{prev_version_stdout}")
+
+        # `zfs --version` output must be at least two lines (the first is userland and the second is the kmod kernel module)
+        version_lines: list[str] = version_stdout.splitlines()
+        self.assertGreaterEqual(len(version_lines), 2, msg=msg)
+
+        # zfs userland and kernel module must contain the same version substring
+        zfs_version_substring = zfs_version.removeprefix("tag:").removeprefix("zfs")
+        if zfs_version_substring:
+            for version_line in version_lines[:2]:
+                self.assertIn(zfs_version_substring, version_line, msg=msg)
+
+        # zfs userland and kernel module must report the same normalized version
+        insignificant_tail = r"(ubuntu)[0-9]*$"  # e.g zfs-2.4.1-1ubuntu5 vs zfs-kmod-2.4.1-1ubuntu4 with LIMA_ZFS_VERSION=""
+        zfs_userland_version = re.sub(insignificant_tail, r"\1", version_lines[0])
+        zfs_kernel_module_version = re.sub(insignificant_tail, r"\1", version_lines[1].replace("kmod-", ""))
+        self.assertEqual(zfs_userland_version, zfs_kernel_module_version, msg)
+
+        return version_stdout
 
     @contextmanager
     def _cleanup_vms(self, *vm_names: str) -> Iterator[None]:
@@ -343,9 +380,9 @@ class TestLimaVmScript(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}")
 
-    def _run_logged_bash_script(self, log_path: str, env: dict[str, str], script: str) -> None:
+    def _run_logged_bash_script(self, log_path: str, env: dict[str, str], script: str, log_mode: str = "w") -> None:
         """Runs a strict bash script, logs combined output, and fails with the saved log on error."""
-        with open(log_path, "w", encoding="utf-8") as log_file:
+        with open(log_path, log_mode, encoding="utf-8") as log_file:
             process = subprocess.run(
                 ["bash", "-e", "-lc", script],
                 check=False,
