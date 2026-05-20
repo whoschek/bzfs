@@ -170,9 +170,16 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
 
     if [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then
         # Upgrade zfs kernel module + userland to specific upstream zfs version
-        # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
-        .github-workflow-scripts/add-apt-repository-with-retries.sh ppa:patrickdk/zfs
-        sudo apt-get -y install zfs-dkms
+        . /etc/os-release
+        if [[ "${VERSION_ID:-}" == "26.04" ]]; then  # ubuntu-26.04
+            # see https://launchpad.net/~arter97/+archive/ubuntu/zfs
+            ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:arter97/zfs
+            sudo apt-get -y install zfs-dkms
+        else  # ubuntu-24.04
+            # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
+            .github-workflow-scripts/add-apt-repository-with-retries.sh ppa:patrickdk/zfs
+            sudo apt-get -y install zfs-dkms
+        fi
         # Ensure just-installed DKMS module is actually the loaded kernel module, and userland has same ZFS version as kernel
         sudo systemctl stop zfs-zed.service || true
         sudo modprobe --remove zfs || true
