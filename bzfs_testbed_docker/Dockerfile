@@ -5,10 +5,12 @@ ARG BZFS_DOCKER_BASE_IMAGE=ubuntu:24.04
 FROM ${BZFS_DOCKER_BASE_IMAGE}
 
 ARG BZFS_GIT_REMOTE=https://github.com/whoschek/bzfs.git
-ARG BZFS_GIT_TAG  # for example 'v1.19.0'
 
-# For hpnssh see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
-ARG BZFS_DOCKER_INSTALL_HPNSSH=true  # hpnssh is optional
+# For example BZFS_GIT_TAG='v1.20.0'
+ARG BZFS_GIT_TAG
+
+# hpnssh is optional; see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
+ARG BZFS_DOCKER_INSTALL_HPNSSH=true
 
 COPY docker_entrypoint.sh /usr/local/bin/docker_entrypoint.sh
 

@@ -1149,7 +1149,7 @@ def _estimate_send_sizes_in_parallel(
                     _estimate_send_size, job, r, dst_dataset, resume_token if i == 0 else None, incr_flag, from_snap, to_snap
                 )
                 for i, (incr_flag, from_snap, to_snap, _to_snapshots) in enumerate(steps_todo)
-            )
+            )  # advancing the lazy on-demand Python Generator submits the next task and yields the corresponding Future
         ]
 
     max_workers: int = min(len(steps_todo), job.max_workers[r.location])

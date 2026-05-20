@@ -37,6 +37,6 @@ python3 -m coverage report | tee coverage_report.txt
 python3 -m coverage html
 python3 -m coverage xml
 
-if [ "$(command -v zfs 2> /dev/null)" != "" ]; then
+if command -v zfs > /dev/null 2>&1; then
     PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate
 fi

@@ -118,7 +118,8 @@ sudo sh -c 'printf "ssh_deletekeys: false\n" > /etc/cloud/cloud.cfg.d/99-lima-pr
 EOF
 
 # Optionally, update all installed packages (including the Linux kernel) to their latest stable available versions within the
-# current release. It does not upgrade from one release (such as ubuntu-24.04) to another release (such as ubuntu-26.04).
+# current Linux distro release. It does not upgrade from one Linux distro release (such as ubuntu-24.04 or almalinux-9) to
+# another Linux distro release (such as ubuntu-26.04 or almalinux-10).
 if [[ "$LIMA_VM_UPGRADE" == "true" ]]; then
     if ! limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -lc 'test -f ~/.bzfs_distro_upgrade_done'; then
         echo "Now upgrading VM ..."
@@ -197,7 +198,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
             python3-dev python3-packaging python3-setuptools python3-sphinx uuid-dev zlib1g-dev
         build_dir="$(mktemp -d /var/tmp/zfs-src.XXXXXX)"
         trap 'rm -rf "$build_dir"' EXIT
-        git clone --branch "$upstream_zfs_git_tag" --single-branch https://github.com/openzfs/zfs.git "$build_dir/zfs"
+        git clone --single-branch --branch="$upstream_zfs_git_tag" https://github.com/openzfs/zfs.git "$build_dir/zfs"
         (
             cd "$build_dir/zfs"
             ./autogen.sh
