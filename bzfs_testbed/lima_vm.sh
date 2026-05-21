@@ -256,6 +256,7 @@ if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     sudo systemctl restart sshd.service
 else  # Ubuntu
     sudo systemctl restart ssh.socket
+    sudo systemctl restart ssh.service  # for ubuntu-22.04
 fi
 ssh -n -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oConnectTimeout=5 -p "$LIMA_SSH_PORT" 127.0.0.1 echo hello1  # verify
 ssh -n -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oConnectTimeout=5 -p "$LIMA_SSH_PORT" 127.0.0.2 echo hello2  # verify

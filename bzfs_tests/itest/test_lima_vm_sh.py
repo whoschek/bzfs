@@ -164,6 +164,7 @@ class TestLimaVmScript(unittest.TestCase):
         for template in [
             "template:experimental/ubuntu-26.04",
             "template:ubuntu-24.04",
+            "template:ubuntu-22.04",
             "template:almalinux-9",
             "template:almalinux-10",
             "template:rocky-9",
@@ -173,6 +174,8 @@ class TestLimaVmScript(unittest.TestCase):
                 zfs_versions = ["", "zfs-2.4", "tag:zfs-2.4.2", "tag:zfs-2.3.7"]
             elif "ubuntu-24.04" in template:
                 zfs_versions = ["", "zfs-2.4", "tag:zfs-2.4.2", "tag:zfs-2.3.7", "tag:zfs-2.2.9"]
+            elif "ubuntu-22.04" in template:
+                zfs_versions = [""]
             else:  # RHEL/EL family
                 zfs_versions = ["zfs-2.4", "zfs-2.3", "zfs-2.2"]
             for zfs_version in zfs_versions:
