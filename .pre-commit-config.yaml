@@ -119,19 +119,19 @@ repos:
         stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
         files: '^(?!bzfs_tests/).*\.py$'  # Run on all Python files except bzfs_tests/
         # config options like `enable` live in pyproject.toml
-  - repo: https://github.com/facebook/pyrefly-pre-commit
-    rev: ef09b1b600419b206ac1a8c6ba4ab224a9ed58c3  # aka 1.0.0
-    hooks:
-      - id: pyrefly-check
-        alias: pyrefly-infer
-        name: "pyrefly infer (auto-fix types)"
-        entry: pyrefly infer --containers=true
-        exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
-        pass_filenames: false
-      - id: pyrefly-check
-        name: "pyrefly check (type checking)"
-        exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
-        pass_filenames: false
+  # - repo: https://github.com/facebook/pyrefly-pre-commit
+  #   rev: ef09b1b600419b206ac1a8c6ba4ab224a9ed58c3  # aka 1.0.0
+  #   hooks:
+  #     - id: pyrefly-check
+  #       alias: pyrefly-infer
+  #       name: "pyrefly infer (auto-fix types)"
+  #       entry: pyrefly infer --containers=true
+  #       exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
+  #       pass_filenames: false
+  #     - id: pyrefly-check
+  #       name: "pyrefly check (type checking)"
+  #       exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
+  #       pass_filenames: false
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: fc0f09a29bb495f4a91f00266155d6282d52485d  # aka v1.20.2
     hooks:
