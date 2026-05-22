@@ -33,7 +33,7 @@ LIMA_VM_RECREATE="${LIMA_VM_RECREATE:-false}"  # to init VM from scratch
 LIMA_VM_PROTECT="${LIMA_VM_PROTECT:-false}"  # 'true' prohibits accidental deletion of this VM
 LIMA_VM_NETWORK="${LIMA_VM_NETWORK:-lima:user-v2}"  # lima:user-v2 network enables VM-to-VM connectivity
 LIMA_VM_MOUNT_TYPE="${LIMA_VM_MOUNT_TYPE:-}"  # empty (the default) lets `limactl` pick a good mount type
-LIMA_VM_UPGRADE="${LIMA_VM_UPGRADE:-true}"  # update all installed packages to their latest available versions on first boot?
+LIMA_VM_UPGRADE="${LIMA_VM_UPGRADE:-true}"  # update all installed packages to their latest stable versions on first boot?
 LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0 picks random unused port;
                                      # host box: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM
                                      # guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM loopback
@@ -117,7 +117,7 @@ sudo mkdir -p /etc/cloud/cloud.cfg.d
 sudo sh -c 'printf "ssh_deletekeys: false\n" > /etc/cloud/cloud.cfg.d/99-lima-preserve-ssh-hostkeys.cfg'
 EOF
 
-# Optionally, update all installed packages (including the Linux kernel) to their latest stable available versions within the
+# Optionally, update all installed packages (including the Linux kernel) to their latest stable versions within the
 # current Linux distro release. It does not upgrade from one Linux distro release (such as ubuntu-24.04 or almalinux-9) to
 # another Linux distro release (such as ubuntu-26.04 or almalinux-10).
 if [[ "$LIMA_VM_UPGRADE" == "true" ]]; then
