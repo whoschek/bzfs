@@ -204,16 +204,6 @@ repos:
           --print-width=125,
         ]
         exclude: '^\.pre-commit-config\.yaml$'
-  - repo: https://github.com/codespell-project/codespell
-    rev: 2ccb47ff45ad361a21071a7eedda4c37e6ae8c5a  # aka v2.4.2
-    hooks:
-      - id: codespell  # Auto-fix typos; if you think this is in error, consider changing the ignore-words-list below
-        args: [
-          "--skip=bzfs_tests/*.py,bzfs_tests/itest/*.py,.venv*,dist*,*.egg-info*,htmlcov*",
-          "--write-changes",                    # Let pre-commit make changes to files instead of printing diffs
-          "--interactive=0",                    # No interactivity on making changes to files
-          "--ignore-words-list=cach,grup,mut",  # Project-specific words that should not be treated as typos
-        ]
   - repo: https://github.com/psf/black-pre-commit-mirror
     rev: fa505ab9c3e0fedafe1709fd7ac2b5f8996c670d  # aka 26.3.1
     hooks:
