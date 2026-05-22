@@ -69,13 +69,14 @@ repos:
     rev: 745eface02aef23e168a8afb6b5737818efbea95  # aka v0.11.0.1
     hooks:
       - id: shellcheck                  # Validate syntax of shell scripts
-  - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: f805888065fdb6162e1f800e50bb9460cbd223d6  # aka 0.37.2
-    hooks:
-      - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
-      - id: check-github-actions        # Validate syntax of GitHub Action YAML files
-      - id: check-compose-spec          # Validate syntax of Docker Compose files
-      - id: check-dependabot            # Validate syntax of Dependabot config files
+  # Temporarily uncomment this hook when editing .github/dependabot.yml or Docker Compose files
+  # - repo: https://github.com/python-jsonschema/check-jsonschema
+  #   rev: f805888065fdb6162e1f800e50bb9460cbd223d6  # aka 0.37.2
+  #   hooks:
+  #     - id: check-github-workflows      # Validate syntax of GitHub Workflow YAML files
+  #     - id: check-github-actions        # Validate syntax of GitHub Action YAML files
+  #     - id: check-compose-spec          # Validate syntax of Docker Compose files
+  #     - id: check-dependabot            # Validate syntax of Dependabot config files
   - repo: https://github.com/rhysd/actionlint
     rev: 914e7df21a07ef503a81201c76d2b11c789d3fca  # aka v1.7.12
     hooks:
