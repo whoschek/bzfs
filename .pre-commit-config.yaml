@@ -219,8 +219,13 @@ repos:
     hooks:
       - id: black                               # Run `black` Python code formatter
       # style options like `line_length` live in pyproject.toml
-  - repo: https://github.com/commitizen-tools/commitizen
-    rev: 9f3ec868c0429155a46b4819b625d47a8522a3d5  # aka v4.10.0
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: 91ab4bf57e58b32adf1a122681f6ebe164d081c8  # aka v4.4.0
     hooks:
-      - id: commitizen  # Check commit msg has the form `type(scope): description` per https://www.conventionalcommits.org
+      - id: conventional-pre-commit             # Check commit msg has the form `type(scope): description`
         stages: [commit-msg]
+        args: [
+          --no-color,
+          --verbose,
+          build, bump, chore, ci, docs, feat, fix, perf, refactor, style, test
+        ]
