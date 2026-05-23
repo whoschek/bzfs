@@ -30,6 +30,7 @@ import bzfs_tests.test_connection
 import bzfs_tests.test_connection_lease
 import bzfs_tests.test_detect
 import bzfs_tests.test_filter
+import bzfs_tests.test_generate_badges
 import bzfs_tests.test_incremental_send_steps
 import bzfs_tests.test_interner
 import bzfs_tests.test_jobrunner
@@ -83,6 +84,7 @@ def main() -> None:
         bzfs_tests.test_replication,
         bzfs_tests.test_compare_snapshot_lists,
         bzfs_tests.test_snapshot_cache,
+        bzfs_tests.test_generate_badges,
         bzfs_tests.test_test_host_sh,
         bzfs_tests.test_jobrunner,
     ]
