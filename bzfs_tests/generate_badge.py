@@ -22,6 +22,7 @@
 #
 """
 Given a label, text and color, generates a corresponding static shields.io SVG badge.
+The label is optional (can be empty).
 
 Downloads SVG badge from shields.io when available, otherwise falls back to local SVG generation.
 Has zero dependencies beyond the Python standard library.
@@ -44,7 +45,8 @@ def main() -> None:
     if len(sys.argv) != 6:
         raise SystemExit(
             f"Usage: {sys.argv[0]} <left_txt> <right_txt> <color> <output_file> <timeout>\n"
-            f"Example: {sys.argv[0]} os 'Linux | FreeBSD' '#007ec6' os.svg 30"
+            f"Example: {sys.argv[0]} coverage '99.53%' '#007ec6' coverage.svg 30\n"
+            f"Example: {sys.argv[0]} '' 'success' '#4b0' status.svg 30"
         )
 
     _, left_txt, right_txt, color, output_file, timeout = sys.argv
@@ -52,7 +54,7 @@ def main() -> None:
 
 
 def generate_badge(left_txt: str, right_txt: str, color: str, output_file: str, timeout: float = 30) -> None:
-    """Writes an SVG badge for the given text."""
+    """Writes an SVG badge for the given text; ``left_txt`` can be empty."""
     if not color:
         color = "#007ec6"  # blue; see https://github.com/badges/shields/tree/master/badge-maker#colors
     try:
@@ -76,7 +78,7 @@ def _download_svg_badge(left_txt: str, right_txt: str, color: str, timeout: floa
     quoted_color = urllib.parse.quote(color, safe="")
     url = f"https://img.shields.io/badge/{quoted_left_txt}-{quoted_right_txt}-{quoted_color}.svg"
     request = urllib.request.Request(url, headers={"User-Agent": "curl/8.7.1"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # fixed Shields URL
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         svg: str = response.read().decode("utf-8")
     if not svg.lstrip().startswith("<svg"):
         raise ValueError(f"Downloaded badge is not SVG: {url}")
@@ -87,9 +89,9 @@ def _build_svg_badge(left_txt: str, right_txt: str, color: str) -> str:
     """Locally creates a basic Shields-compatible SVG without requiring network connectivity."""
 
     def _text_width(text: str) -> int:  # Returns a simple text segment width with padding
-        return max(10, round(sum(4 if char in " .,:;|!ilI'`" else 7.2 for char in text) + 10))
+        return max(10, 10 + round(sum(4 if char in " .,:;|!ilI'`" else 7.2 for char in text)))
 
-    left_width = _text_width(left_txt)
+    left_width = _text_width(left_txt) if left_txt else 0
     right_width = _text_width(right_txt)
     width = left_width + right_width
     left_x = left_width / 2
