@@ -12,169 +12,172 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""
-Run this script to regenerate a README from the argparse help text of a selected module.
-Example usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main.bzfs README.md
-This essentially does the following steps:
-argparse-manpage --module <module> --function argument_parser > /tmp/manpage.1
-pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
-Then takes that output, auto-cleans it and auto-replaces certain sections of the target README with it.
-
-Before doing so install prerequisites:
-brew install pandoc  # OSX
-sudo apt-get -y install pandoc  # Linux
-python3 -m pip install argparse-manpage  # see https://github.com/praiskup/argparse-manpage
-"""
+"""Regenerate README markdown sections directly from argparse parser definitions."""
 
 from __future__ import (
     annotations,
 )
+import argparse
+import importlib
 import os
 import re
-import subprocess
 import sys
-import tempfile
-
-from bzfs_main import (
-    bzfs,
-    bzfs_jobrunner,
+import textwrap
+from pathlib import (
+    Path,
 )
+from typing import (
+    Final,
+)
+
 from bzfs_main.util.utils import (
     find_match,
 )
 
+# constants:
+_WRAP_COLUMNS: Final[int] = 98
+_DEFAULT_GROUPS: Final[frozenset] = frozenset(["positional arguments", "optional arguments", "options"])
+TRIPLE_BACKTICK: Final[str] = "```"
+
 
 def main() -> None:
-    """API for command line clients."""
+    """Runs the README generation CLI."""
     if len(sys.argv) != 3:
-        print("Usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main.bzfs path/to/README.md")
-        sys.exit(1)
+        raise SystemExit("Usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main.bzfs path/to/README.md")
 
-    bzfs_module, readme_file = sys.argv[1], sys.argv[2]
-    tmp_manpage1_path = os.path.join(tempfile.gettempdir(), "manpage.1")
-    tmp_manpage_md_path = os.path.join(tempfile.gettempdir(), "manpage.md")
-
-    # Step 1: Generate manpage
-    with open(tmp_manpage1_path, "w", encoding="utf-8") as fd:
-        cmd = ["argparse-manpage", "--module", bzfs_module, "--function", "argument_parser"]
-        subprocess.run(cmd, check=True, stdout=fd)
-
-    # Step 2: Convert to markdown using pandoc
-    cmd = ["pandoc", "--columns=98", "-s", "-t", "markdown", tmp_manpage1_path, "-o", tmp_manpage_md_path]
-    subprocess.run(cmd, check=True)
-
-    # Step 3: Clean up generated markdown file
-    with open(tmp_manpage_md_path, encoding="utf-8") as file:
-        content = file.read()
-
-    triple_backticks = "\\`\\`\\`"
-    re_triple_backticks = r"\\`\\`\\`"
-    content = re.sub(  # Multiline CLI examples: Replace \n between non-newline chars, with a backslash followed by newline
-        re_triple_backticks + r"(.*?)" + re_triple_backticks,
-        lambda m: triple_backticks + re.sub(r"(?<=.)(\n)(?=.)", r" \\\n", m.group(1)) + triple_backticks,
-        content,
-        flags=re.DOTALL,
-    )
-    content = re.sub(
-        re_triple_backticks + r"(.*?)" + re_triple_backticks,
-        lambda m: triple_backticks + m.group(1).replace("\n\n", "\n") + triple_backticks,
-        content,
-        flags=re.DOTALL,
-    )
-    content = content.replace(r"\`\`\`", "\n```\n")
-    content = re.sub(r"\\([`#-_|~>\[*])", r"\1", content)  # s/\\\([`#-_|>\[\*]\)/\1/g
-    content = re.sub(r"\\'", r"'", content)  # s/\\\'/'/g
-    content = re.sub(r'\\"', r'"', content)  # s/\\\"/"/g
-    content = re.sub(r"\\]", r"\]", content)  # s/\\\]/\]/g
-    content = re.sub(r"# OPTIONS", "", content)  # s/# OPTIONS//g
-    content = re.sub(r": {3}", r"*  ", content)  # s/:   /*  /g
-    manpage = content.splitlines(keepends=True)
-
-    # Step 4: Replace Description Section
-    # Step 4a: Extract replacement from cleaned markdown, which is the text between "# DESCRIPTION" and help detail.
-    begin_desc_markdown_tag = "# DESCRIPTION"
-    begin_help_markdown_tags = ["**SRC_DATASET", "**--create-src-snapshots"]
-    begin_desc_markdown_idx = find_match(
-        manpage,
-        lambda line: line.startswith(begin_desc_markdown_tag),
-        raises=f"{begin_desc_markdown_tag} not found in the cleaned markdown",
-    )
-    begin_help_markdown_idx = find_match(
-        manpage,
-        lambda line: any(tag in line for tag in begin_help_markdown_tags),
-        start=begin_desc_markdown_idx,
-        raises=f"{begin_help_markdown_tags} not found in the cleaned markdown",
-    )
-    replacement = "".join(manpage[begin_desc_markdown_idx + 1 : begin_help_markdown_idx]).strip()
-
-    # Step 4b: Replace text between '<!-- BEGIN DESCRIPTION SECTION -->' and '<!-- END DESCRIPTION SECTION -->'.
-    begin_desc_readme_tag = "<!-- BEGIN DESCRIPTION SECTION -->"
-    end_desc_readme_tag = "<!-- END DESCRIPTION SECTION -->"
-    with open(readme_file, encoding="utf-8") as f:
-        readme = f.readlines()
-    begin_desc_readme_idx = find_match(
-        readme,
-        lambda line: line.strip() == begin_desc_readme_tag,
-        raises=f"{begin_desc_readme_tag} not found in {readme_file}",
-    )
-    end_desc_readme_idx = find_match(
-        readme,
-        lambda line: line.strip().startswith(end_desc_readme_tag),
-        start=begin_desc_readme_idx,
-        raises=f"{end_desc_readme_tag} not found in {readme_file}",
-    )
-    readme = readme[: begin_desc_readme_idx + 1] + [replacement + "\n\n"] + readme[end_desc_readme_idx:]
-
-    # Step 5: Replace Usage Overview Section
-    begin_help_overview_tag = "<!-- BEGIN HELP OVERVIEW SECTION -->"
-    begin_help_overview_idx = find_match(
-        readme,
-        lambda line: begin_help_overview_tag in line,
-        raises=f"{begin_help_overview_tag} not found in {readme_file}",
-    )
-    end_help_overview_tag = "<!-- END HELP OVERVIEW SECTION -->"
-    end_help_overview_idx = find_match(
-        readme,
-        lambda line: end_help_overview_tag in line,
-        start=begin_help_overview_idx,
-        raises=f"{end_help_overview_tag} not found in {readme_file}",
-    )
-    os.environ["COLUMNS"] = "18"
-    help_msg_str = (
-        bzfs.argument_parser().format_usage()
-        if "_jobrunner" not in bzfs_module
-        else bzfs_jobrunner.argument_parser().format_usage()
-    )
-    help_msg = ["```\n"] + help_msg_str.splitlines(keepends=True) + ["```\n"]
-    readme = readme[: begin_help_overview_idx + 1] + help_msg + readme[end_help_overview_idx:]
-
-    # Step 6: Replace Usage Details Section
-    begin_help_markdown_idx = find_match(
-        manpage,
-        lambda line: any(tag in line for tag in begin_help_markdown_tags),
-        raises=f"Marker {begin_help_markdown_tags} not found in cleaned markdown.",
-    )
-    begin_help_readme_tag = "<!-- BEGIN HELP DETAIL SECTION -->"
-    begin_help_readme_idx = find_match(
-        readme,
-        lambda line: begin_help_readme_tag in line,
-        raises=f"{begin_help_readme_tag} not found in {readme_file}",
-    )
-
-    # add anchors to be able to link to each CLI option
-    def substitute_fn(match: re.Match) -> str:
-        anchor_id = match.group(1).replace(" ", "_")
-        return f'<div id="{anchor_id}"></div>\n\n{match.group(0)}'
-
-    manpage = [re.sub(r"\*\*([^*]+?)\*\*.*", substitute_fn, x) for x in manpage[begin_help_markdown_idx:]]
-
-    # Retain lines before and including the marker in readme_file and replace the rest
-    readme = readme[: begin_help_readme_idx + 1] + manpage
-    with open(readme_file, "w", encoding="utf-8") as f:
-        f.writelines(readme)
-
+    parser: argparse.ArgumentParser = importlib.import_module(sys.argv[1]).argument_parser()
+    readme_path = Path(sys.argv[2])
+    readme = readme_path.read_text(encoding="utf-8")
+    readme = render_readme(parser, readme)
+    readme_path.write_text(readme, encoding="utf-8")
     print("Done.")
 
 
+def render_readme(parser: argparse.ArgumentParser, readme: str) -> str:
+    """Returns README text with generated sections replaced from argparse."""
+    description: str = "\n".join(_render_blocks(parser.description or "")).strip() + "\n\n"
+    usage: list[str] = [TRIPLE_BACKTICK + "\n"] + _format_usage(parser).splitlines(keepends=True) + [TRIPLE_BACKTICK + "\n"]
+    help_detail: str = _help_detail(parser)
+
+    lines: list[str] = readme.splitlines(keepends=True)
+    lines = _replace(lines, "<!-- BEGIN DESCRIPTION SECTION -->", [description], end_tag="<!-- END DESCRIPTION SECTION -->")
+    lines = _replace(lines, "<!-- BEGIN HELP OVERVIEW SECTION -->", usage, end_tag="<!-- END HELP OVERVIEW SECTION -->")
+    lines = _replace(lines, "<!-- BEGIN HELP DETAIL SECTION -->", [help_detail])
+    return "".join(lines)
+
+
+def _replace(lines: list[str], begin_tag: str, replacement: list[str], *, end_tag: str | None = None) -> list[str]:
+    """Returns lines with a marked README section replaced; when end_tag is omitted, replacement extends to EOF."""
+    begin: int = find_match(lines, lambda line: begin_tag in line, raises=f"{begin_tag} not found")
+    if end_tag is None:
+        return lines[: begin + 1] + replacement
+    else:
+        end: int = find_match(lines, lambda line: end_tag in line, start=begin + 1, raises=f"{end_tag} not found")
+        return lines[: begin + 1] + replacement + lines[end:]
+
+
+def _render_blocks(text: str, *, list_item: bool = False) -> list[str]:
+    """Renders argparse help into the README's supported Markdown subset.
+
+    Assumes prose paragraphs are separated by blank lines and fenced examples use triple backticks. Prose is normalized and
+    wrapped; headings and fenced code stay structural. In list_item mode, the first block forms the bullet body and later
+    blocks are indented beneath it, avoiding a Markdown parser while preserving readable generated option help.
+    """
+    initial_indent: str = "*  " if list_item else ""
+    subsequent_indent: str = "    " if list_item else ""
+
+    # Split prose around fenced code so blank lines inside examples survive.
+    blocks: list[str] = []
+    for i, part in enumerate(text.strip("\n").split(TRIPLE_BACKTICK)):
+        if i % 2 != 0:
+            blocks.append(TRIPLE_BACKTICK + part + TRIPLE_BACKTICK)
+        else:
+            blocks += [block for block in re.split(r"\n\s*\n", part) if block.strip()]
+
+    results: list[str] = []
+    for i, block in enumerate(blocks):
+        if i > 0:
+            results.append("")
+        indent: str = initial_indent if i == 0 else subsequent_indent
+        if block.startswith(TRIPLE_BACKTICK) and block.endswith(TRIPLE_BACKTICK):
+            results += [""] + [indent + line for line in block.splitlines()] + [""]
+        elif re.fullmatch(r"#{1,6} .+", block):  # Keep Markdown headings unwrapped
+            results.append(indent + block)
+        else:
+            results += _wrap_text(" ".join(block.split()), initial_indent=indent, subsequent_indent=subsequent_indent)
+    return results
+
+
+def _help_detail(parser: argparse.ArgumentParser) -> str:
+    """Renders argparse actions as anchored Markdown reference entries."""
+    results: list[str] = []
+    groups = parser._action_groups  # noqa: SLF001  # pylint: disable=protected-access  # argparse has no public iterator
+    for group in groups:
+        actions = [
+            action
+            for action in group._group_actions  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
+            if action.help != argparse.SUPPRESS and "--help" not in action.option_strings
+        ]
+        if len(actions) == 0:
+            continue
+
+        title = None if group.title is None or group.title in _DEFAULT_GROUPS else group.title.upper()
+        if title:
+            results += [f"# {title}", ""]
+            if group.description and group.description != argparse.SUPPRESS:
+                results += _render_blocks(group.description)
+                results.append("")
+
+        for i, action in enumerate(actions):
+            anchor, header = _action_heading(parser, action)
+            results += [f'<div id="{anchor}"></div>', "", header, ""]
+            if action.help:
+                help_text = parser._get_formatter()._expand_help(action)  # noqa: SLF001  # pylint: disable=protected-access
+                results += _render_blocks(help_text, list_item=True)
+                results.append("")
+            if i != len(actions) - 1:
+                results += ["<!-- -->", ""]  # Prevent adjacent lists from merging
+    return "\n".join(results)
+
+
+def _action_heading(parser: argparse.ArgumentParser, action: argparse.Action) -> tuple[str, str]:
+    """Returns the README anchor and Markdown heading for one argparse action."""
+    formatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
+    if not action.option_strings:
+        label = formatter._metavar_formatter(action, action.dest)(1)[0]  # noqa: SLF001  # pylint: disable=protected-access
+        return label.replace(" ", "_"), f"**{label}**"
+    elif action.nargs == 0:
+        header = ", ".join(f"**{option}**" for option in action.option_strings)
+    else:
+        args: str = formatter._format_args(action, action.dest.upper())  # noqa: SLF001  # pylint: disable=protected-access
+        header = ", ".join(f"**{option}** *{args}*" for option in action.option_strings)
+    return action.option_strings[0].replace(" ", "_"), header
+
+
+def _wrap_text(text: str, *, width: int = _WRAP_COLUMNS, initial_indent: str = "", subsequent_indent: str = "") -> list[str]:
+    """Wraps prose without splitting words, option names, or paths."""
+    return textwrap.wrap(
+        text,
+        width=width,
+        initial_indent=initial_indent,
+        subsequent_indent=subsequent_indent,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+
+
+def _format_usage(parser: argparse.ArgumentParser) -> str:
+    previous_columns: str | None = os.environ.get("COLUMNS")
+    try:
+        os.environ["COLUMNS"] = "18"  # force each option onto a separate line
+        return parser.format_usage()
+    finally:
+        if previous_columns is None:
+            os.environ.pop("COLUMNS", None)
+        else:
+            os.environ["COLUMNS"] = previous_columns
+
+
+#############################################################################
 if __name__ == "__main__":
     main()

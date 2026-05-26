@@ -122,7 +122,7 @@ def argument_parser() -> argparse.ArgumentParser:
         prog=PROG_NAME,
         allow_abbrev=False,
         formatter_class=argparse.RawTextHelpFormatter,
-        description=f"""
+        description=rf"""
 On the first run, {PROG_NAME} replicates the source dataset and all its snapshots to the destination.
 On subsequent runs, it sends only changes since the previous run by incrementally replicating snapshots
 created on the source after that run. Source snapshots older than the most recent common snapshot
@@ -196,25 +196,30 @@ secondary or to M read replicas, and backups to removable drives.
 
 * Create adhoc atomic snapshots without a schedule:
 
-```$ {PROG_NAME} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
---create-src-snapshots-plan "{create_src_snapshots_plan_example1}"```
+```
+$ {PROG_NAME} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots \
+--create-src-snapshots-plan "{create_src_snapshots_plan_example1}"
+```
 
-```$ zfs list -t snapshot tank1/foo/bar
-
-tank1/foo/bar@test_2024-11-06_08:30:05_adhoc```
+```
+$ zfs list -t snapshot tank1/foo/bar
+tank1/foo/bar@test_2024-11-06_08:30:05_adhoc
+```
 
 * Create periodic atomic snapshots on a schedule, every minute, every hour and every day, by launching this from a periodic `cron` job:
 
-```$ {PROG_NAME} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
---create-src-snapshots-plan "{create_src_snapshots_plan_example2}"```
+```
+$ {PROG_NAME} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots \
+--create-src-snapshots-plan \
+"{create_src_snapshots_plan_example2}"
+```
 
-```$ zfs list -t snapshot tank1/foo/bar
-
+```
+$ zfs list -t snapshot tank1/foo/bar
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_daily
-
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_hourly
-
-tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_minutely```
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_minutely
+```
 
 Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g. `_daily` or `_hourly`
 or `_minutely` or `_2secondly` or `_100millisecondly`), or if the --create-src-snapshots-even-if-not-due flag is specified,
@@ -225,82 +230,89 @@ creation time of any existing snapshot.
 
 * Replication example in local mode (no network, no ssh), to replicate ZFS dataset tank1/foo/bar to tank2/boo/bar:
 
-```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar```
+```
+$ {PROG_NAME} tank1/foo/bar tank2/boo/bar
+```
 
-```$ zfs list -t snapshot tank1/foo/bar
-
+```
+$ zfs list -t snapshot tank1/foo/bar
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_daily
-
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_hourly
+tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_minutely
+```
 
-tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_minutely```
-
-```$ zfs list -t snapshot tank2/boo/bar
-
+```
+$ zfs list -t snapshot tank2/boo/bar
 tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_daily
-
 tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_hourly
-
-tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_minutely```
+tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_minutely
+```
 
 * Same example in pull mode:
 
-```$ {PROG_NAME} root@host1.example.com:tank1/foo/bar tank2/boo/bar```
+```
+$ {PROG_NAME} root@host1.example.com:tank1/foo/bar tank2/boo/bar
+```
 
 * Same example in push mode:
 
-```$ {PROG_NAME} tank1/foo/bar root@host2.example.com:tank2/boo/bar```
+```
+$ {PROG_NAME} tank1/foo/bar root@host2.example.com:tank2/boo/bar
+```
 
 * Same example in pull-push mode:
 
-```$ {PROG_NAME} root@host1:tank1/foo/bar root@host2:tank2/boo/bar```
+```
+$ {PROG_NAME} root@host1:tank1/foo/bar root@host2:tank2/boo/bar
+```
 
 * Same example with direct remote-to-remote transfer via `--r2r=pull`:
 
-```$ {PROG_NAME} --r2r=pull root@host1:tank1/foo/bar root@host2:tank2/boo/bar```
+```
+$ {PROG_NAME} --r2r=pull root@host1:tank1/foo/bar root@host2:tank2/boo/bar
+```
 
 * Same example with direct remote-to-remote transfer via `--r2r=push`:
 
-```$ {PROG_NAME} --r2r=push root@host1:tank1/foo/bar root@host2:tank2/boo/bar```
+```
+$ {PROG_NAME} --r2r=push root@host1:tank1/foo/bar root@host2:tank2/boo/bar
+```
 
 * Example in local mode (no network, no ssh) to recursively replicate ZFS dataset tank1/foo/bar and its descendant
 datasets to tank2/boo/bar:
 
-```$ {PROG_NAME} --recursive tank1/foo/bar tank2/boo/bar```
+```
+$ {PROG_NAME} --recursive tank1/foo/bar tank2/boo/bar
+```
 
-```$ zfs list -t snapshot -r tank1/foo/bar
-
+```
+$ zfs list -t snapshot -r tank1/foo/bar
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_daily
-
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_hourly
-
 tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_minutely
-
 tank1/foo/bar/baz@prod_us-west_2024-11-06_08:40:00_daily
-
 tank1/foo/bar/baz@prod_us-west_2024-11-06_08:40:00_hourly
+tank1/foo/bar/baz@prod_us-west_2024-11-06_08:40:00_minutely
+```
 
-tank1/foo/bar/baz@prod_us-west_2024-11-06_08:40:00_minutely```
-
-```$ zfs list -t snapshot -r tank2/boo/bar
-
+```
+$ zfs list -t snapshot -r tank2/boo/bar
 tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_daily
-
 tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_hourly
-
 tank2/boo/bar@prod_us-west_2024-11-06_08:30:05_minutely
-
 tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_daily
-
 tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_hourly
-
-tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_minutely```
+tank2/boo/bar/baz@prod_us-west_2024-11-06_08:40:00_minutely
+```
 
 * Replicate all daily snapshots created during the last 31 days, and at the same time ensure that the latest 31 daily
 snapshots (per dataset) are replicated regardless of creation time. Same for 40 minutely snapshots, and 36 hourly
 snapshots:
 
-```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-plan "{create_src_snapshots_plan_example2}"```
+```
+$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-plan \
+"{create_src_snapshots_plan_example2}"
+```
 
 Note: The example above compares the specified times against the standard ZFS 'creation' time property of the snapshots
 (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be part of the snapshot name.
@@ -309,8 +321,11 @@ Note: The example above compares the specified times against the standard ZFS 'c
 secondly snapshots (per dataset) are retained regardless of creation time. Same for 40 minutely snapshots, 36 hourly
 snapshots, 31 daily snapshots, 12 weekly snapshots, 18 monthly snapshots, and 5 yearly snapshots:
 
-```$ {PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
---delete-dst-snapshots-except-plan "{delete_dst_snapshots_except_plan_example1}"```
+```
+$ {PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --recursive --skip-replication \
+--delete-dst-snapshots --delete-dst-snapshots-except-plan \
+"{delete_dst_snapshots_except_plan_example1}"
+```
 
 Note: This also prints how many GB of disk space in total would be freed if the command were to be run for real without
 the --dryrun flag.
@@ -321,9 +336,12 @@ only contained in dst (tagged with 'dst'), and contained in both src and dst (ta
 and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some slack/stragglers),
 excluding temporary datasets:
 
-```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshot-lists --recursive
---include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
---exclude-dataset-regex '(.*/)?tmp.*'```
+```
+$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshot-lists \
+--recursive --include-snapshot-regex '.*_(hourly|daily)' \
+--include-snapshot-times-and-ranks '7 days ago..4 hours ago' --exclude-dataset-regex \
+'(.*/)?tmp.*'
+```
 
 If the resulting TSV output file contains zero lines starting with the prefix 'src' and zero lines starting with the
 prefix 'dst' then no source snapshots are missing on the destination, and no destination snapshots are missing
@@ -343,12 +361,17 @@ The example alerts the user if the *latest* source or destination snapshot named
 more than 30 minutes late (i.e. more than 30+60=90 minutes old) [warning], or more than 300 minutes late (i.e. more
 than 300+60=360 minutes old) [critical]. Analog for minutely and daily snapshots:
 
-```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --recursive --skip-replication -v --monitor-snapshots \
-"{monitor_snapshots_example}"```
+```
+$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --recursive --skip-replication -v --monitor-snapshots \
+"{monitor_snapshots_example}"
+```
 
 * Example that makes destination identical to source even if the two have drastically diverged:
 
-```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-dst-datasets --delete-dst-snapshots```
+```
+$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-dst-datasets \
+--delete-dst-snapshots
+```
 
 """)
 

@@ -57,18 +57,17 @@ snapshots created on the source after that run. Source snapshots older than the 
 snapshot on the destination are skipped automatically.
 
 Unless bzfs is told to create snapshots on the source, it treats the source as read-only. With
-`--dryrun`, it also treats the destination as read-only. In normal operation, the destination
-is append-only. Optional flags can delete destination snapshots and datasets if you want to manage
+`--dryrun`, it also treats the destination as read-only. In normal operation, the destination is
+append-only. Optional flags can delete destination snapshots and datasets if you want to manage
 storage space consumption, reconcile divergence, restore production from backup, or resync backup
 from production.
 
 bzfs supports include/exclude filters that can be combined to choose which datasets, snapshots,
 and properties to create, replicate, delete, or compare.
 
-A common setup uses scheduled `cron` jobs: one to create and prune source snapshots, one to
-prune destination snapshots, and one to replicate recently created snapshots from source to
-destination. Schedules can run every N milliseconds, seconds, minutes, hours, days, weeks, months,
-or years.
+A common setup uses scheduled `cron` jobs: one to create and prune source snapshots, one to prune
+destination snapshots, and one to replicate recently created snapshots from source to destination.
+Schedules can run every N milliseconds, seconds, minutes, hours, days, weeks, months, or years.
 
 Snapshot creation, replication, pruning, monitoring, and comparison work with snapshots in any
 naming format, including snapshots created by third-party tools or by manual zfs snapshot
@@ -79,15 +78,15 @@ the initiator host, which can be the source host (push mode), destination host (
 host (local mode, no network, no ssh), or a third-party host that can SSH into source and
 destination (pull-push mode). In pull-push mode, the source `zfs send` stream is relayed by the
 initiator to the destination `zfs receive`, without storing anything locally. For bulk data
-transfers, remote-to-remote mode (`--r2r=pull` or `--r2r=push`) can instead transfer the
-stream directly between source and destination to avoid making the initiator a bandwidth
-bottleneck. In this mode, bzfs does not need to be installed on source or destination; only the
-`zfs` CLI is required there. bzfs can run as root or as a non-root user via sudo or delegated
-`zfs allow` permissions.
+transfers, remote-to-remote mode (`--r2r=pull` or `--r2r=push`) can instead transfer the stream
+directly between source and destination to avoid making the initiator a bandwidth bottleneck. In
+this mode, bzfs does not need to be installed on source or destination; only the `zfs` CLI is
+required there. bzfs can run as root or as a non-root user via sudo or delegated `zfs allow`
+permissions.
 
 bzfs is written in Python and continuously tested with unit and integration tests on old and new
-ZFS versions, on multiple Linux and FreeBSD versions, and on all Python versions >= 3.9
-(including latest stable, currently python-3.14).
+ZFS versions, on multiple Linux and FreeBSD versions, and on all Python versions >= 3.9 (including
+latest stable, currently python-3.14).
 
 bzfs is a stand-alone program with zero required dependencies. It is meant to run in restricted
 barebones server environments. No external Python packages are required; indeed no Python package
@@ -101,23 +100,23 @@ every N milliseconds.
 Replication progress (e.g. throughput and ETA) is shown aggregated across parallel replication
 tasks. Example console status line:
 
-`2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] 80% ETA 0:00:04
-ETA 01:23:08`
+`2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] 80% ETA 0:00:04 ETA
+01:23:08`
 
 bzfs uses streaming algorithms to process millions of datasets with low memory usage and low
 latency. It handles replication policies with multiple sources and multiple destinations per
 source.
 
 Optionally, bzfs applies bandwidth rate limiting and progress monitoring (via `pv`) during `zfs
-send/receive` transfers. Over the network, it can insert lightweight compression (via `zstd`)
-and buffering (via `mbuffer`) between endpoints. If one of these tools is not installed, bzfs
+send/receive` transfers. Over the network, it can insert lightweight compression (via `zstd`) and
+buffering (via `mbuffer`) between endpoints. If one of these tools is not installed, bzfs
 auto-detects that and continues without that auxiliary feature.
 
 # Periodic Jobs with bzfs_jobrunner
 
 The project also ships with [bzfs_jobrunner](README_bzfs_jobrunner.md), a companion program that
-wraps `bzfs` for periodic snapshot creation, replication, pruning, and monitoring across N
-source hosts and M destination hosts, using one shared fleet-wide
+wraps `bzfs` for periodic snapshot creation, replication, pruning, and monitoring across N source
+hosts and M destination hosts, using one shared fleet-wide
 [jobconfig](bzfs_testbed/bzfs_job_testbed.py) script.
 
 Typical use cases include geo-replicated backup where each destination host is in a different
@@ -163,12 +162,12 @@ tank1/foo/bar@prod_us-west_2024-11-06_08:30:05_minutely
 
 
 Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g.
-`_daily` or `_hourly` or `_minutely` or `_2secondly` or `_100millisecondly`), or if
-the --create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled
-snapshot is somehow missing. In the latter case bzfs immediately creates a snapshot (named with
-the current time, not backdated to the missed time), and then resumes the original schedule. If
-the suffix is `_adhoc` or not a known period then a snapshot is considered non-periodic and is
-thus created immediately regardless of the creation time of any existing snapshot.
+`_daily` or `_hourly` or `_minutely` or `_2secondly` or `_100millisecondly`), or if the
+--create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled snapshot
+is somehow missing. In the latter case bzfs immediately creates a snapshot (named with the current
+time, not backdated to the missed time), and then resumes the original schedule. If the suffix is
+`_adhoc` or not a known period then a snapshot is considered non-periodic and is thus created
+immediately regardless of the creation time of any existing snapshot.
 
 * Replication example in local mode (no network, no ssh), to replicate ZFS dataset tank1/foo/bar
 to tank2/boo/bar:
@@ -303,9 +302,9 @@ run for real without the --dryrun flag.
 
 * Compare source and destination dataset trees recursively, for example to check if all recently
 taken snapshots have been successfully replicated by a periodic job. List snapshots only contained
-in src (tagged with 'src'), only contained in dst (tagged with 'dst'), and contained in both
-src and dst (tagged with 'all'), restricted to hourly and daily snapshots taken within the last
-7 days, excluding the last 4 hours (to allow for some slack/stragglers), excluding temporary
+in src (tagged with 'src'), only contained in dst (tagged with 'dst'), and contained in both src
+and dst (tagged with 'all'), restricted to hourly and daily snapshots taken within the last 7
+days, excluding the last 4 hours (to allow for some slack/stragglers), excluding temporary
 datasets:
 
 
@@ -317,26 +316,26 @@ $ bzfs tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshot-lists \
 ```
 
 
-If the resulting TSV output file contains zero lines starting with the prefix 'src' and zero
-lines starting with the prefix 'dst' then no source snapshots are missing on the destination,
-and no destination snapshots are missing on the source, indicating that the periodic replication
-and pruning jobs perform as expected. The TSV output is sorted by dataset, and by ZFS creation
-time within each dataset - the first and last line prefixed with 'all' contains the metadata of
-the oldest and latest common snapshot, respectively. The --compare-snapshot-lists option also
-directly logs [various summary
+If the resulting TSV output file contains zero lines starting with the prefix 'src' and zero lines
+starting with the prefix 'dst' then no source snapshots are missing on the destination, and no
+destination snapshots are missing on the source, indicating that the periodic replication and
+pruning jobs perform as expected. The TSV output is sorted by dataset, and by ZFS creation time
+within each dataset - the first and last line prefixed with 'all' contains the metadata of the
+oldest and latest common snapshot, respectively. The --compare-snapshot-lists option also directly
+logs [various summary
 stats](https://github.com/whoschek/bzfs/blob/main/bzfs_docs/compare-snapshot-lists-example.log),
 such as the metadata of the latest common snapshot, latest snapshots and oldest snapshots, as well
 as the time diff between the latest common snapshot and latest snapshot only in src (and only in
 dst), as well as how many src snapshots and how many GB of data are missing on dst, etc.
 
-* Alert the user if the ZFS 'creation' time property of the latest source or destination
-snapshot for any specified snapshot name pattern within the selected datasets is too old wrt. the
-specified age limit. The purpose is to check if snapshots are successfully created and replicated
-on schedule. Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively. The example
-alerts the user if the *latest* source or destination snapshot named
-`prod_us-west_<timestamp>_hourly` is more than 30 minutes late (i.e. more than 30+60=90
-minutes old) [warning], or more than 300 minutes late (i.e. more than 300+60=360 minutes old)
-[critical]. Analog for minutely and daily snapshots:
+* Alert the user if the ZFS 'creation' time property of the latest source or destination snapshot
+for any specified snapshot name pattern within the selected datasets is too old wrt. the specified
+age limit. The purpose is to check if snapshots are successfully created and replicated on
+schedule. Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively. The example alerts
+the user if the *latest* source or destination snapshot named `prod_us-west_<timestamp>_hourly` is
+more than 30 minutes late (i.e. more than 30+60=90 minutes old) [warning], or more than 300
+minutes late (i.e. more than 300+60=360 minutes old) [critical]. Analog for minutely and daily
+snapshots:
 
 
 ```
@@ -651,37 +650,33 @@ usage: bzfs [-h]
 **SRC_DATASET DST_DATASET**
 
 *  SRC_DATASET: Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS
-    filesystem or ZFS volume. Format is [[user@]host:]dataset. The host name can also be an
-    IPv4 address (or an IPv6 address where each ':' colon character must be replaced with a
-    '|' pipe character for disambiguation). If the host name is '-', the dataset will be on
-    the local host, and the corresponding SSH leg will be omitted. The same is true if the host is
-    omitted and the dataset does not contain a ':' colon at the same time. Local dataset
-    examples: `tank1/foo/bar`, `tank1`, `-:tank1/foo/bar:baz:boo` Remote dataset examples:
+    filesystem or ZFS volume. Format is [[user@]host:]dataset. The host name can also be an IPv4
+    address (or an IPv6 address where each ':' colon character must be replaced with a '|' pipe
+    character for disambiguation). If the host name is '-', the dataset will be on the local host,
+    and the corresponding SSH leg will be omitted. The same is true if the host is omitted and the
+    dataset does not contain a ':' colon at the same time. Local dataset examples:
+    `tank1/foo/bar`, `tank1`, `-:tank1/foo/bar:baz:boo` Remote dataset examples:
     `host:tank1/foo/bar`, `host.example.com:tank1/foo/bar`, `root@host:tank`,
     `root@host.example.com:tank1/foo/bar`, `user@127.0.0.1:tank1/foo/bar:baz:boo`,
-    `user@||1:tank1/foo/bar:baz:boo`. The first component of the ZFS dataset name is the ZFS
-    pool name, here `tank1`. If the option starts with a `+` prefix then dataset names are
-    read from the UTF-8 text file given after the `+` prefix, with each line in the file
-    containing a SRC_DATASET and a DST_DATASET, separated by a tab character. The basename must
-    contain the substring 'bzfs_argument_file'. Example:
-    `+root_dataset_names_bzfs_argument_file.txt`,
+    `user@||1:tank1/foo/bar:baz:boo`. The first component of the ZFS dataset name is the ZFS pool
+    name, here `tank1`. If the option starts with a `+` prefix then dataset names are read from
+    the UTF-8 text file given after the `+` prefix, with each line in the file containing a
+    SRC_DATASET and a DST_DATASET, separated by a tab character. The basename must contain the
+    substring 'bzfs_argument_file'. Example: `+root_dataset_names_bzfs_argument_file.txt`,
     `+/path/to/root_dataset_names_bzfs_argument_file.txt`
 
     DST_DATASET: Destination ZFS dataset for replication and deletion. Has same naming format as
     SRC_DATASET. During replication, destination datasets that do not yet exist are created as
     necessary, along with their parent and ancestors.
 
-    *Performance Note:* bzfs automatically replicates multiple datasets in parallel. It
-    replicates snapshots in parallel across datasets and serially within a dataset. All child
-    datasets of a dataset may be processed in parallel. For consistency, processing of a dataset
-    only starts after processing of all its ancestor datasets has completed. Further, when a
-    thread is ready to start processing another dataset, it chooses the next dataset wrt.
-    lexicographical sort order from the datasets that are currently available for start of
-    processing. Initially, only the roots of the selected dataset subtrees are available for start
-    of processing. The degree of parallelism is configurable with the --threads option (see
-    below).
-
-
+    *Performance Note:* bzfs automatically replicates multiple datasets in parallel. It replicates
+    snapshots in parallel across datasets and serially within a dataset. All child datasets of a
+    dataset may be processed in parallel. For consistency, processing of a dataset only starts
+    after processing of all its ancestor datasets has completed. Further, when a thread is ready
+    to start processing another dataset, it chooses the next dataset wrt. lexicographical sort
+    order from the datasets that are currently available for start of processing. Initially, only
+    the roots of the selected dataset subtrees are available for start of processing. The degree
+    of parallelism is configurable with the --threads option (see below).
 
 <div id="--recursive"></div>
 
@@ -697,22 +692,22 @@ usage: bzfs [-h]
 
 **--include-dataset** *DATASET [DATASET ...]*
 
-*  During snapshot creation, replication, deletion and comparison, select any ZFS dataset (and
-    its descendants) that is contained within SRC_DATASET (DST_DATASET in case of deletion) if its
+*  During snapshot creation, replication, deletion and comparison, select any ZFS dataset (and its
+    descendants) that is contained within SRC_DATASET (DST_DATASET in case of deletion) if its
     dataset name is one of the given include dataset names but none of the exclude dataset names.
     If a dataset is excluded its descendants are automatically excluded too, and this decision is
     never reconsidered even for the descendants because exclude takes precedence over include.
 
-    A dataset name is absolute if the specified dataset is prefixed by `/`, e.g.
-    `/tank/baz/tmp`. Otherwise the dataset name is relative wrt. source and destination, e.g.
-    `baz/tmp` if the source is `tank`.
+    A dataset name is absolute if the specified dataset is prefixed by `/`, e.g. `/tank/baz/tmp`.
+    Otherwise the dataset name is relative wrt. source and destination, e.g. `baz/tmp` if the
+    source is `tank`.
 
     This option is automatically translated to an --include-dataset-regex (see below) and can be
     specified multiple times.
 
-    If the option starts with a `+` prefix then dataset names are read from the
-    newline-separated UTF-8 text file given after the `+` prefix, one dataset per line inside of
-    the text file. The basename must contain the substring 'bzfs_argument_file'.
+    If the option starts with a `+` prefix then dataset names are read from the newline-separated
+    UTF-8 text file given after the `+` prefix, one dataset per line inside of the text file. The
+    basename must contain the substring 'bzfs_argument_file'.
 
     Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative),
     `+dataset_names_bzfs_argument_file.txt`, `+/path/to/dataset_names_bzfs_argument_file.txt`
@@ -723,8 +718,8 @@ usage: bzfs [-h]
 
 **--exclude-dataset** *DATASET [DATASET ...]*
 
-*  Same syntax as --include-dataset (see above) except that the option is automatically
-    translated to an --exclude-dataset-regex (see below).
+*  Same syntax as --include-dataset (see above) except that the option is automatically translated
+    to an --exclude-dataset-regex (see below).
 
 <!-- -->
 
@@ -741,8 +736,8 @@ usage: bzfs [-h]
     takes precedence over include.
 
     This option can be specified multiple times. A leading `!` character indicates logical
-    negation, i.e. the regex matches if the regex with the leading `!` character removed does
-    not match.
+    negation, i.e. the regex matches if the regex with the leading `!` character removed does not
+    match.
 
     If the option starts with a `+` prefix then regex names are read from the newline-separated
     UTF-8 text file given after the `+` prefix, one regex per line inside of the text file. The
@@ -751,8 +746,7 @@ usage: bzfs [-h]
     Default: `.*` (include all datasets).
 
     Examples: `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`, `!public`,
-    `+dataset_regexes_bzfs_argument_file.txt`,
-    `+/path/to/dataset_regexes_bzfs_argument_file.txt`
+    `+dataset_regexes_bzfs_argument_file.txt`, `+/path/to/dataset_regexes_bzfs_argument_file.txt`
 
 <!-- -->
 
@@ -761,8 +755,8 @@ usage: bzfs [-h]
 **--exclude-dataset-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-dataset-regex (see above) except that the default is
-    `(?:.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*` (exclude tmp datasets). Example:
-    `!.*` (exclude no dataset)
+    `(?:.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*` (exclude tmp datasets). Example: `!.*` (exclude no
+    dataset)
 
 <!-- -->
 
@@ -774,8 +768,7 @@ usage: bzfs [-h]
     value (potentially inherited) of that user property is read via 'zfs list' for each selected
     source dataset to determine whether the dataset will be included or excluded, as follows:
 
-    a) Value is 'true' or '-' or empty string or the property is missing: Include the
-    dataset.
+    a) Value is 'true' or '-' or empty string or the property is missing: Include the dataset.
 
     b) Value is 'false': Exclude the dataset and its descendants.
 
@@ -790,8 +783,8 @@ usage: bzfs [-h]
 
     *Note:* The use of --exclude-dataset-property is discouraged for most use cases. It is more
     flexible, more powerful, *and* more efficient to instead use a combination of
-    --include/exclude-dataset-regex and/or --include/exclude-dataset to achieve the same or
-    better outcome.
+    --include/exclude-dataset-regex and/or --include/exclude-dataset to achieve the same or better
+    outcome.
 
 <!-- -->
 
@@ -805,18 +798,18 @@ usage: bzfs [-h]
     decision is never reconsidered because exclude takes precedence over include.
 
     This option can be specified multiple times. A leading `!` character indicates logical
-    negation, i.e. the regex matches if the regex with the leading `!` character removed does
-    not match.
+    negation, i.e. the regex matches if the regex with the leading `!` character removed does not
+    match.
 
     Default: `.*` (include all snapshots). Examples: `test_.*`, `!prod_.*`,
     `.*_(hourly|frequent)`, `!.*_(weekly|daily)`
 
     *Note:* All --include/exclude-snapshot-* CLI option groups are combined into a mini filter
     pipeline. A filter pipeline is executed in the order given on the command line, left to right.
-    For example if --include-snapshot-times-and-ranks (see below) is specified on the command
-    line before --include/exclude-snapshot-regex, then --include-snapshot-times-and-ranks will
-    be applied before --include/exclude-snapshot-regex. The pipeline results would not always be
-    the same if the order were reversed. Order matters.
+    For example if --include-snapshot-times-and-ranks (see below) is specified on the command line
+    before --include/exclude-snapshot-regex, then --include-snapshot-times-and-ranks will be
+    applied before --include/exclude-snapshot-regex. The pipeline results would not always be the
+    same if the order were reversed. Order matters.
 
     *Note:* During replication, bookmarks are always retained aka selected in order to help find
     common snapshots between source and destination.
@@ -836,8 +829,8 @@ usage: bzfs [-h]
 
 **--include-snapshot-times-and-ranks** *TIMERANGE [RANKRANGE ...]*
 
-*  This option takes as input parameters a time range filter and an optional rank range filter.
-    It separately computes the results for each filter and selects the UNION of both results. To
+*  This option takes as input parameters a time range filter and an optional rank range filter. It
+    separately computes the results for each filter and selects the UNION of both results. To
     instead use a pure rank range filter (no UNION), or a pure time range filter (no UNION),
     simply use 'notime' aka '0..0' to indicate an empty time range, or omit the rank range,
     respectively. This option can be specified multiple times.
@@ -846,15 +839,15 @@ usage: bzfs [-h]
 
     Specify to replicate all daily snapshots created during the last 7 days, and at the same time
     ensure that the latest 7 daily snapshots (per dataset) are replicated regardless of creation
-    time, like so: `--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks
-    '7 days ago..anytime' 'latest 7'`
+    time, like so: `--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days
+    ago..anytime' 'latest 7'`
 
     <b>*Deletion Example (no UNION):* </b>
 
     Specify to delete all daily snapshots older than 7 days, but ensure that the latest 7 daily
     snapshots (per dataset) are retained regardless of creation time, like so:
-    `--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all
-    except latest 7' --include-snapshot-times-and-ranks 'anytime..7 days ago'`
+    `--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except
+    latest 7' --include-snapshot-times-and-ranks 'anytime..7 days ago'`
 
     This helps to safely cope with irregular scenarios where no snapshots were created or received
     within the last 7 days, or where more than 7 daily snapshots were created within the last 7
@@ -864,11 +857,11 @@ usage: bzfs [-h]
     <b>*TIMERANGE:* </b>
 
     The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order
-    for the snapshot to be included. The time range consists of a 'start' time, followed by a
-    '..' separator, followed by an 'end' time. For example '2024-01-01..2024-04-01', or
-    'anytime..anytime' aka `*..*` aka all times, or 'notime' aka '0..0' aka empty time
-    range. Only snapshots (and bookmarks) in the half-open time range [start, end) are included;
-    other snapshots (and bookmarks) are excluded. If a snapshot is excluded this decision is never
+    for the snapshot to be included. The time range consists of a 'start' time, followed by a '..'
+    separator, followed by an 'end' time. For example '2024-01-01..2024-04-01', or
+    'anytime..anytime' aka `*..*` aka all times, or 'notime' aka '0..0' aka empty time range. Only
+    snapshots (and bookmarks) in the half-open time range [start, end) are included; other
+    snapshots (and bookmarks) are excluded. If a snapshot is excluded this decision is never
     reconsidered because exclude takes precedence over include. Each of the two specified times
     can take any of the following forms:
 
@@ -877,15 +870,15 @@ usage: bzfs [-h]
     * b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805
 
     * c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05',
-    '2024-10-05T14:48:55', '2024-10-05T14:48:55+02', '2024-10-05T14:48:55-04:30'. If the
-    datetime string does not contain time zone info then it is assumed to be in the local time
-    zone. Timezone string support requires Python ≥ 3.11.
+    '2024-10-05T14:48:55', '2024-10-05T14:48:55+02', '2024-10-05T14:48:55-04:30'. If the datetime
+    string does not contain time zone info then it is assumed to be in the local time zone.
+    Timezone string support requires Python ≥ 3.11.
 
-    * d) a duration that indicates how long ago from the current time, using the following
-    syntax: a non-negative integer, followed by an optional space, followed by a duration unit
-    that is *one* of 'seconds', 'secs', 'minutes', 'mins', 'hours', 'days',
-    'weeks', 'months', 'years', followed by an optional space, followed by the word 'ago'.
-    Examples: '0secs ago', '40 mins ago', '36hours ago', '90days ago', '12weeksago'.
+    * d) a duration that indicates how long ago from the current time, using the following syntax:
+    a non-negative integer, followed by an optional space, followed by a duration unit that is
+    *one* of 'seconds', 'secs', 'minutes', 'mins', 'hours', 'days', 'weeks', 'months', 'years',
+    followed by an optional space, followed by the word 'ago'. Examples: '0secs ago', '40 mins
+    ago', '36hours ago', '90days ago', '12weeksago'.
 
     * Note: This option compares the specified time against the standard ZFS 'creation' time
     property of the snapshot (which is a UTC Unix time in integer seconds), rather than against a
@@ -904,8 +897,8 @@ usage: bzfs [-h]
     the 'createtxg' ZFS property, which serves the same purpose but is more precise). The rank
     position of a snapshot is the zero-based integer position of the snapshot within that sorted
     list. A rank consists of the optional words 'all except' (followed by an optional space),
-    followed by the word 'oldest' or 'latest', followed by a non-negative integer, followed by
-    an optional '%' percent sign. A rank range consists of a lower rank, followed by a '..'
+    followed by the word 'oldest' or 'latest', followed by a non-negative integer, followed by an
+    optional '%' percent sign. A rank range consists of a lower rank, followed by a '..'
     separator, followed by a higher rank. If the optional lower rank is missing it is assumed to
     be 0. Examples:
 
@@ -913,28 +906,28 @@ usage: bzfs [-h]
 
     * 'latest 10%' aka 'latest 0..latest 10%' (include the latest 10% of all snapshots)
 
-    * 'all except latest 10%' aka 'oldest 90%' aka 'oldest 0..oldest 90%' (include all
-    snapshots except the latest 10% of all snapshots)
+    * 'all except latest 10%' aka 'oldest 90%' aka 'oldest 0..oldest 90%' (include all snapshots
+    except the latest 10% of all snapshots)
 
     * 'oldest 90' aka 'oldest 0..oldest 90' (include the oldest 90 snapshots)
 
     * 'latest 90' aka 'latest 0..latest 90' (include the latest 90 snapshots)
 
-    * 'all except oldest 90' aka 'oldest 90..oldest 100%' (include all snapshots except the
-    oldest 90 snapshots)
+    * 'all except oldest 90' aka 'oldest 90..oldest 100%' (include all snapshots except the oldest
+    90 snapshots)
 
-    * 'all except latest 90' aka 'latest 90..latest 100%' (include all snapshots except the
-    latest 90 snapshots)
+    * 'all except latest 90' aka 'latest 90..latest 100%' (include all snapshots except the latest
+    90 snapshots)
 
     * 'latest 1' aka 'latest 0..latest 1' (include the latest snapshot)
 
-    * 'all except latest 1' aka 'latest 1..latest 100%' (include all snapshots except the
-    latest snapshot)
+    * 'all except latest 1' aka 'latest 1..latest 100%' (include all snapshots except the latest
+    snapshot)
 
     * 'oldest 2' aka 'oldest 0..oldest 2' (include the oldest 2 snapshots)
 
-    * 'all except oldest 2' aka 'oldest 2..oldest 100%' (include all snapshots except the
-    oldest 2 snapshots)
+    * 'all except oldest 2' aka 'oldest 2..oldest 100%' (include all snapshots except the oldest 2
+    snapshots)
 
     * 'oldest 100%' aka 'oldest 0..oldest 100%' (include all snapshots)
 
@@ -971,17 +964,16 @@ usage: bzfs [-h]
     be replicated. To avoid unexpected surprises, make sure to carefully specify ALL snapshot
     names and periods that shall be replicated, in combination with --dryrun.
 
-    Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36,
-    'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west': {'secondly': 0,
-    'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly':
-    5}, 'eu-west': {'secondly': 0, 'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly':
-    12, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly': 42, 'weekly':
-    12}, 'onsite': {'100millisecondly': 42}}}"`. This example will, for the organization
-    'prod' and the intended logical target 'onsite', replicate secondly snapshots that were
-    created less than 40 seconds ago, yet replicate the latest 40 secondly snapshots regardless of
-    creation time. Analog for the latest 40 minutely snapshots, latest 36 hourly snapshots, etc.
-    Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be
-    replicated for the given period.
+    Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36, 'daily': 31,
+    'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west': {'secondly': 0, 'minutely': 0, 'hourly':
+    36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'eu-west': {'secondly': 0,
+    'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test':
+    {'offsite': {'12hourly': 42, 'weekly': 12}, 'onsite': {'100millisecondly': 42}}}"`. This
+    example will, for the organization 'prod' and the intended logical target 'onsite', replicate
+    secondly snapshots that were created less than 40 seconds ago, yet replicate the latest 40
+    secondly snapshots regardless of creation time. Analog for the latest 40 minutely snapshots,
+    latest 36 hourly snapshots, etc. Note: A zero within a period (e.g. 'hourly': 0) indicates
+    that no snapshots shall be replicated for the given period.
 
     Note: --include-snapshot-plan is a convenience option that auto-generates a series of the
     following other options: --new-snapshot-filter-group, --include-snapshot-regex,
@@ -993,22 +985,22 @@ usage: bzfs [-h]
 
 **--new-snapshot-filter-group**
 
-*  Starts a new snapshot filter group containing separate --{include|exclude}-snapshot-*
-    filter options. The program separately computes the results for each filter group and selects
-    the UNION of all results. This option can be specified multiple times and serves as a
-    separator between groups. Example:
+*  Starts a new snapshot filter group containing separate --{include|exclude}-snapshot-* filter
+    options. The program separately computes the results for each filter group and selects the
+    UNION of all results. This option can be specified multiple times and serves as a separator
+    between groups. Example:
 
     Delete all minutely snapshots older than 40 minutes, but ensure that the latest 40 minutely
     snapshots (per dataset) are retained regardless of creation time. Additionally, delete all
     hourly snapshots older than 36 hours, but ensure that the latest 36 hourly snapshots (per
     dataset) are retained regardless of creation time. Additionally, delete all daily snapshots
     older than 31 days, but ensure that the latest 31 daily snapshots (per dataset) are retained
-    regardless of creation time: `bzfs dummy tank2/boo/bar --dryrun --recursive
-    --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_minutely'
+    regardless of creation time: `bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
+    --delete-dst-snapshots --include-snapshot-regex '.*_minutely'
     --include-snapshot-times-and-ranks notime 'all except latest 40'
     --include-snapshot-times-and-ranks 'anytime..40 minutes ago' --new-snapshot-filter-group
-    --include-snapshot-regex '.*_hourly' --include-snapshot-times-and-ranks notime 'all
-    except latest 36' --include-snapshot-times-and-ranks 'anytime..36 hours ago'
+    --include-snapshot-regex '.*_hourly' --include-snapshot-times-and-ranks notime 'all except
+    latest 36' --include-snapshot-times-and-ranks 'anytime..36 hours ago'
     --new-snapshot-filter-group --include-snapshot-regex '.*_daily'
     --include-snapshot-times-and-ranks notime 'all except latest 31'
     --include-snapshot-times-and-ranks 'anytime..31 days ago'`
@@ -1028,21 +1020,21 @@ usage: bzfs [-h]
 
     A periodic snapshot is created if it is due per the schedule indicated by
     --create-src-snapshots-plan (for example '_daily' or '_hourly' or _'10minutely' or
-    '_2secondly' or '_100millisecondly'), or if the --create-src-snapshots-even-if-not-due
-    flag is specified, or if the most recent scheduled snapshot is somehow missing. In the latter
-    case bzfs immediately creates a snapshot (tagged with the current time, not backdated to the
-    missed time), and then resumes the original schedule.
+    '_2secondly' or '_100millisecondly'), or if the --create-src-snapshots-even-if-not-due flag is
+    specified, or if the most recent scheduled snapshot is somehow missing. In the latter case
+    bzfs immediately creates a snapshot (tagged with the current time, not backdated to the missed
+    time), and then resumes the original schedule.
 
     If the snapshot suffix is '_adhoc' or not a known period then a snapshot is considered
     non-periodic and is thus created immediately regardless of the creation time of any existing
     snapshot.
 
     The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs
-    snapshot' command line, using lexicographical sort order, and using 'zfs snapshot -r' to
-    the extent that this is compatible with the actual results of the schedule and the actual
-    results of the --{include|exclude}-dataset* pruning policy. The snapshots of all datasets
-    that fit within the same single 'zfs snapshot' CLI invocation will be taken within the same
-    ZFS transaction group, and correspondingly have identical 'createtxg' ZFS property (but not
+    snapshot' command line, using lexicographical sort order, and using 'zfs snapshot -r' to the
+    extent that this is compatible with the actual results of the schedule and the actual results
+    of the --{include|exclude}-dataset* pruning policy. The snapshots of all datasets that fit
+    within the same single 'zfs snapshot' CLI invocation will be taken within the same ZFS
+    transaction group, and correspondingly have identical 'createtxg' ZFS property (but not
     necessarily identical 'creation' ZFS time property as ZFS actually provides no such
     guarantee), and thus be consistent. Dataset names that can't fit into a single command line
     are spread over multiple command line invocations, respecting the limits that the operating
@@ -1061,18 +1053,18 @@ usage: bzfs [-h]
 *  Creation periods that specify a schedule for when new snapshots shall be created on src within
     the selected datasets. Has the same format as --delete-dst-snapshots-except-plan.
 
-    Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36,
-    'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west': {'secondly': 0,
-    'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly':
-    5}, 'eu-west': {'secondly': 0, 'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly':
-    12, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly': 42, 'weekly':
-    12}, 'onsite': {'100millisecondly': 42}}}"`. This example will, for the organization
-    'prod' and the intended logical target 'onsite', create 'secondly' snapshots every
-    second, 'minutely' snapshots every minute, hourly snapshots every hour, and so on. It will
-    also create snapshots for the targets 'us-west' and 'eu-west' within the 'prod'
-    organization. In addition, it will create snapshots every 12 hours and every week for the
-    'test' organization, and name them as being intended for the 'offsite' replication target.
-    Analog for snapshots that are taken every 100 milliseconds within the 'test' organization.
+    Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36, 'daily': 31,
+    'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west': {'secondly': 0, 'minutely': 0, 'hourly':
+    36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'eu-west': {'secondly': 0,
+    'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test':
+    {'offsite': {'12hourly': 42, 'weekly': 12}, 'onsite': {'100millisecondly': 42}}}"`. This
+    example will, for the organization 'prod' and the intended logical target 'onsite', create
+    'secondly' snapshots every second, 'minutely' snapshots every minute, hourly snapshots every
+    hour, and so on. It will also create snapshots for the targets 'us-west' and 'eu-west' within
+    the 'prod' organization. In addition, it will create snapshots every 12 hours and every week
+    for the 'test' organization, and name them as being intended for the 'offsite' replication
+    target. Analog for snapshots that are taken every 100 milliseconds within the 'test'
+    organization.
 
     The example creates ZFS snapshots with names like `prod_onsite_<timestamp>_secondly`,
     `prod_onsite_<timestamp>_minutely`, `prod_us-west_<timestamp>_hourly`,
@@ -1084,8 +1076,8 @@ usage: bzfs [-h]
     period.
 
     The period name can contain an optional positive integer immediately preceding the time period
-    unit, for example `_2secondly` or `_10minutely` or `_100millisecondly` to indicate
-    that snapshots are taken every 2 seconds, or every 10 minutes, or every 100 milliseconds,
+    unit, for example `_2secondly` or `_10minutely` or `_100millisecondly` to indicate that
+    snapshots are taken every 2 seconds, or every 10 minutes, or every 100 milliseconds,
     respectively.
 
 <!-- -->
@@ -1096,8 +1088,8 @@ usage: bzfs [-h]
 
 *  Default is `%Y-%m-%d_%H:%M:%S`. For the strftime format, see
     https://docs.python.org/3.11/library/datetime.html#strftime-strptime-behavior. Examples:
-    `%Y-%m-%d_%H:%M:%S.%f` (adds microsecond resolution), `%Y-%m-%d_%H:%M:%S%z` (adds
-    timezone offset), `%Y-%m-%dT%H-%M-%S` (no colons).
+    `%Y-%m-%d_%H:%M:%S.%f` (adds microsecond resolution), `%Y-%m-%d_%H:%M:%S%z` (adds timezone
+    offset), `%Y-%m-%dT%H-%M-%S` (no colons).
 
     The name of the snapshot created on the src is
     `$org_$target_strftime(--create-src-snapshots-time*)_$period`. Example:
@@ -1114,10 +1106,9 @@ usage: bzfs [-h]
     --create-src-snapshots-timeformat, into the standard strftime() function to generate the
     timestamp portion of the snapshot name. The TZ_SPEC input parameter is of the form 'UTC' or
     '+HHMM' or '-HHMM' for fixed UTC offsets, or an IANA TZ identifier for auto-adjustment to
-    daylight savings time, or the empty string to use the local timezone, for example '',
-    'UTC', '+0000', '+0530', '-0400', 'America/Los_Angeles', 'Europe/Vienna'. For a
-    list of valid IANA TZ identifiers see
-    https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List
+    daylight savings time, or the empty string to use the local timezone, for example '', 'UTC',
+    '+0000', '+0530', '-0400', 'America/Los_Angeles', 'Europe/Vienna'. For a list of valid IANA TZ
+    identifiers see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List
 
     To change the timezone not only for snapshot name creation, but in all respects for the entire
     program, use the standard 'TZ' Unix environment variable, like so: `export TZ=UTC`.
@@ -1137,9 +1128,9 @@ usage: bzfs [-h]
 
 **--zfs-send-program-opts** *STRING*
 
-*  Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs
-    send' CLI. The value is split on runs of one or more whitespace characters. Default is
-    '--raw --compressed'. To run `zfs send` without options, specify the empty string:
+*  Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI.
+    The value is split on runs of one or more whitespace characters. Default is '--raw
+    --compressed'. To run `zfs send` without options, specify the empty string:
     `--zfs-send-program-opts=''`. See
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html and
     https://github.com/openzfs/zfs/issues/13024
@@ -1150,11 +1141,10 @@ usage: bzfs [-h]
 
 **--zfs-recv-program-opts** *STRING*
 
-*  Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs
-    receive' CLI. The value is split on runs of one or more whitespace characters. Default is
-    '-u'. To run `zfs receive` without options, specify the empty string:
-    `--zfs-recv-program-opts=''`. Example: '-u -o canmount=noauto -o readonly=on -x
-    keylocation -x keyformat -x encryption'. See
+*  Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive'
+    CLI. The value is split on runs of one or more whitespace characters. Default is '-u'. To run
+    `zfs receive` without options, specify the empty string: `--zfs-recv-program-opts=''`.
+    Example: '-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption'. See
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html and
     https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
 
@@ -1164,9 +1154,9 @@ usage: bzfs [-h]
 
 **--zfs-recv-program-opt** *STRING*
 
-*  Parameter to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs
-    receive' CLI. The value can contain spaces and is not split. This option can be specified
-    multiple times. Example: `--zfs-recv-program-opt=-o
+*  Parameter to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive'
+    CLI. The value can contain spaces and is not split. This option can be specified multiple
+    times. Example: `--zfs-recv-program-opt=-o
     --zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`
 
 <!-- -->
@@ -1187,9 +1177,9 @@ usage: bzfs [-h]
     See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html and
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x
 
-    Note: --preserve-properties uses the 'zfs recv -x' option and thus requires either OpenZFS
-    ≥ 2.2.0 (see https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff),
-    or that 'zfs send --props' is not used.
+    Note: --preserve-properties uses the 'zfs recv -x' option and thus requires either OpenZFS ≥
+    2.2.0 (see https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff), or
+    that 'zfs send --props' is not used.
 
 <!-- -->
 
@@ -1198,9 +1188,9 @@ usage: bzfs [-h]
 **--force-rollback-to-latest-snapshot**
 
 *  Before replication, rollback the destination dataset to its most recent destination snapshot
-    (if there is one), via 'zfs rollback', just in case the destination dataset was modified
-    since its most recent snapshot. This is much less invasive than the other --force* options
-    (see below).
+    (if there is one), via 'zfs rollback', just in case the destination dataset was modified since
+    its most recent snapshot. This is much less invasive than the other --force* options (see
+    below).
 
 <!-- -->
 
@@ -1218,10 +1208,10 @@ usage: bzfs [-h]
 
 **--force**
 
-*  Same as --force-rollback-to-latest-common-snapshot (see above), except that additionally, if
-    no common snapshot exists, then delete all destination snapshots before starting replication,
-    and proceed without aborting. Without the --force* flags, the destination dataset is treated
-    as append-only, hence no destination snapshot that already exists is deleted, and instead the
+*  Same as --force-rollback-to-latest-common-snapshot (see above), except that additionally, if no
+    common snapshot exists, then delete all destination snapshots before starting replication, and
+    proceed without aborting. Without the --force* flags, the destination dataset is treated as
+    append-only, hence no destination snapshot that already exists is deleted, and instead the
     operation is aborted with an error when encountering a conflicting snapshot.
 
     Analogy: --force-rollback-to-latest-snapshot is a tiny hammer, whereas
@@ -1235,10 +1225,9 @@ usage: bzfs [-h]
 
 **--force-destroy-dependents**
 
-*  On destination, --force and --force-rollback-to-latest-common-snapshot and --delete-* will
-    add the '-R' flag to their use of 'zfs rollback' and 'zfs destroy', causing them to
-    delete dependents such as clones and bookmarks. This can be very destructive and is rarely
-    advisable.
+*  On destination, --force and --force-rollback-to-latest-common-snapshot and --delete-* will add
+    the '-R' flag to their use of 'zfs rollback' and 'zfs destroy', causing them to delete
+    dependents such as clones and bookmarks. This can be very destructive and is rarely advisable.
 
 <!-- -->
 
@@ -1246,8 +1235,8 @@ usage: bzfs [-h]
 
 **--force-unmount**
 
-*  On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f'
-    flag to their use of 'zfs rollback' and 'zfs destroy'.
+*  On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f' flag
+    to their use of 'zfs rollback' and 'zfs destroy'.
 
 <!-- -->
 
@@ -1269,8 +1258,8 @@ usage: bzfs [-h]
     process their descendant datasets, i.e. children, and children of children, etc (with
     --recursive). No dataset is processed unless --recursive is also specified. Analogy: `bzfs
     --recursive --skip-parent src dst` is akin to Unix `cp -r src/* dst/` whereas `bzfs
-    --recursive --skip-parent --skip-replication --delete-dst-datasets dummy dst` is akin to
-    Unix `rm -r dst/*`
+    --recursive --skip-parent --skip-replication --delete-dst-datasets dummy dst` is akin to Unix
+    `rm -r dst/*`
 
 <!-- -->
 
@@ -1278,8 +1267,8 @@ usage: bzfs [-h]
 
 **--skip-missing-snapshots** *[{fail,dataset,continue}]*
 
-*  During replication, handle source datasets that select no snapshots (and no relevant
-    bookmarks) as follows:
+*  During replication, handle source datasets that select no snapshots (and no relevant bookmarks)
+    as follows:
 
     a) 'fail': Abort with an error.
 
@@ -1287,8 +1276,8 @@ usage: bzfs [-h]
     --recursive and destination dataset does not exist. Otherwise skip to the next dataset.
 
     c) 'continue': Skip nothing. If destination snapshots exist, delete them (with --force) or
-    abort with an error (without --force). If there is no such abort, continue processing with
-    the next dataset. Eventually create empty destination dataset and ancestors if they do not yet
+    abort with an error (without --force). If there is no such abort, continue processing with the
+    next dataset. Eventually create empty destination dataset and ancestors if they do not yet
     exist and source dataset has at least one descendant that selects at least one snapshot.
 
 <!-- -->
@@ -1325,10 +1314,10 @@ usage: bzfs [-h]
 **--retry-max-sleep-secs** *FLOAT*
 
 *  The maximum duration to sleep between retries initially starts with
-    --retry-initial-max-sleep-secs (see above), and doubles on each retry, up to the final
-    maximum of --retry-max-sleep-secs (default: 300). On each retry a random sleep time in the
-    [--retry-min-sleep-secs, current max] range is picked. In a nutshell: retry-min-sleep-secs
-    ≤ retry-initial-max-sleep-secs ≤ retry-max-sleep-secs. The timer resets after each operation.
+    --retry-initial-max-sleep-secs (see above), and doubles on each retry, up to the final maximum
+    of --retry-max-sleep-secs (default: 300). On each retry a random sleep time in the
+    [--retry-min-sleep-secs, current max] range is picked. In a nutshell: retry-min-sleep-secs ≤
+    retry-initial-max-sleep-secs ≤ retry-max-sleep-secs. The timer resets after each operation.
 
 <!-- -->
 
@@ -1348,8 +1337,8 @@ usage: bzfs [-h]
 
 **--skip-on-error** *{fail,tree,dataset}*
 
-*  During replication and deletion, if an error is not retryable, or --retries has been
-    exhausted, or --skip-missing-snapshots raises an error, proceed as follows:
+*  During replication and deletion, if an error is not retryable, or --retries has been exhausted,
+    or --skip-missing-snapshots raises an error, proceed as follows:
 
     a) 'fail': Abort the program with an error. This mode is ideal for testing, clear error
     reporting, and situations where consistency trumps availability.
@@ -1359,8 +1348,8 @@ usage: bzfs [-h]
     tank/user1/foo and tank/user2/bar and an error occurs while processing tank/user1. In this
     case processing skips tank/user1/foo and proceeds with tank/user2.
 
-    c) 'dataset' (default): Same as 'tree' except if the destination dataset already exists,
-    skip to the next dataset instead.
+    c) 'dataset' (default): Same as 'tree' except if the destination dataset already exists, skip
+    to the next dataset instead.
 
     Example: Assume datasets tank/user1/foo and tank/user2/bar and an error occurs while
     processing tank/user1. In this case processing skips tank/user1 and proceeds with
@@ -1388,10 +1377,9 @@ usage: bzfs [-h]
 
 *  Do nothing if the --delete-dst-datasets option is missing. Otherwise, after successful
     replication step, if any, delete existing destination datasets that are selected via
-    --{include|exclude}-dataset* policy yet do not exist within SRC_DATASET (which can be an
-    empty dataset, such as the hardcoded virtual dataset named 'dummy'!). Do not recurse without
-    --recursive. With --recursive, never delete non-selected dataset subtrees or their
-    ancestors.
+    --{include|exclude}-dataset* policy yet do not exist within SRC_DATASET (which can be an empty
+    dataset, such as the hardcoded virtual dataset named 'dummy'!). Do not recurse without
+    --recursive. With --recursive, never delete non-selected dataset subtrees or their ancestors.
 
     For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3,
     and the include/exclude policy selects h1,h2,h3,d1, then delete datasets h1,h2,d1 on the
@@ -1399,8 +1387,8 @@ usage: bzfs [-h]
     selects h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.
 
     Example to delete all tmp datasets within tank2/boo/bar: `bzfs dummy tank2/boo/bar --dryrun
-    --skip-replication --recursive --delete-dst-datasets --include-dataset-regex
-    '(.*/)?tmp.*' --exclude-dataset-regex '!.*'`
+    --skip-replication --recursive --delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*'
+    --exclude-dataset-regex '!.*'`
 
 <!-- -->
 
@@ -1412,26 +1400,26 @@ usage: bzfs [-h]
     replication, and successful --delete-dst-datasets step, if any, delete existing destination
     snapshots whose GUID does not exist within the source dataset (which can be an empty dummy
     dataset!) if the destination snapshots are selected by the --include/exclude-snapshot-*
-    policy, and the destination dataset is selected via --{include|exclude}-dataset* policy.
-    Does not recurse without --recursive.
+    policy, and the destination dataset is selected via --{include|exclude}-dataset* policy. Does
+    not recurse without --recursive.
 
     For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily)
     whereas the source dataset only contains snapshot h3, and the include/exclude policy selects
-    h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the
-    same'. On the other hand, if the include/exclude policy only selects snapshots h1,h2,h3 then
-    only delete snapshots h1,h2 on the destination dataset to make it 'the same'.
+    h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'.
+    On the other hand, if the include/exclude policy only selects snapshots h1,h2,h3 then only
+    delete snapshots h1,h2 on the destination dataset to make it 'the same'.
 
-    *Note:* To delete snapshots regardless, consider using --delete-dst-snapshots in
-    combination with a source that is an empty dataset, such as the hardcoded virtual dataset
-    named 'dummy', like so: `bzfs dummy tank2/boo/bar --dryrun --skip-replication
-    --delete-dst-snapshots --include-snapshot-regex '.*_daily' --recursive`
+    *Note:* To delete snapshots regardless, consider using --delete-dst-snapshots in combination
+    with a source that is an empty dataset, such as the hardcoded virtual dataset named 'dummy',
+    like so: `bzfs dummy tank2/boo/bar --dryrun --skip-replication --delete-dst-snapshots
+    --include-snapshot-regex '.*_daily' --recursive`
 
     *Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in
     which case no snapshots are selected and the --{include|exclude}-snapshot-* filter options
     treat bookmarks as snapshots wrt. selecting.
 
-    *Note:* Does not attempt to delete snapshots that carry a `zfs hold`; instead auto-skips
-    them without failing.
+    *Note:* Does not attempt to delete snapshots that carry a `zfs hold`; instead auto-skips them
+    without failing.
 
     *Performance Note:* --delete-dst-snapshots operates on multiple datasets in parallel (and
     serially within a dataset), using the same dataset order as bzfs replication. The degree of
@@ -1455,19 +1443,19 @@ usage: bzfs [-h]
 
 **--delete-dst-snapshots-except**
 
-*  This flag indicates that the --include/exclude-snapshot-* options shall have inverted
-    semantics for the --delete-dst-snapshots option, thus deleting all snapshots except for the
-    selected snapshots (within the specified datasets), instead of deleting all selected snapshots
-    (within the specified datasets). In other words, this flag enables to specify which snapshots
-    to retain instead of which snapshots to delete.
+*  This flag indicates that the --include/exclude-snapshot-* options shall have inverted semantics
+    for the --delete-dst-snapshots option, thus deleting all snapshots except for the selected
+    snapshots (within the specified datasets), instead of deleting all selected snapshots (within
+    the specified datasets). In other words, this flag enables to specify which snapshots to
+    retain instead of which snapshots to delete.
 
     *Synchronization vs. Backup*: When a real (non-dummy) source dataset is specified in
     combination with --delete-dst-snapshots-except, then any destination snapshot retained by the
     rules above is actually only retained if it also exists in the source dataset - __all other
     destination snapshots are deleted__. This is great for synchronization use cases but should
-    __NEVER BE USED FOR LONG-TERM ARCHIVAL__. Long-term archival use cases should instead
-    specify the `dummy` source dataset as they require an independent retention policy that is
-    not tied to the current contents of the source dataset.
+    __NEVER BE USED FOR LONG-TERM ARCHIVAL__. Long-term archival use cases should instead specify
+    the `dummy` source dataset as they require an independent retention policy that is not tied to
+    the current contents of the source dataset.
 
 <!-- -->
 
@@ -1482,31 +1470,30 @@ usage: bzfs [-h]
     unexpected surprises, make sure to carefully specify ALL snapshot names and periods that shall
     be retained, in combination with --dryrun.
 
-    Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36,
-    'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west': {'secondly': 0,
-    'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly':
-    5}, 'eu-west': {'secondly': 0, 'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly':
-    12, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly': 42, 'weekly':
-    12}, 'onsite': {'100millisecondly': 42}}}"`. This example will, for the organization
-    'prod' and the intended logical target 'onsite', retain secondly snapshots that were
-    created less than 40 seconds ago, yet retain the latest 40 secondly snapshots regardless of
-    creation time. Analog for the latest 40 minutely snapshots, latest 36 hourly snapshots, etc.
-    It will also retain snapshots for the targets 'us-west' and 'eu-west' within the 'prod'
-    organization. In addition, within the 'test' organization, it will retain snapshots that are
-    created every 12 hours and every week as specified, and name them as being intended for the
-    'offsite' replication target. Analog for snapshots that are taken every 100 milliseconds
-    within the 'test' organization. All other snapshots within the selected datasets will be
-    deleted - you've been warned!
+    Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36, 'daily': 31,
+    'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west': {'secondly': 0, 'minutely': 0, 'hourly':
+    36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'eu-west': {'secondly': 0,
+    'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test':
+    {'offsite': {'12hourly': 42, 'weekly': 12}, 'onsite': {'100millisecondly': 42}}}"`. This
+    example will, for the organization 'prod' and the intended logical target 'onsite', retain
+    secondly snapshots that were created less than 40 seconds ago, yet retain the latest 40
+    secondly snapshots regardless of creation time. Analog for the latest 40 minutely snapshots,
+    latest 36 hourly snapshots, etc. It will also retain snapshots for the targets 'us-west' and
+    'eu-west' within the 'prod' organization. In addition, within the 'test' organization, it will
+    retain snapshots that are created every 12 hours and every week as specified, and name them as
+    being intended for the 'offsite' replication target. Analog for snapshots that are taken every
+    100 milliseconds within the 'test' organization. All other snapshots within the selected
+    datasets will be deleted - you've been warned!
 
     The example scans the selected ZFS datasets for snapshots with names like
     `prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`,
     `prod_us-west_<timestamp>_hourly`, `prod_us-west_<timestamp>_daily`,
     `prod_eu-west_<timestamp>_hourly`, `prod_eu-west_<timestamp>_daily`,
-    `test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on,
-    and deletes all snapshots that do not match a retention rule.
+    `test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on, and deletes
+    all snapshots that do not match a retention rule.
 
-    Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be
-    retained for the given period.
+    Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be retained
+    for the given period.
 
     Note: --delete-dst-snapshots-except-plan is a convenience option that auto-generates a series
     of the following other options: --delete-dst-snapshots-except, --new-snapshot-filter-group,
@@ -1539,40 +1526,38 @@ usage: bzfs [-h]
 
 **--monitor-snapshots** *DICT_STRING*
 
-*  Do nothing if the --monitor-snapshots flag is missing. Otherwise, after all other steps,
-    alert the user if the ZFS 'creation' time property of the latest snapshot for any specified
-    snapshot name pattern within the selected datasets is too old wrt. the specified age limit.
-    The purpose is to check if snapshots are successfully taken on schedule, successfully
-    replicated on schedule, and successfully pruned on schedule. Process exit code is 0, 1, 2 on
-    OK, WARNING, CRITICAL, respectively. Example DICT_STRING: `"{'prod': {'onsite':
-    {'100millisecondly': {'latest': {'warning': '300 milliseconds', 'critical': '2
-    seconds'}}, 'secondly': {'latest': {'warning': '2 seconds', 'critical': '14
-    seconds'}}, 'minutely': {'latest': {'warning': '30 seconds', 'critical': '300
-    seconds'}}, 'hourly': {'latest': {'warning': '30 minutes', 'critical': '300
-    minutes'}}, 'daily': {'latest': {'warning': '4 hours', 'critical': '8 hours'}},
-    'weekly': {'latest': {'warning': '2 days', 'critical': '8 days'}}, 'monthly':
-    {'latest': {'warning': '2 days', 'critical': '8 days'}}, 'yearly': {'latest':
-    {'warning': '5 days', 'critical': '14 days'}}, '10minutely': {'latest':
-    {'warning': '0 minutes', 'critical': '0 minutes'}}}, '': {'daily': {'latest':
-    {'warning': '4 hours', 'critical': '8 hours'}}}}}"`. This example alerts the user if
-    the latest src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more than 30
-    minutes late (i.e. more than 30+60=90 minutes old) [warning] or more than 300 minutes late
-    (i.e. more than 300+60=360 minutes old) [critical]. Analog for the latest snapshot named
-    `prod_<timestamp>_daily`, and so on.
+*  Do nothing if the --monitor-snapshots flag is missing. Otherwise, after all other steps, alert
+    the user if the ZFS 'creation' time property of the latest snapshot for any specified snapshot
+    name pattern within the selected datasets is too old wrt. the specified age limit. The purpose
+    is to check if snapshots are successfully taken on schedule, successfully replicated on
+    schedule, and successfully pruned on schedule. Process exit code is 0, 1, 2 on OK, WARNING,
+    CRITICAL, respectively. Example DICT_STRING: `"{'prod': {'onsite': {'100millisecondly':
+    {'latest': {'warning': '300 milliseconds', 'critical': '2 seconds'}}, 'secondly': {'latest':
+    {'warning': '2 seconds', 'critical': '14 seconds'}}, 'minutely': {'latest': {'warning': '30
+    seconds', 'critical': '300 seconds'}}, 'hourly': {'latest': {'warning': '30 minutes',
+    'critical': '300 minutes'}}, 'daily': {'latest': {'warning': '4 hours', 'critical': '8
+    hours'}}, 'weekly': {'latest': {'warning': '2 days', 'critical': '8 days'}}, 'monthly':
+    {'latest': {'warning': '2 days', 'critical': '8 days'}}, 'yearly': {'latest': {'warning': '5
+    days', 'critical': '14 days'}}, '10minutely': {'latest': {'warning': '0 minutes', 'critical':
+    '0 minutes'}}}, '': {'daily': {'latest': {'warning': '4 hours', 'critical': '8 hours'}}}}}"`.
+    This example alerts the user if the latest src or dst snapshot named
+    `prod_onsite_<timestamp>_hourly` is more than 30 minutes late (i.e. more than 30+60=90 minutes
+    old) [warning] or more than 300 minutes late (i.e. more than 300+60=360 minutes old)
+    [critical]. Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.
 
-    Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots
-    shall be checked for the given snapshot name pattern.
+    Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall
+    be checked for the given snapshot name pattern.
 
     Example output with `--verbose`:
 
-    `--monitor_snapshots: OK. Latest snapshot for tank/foo@prod_<timestamp>_daily is 4.18h
-    old: @prod_2025-01-10_08:30:05_daily`
+    `--monitor_snapshots: OK. Latest snapshot for tank/foo@prod_<timestamp>_daily is 4.18h old:
+    @prod_2025-01-10_08:30:05_daily`
 
-    `--monitor_snapshots: OK. Latest snapshot for tank/bar@prod_<timestamp>_daily is 4.18h
-    old: @prod_2025-01-10_08:30:05_daily`
+    `--monitor_snapshots: OK. Latest snapshot for tank/bar@prod_<timestamp>_daily is 4.18h old:
+    @prod_2025-01-10_08:30:05_daily`
 
-    `--monitor_snapshots: Latest snapshot for tank/baz@prod_<timestamp>_daily is 1.2d old
-    but should be at most 1.1d old: @prod_2025-01-09_08:30:05_daily`
+    `--monitor_snapshots: Latest snapshot for tank/baz@prod_<timestamp>_daily is 1.2d old but
+    should be at most 1.1d old: @prod_2025-01-09_08:30:05_daily`
 
     ...
 
@@ -1614,14 +1599,12 @@ usage: bzfs [-h]
     'all'), restricted to hourly and daily snapshots taken within the last 7 days, excluding the
     last 4 hours (to allow for some slack/stragglers), excluding temporary datasets: `bzfs
     tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshot-lists=src+dst+all
-    --recursive --include-snapshot-regex '.*_(hourly|daily)'
-    --include-snapshot-times-and-ranks '7 days ago..4 hours ago' --exclude-dataset-regex
-    'tmp.*'`
+    --recursive --include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7
+    days ago..4 hours ago' --exclude-dataset-regex 'tmp.*'`
 
     This outputs a TSV file containing the following columns:
 
-    `location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation
-    written`
+    `location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation written`
 
     Example output row:
 
@@ -1629,11 +1612,11 @@ usage: bzfs [-h]
     tank1/src /foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205 24576`
 
     If the TSV output file contains zero lines starting with the prefix 'src' and zero lines
-    starting with the prefix 'dst' then no source snapshots are missing on the destination, and
-    no destination snapshots are missing on the source, indicating that the periodic replication
-    and pruning jobs perform as expected. The TSV output is sorted by rel_dataset, and by ZFS
-    creation time within each rel_dataset - the first and last line prefixed with 'all' contains
-    the metadata of the oldest and latest common snapshot, respectively. Third party tools can use
+    starting with the prefix 'dst' then no source snapshots are missing on the destination, and no
+    destination snapshots are missing on the source, indicating that the periodic replication and
+    pruning jobs perform as expected. The TSV output is sorted by rel_dataset, and by ZFS creation
+    time within each rel_dataset - the first and last line prefixed with 'all' contains the
+    metadata of the oldest and latest common snapshot, respectively. Third party tools can use
     this info for post-processing, for example using custom scripts using 'csplit' or duckdb
     analytics queries.
 
@@ -1662,8 +1645,8 @@ usage: bzfs [-h]
 
 *  If --cache-snapshots is specified, maintain a persistent local cache of recent snapshot
     creation times, recent successful replication times, and recent monitoring times, and compare
-    them to a quick 'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if
-    a new snapshot shall be created on the src, and if there are any changes that need to be
+    them to a quick 'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if a
+    new snapshot shall be created on the src, and if there are any changes that need to be
     replicated or monitored. Enabling the cache improves performance if --create-src-snapshots
     and/or replication and/or --monitor-snapshots is invoked frequently (e.g. every minute via
     cron) over a large number of datasets, with each dataset containing a large number of
@@ -1686,8 +1669,8 @@ usage: bzfs [-h]
     executed for real (optional). This option treats both the ZFS source and destination as
     read-only. Accepts an optional argument for fine tuning that is handled as follows:
 
-    a) 'recv': Send snapshot data via 'zfs send' to the destination host and receive it there
-    via 'zfs receive -n', which discards the received data there.
+    a) 'recv': Send snapshot data via 'zfs send' to the destination host and receive it there via
+    'zfs receive -n', which discards the received data there.
 
     b) 'send': Do not execute 'zfs send' and do not execute 'zfs receive'. This is a less
     'realistic' form of dry run, but much faster, especially for large snapshots and slow
@@ -1702,12 +1685,12 @@ usage: bzfs [-h]
 
 **--verbose**, **-v**
 
-*  Print verbose information. This option can be specified multiple times to increase the level
-    of verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the
-    `-v -v -v` flag, maybe along with --dryrun. All ZFS and SSH commands (even with --dryrun)
-    are logged such that they can be inspected, copy-and-pasted into a terminal shell and run
-    manually to help anticipate or diagnose issues. ERROR, WARN, INFO, DEBUG, TRACE output lines
-    are identified by [E], [W], [I], [D], [T] prefixes, respectively.
+*  Print verbose information. This option can be specified multiple times to increase the level of
+    verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v
+    -v -v` flag, maybe along with --dryrun. All ZFS and SSH commands (even with --dryrun) are
+    logged such that they can be inspected, copy-and-pasted into a terminal shell and run manually
+    to help anticipate or diagnose issues. ERROR, WARN, INFO, DEBUG, TRACE output lines are
+    identified by [E], [W], [I], [D], [T] prefixes, respectively.
 
 <!-- -->
 
@@ -1724,19 +1707,19 @@ usage: bzfs [-h]
 **--no-privilege-elevation**, **-p**
 
 *  Do not attempt to run state changing ZFS operations 'zfs
-    create/rollback/destroy/send/receive/snapshot' as root (via 'sudo -u root' elevation
-    granted by administrators appending the following to /etc/sudoers: `<NON_ROOT_USER_NAME>
+    create/rollback/destroy/send/receive/snapshot' as root (via 'sudo -u root' elevation granted
+    by administrators appending the following to /etc/sudoers: `<NON_ROOT_USER_NAME>
     ALL=NOPASSWD:/path/to/zfs`
 
     Instead, the --no-privilege-elevation flag is for non-root users that have been granted
-    corresponding ZFS permissions by administrators via 'zfs allow' delegation mechanism, like
-    so: sudo zfs allow -u $SRC_NON_ROOT_USER_NAME snapshot,destroy,send,bookmark,hold
-    $SRC_DATASET; sudo zfs allow -u $DST_NON_ROOT_USER_NAME
-    mount,create,receive,rollback,destroy $DST_DATASET_OR_POOL.
+    corresponding ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so:
+    sudo zfs allow -u $SRC_NON_ROOT_USER_NAME snapshot,destroy,send,bookmark,hold $SRC_DATASET;
+    sudo zfs allow -u $DST_NON_ROOT_USER_NAME mount,create,receive,rollback,destroy
+    $DST_DATASET_OR_POOL.
 
-    If you do not plan to use the --force* flags and --delete-* CLI options then ZFS
-    permissions 'rollback,destroy' can be omitted, arriving at the absolutely minimal set of
-    required destination permissions: `mount,create,receive`.
+    If you do not plan to use the --force* flags and --delete-* CLI options then ZFS permissions
+    'rollback,destroy' can be omitted, arriving at the absolutely minimal set of required
+    destination permissions: `mount,create,receive`.
 
     For extra security $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME,
     i.e. the sending Unix user on the source and the receiving Unix user at the destination should
@@ -1752,13 +1735,13 @@ usage: bzfs [-h]
 
 **--no-stream**
 
-*  During replication, only replicate the most recent selected source snapshot of a dataset
-    (using -i incrementals instead of -I incrementals), hence skip all intermediate source
-    snapshots that may exist between that and the most recent common snapshot. If there is no
-    common snapshot also skip all other source snapshots for the dataset, except for the most
-    recent selected source snapshot. This option helps the destination to 'catch up' with the
-    source ASAP, consuming a minimum of disk space, at the expense of reducing reliable options
-    for rolling back to intermediate snapshots in the future.
+*  During replication, only replicate the most recent selected source snapshot of a dataset (using
+    -i incrementals instead of -I incrementals), hence skip all intermediate source snapshots that
+    may exist between that and the most recent common snapshot. If there is no common snapshot
+    also skip all other source snapshots for the dataset, except for the most recent selected
+    source snapshot. This option helps the destination to 'catch up' with the source ASAP,
+    consuming a minimum of disk space, at the expense of reducing reliable options for rolling
+    back to intermediate snapshots in the future.
 
 <!-- -->
 
@@ -1767,13 +1750,13 @@ usage: bzfs [-h]
 **--no-resume-recv**
 
 *  Replication of snapshots via 'zfs send/receive' can be interrupted by intermittent network
-    hiccups, reboots, hardware issues, etc. Interrupted 'zfs send/receive' operations are
-    retried if the --retries and --retry-* options enable it (see above). In normal operation
-    bzfs automatically retries such that only the portion of the snapshot is transmitted that has
-    not yet been fully received on the destination. For example, this helps to progressively
-    transfer a large individual snapshot over a wireless network in a timely manner despite
-    frequent intermittent network hiccups. This optimization is called 'resume receive' and uses
-    the 'zfs receive -s' and 'zfs send -t' feature.
+    hiccups, reboots, hardware issues, etc. Interrupted 'zfs send/receive' operations are retried
+    if the --retries and --retry-* options enable it (see above). In normal operation bzfs
+    automatically retries such that only the portion of the snapshot is transmitted that has not
+    yet been fully received on the destination. For example, this helps to progressively transfer
+    a large individual snapshot over a wireless network in a timely manner despite frequent
+    intermittent network hiccups. This optimization is called 'resume receive' and uses the 'zfs
+    receive -s' and 'zfs send -t' feature.
 
     The --no-resume-recv option disables this optimization such that a retry now retransmits the
     entire snapshot from scratch, which could slow down or even prohibit progress in case of
@@ -1782,12 +1765,11 @@ usage: bzfs [-h]
     optimization.
 
     *Note:* Snapshots that have already been fully transferred as part of the current 'zfs
-    send/receive' operation need not be retransmitted regardless of the --no-resume-recv flag.
-    For example, assume a single 'zfs send/receive' operation is transferring incremental
-    snapshots 1 through 10 via 'zfs send -I', but the operation fails while transferring
-    snapshot 10, then snapshots 1 through 9 need not be retransmitted regardless of the
-    --no-resume-recv flag, as these snapshots have already been successfully received at the
-    destination either way.
+    send/receive' operation need not be retransmitted regardless of the --no-resume-recv flag. For
+    example, assume a single 'zfs send/receive' operation is transferring incremental snapshots 1
+    through 10 via 'zfs send -I', but the operation fails while transferring snapshot 10, then
+    snapshots 1 through 9 need not be retransmitted regardless of the --no-resume-recv flag, as
+    these snapshots have already been successfully received at the destination either way.
 
 <!-- -->
 
@@ -1798,19 +1780,19 @@ usage: bzfs [-h]
 *  For increased safety, bzfs replication behaves as follows wrt. ZFS bookmark creation, if it is
     autodetected that the source ZFS pool supports bookmarks:
 
-    * `all` (default): Whenever it has successfully completed a 'zfs send' operation, bzfs
-    creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send'
-    operation, and attaches it to the source dataset. This increases safety at the expense of a
-    little performance.
+    * `all` (default): Whenever it has successfully completed a 'zfs send' operation, bzfs creates
+    a ZFS bookmark of each source snapshot that was sent during that 'zfs send' operation, and
+    attaches it to the source dataset. This increases safety at the expense of a little
+    performance.
 
     * `hourly`: Whenever it has successfully completed replication of the most recent source
     snapshot, bzfs creates a ZFS bookmark of that snapshot, and attaches it to the source dataset.
-    In addition, whenever it has successfully completed a 'zfs send' operation, bzfs creates a
-    ZFS bookmark of each hourly, daily, weekly, monthly and yearly source snapshot that was sent
+    In addition, whenever it has successfully completed a 'zfs send' operation, bzfs creates a ZFS
+    bookmark of each hourly, daily, weekly, monthly and yearly source snapshot that was sent
     during that 'zfs send' operation, and attaches it to the source dataset.
 
-    * `minutely` and `secondly`: Same as `hourly` except that it also creates ZFS bookmarks
-    for minutely and secondly snapshots, respectively.
+    * `minutely` and `secondly`: Same as `hourly` except that it also creates ZFS bookmarks for
+    minutely and secondly snapshots, respectively.
 
     * `none`: No bookmark is created.
 
@@ -1850,10 +1832,9 @@ usage: bzfs [-h]
     pruned less aggressively than snapshots, and destination snapshots should be pruned less
     aggressively than source snapshots. As an example starting point, here is a command that
     deletes all bookmarks older than 90 days, but retains the latest 200 bookmarks (per dataset)
-    regardless of creation time: `bzfs dummy tank2/boo/bar --dryrun --recursive
-    --skip-replication --delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks
-    notime 'all except latest 200' --include-snapshot-times-and-ranks 'anytime..90 days
-    ago'`
+    regardless of creation time: `bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
+    --delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks notime 'all except latest
+    200' --include-snapshot-times-and-ranks 'anytime..90 days ago'`
 
 <!-- -->
 
@@ -1861,12 +1842,12 @@ usage: bzfs [-h]
 
 **--no-use-bookmark**
 
-*  For increased safety, in normal replication operation bzfs replication also looks for
-    bookmarks (in addition to snapshots) on the source dataset in order to find the most recent
-    common snapshot wrt. the destination dataset, if it is auto-detected that the source ZFS pool
-    support bookmarks. The --no-use-bookmark option disables this safety feature but is
-    discouraged, because bookmarks help to ensure that ZFS replication can continue even if source
-    and destination dataset somehow have no common snapshot anymore.
+*  For increased safety, in normal replication operation bzfs replication also looks for bookmarks
+    (in addition to snapshots) on the source dataset in order to find the most recent common
+    snapshot wrt. the destination dataset, if it is auto-detected that the source ZFS pool support
+    bookmarks. The --no-use-bookmark option disables this safety feature but is discouraged,
+    because bookmarks help to ensure that ZFS replication can continue even if source and
+    destination dataset somehow have no common snapshot anymore.
 
     Note that it does not matter whether a bookmark was created by bzfs or a third party script,
     as only the GUID of the bookmark and the GUID of the snapshot is considered for comparison,
@@ -1881,9 +1862,9 @@ usage: bzfs [-h]
 
 **--ssh-cipher** *STRING*
 
-*  SSH cipher specification for encrypting the session (optional); will be passed into ssh
-    -c CLI. --ssh-cipher is a comma-separated list of ciphers listed in order of preference. See
-    the 'Ciphers' keyword in ssh_config(5) for more information:
+*  SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI.
+    --ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the
+    'Ciphers' keyword in ssh_config(5) for more information:
     https://manpages.ubuntu.com/manpages/man5/ssh_config.5.html. Default:
     `^aes256-gcm@openssh.com`
 
@@ -1991,12 +1972,11 @@ usage: bzfs [-h]
 **--max-concurrent-ssh-sessions-per-tcp-connection** *INT*
 
 *  For best throughput, bzfs uses multiple SSH TCP connections in parallel, as indicated by
-    --threads (see above). For best startup latency, each such parallel TCP connection can carry
-    a maximum of S concurrent SSH sessions, where
-    S=--max-concurrent-ssh-sessions-per-tcp-connection (default: 8, min: 1). Concurrent SSH
-    sessions are mostly used for metadata operations such as listing ZFS datasets and their
-    snapshots. This client-side max sessions parameter must not be higher than the server-side
-    sshd_config(5) MaxSessions parameter (which defaults to 10, see
+    --threads (see above). For best startup latency, each such parallel TCP connection can carry a
+    maximum of S concurrent SSH sessions, where S=--max-concurrent-ssh-sessions-per-tcp-connection
+    (default: 8, min: 1). Concurrent SSH sessions are mostly used for metadata operations such as
+    listing ZFS datasets and their snapshots. This client-side max sessions parameter must not be
+    higher than the server-side sshd_config(5) MaxSessions parameter (which defaults to 10, see
     https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html).
 
     *Note:* For better throughput, bzfs uses one dedicated TCP connection per ZFS send/receive
@@ -2021,8 +2001,8 @@ usage: bzfs [-h]
 
     Example: ssh alice@srchost 'zfs send ...' | ssh bob@dsthost 'zfs receive ...'
 
-    * `pull`: Tells the destination host to pull the `zfs send` stream directly from the
-    source host. Requires `sh` and `ssh` on the destination host, plus SSH setup such that the
+    * `pull`: Tells the destination host to pull the `zfs send` stream directly from the source
+    host. Requires `sh` and `ssh` on the destination host, plus SSH setup such that the
     destination user@host can `ssh` into the source host.
 
     Example: ssh bob@dsthost "sh -c 'ssh alice@srchost zfs send ... | zfs receive ...'"
@@ -2034,17 +2014,17 @@ usage: bzfs [-h]
     Example: ssh alice@srchost "sh -c 'zfs send ... | ssh bob@dsthost zfs receive ...'"
 
     *Note:* Orchestration still runs on the initiator; only the bulk data path changes. It is
-    recommended to also set `--ssh-src-user` and `--ssh-dst-user` explicitly in order to
-    avoid potential confusion about which SSH user account performs the nested remote-to-remote
+    recommended to also set `--ssh-src-user` and `--ssh-dst-user` explicitly in order to avoid
+    potential confusion about which SSH user account performs the nested remote-to-remote
     operation.
 
-    *Note:* If the required nested `sh`/`ssh` do not exist, bzfs falls back to
-    `--r2r=off`. `--r2r=pull` falls back to `--r2r=off` if `--ssh-src-config-file` is
-    set to a non-empty value other than `none`, and `--r2r=push` falls back to `--r2r=off`
-    if `--ssh-dst-config-file` is set to a non-empty value other than `none`.
+    *Note:* If the required nested `sh`/`ssh` do not exist, bzfs falls back to `--r2r=off`.
+    `--r2r=pull` falls back to `--r2r=off` if `--ssh-src-config-file` is set to a non-empty value
+    other than `none`, and `--r2r=push` falls back to `--r2r=off` if `--ssh-dst-config-file` is
+    set to a non-empty value other than `none`.
 
-    *Note:* `--pv*` progress reporting options have no effect in r2r modes; progress
-    reporting is disabled.
+    *Note:* `--pv*` progress reporting options have no effect in r2r modes; progress reporting is
+    disabled.
 
 <!-- -->
 
@@ -2052,8 +2032,8 @@ usage: bzfs [-h]
 
 **--bwlimit** *STRING*
 
-*  Sets `pv` and `mbuffer` bandwidth rate limit for zfs send/receive data transfer
-    (optional). Example: `100m` to cap throughput at 100 MB/sec. Default is unlimited. Also see
+*  Sets `pv` and `mbuffer` bandwidth rate limit for zfs send/receive data transfer (optional).
+    Example: `100m` to cap throughput at 100 MB/sec. Default is unlimited. Also see
     https://manpages.ubuntu.com/manpages/man1/pv.1.html
 
 <!-- -->
@@ -2071,9 +2051,9 @@ usage: bzfs [-h]
 
 **--compression-program** *{zstd,lz4,pzstd,pigz,gzip,-}*
 
-*  The name of the 'zstd' executable (optional). Default is 'zstd'. Use '-' to disable the
-    use of this program. The use is auto-disabled if data is transferred locally instead of via
-    the network. This option is about transparent compression-on-the-wire, not about
+*  The name of the 'zstd' executable (optional). Default is 'zstd'. Use '-' to disable the use of
+    this program. The use is auto-disabled if data is transferred locally instead of via the
+    network. This option is about transparent compression-on-the-wire, not about
     compression-at-rest.
 
 <!-- -->
@@ -2082,8 +2062,8 @@ usage: bzfs [-h]
 
 **--compression-program-opts** *STRING*
 
-*  The options to be passed to the compression program on the compression step (optional).
-    Default is '-1' (fastest).
+*  The options to be passed to the compression program on the compression step (optional). Default
+    is '-1' (fastest).
 
 <!-- -->
 
@@ -2091,10 +2071,10 @@ usage: bzfs [-h]
 
 **--mbuffer-program** *{mbuffer,-}*
 
-*  The name of the 'mbuffer' executable (optional). Default is 'mbuffer'. Use '-' to
-    disable the use of this program. The use is auto-disabled if data is transferred locally
-    instead of via the network. This tool is used to smooth out the rate of data flow and prevent
-    bottlenecks caused by network latency or speed fluctuation.
+*  The name of the 'mbuffer' executable (optional). Default is 'mbuffer'. Use '-' to disable the
+    use of this program. The use is auto-disabled if data is transferred locally instead of via
+    the network. This tool is used to smooth out the rate of data flow and prevent bottlenecks
+    caused by network latency or speed fluctuation.
 
 <!-- -->
 
@@ -2110,8 +2090,8 @@ usage: bzfs [-h]
 
 **--ps-program** *{ps,-}*
 
-*  The name of the 'ps' executable (optional). Default is 'ps'. Use '-' to disable the use
-    of this program.
+*  The name of the 'ps' executable (optional). Default is 'ps'. Use '-' to disable the use of this
+    program.
 
 <!-- -->
 
@@ -2119,8 +2099,8 @@ usage: bzfs [-h]
 
 **--pv-program** *{pv,-}*
 
-*  The name of the 'pv' executable (optional). Default is 'pv'. Use '-' to disable the use
-    of this program. This is used for bandwidth rate-limiting and progress monitoring.
+*  The name of the 'pv' executable (optional). Default is 'pv'. Use '-' to disable the use of this
+    program. This is used for bandwidth rate-limiting and progress monitoring.
 
 <!-- -->
 
@@ -2128,9 +2108,8 @@ usage: bzfs [-h]
 
 **--pv-program-opts** *STRING*
 
-*  The options to be passed to the 'pv' program (optional). Default: '--progress --timer
-    --eta --fineta --rate --average-rate --bytes --interval=1 --width=120
-    --buffer-size=2M'.
+*  The options to be passed to the 'pv' program (optional). Default: '--progress --timer --eta
+    --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M'.
 
 <!-- -->
 
@@ -2138,8 +2117,8 @@ usage: bzfs [-h]
 
 **--shell-program** *{sh,-}*
 
-*  The name of the 'sh' executable (optional). Default is 'sh'. Use '-' to disable the use
-    of this program.
+*  The name of the 'sh' executable (optional). Default is 'sh'. Use '-' to disable the use of this
+    program.
 
 <!-- -->
 
@@ -2147,8 +2126,8 @@ usage: bzfs [-h]
 
 **--ssh-program** *{ssh,hpnssh,-}*
 
-*  The name of the 'ssh' executable (optional). Default is 'ssh'. Use '-' to disable the
-    use of this program.
+*  The name of the 'ssh' executable (optional). Default is 'ssh'. Use '-' to disable the use of
+    this program.
 
 <!-- -->
 
@@ -2156,8 +2135,8 @@ usage: bzfs [-h]
 
 **--sudo-program** *{sudo,doas,-}*
 
-*  The name of the 'sudo' executable (optional). Default is 'sudo'. Use '-' to disable the
-    use of this program.
+*  The name of the 'sudo' executable (optional). Default is 'sudo'. Use '-' to disable the use of
+    this program.
 
 <!-- -->
 
@@ -2165,8 +2144,8 @@ usage: bzfs [-h]
 
 **--zpool-program** *{zpool,-}*
 
-*  The name of the 'zpool' executable (optional). Default is 'zpool'. Use '-' to disable
-    the use of this program.
+*  The name of the 'zpool' executable (optional). Default is 'zpool'. Use '-' to disable the use
+    of this program.
 
 <!-- -->
 
@@ -2174,17 +2153,16 @@ usage: bzfs [-h]
 
 **--log-dir** *DIR*
 
-*  Path to the log output directory on local host (optional). Default: $HOME/bzfs-logs. The
-    logger that is used by default writes log files there, in addition to the console. The
-    basename of --log-dir must contain the substring 'bzfs-logs' as this helps prevent
-    accidents. The current.dir symlink always points to the subdirectory containing the most
-    recent log file. The current.log symlink always points to the most recent log file. The
-    current.pv symlink always points to the most recent data transfer monitoring log. Run `tail
-    --follow=name --max-unchanged-stats=1` on both symlinks to follow what's currently going
-    on. Parallel replication generates a separate .pv file per thread. To monitor these, run
-    something like `while true; do clear; for f in $(realpath
-    $HOME/bzfs-logs/current/current.pv)*; do tac -s $(printf '\r') $f | tr '\r' '\n'
-    | grep -m1 -v '^$'; done; sleep 1; done`
+*  Path to the log output directory on local host (optional). Default: $HOME/bzfs-logs. The logger
+    that is used by default writes log files there, in addition to the console. The basename of
+    --log-dir must contain the substring 'bzfs-logs' as this helps prevent accidents. The
+    current.dir symlink always points to the subdirectory containing the most recent log file. The
+    current.log symlink always points to the most recent log file. The current.pv symlink always
+    points to the most recent data transfer monitoring log. Run `tail --follow=name
+    --max-unchanged-stats=1` on both symlinks to follow what's currently going on. Parallel
+    replication generates a separate .pv file per thread. To monitor these, run something like
+    `while true; do clear; for f in $(realpath $HOME/bzfs-logs/current/current.pv)*; do tac -s
+    $(printf '\r') $f | tr '\r' '\n' | grep -m1 -v '^$'; done; sleep 1; done`
 
 <!-- -->
 
@@ -2194,8 +2172,8 @@ usage: bzfs [-h]
 
 *  Default is zrun_. The path name of the log file on local host is
     `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`.
-    Example: `--log-file-prefix=zrun_us-west_ --log-file-suffix=_daily` will generate log
-    file names such as `zrun_us-west_2024-09-03_12:26:15_daily-bl4i1fth.log`
+    Example: `--log-file-prefix=zrun_us-west_ --log-file-suffix=_daily` will generate log file
+    names such as `zrun_us-west_2024-09-03_12:26:15_daily-bl4i1fth.log`
 
 <!-- -->
 
@@ -2205,8 +2183,8 @@ usage: bzfs [-h]
 
 *  Default is the empty string. The path name of the log file on local host is
     `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`.
-    Example: `--log-file-prefix=zrun_us-west_ --log-file-suffix=_daily` will generate log
-    file names such as `zrun_us-west_2024-09-03_12:26:15_daily-bl4i1fth.log`
+    Example: `--log-file-prefix=zrun_us-west_ --log-file-suffix=_daily` will generate log file
+    names such as `zrun_us-west_2024-09-03_12:26:15_daily-bl4i1fth.log`
 
 <!-- -->
 
@@ -2216,8 +2194,8 @@ usage: bzfs [-h]
 
 *  Default is the empty string. The path name of the log file on local host is
     `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`.
-    Example: `--log-file-prefix=zrun_us-west_ --log-file-suffix=_daily` will generate log
-    file names such as `zrun_us-west_2024-09-03_12:26:15_daily-bl4i1fth.log`
+    Example: `--log-file-prefix=zrun_us-west_ --log-file-suffix=_daily` will generate log file
+    names such as `zrun_us-west_2024-09-03_12:26:15_daily-bl4i1fth.log`
 
 <!-- -->
 
@@ -2225,8 +2203,8 @@ usage: bzfs [-h]
 
 **--log-subdir** *{daily,hourly,minutely}*
 
-*  Make a new subdirectory in --log-dir every day, hour or minute; write log files there.
-    Default is 'daily'.
+*  Make a new subdirectory in --log-dir every day, hour or minute; write log files there. Default
+    is 'daily'.
 
 <!-- -->
 
@@ -2263,8 +2241,8 @@ usage: bzfs [-h]
 
 **--log-syslog-prefix** *STRING*
 
-*  The name to prepend to each message that is sent to syslog; identifies bzfs messages as
-    opposed to messages from other sources. Default is 'bzfs'.
+*  The name to prepend to each message that is sent to syslog; identifies bzfs messages as opposed
+    to messages from other sources. Default is 'bzfs'.
 
 <!-- -->
 
@@ -2288,11 +2266,11 @@ usage: bzfs [-h]
     malicious injection of environment variable values that may have unintended effects.
 
     This option can be specified multiple times. A leading `!` character indicates logical
-    negation, i.e. the regex matches if the regex with the leading `!` character removed does
-    not match. The default is to include no environment variables, i.e. to make no exceptions to
+    negation, i.e. the regex matches if the regex with the leading `!` character removed does not
+    match. The default is to include no environment variables, i.e. to make no exceptions to
     --exclude-envvar-regex. Example that retains at least these two env vars:
-    `--include-envvar-regex PATH --include-envvar-regex bzfs_min_pipe_transfer_size`. Example
-    that retains all environment variables without tightened security: `'.*'`
+    `--include-envvar-regex PATH --include-envvar-regex bzfs_min_pipe_transfer_size`. Example that
+    retains all environment variables without tightened security: `'.*'`
 
 <!-- -->
 
@@ -2538,10 +2516,9 @@ group.
 
 **--zfs-recv-o-targets** *{full,incremental,full+incremental}*
 
-*  The zfs send phase or phases during which the extra '-o' options are passed to 'zfs
-    receive'. This can be one of the following choices: 'full', 'incremental',
-    'full+incremental'. Default is 'full'. A 'full' send is sometimes also known as an
-    'initial' send.
+*  The zfs send phase or phases during which the extra '-o' options are passed to 'zfs receive'.
+    This can be one of the following choices: 'full', 'incremental', 'full+incremental'. Default
+    is 'full'. A 'full' send is sometimes also known as an 'initial' send.
 
 <!-- -->
 
@@ -2549,15 +2526,14 @@ group.
 
 **--zfs-recv-o-sources** *STRING*
 
-*  The ZFS sources to provide to the 'zfs get -s' CLI in order to fetch the ZFS dataset
-    properties that will be fed into the --zfs-recv-o-include/exclude-regex filter (see below).
-    The sources are in the form of a comma-separated list (no spaces) containing one or more of
-    the following choices: 'local', 'default', 'inherited', 'temporary', 'received',
-    'none', with the default being 'local'. Uses 'zfs get -p -s $zfs-recv-o-sources all
-    $SRC_DATASET' to fetch the properties to copy -
-    https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html. P.S: Note that the
-    existing 'zfs send --props' option does not filter and that --props only reads properties
-    from the 'local' ZFS property source (https://github.com/openzfs/zfs/issues/13024).
+*  The ZFS sources to provide to the 'zfs get -s' CLI in order to fetch the ZFS dataset properties
+    that will be fed into the --zfs-recv-o-include/exclude-regex filter (see below). The sources
+    are in the form of a comma-separated list (no spaces) containing one or more of the following
+    choices: 'local', 'default', 'inherited', 'temporary', 'received', 'none', with the default
+    being 'local'. Uses 'zfs get -p -s $zfs-recv-o-sources all $SRC_DATASET' to fetch the
+    properties to copy - https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html. P.S:
+    Note that the existing 'zfs send --props' option does not filter and that --props only reads
+    properties from the 'local' ZFS property source (https://github.com/openzfs/zfs/issues/13024).
 
 <!-- -->
 
@@ -2569,20 +2545,20 @@ group.
     only retain the properties whose name matches at least one of the --include regexes but none
     of the --exclude regexes. If a property is excluded this decision is never reconsidered
     because exclude takes precedence over include. Append each retained property to the list of
-    '-o' options in --zfs-recv-program-opt(s), unless another '-o' or '-x' option with the
-    same name already exists therein. In other words, --zfs-recv-program-opt(s) takes precedence.
+    '-o' options in --zfs-recv-program-opt(s), unless another '-o' or '-x' option with the same
+    name already exists therein. In other words, --zfs-recv-program-opt(s) takes precedence.
 
-    Zero or more regexes can be specified. Specify zero regexes to append no extra '-o' option.
-    A leading `!` character indicates logical negation, i.e. the regex matches if the regex with
-    the leading `!` character removed does not match. If the option starts with a `+` prefix
-    then regexes are read from the newline-separated UTF-8 text file given after the `+` prefix,
-    one regex per line inside of the text file. The basename must contain the substring
+    Zero or more regexes can be specified. Specify zero regexes to append no extra '-o' option. A
+    leading `!` character indicates logical negation, i.e. the regex matches if the regex with the
+    leading `!` character removed does not match. If the option starts with a `+` prefix then
+    regexes are read from the newline-separated UTF-8 text file given after the `+` prefix, one
+    regex per line inside of the text file. The basename must contain the substring
     'bzfs_argument_file'.
 
     The default regex is
     'aclinherit|aclmode|acltype|atime|checksum|compression|copies|logbias|primarycache|recordsize|redundant_metadata|relatime|secondarycache|snapdir|sync|xattr'.
-    Example: `--zfs-recv-o-include-regex compression recordsize`. More examples: `.*`
-    (include all properties), `foo bar myapp:.*` (include three regexes)
+    Example: `--zfs-recv-o-include-regex compression recordsize`. More examples: `.*` (include all
+    properties), `foo bar myapp:.*` (include three regexes)
     `+zfs-recv-o_regexes_bzfs_argument_file.txt`,
     `+/path/to/zfs-recv-o_regexes_bzfs_argument_file.txt`
 
@@ -2609,10 +2585,9 @@ group.
 
 **--zfs-recv-x-targets** *{full,incremental,full+incremental}*
 
-*  The zfs send phase or phases during which the extra '-x' options are passed to 'zfs
-    receive'. This can be one of the following choices: 'full', 'incremental',
-    'full+incremental'. Default is 'full+incremental'. A 'full' send is sometimes also known
-    as an 'initial' send.
+*  The zfs send phase or phases during which the extra '-x' options are passed to 'zfs receive'.
+    This can be one of the following choices: 'full', 'incremental', 'full+incremental'. Default
+    is 'full+incremental'. A 'full' send is sometimes also known as an 'initial' send.
 
 <!-- -->
 
@@ -2620,16 +2595,15 @@ group.
 
 **--zfs-recv-x-sources** *STRING*
 
-*  The ZFS sources to provide to the 'zfs get -s' CLI in order to fetch the ZFS dataset
-    properties that will be fed into the --zfs-recv-x-include/exclude-regex filter (see below).
-    The sources are in the form of a comma-separated list (no spaces) containing one or more of
-    the following choices: 'local', 'default', 'inherited', 'temporary', 'received',
-    'none', with the default being 'local'. Uses 'zfs get -p -s $zfs-recv-x-sources all
-    $SRC_DATASET' to fetch the properties to copy -
-    https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html. P.S: Note that the
-    existing 'zfs send --props' option does not filter and that --props only reads properties
-    from the 'local' ZFS property source (https://github.com/openzfs/zfs/issues/13024). Thus, -x
-    opts do not benefit from source != 'local' (which is the default already).
+*  The ZFS sources to provide to the 'zfs get -s' CLI in order to fetch the ZFS dataset properties
+    that will be fed into the --zfs-recv-x-include/exclude-regex filter (see below). The sources
+    are in the form of a comma-separated list (no spaces) containing one or more of the following
+    choices: 'local', 'default', 'inherited', 'temporary', 'received', 'none', with the default
+    being 'local'. Uses 'zfs get -p -s $zfs-recv-x-sources all $SRC_DATASET' to fetch the
+    properties to copy - https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html. P.S:
+    Note that the existing 'zfs send --props' option does not filter and that --props only reads
+    properties from the 'local' ZFS property source (https://github.com/openzfs/zfs/issues/13024).
+    Thus, -x opts do not benefit from source != 'local' (which is the default already).
 
 <!-- -->
 
@@ -2641,19 +2615,19 @@ group.
     only retain the properties whose name matches at least one of the --include regexes but none
     of the --exclude regexes. If a property is excluded this decision is never reconsidered
     because exclude takes precedence over include. Append each retained property to the list of
-    '-x' options in --zfs-recv-program-opt(s), unless another '-o' or '-x' option with the
-    same name already exists therein. In other words, --zfs-recv-program-opt(s) takes precedence.
+    '-x' options in --zfs-recv-program-opt(s), unless another '-o' or '-x' option with the same
+    name already exists therein. In other words, --zfs-recv-program-opt(s) takes precedence.
 
-    Zero or more regexes can be specified. Specify zero regexes to append no extra '-x' option.
-    A leading `!` character indicates logical negation, i.e. the regex matches if the regex with
-    the leading `!` character removed does not match. If the option starts with a `+` prefix
-    then regexes are read from the newline-separated UTF-8 text file given after the `+` prefix,
-    one regex per line inside of the text file. The basename must contain the substring
+    Zero or more regexes can be specified. Specify zero regexes to append no extra '-x' option. A
+    leading `!` character indicates logical negation, i.e. the regex matches if the regex with the
+    leading `!` character removed does not match. If the option starts with a `+` prefix then
+    regexes are read from the newline-separated UTF-8 text file given after the `+` prefix, one
+    regex per line inside of the text file. The basename must contain the substring
     'bzfs_argument_file'.
 
     The default is to include no properties, thus by default no extra '-x' option is appended.
-    Example: `--zfs-recv-x-include-regex compression recordsize`. More examples: `.*`
-    (include all properties), `foo bar myapp:.*` (include three regexes)
+    Example: `--zfs-recv-x-include-regex compression recordsize`. More examples: `.*` (include all
+    properties), `foo bar myapp:.*` (include three regexes)
     `+zfs-recv-x_regexes_bzfs_argument_file.txt`,
     `+/path/to/zfs-recv-x_regexes_bzfs_argument_file.txt`
 

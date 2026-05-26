@@ -159,7 +159,7 @@ if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     sudo dnf -y install rsync curl
     sudo dnf -y install ripgrep --enablerepo=epel
     sudo dnf --setopt=install_weak_deps=False -y install nodejs  # for https://github.com/prettier/prettier via pre-commit
-    # sudo dnf -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
+    # sudo dnf -y install git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo dnf -y install npm bubblewrap; sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     export DEBIAN_FRONTEND=noninteractive
@@ -222,7 +222,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     # Run common preparation steps
     sudo apt-get -y install python3 zstd mbuffer pv cron rsync curl ripgrep python3-venv
     sudo apt-get -y install --no-install-recommends nodejs  # for https://github.com/prettier/prettier via pre-commit
-    # sudo apt-get -y install pandoc git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
+    # sudo apt-get -y install git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
     # sudo apt-get -y install npm bubblewrap; sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 
     mkdir -p --mode=u=rwx,go= "$HOME/.ssh"

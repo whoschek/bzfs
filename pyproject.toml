@@ -54,8 +54,6 @@ Distribution = "https://pypi.org/project/bzfs"
 
 [project.optional-dependencies]
 dev = [  # for development only
-  "argparse-manpage==4.7",          # see https://github.com/praiskup/argparse-manpage
-  # "pandoc", # instead use this for pandoc >= 3.5: `sudo apt-get -y install pandoc` (Ubuntu) or `brew install pandoc` (OSX) or `pkg install -y pandoc` (FreeBSD)
   "pre-commit==4.6.0 ; python_version >= '3.10'",  # see https://github.com/pre-commit/pre-commit
   "black==26.3.1 ; python_version >= '3.10'",      # see https://github.com/psf/black
   "ruff==0.15.13",                                 # see https://github.com/astral-sh/ruff
