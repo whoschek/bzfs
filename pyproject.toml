@@ -55,7 +55,7 @@ Distribution = "https://pypi.org/project/bzfs"
 [project.optional-dependencies]
 dev = [  # for development only
   "pre-commit==4.6.0 ; python_version >= '3.10'",  # see https://github.com/pre-commit/pre-commit
-  "black==26.3.1 ; python_version >= '3.10'",      # see https://github.com/psf/black
+  "black==26.5.1 ; python_version >= '3.10'",      # see https://github.com/psf/black
   "ruff==0.15.13",                                 # see https://github.com/astral-sh/ruff
   "coverage==7.10.7 ; python_version < '3.10'",    # see https://github.com/nedbat/coveragepy
   "coverage==7.14.0 ; python_version >= '3.10'",   # see https://github.com/nedbat/coveragepy
