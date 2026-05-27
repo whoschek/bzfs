@@ -50,7 +50,9 @@ TRIPLE_BACKTICK: Final[str] = "```"
 #############################################################################
 def _argument_parser() -> argparse.ArgumentParser:
     cli = argparse.ArgumentParser(
-        description="Regenerate README markdown sections from the specified argparse parser.",
+        description="Automatically (re)generate README markdown sections directly from argparse parser definitions. This "
+        "avoids manually editing the same docs in two places, namely in the argparse.ArgumentParser help configuration "
+        "(help=, description=, etc.), and also in a manually edited man page within README.md.",
         allow_abbrev=False,
         formatter_class=argparse.RawTextHelpFormatter,
     )

@@ -241,8 +241,8 @@ Before committing any changes, you MUST follow this exact sequence:
 
 ## How to Write Code
 
-- **docstrings:** For every module, class, function, or public method you **add or semantically modify**, attach a
-  docstring ≤ 80 words that concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this
+- **docstrings:** For every module, class, public function, or public method you **add or semantically modify**, attach
+  a docstring ≤ 80 words that concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this
   implementation was chosen).
 - **Do not add Historic Code Comments**: NEVER add code comments that describe how your change relates to the state
   before the change. For example, NEVER add code comments that mention what you added or deleted or changed, NEVER add
