@@ -37,7 +37,7 @@ from typing import (
     Final,
 )
 
-from bzfs_tests.generate_badge import (
+from bzfs_main.util.generate_badge import (
     generate_badge,
 )
 

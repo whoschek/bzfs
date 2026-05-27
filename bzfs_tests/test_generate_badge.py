@@ -29,7 +29,7 @@ from unittest.mock import (
     patch,
 )
 
-from bzfs_tests.generate_badge import (
+from bzfs_main.util.generate_badge import (
     generate_badge,
     main,
 )
@@ -135,7 +135,7 @@ class TestGenerateBadge(unittest.TestCase):
                         "--timeout=12.5",
                     ],
                 ),
-                patch("bzfs_tests.generate_badge.generate_badge") as generate_badge_mock,
+                patch("bzfs_main.util.generate_badge.generate_badge") as generate_badge_mock,
             ):
                 main()
 
@@ -161,7 +161,7 @@ class TestGenerateBadge(unittest.TestCase):
                 ),
                 suppress_output(),
             ):
-                runpy.run_module("bzfs_tests.generate_badge", run_name="__main__")
+                runpy.run_module("bzfs_main.util.generate_badge", run_name="__main__")
 
             svg = output_file.read_text(encoding="utf-8")
 
