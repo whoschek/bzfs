@@ -19,10 +19,13 @@ from __future__ import (
 )
 import argparse
 import importlib
-import importlib.util
 import os
+import runpy
 import sys
 import unittest
+from io import (
+    StringIO,
+)
 from pathlib import (
     Path,
 )
@@ -37,8 +40,15 @@ from bzfs_main import (
     argparse_actions,
     bzfs_jobrunner,
 )
+from bzfs_docs import (
+    update_readme,
+)
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
+)
+from bzfs_tests.tools import (
+    capture_stderr,
+    capture_stdout,
 )
 
 
@@ -51,15 +61,10 @@ def suite() -> unittest.TestSuite:
 
 
 ###############################################################################
-@unittest.skipIf(importlib.util.find_spec("bzfs_docs") is None, "bzfs_docs not installed")
 class TestUpdateReadme(AbstractTestCase):
     """Checks README help rendering for argparse features used by bzfs CLIs."""
 
     def test_common_argparse_features_are_rendered_from_parser_model(self) -> None:
-        from bzfs_docs import (
-            update_readme,
-        )
-
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument("src", metavar="SRC", help="Source dataset.")
         group = parser.add_argument_group("Transfer Options", description="Controls transfer behavior.")
@@ -67,38 +72,30 @@ class TestUpdateReadme(AbstractTestCase):
         group.add_argument("--item", nargs="+", metavar="NAME", help="Name to process.")
         group.add_argument("--hidden", help=argparse.SUPPRESS)
 
-        detail = update_readme._help_detail(parser)
+        details = update_readme._render_help_details(parser)
 
-        self.assertIn('<div id="SRC"></div>', detail)
-        self.assertIn("**SRC**", detail)
-        self.assertNotIn('<div id="-h"></div>', detail)
-        self.assertIn("# TRANSFER OPTIONS", detail)
-        self.assertIn("Controls transfer behavior.", detail)
-        self.assertIn("**--mode** *{fast,safe}*", detail)
-        self.assertIn("Choose mode. Default: safe.", detail)
-        self.assertIn("**--item** *NAME [NAME ...]*", detail)
-        self.assertNotIn("--hidden", detail)
+        self.assertIn('<div id="SRC"></div>', details)
+        self.assertIn("**SRC**", details)
+        self.assertNotIn('<div id="-h"></div>', details)
+        self.assertIn("# TRANSFER OPTIONS", details)
+        self.assertIn("Controls transfer behavior.", details)
+        self.assertIn("**--mode** *{fast,safe}*", details)
+        self.assertIn("Choose mode. Default: safe.", details)
+        self.assertIn("**--item** *NAME [NAME ...]*", details)
+        self.assertNotIn("--hidden", details)
 
     def test_custom_help_action_is_rendered(self) -> None:
-        from bzfs_docs import (
-            update_readme,
-        )
-
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument("--help, -h", action="help", help="Show help.")
 
-        detail = update_readme._help_detail(parser)
+        details = update_readme._render_help_details(parser)
 
-        self.assertNotIn('<div id="-h"></div>', detail)
-        self.assertIn('<div id="--help,_-h"></div>', detail)
-        self.assertIn("**--help, -h**", detail)
+        self.assertNotIn('<div id="-h"></div>', details)
+        self.assertIn('<div id="--help,_-h"></div>', details)
+        self.assertIn("**--help, -h**", details)
 
     def test_bzfs_custom_actions_are_rendered_from_parser_model(self) -> None:
         """Covers project-specific argparse actions without invoking their parsers."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument(
             "root_dataset_pairs",
@@ -169,28 +166,24 @@ class TestUpdateReadme(AbstractTestCase):
             help="Workers min %(min)s default %(default)s.",
         )
 
-        detail = update_readme._help_detail(parser)
+        details = update_readme._render_help_details(parser)
 
-        self.assertIn('<div id="SRC_DATASET_DST_DATASET"></div>', detail)
-        self.assertIn("**SRC_DATASET DST_DATASET**", detail)
-        self.assertIn("**--include-snapshot-regex** *REGEX [REGEX ...]*", detail)
-        self.assertIn("**--compare-include-regex** *[REGEX ...]*", detail)
-        self.assertIn("**--include-snapshot-times-and-ranks** *TIMERANGE [RANKRANGE ...]*", detail)
-        self.assertIn("**--include-snapshot-plan** *DICT_STRING*", detail)
-        self.assertIn("**--delete-dst-snapshots-except-plan** *DICT_STRING*", detail)
-        self.assertIn("**--new-snapshot-filter-group**", detail)
-        self.assertIn("**--log-file-prefix** *STRING*", detail)
-        self.assertIn("Prefix default zrun_.", detail)
-        self.assertIn("**--log-dir** *DIR*", detail)
-        self.assertIn("**--workers** *INT[%]*", detail)
-        self.assertIn("Workers min 1 default (100, True).", detail)
+        self.assertIn('<div id="SRC_DATASET_DST_DATASET"></div>', details)
+        self.assertIn("**SRC_DATASET DST_DATASET**", details)
+        self.assertIn("**--include-snapshot-regex** *REGEX [REGEX ...]*", details)
+        self.assertIn("**--compare-include-regex** *[REGEX ...]*", details)
+        self.assertIn("**--include-snapshot-times-and-ranks** *TIMERANGE [RANKRANGE ...]*", details)
+        self.assertIn("**--include-snapshot-plan** *DICT_STRING*", details)
+        self.assertIn("**--delete-dst-snapshots-except-plan** *DICT_STRING*", details)
+        self.assertIn("**--new-snapshot-filter-group**", details)
+        self.assertIn("**--log-file-prefix** *STRING*", details)
+        self.assertIn("Prefix default zrun_.", details)
+        self.assertIn("**--log-dir** *DIR*", details)
+        self.assertIn("**--workers** *INT[%]*", details)
+        self.assertIn("Workers min 1 default (100, True).", details)
 
     def test_jobrunner_argparse_features_are_rendered_from_parser_model(self) -> None:
         """Covers argparse features used directly by bzfs_jobrunner."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         parser = argparse.ArgumentParser(prog="demo", allow_abbrev=False, formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument("--create-src-snapshots", action="store_true", help="Take snapshots.")
         parser.add_argument("--src-host", default=None, action="append", metavar="STRING", help="Subset source hosts.")
@@ -218,24 +211,20 @@ class TestUpdateReadme(AbstractTestCase):
         parser.add_argument("--version", action="version", version="demo-1", help="Display version.")
         parser.add_argument("--timeout", action=bzfs_jobrunner.RejectArgumentAction, nargs=0, help=argparse.SUPPRESS)
 
-        detail = update_readme._help_detail(parser)
+        details = update_readme._render_help_details(parser)
 
-        self.assertIn("**--create-src-snapshots**", detail)
-        self.assertIn("**--src-host** *STRING*", detail)
-        self.assertIn("**--job-id** *STRING*", detail)
-        self.assertIn("**--ssh-src-config-file** *FILE*", detail)
-        self.assertIn("**--jobrunner-log-level** *{CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}*", detail)
-        self.assertIn("Default is 'INFO'.", detail)
-        self.assertIn("**--work-period-seconds** *FLOAT*", detail)
-        self.assertIn("**--version**", detail)
-        self.assertNotIn("--timeout", detail)
+        self.assertIn("**--create-src-snapshots**", details)
+        self.assertIn("**--src-host** *STRING*", details)
+        self.assertIn("**--job-id** *STRING*", details)
+        self.assertIn("**--ssh-src-config-file** *FILE*", details)
+        self.assertIn("**--jobrunner-log-level** *{CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}*", details)
+        self.assertIn("Default is 'INFO'.", details)
+        self.assertIn("**--work-period-seconds** *FLOAT*", details)
+        self.assertIn("**--version**", details)
+        self.assertNotIn("--timeout", details)
 
     def test_render_blocks_preserves_markdown_headings_and_plain_fenced_code(self) -> None:
         """Covers Markdown blocks that argparse help embeds in README sections."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         text = "# Heading\n\n```\ndemo --option value \\\n--second value\n\nplain output\n```"
 
         rendered = "\n".join(update_readme._render_blocks(text))
@@ -247,10 +236,6 @@ class TestUpdateReadme(AbstractTestCase):
 
     def test_render_blocks_without_language_uses_plain_fence_in_list_item(self) -> None:
         """Covers source-authored plain fenced examples in action help."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         self.assertListEqual(
             ["*  Intro.", "", "", "    ```", "    demo --flag", "    ```", ""],
             update_readme._render_blocks("Intro.\n\n```\ndemo --flag\n```", list_item=True),
@@ -258,41 +243,39 @@ class TestUpdateReadme(AbstractTestCase):
 
     def test_render_blocks_preserves_explicit_line_continuations(self) -> None:
         """Covers explicit shell continuation lines authored in argparse help."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         self.assertListEqual(
             ["", "```", "cmd1 \\", "cmd2", "", "cmd output", "```", ""],
             update_readme._render_blocks("```\ncmd1 \\\ncmd2\n\ncmd output\n```"),
         )
 
+    def test_render_blocks_rejects_unmatched_fenced_code(self) -> None:
+        """Covers malformed Markdown examples before README output is written."""
+        text = "Intro.\n\n```\ndemo --flag"
+        for list_item in (False, True):
+            with self.subTest(list_item=list_item):
+                with self.assertRaises(ValueError) as cm:
+                    update_readme._render_blocks(text, list_item=list_item)
+                self.assertIn("Opening ``` fence without a matching closing fence", str(cm.exception))
+                self.assertIn(repr(text), str(cm.exception))
+
     def test_help_detail_handles_titled_group_without_description_or_action_help(self) -> None:
         """Covers titled groups and intentionally terse argparse actions."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         group = parser.add_argument_group("Advanced Options")
         group.add_argument("--bare", action="store_true")
 
-        detail = update_readme._help_detail(parser)
+        details = update_readme._render_help_details(parser)
 
-        self.assertIn("# ADVANCED OPTIONS", detail)
-        self.assertIn("**--bare**", detail)
-        self.assertNotIn("*  None", detail)
+        self.assertIn("# ADVANCED OPTIONS", details)
+        self.assertIn("**--bare**", details)
+        self.assertNotIn("*  None", details)
 
     def test_render_readme_replaces_generated_sections(self) -> None:
         """Covers full README replacement with a small parser."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         parser = self.make_demo_parser(description="Demo description.")
 
         with patch.dict(os.environ, {"NO_COLOR": "1"}):
-            rendered = update_readme.render_readme(parser, self.readme_template())
+            rendered = update_readme._render_readme(parser, self.readme_template())
 
         self.assertIn("<!-- BEGIN DESCRIPTION SECTION -->\nDemo description.\n\n<!-- END DESCRIPTION SECTION -->", rendered)
         self.assertIn("<!-- BEGIN HELP OVERVIEW SECTION -->\n```\nusage: demo", rendered)
@@ -300,55 +283,46 @@ class TestUpdateReadme(AbstractTestCase):
         self.assertIn('<!-- BEGIN HELP DETAIL SECTION -->\n<div id="--flag"></div>', rendered)
         self.assertNotIn("old description", rendered)
         self.assertNotIn("old overview", rendered)
-        self.assertNotIn("old detail", rendered)
+        self.assertNotIn("old details", rendered)
 
-    def test_main_rejects_wrong_arg_count(self) -> None:
-        """Covers the update_readme command-line usage error path."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
-        with patch.object(sys, "argv", ["update_readme"]):
+    def test_main_requires_module_and_readme_arguments(self) -> None:
+        """Covers argparse validation for required update_readme options."""
+        with patch.object(sys, "argv", ["update_readme"]), patch("sys.stderr", new_callable=StringIO) as stderr:
             with self.assertRaises(SystemExit) as cm:
                 update_readme.main()
 
-        self.assertEqual(
-            "Usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main.bzfs path/to/README.md",
-            cm.exception.code,
-        )
+        self.assertEqual(2, cm.exception.code)
+        self.assertIn("usage:", stderr.getvalue())
+        self.assertIn("the following arguments are required: --module, --readme", stderr.getvalue())
 
     def test_main_updates_readme_file(self) -> None:
         """Covers the update_readme command-line success path without invoking real parsers."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         with TemporaryDirectory() as tmpdir:
             readme_path = Path(tmpdir) / "README.md"
-            readme_path.write_text("old readme", encoding="utf-8")
+            readme_path.write_text(self.readme_template(), encoding="utf-8")
             parser = self.make_demo_parser(description="Demo description.")
 
             with (
-                patch.object(sys, "argv", ["update_readme", "bzfs_main.bzfs", str(readme_path)]),
-                patch.object(update_readme, "render_readme", return_value="new readme") as mock_render,
-                patch("builtins.print") as mock_print,
+                patch.object(sys, "argv", ["update_readme", "--module", "bzfs_main.bzfs", "--readme", str(readme_path)]),
+                patch.dict(os.environ, {"NO_COLOR": "1"}),
                 patch.object(importlib, "import_module") as mock_import,
+                capture_stdout() as stdout,
+                capture_stderr() as stderr,
             ):
                 mock_import.return_value.argument_parser.return_value = parser
-                update_readme.main()
+                runpy.run_path(str(Path(update_readme.__file__).resolve()), run_name="__main__")
 
-            self.assertEqual("new readme", readme_path.read_text(encoding="utf-8"))
+            rendered = readme_path.read_text(encoding="utf-8")
+            self.assertIn("<!-- BEGIN DESCRIPTION SECTION -->\nDemo description.", rendered)
+            self.assertIn("<!-- BEGIN HELP OVERVIEW SECTION -->\n```\nusage: demo", rendered)
+            self.assertIn('<!-- BEGIN HELP DETAIL SECTION -->\n<div id="--flag"></div>', rendered)
             mock_import.assert_called_once_with("bzfs_main.bzfs")
             mock_import.return_value.argument_parser.assert_called_once_with()
-            mock_render.assert_called_once_with(parser, "old readme")
-            mock_print.assert_called_once_with("Done.")
+            self.assertEqual("", stdout.getvalue())
+            self.assertEqual("Success.\n", stderr.getvalue())
 
     def test_main_updates_readme_with_real_cli_modules(self) -> None:
         """Covers README generation with the real bzfs and bzfs_jobrunner parsers."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         cases = (
             (
                 "bzfs_main.bzfs",
@@ -369,9 +343,10 @@ class TestUpdateReadme(AbstractTestCase):
                     readme_path.write_text(self.readme_template(), encoding="utf-8")
 
                     with (
-                        patch.object(sys, "argv", ["update_readme", module_name, str(readme_path)]),
+                        patch.object(sys, "argv", ["update_readme", f"--module={module_name}", f"--readme={readme_path}"]),
                         patch.dict(os.environ, {"NO_COLOR": "1"}),
-                        patch("builtins.print") as mock_print,
+                        capture_stdout() as stdout,
+                        capture_stderr() as stderr,
                     ):
                         update_readme.main()
 
@@ -380,22 +355,19 @@ class TestUpdateReadme(AbstractTestCase):
                         self.assertIn(fragment, rendered)
                     self.assertNotIn("old description", rendered)
                     self.assertNotIn("old overview", rendered)
-                    self.assertNotIn("old detail", rendered)
-                    mock_print.assert_called_once_with("Done.")
+                    self.assertNotIn("old details", rendered)
+                    self.assertEqual("", stdout.getvalue())
+                    self.assertEqual("Success.\n", stderr.getvalue())
 
     def test_main_rejects_unknown_module_without_modifying_file(self) -> None:
         """Covers the update_readme command-line import error path."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         with TemporaryDirectory() as tmpdir:
             readme_path = Path(tmpdir) / "README.md"
             original_readme = "old readme"
             readme_path.write_text(original_readme, encoding="utf-8")
 
             with (
-                patch.object(sys, "argv", ["update_readme", "typo.not_a_module", str(readme_path)]),
+                patch.object(sys, "argv", ["update_readme", "--module", "typo.not_a_module", "--readme", str(readme_path)]),
                 patch.object(importlib, "import_module", side_effect=ModuleNotFoundError("No module named typo")),
             ):
                 with self.assertRaises(ModuleNotFoundError):
@@ -405,10 +377,6 @@ class TestUpdateReadme(AbstractTestCase):
 
     def test_format_usage_returns_raw_usage_and_restores_columns_envvar(self) -> None:
         """Covers scoping of the temporary argparse usage width override."""
-        from bzfs_docs import (
-            update_readme,
-        )
-
         parser = self.make_demo_parser(description="Demo description.")
 
         with patch.dict(os.environ, {"COLUMNS": "120", "NO_COLOR": "1"}):
@@ -443,5 +411,5 @@ class TestUpdateReadme(AbstractTestCase):
             "<!-- END HELP OVERVIEW SECTION -->\n"
             "tail\n"
             "<!-- BEGIN HELP DETAIL SECTION -->\n"
-            "old detail\n"
+            "old details\n"
         )

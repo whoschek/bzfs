@@ -12,7 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Regenerate README markdown sections directly from argparse parser definitions."""
+"""
+Automatically (re)generate README markdown sections directly from argparse parser definitions.
+
+This avoids manually editing the same docs in two places, namely in the argparse.ArgumentParser help configuration
+(help=, description=, etc.), and also in a manually edited man page within README.md.
+
+Has zero dependencies beyond the Python standard library.
+"""
 
 from __future__ import (
     annotations,
@@ -40,34 +47,65 @@ _DEFAULT_GROUPS: Final[frozenset] = frozenset(["positional arguments", "optional
 TRIPLE_BACKTICK: Final[str] = "```"
 
 
+#############################################################################
+def _argument_parser() -> argparse.ArgumentParser:
+    cli = argparse.ArgumentParser(
+        description="Regenerate README markdown sections from the specified argparse parser.",
+        allow_abbrev=False,
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    cli.add_argument(
+        "--module",
+        required=True,
+        metavar="STRING",
+        help="Python module containing the parser factory. Example: 'bzfs_main.bzfs'",
+    )
+    cli.add_argument(
+        "--function",
+        default="argument_parser",
+        metavar="STRING",
+        help="Name of the no-argument parser factory function within the Python module. The function must return an "
+        "instance of argparse.ArgumentParser. Default is '%(default)s'.",
+    )
+    cli.add_argument(
+        "--readme",
+        required=True,
+        type=Path,
+        metavar="PATH",
+        help="Path of README markdown file to update. Example: path/to/README.md",
+    )
+    return cli
+
+
 def main() -> None:
-    """Runs the README generation CLI."""
-    if len(sys.argv) != 3:
-        raise SystemExit("Usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main.bzfs path/to/README.md")
+    """API for command line clients."""
+    args: argparse.Namespace = _argument_parser().parse_args()
+    module = importlib.import_module(args.module)
+    parser = getattr(module, args.function)()
+    assert isinstance(parser, argparse.ArgumentParser)
+    readme_path: Path = args.readme
 
-    parser: argparse.ArgumentParser = importlib.import_module(sys.argv[1]).argument_parser()
-    readme_path = Path(sys.argv[2])
     readme = readme_path.read_text(encoding="utf-8")
-    readme = render_readme(parser, readme)
+    readme = _render_readme(parser, readme)  # do the real work
     readme_path.write_text(readme, encoding="utf-8")
-    print("Done.")
+    print("Success.", file=sys.stderr)
 
 
-def render_readme(parser: argparse.ArgumentParser, readme: str) -> str:
+def _render_readme(parser: argparse.ArgumentParser, readme: str) -> str:
     """Returns README text with generated sections replaced from argparse."""
     description: str = "\n".join(_render_blocks(parser.description or "")).strip() + "\n\n"
     usage: list[str] = [TRIPLE_BACKTICK + "\n"] + _format_usage(parser).splitlines(keepends=True) + [TRIPLE_BACKTICK + "\n"]
-    help_detail: str = _help_detail(parser)
+    help_details: str = _render_help_details(parser)
 
     lines: list[str] = readme.splitlines(keepends=True)
     lines = _replace(lines, "<!-- BEGIN DESCRIPTION SECTION -->", [description], end_tag="<!-- END DESCRIPTION SECTION -->")
     lines = _replace(lines, "<!-- BEGIN HELP OVERVIEW SECTION -->", usage, end_tag="<!-- END HELP OVERVIEW SECTION -->")
-    lines = _replace(lines, "<!-- BEGIN HELP DETAIL SECTION -->", [help_detail])
+    lines = _replace(lines, "<!-- BEGIN HELP DETAIL SECTION -->", [help_details])
     return "".join(lines)
 
 
 def _replace(lines: list[str], begin_tag: str, replacement: list[str], *, end_tag: str | None = None) -> list[str]:
-    """Returns lines with a marked README section replaced; when end_tag is omitted, replacement extends to EOF."""
+    """Replaces the lines between begin_tag and end_tag with the given replacement; if end_tag is None it extends to EOF."""
     begin: int = find_match(lines, lambda line: begin_tag in line, raises=f"{begin_tag} not found")
     if end_tag is None:
         return lines[: begin + 1] + replacement
@@ -85,6 +123,11 @@ def _render_blocks(text: str, *, list_item: bool = False) -> list[str]:
     """
     initial_indent: str = "*  " if list_item else ""
     subsequent_indent: str = "    " if list_item else ""
+    if text.count(TRIPLE_BACKTICK) % 2 != 0:
+        raise ValueError(
+            f"Malformed argparse help text: Opening {TRIPLE_BACKTICK} fence without a matching closing fence; "
+            f"input text: {text!r}"
+        )
 
     # Split prose around fenced code so blank lines inside examples survive.
     blocks: list[str] = []
@@ -108,8 +151,8 @@ def _render_blocks(text: str, *, list_item: bool = False) -> list[str]:
     return results
 
 
-def _help_detail(parser: argparse.ArgumentParser) -> str:
-    """Renders argparse actions as anchored Markdown reference entries."""
+def _render_help_details(parser: argparse.ArgumentParser) -> str:
+    """Renders all argparse actions including their help text as anchored Markdown reference entries."""
     results: list[str] = []
     groups = parser._action_groups  # noqa: SLF001  # pylint: disable=protected-access  # argparse has no public iterator
     for group in groups:
@@ -129,8 +172,8 @@ def _help_detail(parser: argparse.ArgumentParser) -> str:
                 results.append("")
 
         for i, action in enumerate(actions):
-            anchor, header = _action_heading(parser, action)
-            results += [f'<div id="{anchor}"></div>', "", header, ""]
+            anchor, title_line = _action_anchor_and_title_line(parser, action)
+            results += [f'<div id="{anchor}"></div>', "", title_line, ""]
             if action.help:
                 help_text = parser._get_formatter()._expand_help(action)  # noqa: SLF001  # pylint: disable=protected-access
                 results += _render_blocks(help_text, list_item=True)
@@ -140,18 +183,18 @@ def _help_detail(parser: argparse.ArgumentParser) -> str:
     return "\n".join(results)
 
 
-def _action_heading(parser: argparse.ArgumentParser, action: argparse.Action) -> tuple[str, str]:
-    """Returns the README anchor and Markdown heading for one argparse action."""
+def _action_anchor_and_title_line(parser: argparse.ArgumentParser, action: argparse.Action) -> tuple[str, str]:
+    """Returns the README anchor and Markdown rendered title line for one argparse action."""
     formatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
     if not action.option_strings:
         label = formatter._metavar_formatter(action, action.dest)(1)[0]  # noqa: SLF001  # pylint: disable=protected-access
         return label.replace(" ", "_"), f"**{label}**"
     elif action.nargs == 0:
-        header = ", ".join(f"**{option}**" for option in action.option_strings)
+        title_line = ", ".join(f"**{option}**" for option in action.option_strings)
     else:
         args: str = formatter._format_args(action, action.dest.upper())  # noqa: SLF001  # pylint: disable=protected-access
-        header = ", ".join(f"**{option}** *{args}*" for option in action.option_strings)
-    return action.option_strings[0].replace(" ", "_"), header
+        title_line = ", ".join(f"**{option}** *{args}*" for option in action.option_strings)
+    return action.option_strings[0].replace(" ", "_"), title_line
 
 
 def _wrap_text(text: str, *, width: int = _WRAP_COLUMNS, initial_indent: str = "", subsequent_indent: str = "") -> list[str]:
