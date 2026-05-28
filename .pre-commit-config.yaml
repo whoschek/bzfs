@@ -113,10 +113,10 @@ repos:
         additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@2f3f5e36d9b0f8f14c998d50aa20a28832205ae8]  # aka v3.13.1
   - repo: local
     hooks:
-      - id: shellcheck                  # Validate syntax of shell scripts via https://github.com/shellcheck-py/shellcheck-py
+      - id: shellcheck                  # Validate syntax of shell scripts via https://github.com/koalaman/shellcheck
         name: shellcheck
         language: unsupported
-        entry: .venv/bin/shellcheck
+        entry: tools/shellcheck
         types: [shell]
         require_serial: true            # Let shellcheck reason about sourced files consistently
   # Temporarily uncomment this hook when editing .github/dependabot.yml or Docker Compose files
@@ -131,7 +131,7 @@ repos:
     rev: 914e7df21a07ef503a81201c76d2b11c789d3fca  # aka v1.7.12
     hooks:
       - id: actionlint                  # Validate semantics (and some syntax) of GitHub Workflow YAML files
-        args: [--shellcheck=.venv/bin/shellcheck]
+        args: [--shellcheck=tools/shellcheck]
   # - repo: https://github.com/woodruffw/zizmor-pre-commit  # also see https://github.com/zizmorcore/zizmor
   #   rev: 9257c6050c0261b8c57e712f632dc4a8010109a9  # aka v1.25.2
   #   hooks:

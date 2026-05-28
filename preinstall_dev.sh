@@ -25,7 +25,6 @@ export NPM_CONFIG_MIN_RELEASE_AGE=$COOLDOWN_DAYS
 
 export NPM_CONFIG_IGNORE_SCRIPTS=true
 export PIP_ONLY_BINARY=:all:
-export PIP_NO_BINARY=shellcheck-py  # not yet available as wheels
 
 python3 -m pip install --upgrade pip
 python3 -m pip --version
