@@ -86,11 +86,12 @@ To understand the system's architecture and features, follow these steps:
 - If the `.venv` directory does not exist, create it and set it up with all development dependencies as follows:
 
   ```
-  python3 -m venv .venv                     # Create a Python virtual environment
-  . .venv/bin/activate                      # Activate the virtual environment
-  . ./preinstall_dev.sh                     # Prepare install
-  python3 -m pip install -e '.[dev]'        # Install all development dependencies
-  pre-commit install --install-hooks        # Set up linters/formatters to run on every commit
+  python3 -m venv .venv                                        # Create a Python virtual environment
+  . .venv/bin/activate                                         # Activate the virtual environment
+  . ./preinstall_dev.sh                                        # Prepare install
+  python3 -m pip install --require-hashes -r requirements-dev.txt  # Install all development dependencies
+  python3 -m pip install -e '.[dev]' --no-deps                 # Make source edits take effect without reinstalling
+  pre-commit install --install-hooks                           # Set up linters/formatters to run on every commit
   ```
 
 # Command Verification Rules
@@ -326,6 +327,15 @@ task that the main agent must understand before it can continue, and do not dupl
 
 - Do not add any new external Python packages or third-party CLI dependencies. The project is designed to have zero
   required dependencies beyond the Python standard library and standard ZFS/Unix tools.
+- When bumping an existing dependency version in `pyproject.toml` regenerate the lock files with:
+
+  ```
+  ./update_lockfiles.sh
+  deactivate || true
+  rm -rf .venv
+  ```
+
+  Afterwards reapply the steps in [How to Set up the Environment](#how-to-set-up-the-environment).
 
 ## How to Write Documentation
 
@@ -340,7 +350,7 @@ task that the main agent must understand before it can continue, and do not dupl
 
 ## Safety Rules
 
-- NEVER run `rm -rf`, except to delete things in the ephemeral `_tmp/` directory tree.
+- NEVER run `rm -rf`, except to delete things in the ephemeral `_tmp/` or `.venv` directory tree.
 - NEVER run `git reset`.
 - NEVER operate on the `.git` directory with anything other than the `git` CLI.
 - NEVER delete, rename or push a branch, tag or release unless the User explicitly requests it.

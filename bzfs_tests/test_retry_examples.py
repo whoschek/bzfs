@@ -282,7 +282,7 @@ class RetryIntegrationExamples(unittest.TestCase):
             cast,
         )
 
-        import pybreaker  # optional third-party ``pybreaker`` circuit breakers; see https://github.com/danielfm/pybreaker
+        import pybreaker  # type: ignore[import-not-found]  # see https://github.com/danielfm/pybreaker
 
         from bzfs_main.util.retry import (
             RetryableError,
@@ -343,7 +343,7 @@ class RetryIntegrationExamples(unittest.TestCase):
         """Demonstrates how to integrate rate limits and honoring a Retry-After delay."""
         import subprocess
 
-        import limits  # optional third-party ``limits`` library for rate limiting; see https://github.com/alisaifee/limits
+        import limits  # type: ignore[import-not-found]  # see https://github.com/alisaifee/limits
 
         from bzfs_main.util.retry import (
             RetryableError,
@@ -403,7 +403,7 @@ class RetryIntegrationExamples(unittest.TestCase):
     def demo_prometheus_metrics(self) -> None:
         """Demonstrates collecting retry latency/failure metrics via an `after_attempt` Prometheus textfile exporter."""
 
-        import prometheus_client  # optional third-party library; see https://github.com/prometheus/client_python
+        import prometheus_client  # type: ignore[import-not-found]  # https://github.com/prometheus/client_python
 
         from bzfs_main.util.retry import (
             RetryableError,

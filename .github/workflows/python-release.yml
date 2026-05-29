@@ -28,7 +28,7 @@ jobs:
           python-version: 3.12
       - name: Install dependencies
         run: |
-          python3 -m pip install --upgrade pip
+          . ./preinstall_dev.sh
           python3 -m pip install build
       - name: Build package
         run: python3 -m build

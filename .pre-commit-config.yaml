@@ -2,8 +2,7 @@
 # pre‑commit configuration for this repository; see https://github.com/pre-commit/pre-commit
 # ------------------------------------------------------------------------------------------
 # How to enable the Git hook on your machine (do this once per git clone):
-#   1. Install the helper tool:
-#          python3 -m pip install pre-commit
+#   1. Set up the development environment as described in AGENTS.md.
 #   2. From the project root directory run:
 #          pre-commit install --install-hooks
 #      This writes an executable hook into .git/hooks/pre-commit that will run the checks
@@ -27,16 +26,43 @@ default_install_hook_types:
 default_language_version:
   golang: 1.26.3
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # aka v6.0.0
-    hooks:
+  - repo: local
+    hooks:                              # See https://github.com/pre-commit/pre-commit-hooks
       - id: detect-private-key          # Prevent the accidental inclusion of private keys in your commits
+        name: detect private key
+        entry: .venv/bin/detect-private-key
+        language: unsupported
+        types: [text]
       - id: check-merge-conflict        # Check that merge conflicts are not being committed
+        name: check for merge conflicts
+        entry: .venv/bin/check-merge-conflict
+        language: unsupported
+        types: [text]
       - id: check-toml                  # Attempt to load all TOML files to verify syntax
+        name: check toml
+        entry: .venv/bin/check-toml
+        language: unsupported
+        types: [toml]
       - id: check-yaml                  # Attempt to load all YAML files to verify syntax
+        name: check yaml
+        entry: .venv/bin/check-yaml
+        language: unsupported
+        types: [yaml]
       - id: check-xml                   # Attempt to load all XML files to verify syntax via xmllint
+        name: check xml
+        entry: .venv/bin/check-xml
+        language: unsupported
+        types: [xml]
       - id: check-json                  # Attempt to load all JSON files to verify syntax
+        name: check json
+        entry: .venv/bin/check-json
+        language: unsupported
+        types: [json]
       - id: pretty-format-json          # Auto-format JSON files
+        name: pretty format json
+        entry: .venv/bin/pretty-format-json
+        language: unsupported
+        types: [json]
         args: [
           --autofix,
           --indent=4,
@@ -45,11 +71,31 @@ repos:
           --top-keys="",                # No keys forced to the top
         ]
       - id: check-shebang-scripts-are-executable
+        name: check that scripts with shebangs are executable
+        entry: .venv/bin/check-shebang-scripts-are-executable
+        language: unsupported
+        types: [text]
       - id: check-symlinks              # Check for symlinks that do not point to anything
+        name: check for broken symlinks
+        entry: .venv/bin/check-symlinks
+        language: unsupported
+        types: [symlink]
       - id: mixed-line-ending
+        name: mixed line ending
+        entry: .venv/bin/mixed-line-ending
+        language: unsupported
+        types: [text]
         args: [--fix=lf]                # Replace line endings with linefeed
       - id: trailing-whitespace         # Remove whitespace from the end of lines
+        name: trim trailing whitespace
+        entry: .venv/bin/trailing-whitespace-fixer
+        language: unsupported
+        types: [text]
       - id: end-of-file-fixer           # Remove whitespace from the end of files and replace end of files with linefeed
+        name: fix end of files
+        entry: .venv/bin/end-of-file-fixer
+        language: unsupported
+        types: [text]
   - repo: local
     hooks:
       - id: shfmt                       # Auto-format shell scripts
@@ -65,10 +111,14 @@ repos:
           --case-indent,                # Indent switch cases
         ]
         additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@2f3f5e36d9b0f8f14c998d50aa20a28832205ae8]  # aka v3.13.1
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: 745eface02aef23e168a8afb6b5737818efbea95  # aka v0.11.0.1
+  - repo: local
     hooks:
-      - id: shellcheck                  # Validate syntax of shell scripts
+      - id: shellcheck                  # Validate syntax of shell scripts via https://github.com/shellcheck-py/shellcheck-py
+        name: shellcheck
+        language: unsupported
+        entry: .venv/bin/shellcheck
+        types: [shell]
+        require_serial: true            # Let shellcheck reason about sourced files consistently
   # Temporarily uncomment this hook when editing .github/dependabot.yml or Docker Compose files
   # - repo: https://github.com/python-jsonschema/check-jsonschema
   #   rev: f805888065fdb6162e1f800e50bb9460cbd223d6  # aka 0.37.2
@@ -87,10 +137,14 @@ repos:
   #   hooks:
   #     - id: zizmor                              # Validate syntax of GitHub Workflow YAML files
   #       args: [--fix=all]
-  - repo: https://github.com/DanielNoord/pydocstringformatter
-    rev: d5190a85272ddf6a3d14bfd88ab327f84aa2a0a7  # aka v0.7.5
+  - repo: local
     hooks:
       - id: pydocstringformatter        # Reformat Python docstrings and wrap them to a specific line length
+        name: pydocstringformatter      # See https://github.com/DanielNoord/pydocstringformatter
+        language: unsupported
+        entry: .venv/bin/python -m pydocstringformatter
+        types: [python]
+        require_serial: true
         args: [                         # see https://pydocstringformatter.readthedocs.io/en/latest/usage.html
           --write,                      # Let pre-commit make changes to files instead of printing diffs
           --max-line-length=126,        # Summary / long-description length
@@ -100,24 +154,37 @@ repos:
           --no-final-period,            # Preserve author-written wording and punctuation
           --no-closing-quotes,          # Don't fix the position of the closing quotes
         ]
-  - repo: https://github.com/pycqa/isort
-    rev: ec0efaee4acfce198521e43caa3029b06cedd64a  # aka 6.1.0
+  - repo: local
     hooks:
       - id: isort                       # Reformat Python imports more precisely than ruff (via force_grid_wrap)
+        name: isort                     # See https://github.com/pycqa/isort
+        language: unsupported
+        entry: .venv/bin/python -m isort
+        args: [--filter-files]
+        types_or: [python, pyi]
         stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
+        require_serial: true
       # config options like `force_grid_wrap` live in pyproject.toml
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 5e2fb545eba1ea9dc051f6f962d52fe8f76a9794  # aka v0.15.13
+  - repo: local
     hooks:
       - id: ruff-check                  # Run `ruff` linter to check if there are problems in the Python source code
+        name: ruff check                # See https://github.com/astral-sh/ruff
+        language: unsupported
+        entry: .venv/bin/ruff
+        args: [check, --force-exclude]
+        types_or: [python, pyi]
+        require_serial: true
       # config options like `target-version` live in pyproject.toml
-  - repo: https://github.com/pycqa/pylint
-    rev: 88e1ab7545a4af4aea15c305a154c164a95ab842  # aka v4.0.5
+  - repo: local
     hooks:
-      - id: pylint                      # Run `pylint` linter to check if there are problems in the Python source code
+      - id: pylint                      # Run `pylint` linter to check Python source code via https://github.com/pycqa/pylint
         name: pylint (cyclic imports, etc)
+        language: unsupported
+        entry: .venv/bin/python -m pylint
+        types: [python]
         stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
         files: '^(?!bzfs_tests/).*\.py$'  # Run on all Python files except bzfs_tests/
+        require_serial: true
         # config options like `enable` live in pyproject.toml
   # - repo: https://github.com/facebook/pyrefly-pre-commit
   #   rev: ef09b1b600419b206ac1a8c6ba4ab224a9ed58c3  # aka 1.0.0
@@ -132,11 +199,15 @@ repos:
   #       name: "pyrefly check (type checking)"
   #       exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
   #       pass_filenames: false
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: fc0f09a29bb495f4a91f00266155d6282d52485d  # aka v1.20.2
+  - repo: local
     hooks:
-      - id: mypy                             # Run `mypy` Python type checker
+      - id: mypy                             # Run `mypy` Python type checker; see https://github.com/python/mypy
+        name: mypy
+        language: unsupported
+        entry: .venv/bin/python -m mypy
+        types_or: [python, pyi]
         exclude: '^\.git.*$'
+        require_serial: true
         # config options like `select` live in pyproject.toml
   - repo: local
     hooks:
@@ -181,10 +252,10 @@ repos:
     hooks:
       - id: prettier-markdown                   # Auto-format Markdown files
         name: prettier (markdown)
-        language: system
+        language: unsupported
         entry: tools/prettier
-        require_serial: true
         types: [markdown]
+        require_serial: true
         args: [                                 # See https://prettier.io/docs/cli and https://prettier.io/docs/options
           --check,
           --write,
@@ -195,25 +266,31 @@ repos:
         exclude: '^(README.*|prd)\.md$'
       - id: prettier-yaml                       # Auto-format YAML files
         name: prettier (yaml)
-        language: system
+        language: unsupported
         entry: tools/prettier
-        require_serial: true
         types: [yaml]
+        require_serial: true
         args: [
           --check,
           --write,
           --print-width=125,
         ]
         exclude: '^\.pre-commit-config\.yaml$'
-  - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: 4160603246a6b365d4a2af661c6d71b0a0f50478  # aka 26.5.1
+  - repo: local
     hooks:
-      - id: black                               # Run `black` Python code formatter
+      - id: black                               # Run `black` Python code formatter; see https://github.com/psf/black
+        name: black
+        language: unsupported
+        entry: .venv/bin/python -m black
+        types_or: [python, pyi]
+        require_serial: true
       # style options like `line_length` live in pyproject.toml
-  - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: 91ab4bf57e58b32adf1a122681f6ebe164d081c8  # aka v4.4.0
+  - repo: local
     hooks:
       - id: conventional-pre-commit             # Check commit msg has the form `type(scope): description`
+        name: conventional-pre-commit           # See https://github.com/compilerla/conventional-pre-commit
+        language: unsupported
+        entry: .venv/bin/conventional-pre-commit
         stages: [commit-msg]
         args: [
           --no-color,

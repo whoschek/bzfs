@@ -1,0 +1,68 @@
+# Copyright 2026 Wolfgang Hoschek AT mac DOT com
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Dependabot Check Lock Files
+
+on: pull_request
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check-lockfiles:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # aka v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # aka v6.2.0
+        with:
+          python-version: 3.14
+      - name: Regenerate lock files
+        run: |
+          ./update_lockfiles.sh
+      - name: Notify user
+        run: |
+          if git diff --quiet requirements*.txt; then
+            {
+              echo "## Lock files are up to date"
+              echo
+              echo "No manual lock file refresh is needed for this Dependabot PR."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Lock files are already up to date. No manual refresh is needed."
+          else
+            {
+              echo "## Consider refreshing lock files"
+              echo
+              echo "This Dependabot PR changes dependency inputs, and regenerating the lock files produced a diff."
+              echo "Review the diff and decide whether to refresh the lock files manually before merging."
+              echo
+              echo '```console'
+              echo "./update_lockfiles.sh"
+              echo '```'
+              echo
+              echo "========================================================================"
+              echo "git diff for lock file changes:"
+              git diff requirements*.txt
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Consider refreshing lock files. Review the regenerated diff before deciding whether to push lockfile changes."
+            exit 1
+          fi

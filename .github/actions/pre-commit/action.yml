@@ -27,8 +27,11 @@ runs:
       if: ${{ !contains(fromJson('["3.8", "3.9"]'), inputs.python-version) }}
       shell: bash
       run: |
-        source ./preinstall_dev.sh
-        python3 -m pip install -e '.[dev]'
+        python3 -m venv .venv
+        . .venv/bin/activate
+        . ./preinstall_dev.sh
+        python3 -m pip install --require-hashes -r requirements-dev.txt
+        python3 -m pip install -e '.[dev]' --no-deps
 
         # In CI, disable pre-commit fail_fast so all hooks run and report.
         # This keeps local developer experience unchanged (fail_fast remains true in the repo config).

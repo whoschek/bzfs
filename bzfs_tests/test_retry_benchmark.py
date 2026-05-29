@@ -182,13 +182,7 @@ class TestTenacityBenchmark(unittest.TestCase):
         max_previous_outcomes: int = 0,
         success_on: int = 1_000_000_000,
     ) -> None:
-        from tenacity import RetryError as TenacityRetryError
-        from tenacity import (
-            Retrying,
-            retry_if_exception_type,
-            stop_after_attempt,
-            wait_none,
-        )
+        import tenacity  # type: ignore[import-not-found]
 
         previous_outcomes: tuple[object, ...] = ()
 
@@ -198,10 +192,10 @@ class TestTenacityBenchmark(unittest.TestCase):
                 retry_state.outcome,
             )
 
-        retrying = Retrying(
-            retry=retry_if_exception_type(RetryableError),
-            stop=stop_after_attempt(101),
-            wait=wait_none(),
+        retrying = tenacity.Retrying(
+            retry=tenacity.retry_if_exception_type(RetryableError),
+            stop=tenacity.stop_after_attempt(101),
+            wait=tenacity.wait_none(),
             before_sleep=before_sleep if max_previous_outcomes > 0 else None,
             reraise=False,
         )
@@ -218,13 +212,13 @@ class TestTenacityBenchmark(unittest.TestCase):
         previous_outcomes = ()
         try:  # warmup
             retrying(fn)
-        except TenacityRetryError:
+        except tenacity.RetryError:
             pass
 
-        retrying = Retrying(
-            retry=retry_if_exception_type(RetryableError),
-            stop=stop_after_attempt(max_retries + 1),
-            wait=wait_none(),
+        retrying = tenacity.Retrying(
+            retry=tenacity.retry_if_exception_type(RetryableError),
+            stop=tenacity.stop_after_attempt(max_retries + 1),
+            wait=tenacity.wait_none(),
             before_sleep=before_sleep if max_previous_outcomes > 0 else None,
             reraise=False,
         )
@@ -244,7 +238,7 @@ class TestTenacityBenchmark(unittest.TestCase):
             previous_outcomes = ()
             try:
                 retrying(fn)
-            except TenacityRetryError:
+            except tenacity.RetryError:
                 pass
 
         elapsed_secs = time.perf_counter() - start
