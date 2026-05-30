@@ -46,6 +46,8 @@ class TestRemotePathValidation(unittest.TestCase):
     def setUp(self) -> None:
         self.repo_root: Path = Path(__file__).resolve().parents[1]
         self.script: str = os.path.join(self.repo_root, "test_host.sh")
+        if not os.path.isfile(self.script):
+            self.skipTest(f"Requires source checkout with {self.script}")
 
     def test_rejects_dangerous_remote_paths_before_running_rsync(self) -> None:
         # Assert that input validation rejects dangerous paths before rsync/ssh runs.
