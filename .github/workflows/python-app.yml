@@ -34,6 +34,7 @@ on:
         type: choice
         options:
           - test_release_packaging
+          - test_check_zizmor
           - test_ubuntu_24_04_fast
           - test_ubuntu_24_04_hpnssh
           - test_ubuntu_24_04_zfs_2_4
@@ -74,6 +75,10 @@ on:
         description: "Number of times to run the jobs"
         type: string
         default: "1"
+      run_pip_audit:
+        description: Run pip-audit
+        type: boolean
+        default: false
   schedule:
     - cron: "5 8 * * *" # Run nightly for main at 8:05am UTC,
     # - cron: "0 3 * * *"  # Run nightly for branch-1.1.x at 3am UTC
@@ -129,6 +134,30 @@ jobs:
       - name: make_release
         run: |
           ./.github-workflow-scripts/make_release.sh
+
+  test_check_zizmor:
+    if: (github.event_name != 'workflow_dispatch' && github.event.schedule != '0 3 * * *') || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_check_zizmor' || contains(github.event.inputs.job_names, 'test_check_zizmor')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: *actions_checkout
+        with:
+          persist-credentials: false
+      - name: Run zizmor check
+        uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d # aka v0.5.6
+        with:
+          version: "1.25.2"
+          advanced-security: false
+      - name: Run pip-audit
+        if: ${{ inputs.run_pip_audit }}
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          . ./preinstall_dev.sh
+          python3 -m pip install pip-audit==2.10.0
+          pip-audit --requirement requirements*.txt
 
   test_ubuntu_24_04_fast: # currently uses zfs-2.2.2
     needs: create_iteration_test_matrix
