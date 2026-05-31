@@ -1,6 +1,9 @@
 [build-system]
-requires = ["setuptools >= 75.1"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build==0.11.16"]
+build-backend = "uv_build"
+
+[tool.bzfs]
+uv-install-script-sha256 = "b9f925505899533f36a3acfdf8684c661ff2d5c8735f759fca768367b5996123"  # for uv_build above
 
 [project]
 name = "bzfs"
@@ -24,7 +27,6 @@ classifiers = [
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
@@ -38,7 +40,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 keywords = ["bzfs", "ZFS", "snapshot", "replication", "backup", "synchronization"]
-license = {text = "Apache License (2.0)"}
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">= 3.9"
 dependencies = [
 ]
@@ -72,13 +75,10 @@ bzfs = "bzfs_main.bzfs:main"
 bzfs_jobrunner = "bzfs_main.bzfs_jobrunner:main"
 bzfs-test = "bzfs_tests.test_all:main"
 
-[tool.setuptools.packages.find]
-where = ["."]
-exclude = ["bzfs_docs", "bash_completion_d", "lab"]
-
-[tool.setuptools.package-data]
-bzfs_main = ["py.typed"]
-bzfs_tests = ["*.json", "py.typed"]
+[tool.uv.build-backend]
+module-name = ["bzfs_main", "bzfs_tests", "bzfs_testbed"]
+module-root = ""
+source-exclude = ["bzfs_testbed/**/*.md", "bzfs_testbed/**/*.sh"]
 
 [tool.commitizen]  # release mgmt via https://github.com/commitizen-tools/commitizen + https://www.conventionalcommits.org
 name = "cz_conventional_commits"

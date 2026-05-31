@@ -282,17 +282,7 @@ for subdir in "${shadow_subdirs[@]}"; do
 done
 
 if ! command -v uv > /dev/null 2>&1; then  # see https://docs.astral.sh/uv/getting-started/installation/
-    uv_install_script="$(mktemp)"
-    curl -fsSL --retry 999 --retry-delay 5 --retry-max-time 60 --retry-all-errors \
-        --output "$uv_install_script" https://astral.sh/uv/0.11.16/install.sh
-    expected_sha256='b9f925505899533f36a3acfdf8684c661ff2d5c8735f759fca768367b5996123'
-    actual_sha256="$(cat "$uv_install_script" | sha256sum -b | sed 's/[[:blank:]].*//')"
-    if [[ "$actual_sha256" != "$expected_sha256" ]]; then
-        echo "ERROR: sha256 mismatch for uv ${uv_install_script}: ${actual_sha256} != ${expected_sha256}" >&2
-        exit 1
-    fi
-    sh "$uv_install_script"
-    rm -f "$uv_install_script"
+    UV_INSTALL_DIR="$HOME/.local/bin" UV_NO_MODIFY_PATH=0 ./tools/install_uv.sh
 fi
 
 # Display ZFS version and Python version

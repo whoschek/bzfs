@@ -10,12 +10,15 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   deploy:
     runs-on: ubuntu-24.04
     environment:
       name: pypi
-      url: https://pypi.org/p/bzfs
     permissions:
       id-token: write # for PyPI's trusted publishing
     steps:
@@ -25,14 +28,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # aka v6.2.0
         with:
-          python-version: 3.12
-      - name: Install dependencies
+          python-version: 3.14
+      - name: make_release
         run: |
-          . ./preinstall_dev.sh
-          python3 -m pip install build
-      - name: Build package
-        run: python3 -m build
-      - name: Publish package
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # aka v1.14.0; see https://github.com/pypa/gh-action-pypi-publish
-        with:
-          verbose: true
+          MAKE_RELEASE_PUBLISH=true ./.github-workflow-scripts/make_release.sh
