@@ -78,7 +78,7 @@ bzfs-test = "bzfs_tests.test_all:main"
 [tool.uv.build-backend]
 module-name = ["bzfs_main", "bzfs_tests", "bzfs_testbed"]
 module-root = ""
-source-exclude = ["bzfs_testbed/**/*.md", "bzfs_testbed/**/*.sh"]
+source-exclude = ["/bzfs_testbed/**/*.md", "/bzfs_testbed/**/*.sh"]
 
 [tool.commitizen]  # release mgmt via https://github.com/commitizen-tools/commitizen + https://www.conventionalcommits.org
 name = "cz_conventional_commits"
