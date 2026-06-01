@@ -32,7 +32,7 @@ runs:
     - name: Set up Lima
       uses: lima-vm/lima-actions/setup@55627e31b78637bf254a8b2a14da8ea7d12564e5 # aka v1.1.0; see https://github.com/lima-vm/lima-actions
       with: # or manually install via `brew install lima` or equivalent
-        version: "v2.1.1"
+        version: "v2.1.2"
     - name: Start VM via Lima
       shell: bash
       env:
