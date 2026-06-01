@@ -64,6 +64,24 @@ def suite() -> unittest.TestSuite:
 class TestUpdateReadme(AbstractTestCase):
     """Checks README help rendering for argparse features used by bzfs CLIs."""
 
+    def test_replace_rejects_missing_begin_tag(self) -> None:
+        """Covers missing generated-section start markers."""
+        lines = ["prefix\n", "<!-- END -->\n"]
+
+        with self.assertRaises(ValueError) as cm:
+            update_readme_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
+
+        self.assertEqual("Not found: '<!-- BEGIN -->'", str(cm.exception))
+
+    def test_replace_rejects_missing_end_tag(self) -> None:
+        """Covers unterminated generated sections after a start marker."""
+        lines = ["prefix\n", "<!-- BEGIN -->\n", "old generated text\n"]
+
+        with self.assertRaises(ValueError) as cm:
+            update_readme_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
+
+        self.assertEqual("Not found: '<!-- END -->'", str(cm.exception))
+
     def test_common_argparse_features_are_rendered_from_parser_model(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument("src", metavar="SRC", help="Source dataset.")
@@ -274,14 +292,40 @@ class TestUpdateReadme(AbstractTestCase):
         """Covers full README replacement with a small parser."""
         parser = self.make_demo_parser(description="Demo description.")
 
-        with patch.dict(os.environ, {"NO_COLOR": "1"}):
-            rendered = update_readme_from_argparse._render_readme(parser, self.readme_template())
+        rendered = update_readme_from_argparse._render_readme(parser, self.readme_template())
 
-        self.assertIn("<!-- BEGIN DESCRIPTION SECTION -->\nDemo description.\n\n<!-- END DESCRIPTION SECTION -->", rendered)
-        self.assertIn("<!-- BEGIN HELP OVERVIEW SECTION -->\n```\nusage: demo", rendered)
+        self.assertIn("<!-- BEGIN_MANPAGE_DESCRIPTION -->\nDemo description.\n<!-- END_MANPAGE_DESCRIPTION -->", rendered)
+        self.assertIn("<!-- BEGIN_MANPAGE_USAGE -->\n```\nusage: demo", rendered)
         self.assertNotIn("\x1b[", rendered)
-        self.assertIn('<!-- BEGIN HELP DETAIL SECTION -->\n<div id="--flag"></div>', rendered)
+        self.assertIn('<!-- BEGIN_MANPAGE_DETAILS -->\n<div id="--flag"></div>', rendered)
+        self.assertIn("<!-- END_MANPAGE_DETAILS -->\nafter generated details\n", rendered)
         self.assertNotIn("old description", rendered)
+        self.assertNotIn("old overview", rendered)
+        self.assertNotIn("old details", rendered)
+
+    def test_render_readme_without_description_section_replaces_usage_and_details(self) -> None:
+        """Covers README files that only opt into generated usage and details."""
+        parser = self.make_demo_parser(description="Demo description.")
+        readme = (
+            "manual introduction\n"
+            "<!-- BEGIN_MANPAGE_USAGE -->\n"
+            "old overview\n"
+            "<!-- END_MANPAGE_USAGE -->\n"
+            "tail\n"
+            "<!-- BEGIN_MANPAGE_DETAILS -->\n"
+            "old details\n"
+            "<!-- END_MANPAGE_DETAILS -->\n"
+            "after generated details\n"
+        )
+
+        rendered = update_readme_from_argparse._render_readme(parser, readme)
+
+        self.assertIn("manual introduction\n", rendered)
+        self.assertNotIn("BEGIN_MANPAGE_DESCRIPTION", rendered)
+        self.assertNotIn("Demo description.", rendered)
+        self.assertIn("<!-- BEGIN_MANPAGE_USAGE -->\n```\nusage: demo", rendered)
+        self.assertIn('<!-- BEGIN_MANPAGE_DETAILS -->\n<div id="--flag"></div>', rendered)
+        self.assertIn("<!-- END_MANPAGE_DETAILS -->\nafter generated details\n", rendered)
         self.assertNotIn("old overview", rendered)
         self.assertNotIn("old details", rendered)
 
@@ -304,7 +348,6 @@ class TestUpdateReadme(AbstractTestCase):
 
             with (
                 patch.object(sys, "argv", ["update_readme", "--module", "bzfs_main.bzfs", "--readme", str(readme_path)]),
-                patch.dict(os.environ, {"NO_COLOR": "1"}),
                 patch.object(importlib, "import_module") as mock_import,
                 capture_stdout() as stdout,
                 capture_stderr() as stderr,
@@ -313,9 +356,10 @@ class TestUpdateReadme(AbstractTestCase):
                 runpy.run_path(str(Path(update_readme_from_argparse.__file__).resolve()), run_name="__main__")
 
             rendered = readme_path.read_text(encoding="utf-8")
-            self.assertIn("<!-- BEGIN DESCRIPTION SECTION -->\nDemo description.", rendered)
-            self.assertIn("<!-- BEGIN HELP OVERVIEW SECTION -->\n```\nusage: demo", rendered)
-            self.assertIn('<!-- BEGIN HELP DETAIL SECTION -->\n<div id="--flag"></div>', rendered)
+            self.assertIn("<!-- BEGIN_MANPAGE_DESCRIPTION -->\nDemo description.", rendered)
+            self.assertIn("<!-- BEGIN_MANPAGE_USAGE -->\n```\nusage: demo", rendered)
+            self.assertIn('<!-- BEGIN_MANPAGE_DETAILS -->\n<div id="--flag"></div>', rendered)
+            self.assertIn("<!-- END_MANPAGE_DETAILS -->\nafter generated details\n", rendered)
             mock_import.assert_called_once_with("bzfs_main.bzfs")
             mock_import.return_value.argument_parser.assert_called_once_with()
             self.assertEqual("", stdout.getvalue())
@@ -344,7 +388,6 @@ class TestUpdateReadme(AbstractTestCase):
 
                     with (
                         patch.object(sys, "argv", ["update_readme", f"--module={module_name}", f"--readme={readme_path}"]),
-                        patch.dict(os.environ, {"NO_COLOR": "1"}),
                         capture_stdout() as stdout,
                         capture_stderr() as stderr,
                     ):
@@ -353,6 +396,7 @@ class TestUpdateReadme(AbstractTestCase):
                     rendered = readme_path.read_text(encoding="utf-8")
                     for fragment in expected_fragments:
                         self.assertIn(fragment, rendered)
+                    self.assertIn("<!-- END_MANPAGE_DETAILS -->\nafter generated details\n", rendered)
                     self.assertNotIn("old description", rendered)
                     self.assertNotIn("old overview", rendered)
                     self.assertNotIn("old details", rendered)
@@ -375,16 +419,18 @@ class TestUpdateReadme(AbstractTestCase):
 
             self.assertEqual(original_readme, readme_path.read_text(encoding="utf-8"))
 
-    def test_format_usage_returns_raw_usage_and_restores_columns_envvar(self) -> None:
-        """Covers scoping of the temporary argparse usage width override."""
+    def test_format_usage_returns_raw_usage_and_restores_envvars(self) -> None:
+        """Covers scoping of temporary argparse usage environment overrides."""
         parser = self.make_demo_parser(description="Demo description.")
 
-        with patch.dict(os.environ, {"COLUMNS": "120", "NO_COLOR": "1"}):
+        with patch.dict(os.environ, {"COLUMNS": "120", "PYTHON_COLORS": "1"}):
             usage = update_readme_from_argparse._format_usage(parser)
 
             self.assertTrue(usage.startswith("usage: demo"))
+            self.assertNotIn("\x1b[", usage)
             self.assertNotIn("```", usage)
             self.assertEqual("120", os.environ["COLUMNS"])
+            self.assertEqual("1", os.environ["PYTHON_COLORS"])
 
     @staticmethod
     def make_demo_parser(description: str) -> argparse.ArgumentParser:
@@ -402,14 +448,16 @@ class TestUpdateReadme(AbstractTestCase):
         """Returns a minimal README skeleton with the generated section markers."""
         return (
             "prefix\n"
-            "<!-- BEGIN DESCRIPTION SECTION -->\n"
+            "<!-- BEGIN_MANPAGE_DESCRIPTION -->\n"
             "old description\n"
-            "<!-- END DESCRIPTION SECTION -->\n"
+            "<!-- END_MANPAGE_DESCRIPTION -->\n"
             "between\n"
-            "<!-- BEGIN HELP OVERVIEW SECTION -->\n"
+            "<!-- BEGIN_MANPAGE_USAGE -->\n"
             "old overview\n"
-            "<!-- END HELP OVERVIEW SECTION -->\n"
+            "<!-- END_MANPAGE_USAGE -->\n"
             "tail\n"
-            "<!-- BEGIN HELP DETAIL SECTION -->\n"
+            "<!-- BEGIN_MANPAGE_DETAILS -->\n"
             "old details\n"
+            "<!-- END_MANPAGE_DETAILS -->\n"
+            "after generated details\n"
         )

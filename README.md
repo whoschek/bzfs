@@ -50,7 +50,7 @@ It handles the many edge cases that you will eventually run into over the course
 - [Man Page](#Man-Page)
 # Introduction
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
-<!-- BEGIN DESCRIPTION SECTION -->
+<!-- BEGIN_MANPAGE_DESCRIPTION -->
 On the first run, bzfs replicates the source dataset and all its snapshots to the destination. On
 subsequent runs, it sends only changes since the previous run by incrementally replicating
 snapshots created on the source after that run. Source snapshots older than the most recent common
@@ -351,8 +351,7 @@ $ bzfs tank1/foo/bar tank2/boo/bar --recursive --skip-replication -v --monitor-s
 $ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-dst-datasets \
 --delete-dst-snapshots
 ```
-
-<!-- END DESCRIPTION SECTION -->
+<!-- END_MANPAGE_DESCRIPTION -->
 
 
 <!-- FINE TO EDIT -->
@@ -513,7 +512,7 @@ bzfs-test        # when installed via pip
 # Man Page
 
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
-<!-- BEGIN HELP OVERVIEW SECTION -->
+<!-- BEGIN_MANPAGE_USAGE -->
 ```
 usage: bzfs [-h]
             [--recursive]
@@ -643,9 +642,9 @@ usage: bzfs [-h]
             [--help, -h]
             SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
-<!-- END HELP OVERVIEW SECTION -->
+<!-- END_MANPAGE_USAGE -->
 
-<!-- BEGIN HELP DETAIL SECTION -->
+<!-- BEGIN_MANPAGE_DETAILS -->
 <div id="SRC_DATASET_DST_DATASET"></div>
 
 **SRC_DATASET DST_DATASET**
@@ -2643,3 +2642,4 @@ group.
 *  Same syntax as --zfs-recv-x-include-regex (see above), and the default is to exclude no
     properties. Example: --zfs-recv-x-exclude-regex encryptionroot keystatus origin volblocksize
     volsize
+<!-- END_MANPAGE_DETAILS -->

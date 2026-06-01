@@ -19,6 +19,35 @@ This avoids manually editing the same docs in two places, namely in the argparse
 (help=, description=, etc.), and also in a manually edited man page within README.md.
 
 Has zero dependencies beyond the Python standard library.
+
+Example README_EXAMPLE.md skeleton:
+
+```markdown
+# Example CLI Tool
+
+<!-- BEGIN_MANPAGE_DESCRIPTION -->
+<!-- END_MANPAGE_DESCRIPTION -->
+
+## Usage
+
+<!-- BEGIN_MANPAGE_USAGE -->
+<!-- END_MANPAGE_USAGE -->
+
+## Options
+
+<!-- BEGIN_MANPAGE_DETAILS -->
+<!-- END_MANPAGE_DETAILS -->
+```
+
+Example CLI invocation that replaces the generated sections between
+the BEGIN_MANPAGE_DESCRIPTION, BEGIN_MANPAGE_USAGE, and BEGIN_MANPAGE_DETAILS marker pairs:
+
+```shell
+python3 -m bzfs_main.util.update_readme_from_argparse \
+  --module=bzfs_main.util.update_readme_from_argparse \
+  --function=_argument_parser \
+  --readme=README_EXAMPLE.md
+```
 """
 
 from __future__ import (
@@ -35,10 +64,6 @@ from pathlib import (
 )
 from typing import (
     Final,
-)
-
-from bzfs_main.util.utils import (
-    find_match,
 )
 
 # constants:
@@ -95,25 +120,27 @@ def main() -> None:
 
 def _render_readme(parser: argparse.ArgumentParser, readme: str) -> str:
     """Returns README text with generated sections replaced from argparse."""
-    description: str = "\n".join(_render_blocks(parser.description or "")).strip() + "\n\n"
     usage: list[str] = [TRIPLE_BACKTICK + "\n"] + _format_usage(parser).splitlines(keepends=True) + [TRIPLE_BACKTICK + "\n"]
     help_details: str = _render_help_details(parser)
 
     lines: list[str] = readme.splitlines(keepends=True)
-    lines = _replace(lines, "<!-- BEGIN DESCRIPTION SECTION -->", [description], end_tag="<!-- END DESCRIPTION SECTION -->")
-    lines = _replace(lines, "<!-- BEGIN HELP OVERVIEW SECTION -->", usage, end_tag="<!-- END HELP OVERVIEW SECTION -->")
-    lines = _replace(lines, "<!-- BEGIN HELP DETAIL SECTION -->", [help_details])
+    if any("<!-- BEGIN_MANPAGE_DESCRIPTION -->" in line for line in lines):
+        description: str = "\n".join(_render_blocks(parser.description or "")).strip() + "\n"
+        lines = _replace(lines, "<!-- BEGIN_MANPAGE_DESCRIPTION -->", [description], "<!-- END_MANPAGE_DESCRIPTION -->")
+    lines = _replace(lines, "<!-- BEGIN_MANPAGE_USAGE -->", usage, end_tag="<!-- END_MANPAGE_USAGE -->")
+    lines = _replace(lines, "<!-- BEGIN_MANPAGE_DETAILS -->", [help_details], end_tag="<!-- END_MANPAGE_DETAILS -->")
     return "".join(lines)
 
 
-def _replace(lines: list[str], begin_tag: str, replacement: list[str], *, end_tag: str | None = None) -> list[str]:
-    """Replaces the lines between begin_tag and end_tag with the given replacement; if end_tag is None it extends to EOF."""
-    begin: int = find_match(lines, lambda line: begin_tag in line, raises=f"{begin_tag} not found")
-    if end_tag is None:
-        return lines[: begin + 1] + replacement
-    else:
-        end: int = find_match(lines, lambda line: end_tag in line, start=begin + 1, raises=f"{end_tag} not found")
-        return lines[: begin + 1] + replacement + lines[end:]
+def _replace(lines: list[str], begin_tag: str, replacement: list[str], end_tag: str) -> list[str]:
+    """Replaces the lines between begin_tag and end_tag with the given replacement."""
+    begin: int | None = next((i for i, line in enumerate(lines) if begin_tag in line), None)
+    if begin is None:
+        raise ValueError(f"Not found: {begin_tag!r}")
+    end: int | None = next((i for i, line in enumerate(lines[begin + 1 :], start=begin + 1) if end_tag in line), None)
+    if end is None:
+        raise ValueError(f"Not found: {end_tag!r}")
+    return lines[: begin + 1] + replacement + lines[end:]
 
 
 def _render_blocks(text: str, *, list_item: bool = False) -> list[str]:
@@ -212,15 +239,21 @@ def _wrap_text(text: str, *, width: int = _WRAP_COLUMNS, initial_indent: str = "
 
 
 def _format_usage(parser: argparse.ArgumentParser) -> str:
+    def _restore(key: str, previous_value: str | None) -> None:
+        if previous_value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = previous_value
+
     previous_columns: str | None = os.environ.get("COLUMNS")
+    previous_colors: str | None = os.environ.get("PYTHON_COLORS")
     try:
         os.environ["COLUMNS"] = "18"  # force each option onto a separate line
+        os.environ["PYTHON_COLORS"] = "0"  # don't add color codes to generated man pages
         return parser.format_usage()
     finally:
-        if previous_columns is None:
-            os.environ.pop("COLUMNS", None)
-        else:
-            os.environ["COLUMNS"] = previous_columns
+        _restore("COLUMNS", previous_columns)
+        _restore("PYTHON_COLORS", previous_colors)
 
 
 #############################################################################
