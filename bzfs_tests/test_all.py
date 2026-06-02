@@ -35,6 +35,7 @@ import bzfs_tests.test_incremental_send_steps
 import bzfs_tests.test_interner
 import bzfs_tests.test_jobrunner
 import bzfs_tests.test_loggers
+import bzfs_tests.test_markdown_from_argparse
 import bzfs_tests.test_parallel_batch_cmd
 import bzfs_tests.test_parallel_iterator
 import bzfs_tests.test_parallel_tasktree
@@ -48,7 +49,6 @@ import bzfs_tests.test_retry_benchmark
 import bzfs_tests.test_retry_examples
 import bzfs_tests.test_snapshot_cache
 import bzfs_tests.test_test_host_sh
-import bzfs_tests.test_update_readme_from_argparse
 import bzfs_tests.test_utils
 from bzfs_main.util.utils import (
     UMASK,
@@ -86,7 +86,7 @@ def main() -> None:
         bzfs_tests.test_compare_snapshot_lists,
         bzfs_tests.test_snapshot_cache,
         bzfs_tests.test_generate_badge,
-        bzfs_tests.test_update_readme_from_argparse,
+        bzfs_tests.test_markdown_from_argparse,
         bzfs_tests.test_test_host_sh,
         bzfs_tests.test_jobrunner,
     ]

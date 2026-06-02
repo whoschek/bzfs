@@ -41,7 +41,7 @@ from bzfs_main import (
     bzfs_jobrunner,
 )
 from bzfs_main.util import (
-    update_readme_from_argparse,
+    markdown_from_argparse,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
@@ -69,7 +69,7 @@ class TestUpdateReadme(AbstractTestCase):
         lines = ["prefix\n", "<!-- END -->\n"]
 
         with self.assertRaises(ValueError) as cm:
-            update_readme_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
+            markdown_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
 
         self.assertEqual("Not found: '<!-- BEGIN -->'", str(cm.exception))
 
@@ -78,7 +78,7 @@ class TestUpdateReadme(AbstractTestCase):
         lines = ["prefix\n", "<!-- BEGIN -->\n", "old generated text\n"]
 
         with self.assertRaises(ValueError) as cm:
-            update_readme_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
+            markdown_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
 
         self.assertEqual("Not found: '<!-- END -->'", str(cm.exception))
 
@@ -90,7 +90,7 @@ class TestUpdateReadme(AbstractTestCase):
         group.add_argument("--item", nargs="+", metavar="NAME", help="Name to process.")
         group.add_argument("--hidden", help=argparse.SUPPRESS)
 
-        details = update_readme_from_argparse._render_help_details(parser)
+        details = markdown_from_argparse._render_help_details(parser)
 
         self.assertIn('<div id="SRC"></div>', details)
         self.assertIn("**SRC**", details)
@@ -106,7 +106,7 @@ class TestUpdateReadme(AbstractTestCase):
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument("--help, -h", action="help", help="Show help.")
 
-        details = update_readme_from_argparse._render_help_details(parser)
+        details = markdown_from_argparse._render_help_details(parser)
 
         self.assertNotIn('<div id="-h"></div>', details)
         self.assertIn('<div id="--help,_-h"></div>', details)
@@ -184,7 +184,7 @@ class TestUpdateReadme(AbstractTestCase):
             help="Workers min %(min)s default %(default)s.",
         )
 
-        details = update_readme_from_argparse._render_help_details(parser)
+        details = markdown_from_argparse._render_help_details(parser)
 
         self.assertIn('<div id="SRC_DATASET_DST_DATASET"></div>', details)
         self.assertIn("**SRC_DATASET DST_DATASET**", details)
@@ -229,7 +229,7 @@ class TestUpdateReadme(AbstractTestCase):
         parser.add_argument("--version", action="version", version="demo-1", help="Display version.")
         parser.add_argument("--timeout", action=bzfs_jobrunner.RejectArgumentAction, nargs=0, help=argparse.SUPPRESS)
 
-        details = update_readme_from_argparse._render_help_details(parser)
+        details = markdown_from_argparse._render_help_details(parser)
 
         self.assertIn("**--create-src-snapshots**", details)
         self.assertIn("**--src-host** *STRING*", details)
@@ -245,7 +245,7 @@ class TestUpdateReadme(AbstractTestCase):
         """Covers Markdown blocks that argparse help embeds in README sections."""
         text = "# Heading\n\n```\ndemo --option value \\\n--second value\n\nplain output\n```"
 
-        rendered = "\n".join(update_readme_from_argparse._render_blocks(text))
+        rendered = "\n".join(markdown_from_argparse._render_blocks(text))
 
         self.assertIn("# Heading", rendered)
         self.assertIn("```", rendered)
@@ -256,14 +256,14 @@ class TestUpdateReadme(AbstractTestCase):
         """Covers source-authored plain fenced examples in action help."""
         self.assertListEqual(
             ["*  Intro.", "", "", "    ```", "    demo --flag", "    ```", ""],
-            update_readme_from_argparse._render_blocks("Intro.\n\n```\ndemo --flag\n```", list_item=True),
+            markdown_from_argparse._render_blocks("Intro.\n\n```\ndemo --flag\n```", list_item=True),
         )
 
     def test_render_blocks_preserves_explicit_line_continuations(self) -> None:
         """Covers explicit shell continuation lines authored in argparse help."""
         self.assertListEqual(
             ["", "```", "cmd1 \\", "cmd2", "", "cmd output", "```", ""],
-            update_readme_from_argparse._render_blocks("```\ncmd1 \\\ncmd2\n\ncmd output\n```"),
+            markdown_from_argparse._render_blocks("```\ncmd1 \\\ncmd2\n\ncmd output\n```"),
         )
 
     def test_render_blocks_rejects_unmatched_fenced_code(self) -> None:
@@ -272,7 +272,7 @@ class TestUpdateReadme(AbstractTestCase):
         for list_item in (False, True):
             with self.subTest(list_item=list_item):
                 with self.assertRaises(ValueError) as cm:
-                    update_readme_from_argparse._render_blocks(text, list_item=list_item)
+                    markdown_from_argparse._render_blocks(text, list_item=list_item)
                 self.assertIn("Opening ``` fence without a matching closing fence", str(cm.exception))
                 self.assertIn(repr(text), str(cm.exception))
 
@@ -282,7 +282,7 @@ class TestUpdateReadme(AbstractTestCase):
         group = parser.add_argument_group("Advanced Options")
         group.add_argument("--bare", action="store_true")
 
-        details = update_readme_from_argparse._render_help_details(parser)
+        details = markdown_from_argparse._render_help_details(parser)
 
         self.assertIn("# ADVANCED OPTIONS", details)
         self.assertIn("**--bare**", details)
@@ -292,7 +292,7 @@ class TestUpdateReadme(AbstractTestCase):
         """Covers full README replacement with a small parser."""
         parser = self.make_demo_parser(description="Demo description.")
 
-        rendered = update_readme_from_argparse._render_readme(parser, self.readme_template())
+        rendered = markdown_from_argparse._render_readme(parser, self.readme_template())
 
         self.assertIn("<!-- BEGIN_MANPAGE_DESCRIPTION -->\nDemo description.\n<!-- END_MANPAGE_DESCRIPTION -->", rendered)
         self.assertIn("<!-- BEGIN_MANPAGE_USAGE -->\n```\nusage: demo", rendered)
@@ -318,7 +318,7 @@ class TestUpdateReadme(AbstractTestCase):
             "after generated details\n"
         )
 
-        rendered = update_readme_from_argparse._render_readme(parser, readme)
+        rendered = markdown_from_argparse._render_readme(parser, readme)
 
         self.assertIn("manual introduction\n", rendered)
         self.assertNotIn("BEGIN_MANPAGE_DESCRIPTION", rendered)
@@ -333,7 +333,7 @@ class TestUpdateReadme(AbstractTestCase):
         """Covers argparse validation for required update_readme options."""
         with patch.object(sys, "argv", ["update_readme"]), patch("sys.stderr", new_callable=StringIO) as stderr:
             with self.assertRaises(SystemExit) as cm:
-                update_readme_from_argparse.main()
+                markdown_from_argparse.main()
 
         self.assertEqual(2, cm.exception.code)
         self.assertIn("usage:", stderr.getvalue())
@@ -353,7 +353,7 @@ class TestUpdateReadme(AbstractTestCase):
                 capture_stderr() as stderr,
             ):
                 mock_import.return_value.argument_parser.return_value = parser
-                runpy.run_path(str(Path(update_readme_from_argparse.__file__).resolve()), run_name="__main__")
+                runpy.run_path(str(Path(markdown_from_argparse.__file__).resolve()), run_name="__main__")
 
             rendered = readme_path.read_text(encoding="utf-8")
             self.assertIn("<!-- BEGIN_MANPAGE_DESCRIPTION -->\nDemo description.", rendered)
@@ -391,7 +391,7 @@ class TestUpdateReadme(AbstractTestCase):
                         capture_stdout() as stdout,
                         capture_stderr() as stderr,
                     ):
-                        update_readme_from_argparse.main()
+                        markdown_from_argparse.main()
 
                     rendered = readme_path.read_text(encoding="utf-8")
                     for fragment in expected_fragments:
@@ -415,7 +415,7 @@ class TestUpdateReadme(AbstractTestCase):
                 patch.object(importlib, "import_module", side_effect=ModuleNotFoundError("No module named typo")),
             ):
                 with self.assertRaises(ModuleNotFoundError):
-                    update_readme_from_argparse.main()
+                    markdown_from_argparse.main()
 
             self.assertEqual(original_readme, readme_path.read_text(encoding="utf-8"))
 
@@ -424,7 +424,7 @@ class TestUpdateReadme(AbstractTestCase):
         parser = self.make_demo_parser(description="Demo description.")
 
         with patch.dict(os.environ, {"COLUMNS": "120", "PYTHON_COLORS": "1"}):
-            usage = update_readme_from_argparse._format_usage(parser)
+            usage = markdown_from_argparse._format_usage(parser)
 
             self.assertTrue(usage.startswith("usage: demo"))
             self.assertNotIn("\x1b[", usage)

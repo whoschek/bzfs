@@ -43,8 +43,8 @@ Example CLI invocation that replaces the generated sections between
 the BEGIN_MANPAGE_DESCRIPTION, BEGIN_MANPAGE_USAGE, and BEGIN_MANPAGE_DETAILS marker pairs:
 
 ```shell
-python3 -m bzfs_main.util.update_readme_from_argparse \
-  --module=bzfs_main.util.update_readme_from_argparse \
+python3 -m bzfs_main.util.markdown_from_argparse \
+  --module=bzfs_main.util.markdown_from_argparse \
   --function=_argument_parser \
   --readme=README_EXAMPLE.md
 ```
