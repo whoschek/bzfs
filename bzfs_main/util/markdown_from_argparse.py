@@ -204,11 +204,7 @@ def _render_help_details_recursive(parser: argparse.ArgumentParser, heading_leve
     formatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
     mutually_exclusive_notes: dict[int, str] = _mutually_exclusive_group_notes(parser, formatter)
     for group in parser._action_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
-        actions = [
-            action
-            for action in group._group_actions  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
-            if action.help != argparse.SUPPRESS and "--help" not in action.option_strings
-        ]
+        actions: list[argparse.Action] = _visible_group_actions(parser, group)
         results: list[str] = []
         for i, action in enumerate(actions):
             subparser_details: list[str] = []
@@ -251,27 +247,41 @@ def _render_help_details_recursive(parser: argparse.ArgumentParser, heading_leve
     return all_results
 
 
-def _mutually_exclusive_group_notes(parser: argparse.ArgumentParser, formatter: argparse.HelpFormatter) -> dict[int, str]:
+def _mutually_exclusive_group_notes(parser: argparse.ArgumentParser, fmt: argparse.HelpFormatter) -> dict[int, str]:
     """Returns notes keyed by the first visible action in each mutually exclusive group."""
     notes: dict[int, str] = {}
     for group in parser._mutually_exclusive_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
-        visible_actions = [
-            action
-            for action in group._group_actions  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
-            if action.help != argparse.SUPPRESS and "--help" not in action.option_strings
-        ]
-        if len(visible_actions) >= 2:
+        actions: list[argparse.Action] = _visible_group_actions(parser, group)
+        if len(actions) >= 2:
             quantifier = "exactly one" if group.required else "at most one"
             choice_labels: list[str] = []
-            for action in visible_actions:
+            for action in actions:
                 if action.option_strings:
                     choice_labels.append(" / ".join(f"**{option}**" for option in action.option_strings))
                 else:
-                    d = action.dest
-                    label = formatter._metavar_formatter(action, d)(1)[0]  # noqa: SLF001  # pylint: disable=protected-access
+                    met = fmt._get_default_metavar_for_positional(action)  # noqa: SLF001  # pylint: disable=protected-access
+                    metavars = fmt._metavar_formatter(action, met)(1)  # noqa: SLF001  # pylint: disable=protected-access
+                    label = " ".join(metavars)
                     choice_labels.append(f"**{label}**")
-            notes[id(visible_actions[0])] = f"Mutually exclusive group: choose {quantifier} of {', '.join(choice_labels)}."
+            notes[id(actions[0])] = f"Mutually exclusive group: choose {quantifier} of {', '.join(choice_labels)}."
     return notes
+
+
+def _visible_group_actions(
+    parser: argparse.ArgumentParser, group: argparse._ArgumentGroup  # pylint: disable=protected-access
+) -> list[argparse.Action]:
+    """Returns documented actions from one argparse action group."""
+    results: list[argparse.Action] = []
+    prefix: str = "-" if "-" in parser.prefix_chars else parser.prefix_chars[0]
+    help_option_strings: tuple[str, str] = (f"{prefix}h", f"{prefix}{prefix}help")
+    for action in group._group_actions:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
+        if action.help != argparse.SUPPRESS and not (
+            isinstance(action, argparse._HelpAction)  # noqa: SLF001  # pylint: disable=protected-access
+            and action.dest == "help"
+            and tuple(action.option_strings) == help_option_strings
+        ):
+            results.append(action)
+    return results
 
 
 def _visible_subparser_actions(
@@ -306,13 +316,16 @@ def _action_anchor_and_title_line(
     """Returns the README anchor and Markdown rendered title line for one argparse action."""
     formatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
     if not action.option_strings:
-        label = formatter._metavar_formatter(action, action.dest)(1)[0]  # noqa: SLF001  # pylint: disable=protected-access
-        return anchor_prefix + label.replace(" ", "_"), f"**{label}**"
+        dflt = formatter._get_default_metavar_for_positional(action)  # noqa: SLF001  # pylint: disable=protected-access
+        label = " ".join(formatter._metavar_formatter(action, dflt)(1))  # noqa: SLF001  # pylint: disable=protected-access
+        positional_args = formatter._format_args(action, dflt)  # noqa: SLF001  # pylint: disable=protected-access
+        return anchor_prefix + label.replace(" ", "_"), f"**{positional_args}**"
     elif action.nargs == 0:
         title_line = ", ".join(f"**{option}**" for option in action.option_strings)
     else:
-        args: str = formatter._format_args(action, action.dest.upper())  # noqa: SLF001  # pylint: disable=protected-access
-        title_line = ", ".join(f"**{option}** *{args}*" for option in action.option_strings)
+        dflt = formatter._get_default_metavar_for_optional(action)  # noqa: SLF001  # pylint: disable=protected-access
+        option_args = formatter._format_args(action, dflt)  # noqa: SLF001  # pylint: disable=protected-access
+        title_line = ", ".join(f"**{option}** *{option_args}*" for option in action.option_strings)
     if action.required:
         title_line += " _(required)_"
     return anchor_prefix + action.option_strings[0].replace(" ", "_"), title_line

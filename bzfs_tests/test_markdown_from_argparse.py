@@ -120,6 +120,40 @@ class TestUpdateReadme(AbstractTestCase):
         self.assertNotIn("**SRC** _(required)_", details)
         self.assertNotIn("**--optional** *VALUE* _(required)_", details)
 
+    def test_positional_nargs_are_rendered_in_detail_titles(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        parser.add_argument("optional_item", nargs="?", metavar="OPTIONAL_ITEM", help="Optional item.")
+        parser.add_argument("many_items", nargs="*", metavar="MANY_ITEM", help="Many items.")
+        parser.add_argument("required_items", nargs="+", metavar="REQUIRED_ITEM", help="Required items.")
+        parser.add_argument("remainder", nargs=argparse.REMAINDER, metavar="ARG", help="Remaining arguments.")
+        parser.add_argument("pair", nargs=2, metavar=("SRC", "DST"), help="Source and destination pair.")
+
+        details = markdown_from_argparse._render_help_details(parser)
+
+        self.assertIn('<div id="OPTIONAL_ITEM"></div>', details)
+        self.assertIn("**[OPTIONAL_ITEM]**", details)
+        self.assertIn('<div id="MANY_ITEM"></div>', details)
+        self.assertIn("**[MANY_ITEM ...]**", details)
+        self.assertIn('<div id="REQUIRED_ITEM"></div>', details)
+        self.assertIn("**REQUIRED_ITEM [REQUIRED_ITEM ...]**", details)
+        self.assertIn('<div id="ARG"></div>', details)
+        self.assertIn("**...**", details)
+        self.assertIn('<div id="SRC_DST"></div>', details)
+        self.assertIn("**SRC DST**", details)
+
+    def test_metavar_type_formatter_is_used_for_detail_titles(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.MetavarTypeHelpFormatter)
+        parser.add_argument("count", type=int, help="Number of items.")
+        parser.add_argument("--limit", type=int, help="Limit rows.")
+
+        details = markdown_from_argparse._render_help_details(parser)
+
+        self.assertIn('<div id="int"></div>', details)
+        self.assertIn("**int**", details)
+        self.assertIn("**--limit** *int*", details)
+        self.assertNotIn("**COUNT**", details)
+        self.assertNotIn("**--limit** *LIMIT*", details)
+
     def test_mutually_exclusive_groups_are_rendered_before_member_actions(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         mode = parser.add_mutually_exclusive_group(required=True)
@@ -151,6 +185,35 @@ class TestUpdateReadme(AbstractTestCase):
         self.assertLess(details.index("choose exactly one of **--full**"), details.index('<div id="sync~--full"></div>'))
         self.assertEqual(3, details.count("Mutually exclusive group:"))
         self.assertNotIn("--hidden", details)
+
+    def test_mutually_exclusive_group_positional_uses_formatter_metavar(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.MetavarTypeHelpFormatter)
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument("count", nargs="?", type=int, help="Number of items.")
+        group.add_argument("--all", action="store_true", help="Include all items.")
+
+        details = markdown_from_argparse._render_help_details(parser)
+
+        self.assertIn("Mutually exclusive group: choose at most one of **int**, **--all**.", details)
+        self.assertLess(details.index("choose at most one of **int**"), details.index('<div id="int"></div>'))
+        self.assertNotIn("choose at most one of **count**", details)
+
+    @unittest.skipIf(
+        sys.version_info < (3, 12),
+        "argparse rejects nargs='*' positionals in mutually exclusive groups on Python < 3.12",
+    )
+    def test_mutually_exclusive_group_positional_uses_tuple_metavar(self) -> None:
+        """Covers tuple metavar labels where argparse accepts starred positional groups."""
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument("pair", nargs="*", metavar=("SRC", "DST"), help="Dataset pairs.")
+        group.add_argument("--all", action="store_true", help="Include all pairs.")
+
+        details = markdown_from_argparse._render_help_details(parser)
+
+        self.assertIn("Mutually exclusive group: choose at most one of **SRC DST**, **--all**.", details)
+        self.assertLess(details.index("choose at most one of **SRC DST**"), details.index('<div id="SRC_DST"></div>'))
+        self.assertNotIn("choose at most one of **SRC**, **--all**", details)
 
     def test_recursive_subparsers_are_rendered_with_configurable_headings(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -210,11 +273,23 @@ class TestUpdateReadme(AbstractTestCase):
         details = markdown_from_argparse._render_help_details(parser, heading_level=3)
 
         self.assertIn("### sync\n\nSynchronize selected snapshots.\n\n```\nusage: demo sync", details)
-        self.assertIn("       --job-id STRING", details)
-        self.assertIn("#### full\n\nFull replication.\n\n```\nusage: demo sync full", details)
+        self.assertTrue(  # Python <= 3.12 splits the option and metavar; newer argparse keeps them on one line.
+            "       --job-id STRING" in details or "       --job-id\n       STRING" in details,
+            details,
+        )
+        self.assertLess(details.index("--job-id"), details.index("{full}"))
+        full_usage_markers = (
+            "#### full\n\nFull replication.\n\n```\nusage: demo sync full",
+            # Python 3.15-dev includes the parent's required option in the nested subparser usage.
+            "#### full\n\nFull replication.\n\n```\nusage: demo sync --job-id STRING full",
+        )
+        self.assertTrue(any(marker in details for marker in full_usage_markers), details)
         self.assertIn("       DATASET", details)
         self.assertLess(details.index("usage: demo sync"), details.index('<div id="sync~--job-id"></div>'))
-        self.assertLess(details.index("usage: demo sync full"), details.index('<div id="sync~full~DATASET"></div>'))
+        full_usage_index = next(
+            details.index(marker.rsplit("\n", maxsplit=1)[-1]) for marker in full_usage_markers if marker in details
+        )
+        self.assertLess(full_usage_index, details.index('<div id="sync~full~DATASET"></div>'))
 
     def test_epilogs_are_rendered_after_parser_details(self) -> None:
         parser = argparse.ArgumentParser(
@@ -317,6 +392,27 @@ class TestUpdateReadme(AbstractTestCase):
         self.assertIn('<div id="--help,_-h"></div>', details)
         self.assertIn("**--help, -h**", details)
 
+    def test_default_help_action_is_hidden_for_alternate_prefix_chars(self) -> None:
+        cases = (
+            ("+/", "+visible", '<div id="+h"></div>', "**+h**, **++help**"),
+            ("+-", "+visible", '<div id="-h"></div>', "**-h**, **--help**"),
+            ("/-", "/visible", '<div id="-h"></div>', "**-h**, **--help**"),
+        )
+        for prefix_chars, visible_option, help_anchor, help_title in cases:
+            with self.subTest(prefix_chars=prefix_chars):
+                parser = argparse.ArgumentParser(
+                    prog="demo", prefix_chars=prefix_chars, formatter_class=argparse.RawTextHelpFormatter
+                )
+                parser.add_argument(visible_option, metavar="VALUE", help="Visible option.")
+
+                details = markdown_from_argparse._render_help_details(parser)
+
+                self.assertNotIn(help_anchor, details)
+                self.assertNotIn(help_title, details)
+                self.assertNotIn("show this help message and exit", details)
+                self.assertIn(f'<div id="{visible_option}"></div>', details)
+                self.assertIn(f"**{visible_option}** *VALUE*", details)
+
     def test_bzfs_custom_actions_are_rendered_from_parser_model(self) -> None:
         """Covers project-specific argparse actions without invoking their parsers."""
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -392,7 +488,7 @@ class TestUpdateReadme(AbstractTestCase):
         details = markdown_from_argparse._render_help_details(parser)
 
         self.assertIn('<div id="SRC_DATASET_DST_DATASET"></div>', details)
-        self.assertIn("**SRC_DATASET DST_DATASET**", details)
+        self.assertIn("**SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]**", details)
         self.assertIn("**--include-snapshot-regex** *REGEX [REGEX ...]*", details)
         self.assertIn("**--compare-include-regex** *[REGEX ...]*", details)
         self.assertIn("**--include-snapshot-times-and-ranks** *TIMERANGE [RANKRANGE ...]*", details)

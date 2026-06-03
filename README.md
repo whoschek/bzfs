@@ -647,7 +647,7 @@ usage: bzfs [-h]
 <!-- BEGIN_MANPAGE_DETAILS -->
 <div id="SRC_DATASET_DST_DATASET"></div>
 
-**SRC_DATASET DST_DATASET**
+**SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]**
 
 *  SRC_DATASET: Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS
     filesystem or ZFS volume. Format is [[user@]host:]dataset. The host name can also be an IPv4
