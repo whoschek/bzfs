@@ -71,7 +71,7 @@ class TestUpdateReadme(AbstractTestCase):
         with self.assertRaises(ValueError) as cm:
             markdown_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
 
-        self.assertEqual("Not found: '<!-- BEGIN -->'", str(cm.exception))
+        self.assertEqual("Marker not found: '<!-- BEGIN -->'", str(cm.exception))
 
     def test_replace_rejects_missing_end_tag(self) -> None:
         """Covers unterminated generated sections after a start marker."""
@@ -80,7 +80,7 @@ class TestUpdateReadme(AbstractTestCase):
         with self.assertRaises(ValueError) as cm:
             markdown_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
 
-        self.assertEqual("Not found: '<!-- END -->'", str(cm.exception))
+        self.assertEqual("Marker not found: '<!-- END -->'", str(cm.exception))
 
     def test_common_argparse_features_are_rendered_from_parser_model(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -101,6 +101,161 @@ class TestUpdateReadme(AbstractTestCase):
         self.assertIn("Choose mode. Default: safe.", details)
         self.assertIn("**--item** *NAME [NAME ...]*", details)
         self.assertNotIn("--hidden", details)
+
+    def test_recursive_subparsers_are_rendered_with_configurable_headings(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        parser.add_argument("--root", action="store_true", help="Root option.")
+        commands = parser.add_subparsers(dest="command", title="Commands", description="Available commands.")
+
+        sync = commands.add_parser(
+            "sync",
+            help="Sync snapshots.",
+            description="Synchronize selected snapshots.",
+            formatter_class=argparse.RawTextHelpFormatter,
+        )
+        sync.add_argument("--speed", choices=["fast", "safe"], help="Sync speed.")
+        modes = sync.add_subparsers(dest="mode", title="Sync Modes", description="Sync variants.")
+        full = modes.add_parser("full", help="Full replication.", formatter_class=argparse.RawTextHelpFormatter)
+        full.add_argument("--force", action="store_true", help="Force full mode.")
+
+        prune = commands.add_parser("prune", aliases=["trim"], help="Prune snapshots.")
+        prune.add_argument("--dry-run", action="store_true", help="Show planned pruning.")
+        commands.add_parser("hidden", help=argparse.SUPPRESS)
+
+        details = markdown_from_argparse._render_help_details(parser, heading_level=3)
+
+        self.assertIn('<div id="--root"></div>', details)
+        self.assertIn("### COMMANDS", details)
+        self.assertIn("Available commands.", details)
+        self.assertIn("### sync", details)
+        self.assertIn("Synchronize selected snapshots.", details)
+        self.assertIn('<div id="sync~--speed"></div>', details)
+        self.assertIn("**--speed** *{fast,safe}*", details)
+        self.assertIn("#### SYNC MODES", details)
+        self.assertIn("Sync variants.", details)
+        self.assertIn("#### full", details)
+        self.assertIn('<div id="sync~full~--force"></div>', details)
+        self.assertIn("### prune (trim)", details)
+        self.assertIn('<div id="prune~--dry-run"></div>', details)
+        self.assertNotIn('<div id="--speed"></div>', details)
+        self.assertNotIn('<div id="--force"></div>', details)
+        self.assertNotIn('<div id="--dry-run"></div>', details)
+        self.assertEqual(1, details.count("### prune (trim)"))
+        self.assertNotIn("hidden", details)
+
+    def test_subparser_usage_blocks_are_rendered_under_subparser_headings(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        commands = parser.add_subparsers(dest="command", title="Commands")
+        sync = commands.add_parser(
+            "sync",
+            help="Sync snapshots.",
+            description="Synchronize selected snapshots.",
+            formatter_class=argparse.RawTextHelpFormatter,
+        )
+        sync.add_argument("--job-id", required=True, metavar="STRING", help="Job id.")
+        sync_modes = sync.add_subparsers(dest="mode", title="Sync Modes")
+        full = sync_modes.add_parser("full", help="Full replication.", formatter_class=argparse.RawTextHelpFormatter)
+        full.add_argument("dataset", metavar="DATASET", help="Dataset to replicate.")
+
+        details = markdown_from_argparse._render_help_details(parser, heading_level=3)
+
+        self.assertIn("### sync\n\nSynchronize selected snapshots.\n\n```\nusage: demo sync", details)
+        self.assertIn("       --job-id STRING", details)
+        self.assertIn("#### full\n\nFull replication.\n\n```\nusage: demo sync full", details)
+        self.assertIn("       DATASET", details)
+        self.assertLess(details.index("usage: demo sync"), details.index('<div id="sync~--job-id"></div>'))
+        self.assertLess(details.index("usage: demo sync full"), details.index('<div id="sync~full~DATASET"></div>'))
+
+    def test_epilogs_are_rendered_after_parser_details(self) -> None:
+        parser = argparse.ArgumentParser(
+            prog="demo",
+            epilog="Root epilog.\n\n```\ndemo root\n```",
+            formatter_class=argparse.RawTextHelpFormatter,
+        )
+        parser.add_argument("--root", action="store_true", help="Root option.")
+        commands = parser.add_subparsers(dest="command", title="Commands")
+
+        sync = commands.add_parser(
+            "sync",
+            help="Sync snapshots.",
+            epilog="Sync epilog.",
+            formatter_class=argparse.RawTextHelpFormatter,
+        )
+        sync.add_argument("--speed", choices=["fast", "safe"], help="Sync speed.")
+        modes = sync.add_subparsers(dest="mode", title="Sync Modes")
+        full = modes.add_parser(
+            "full",
+            help="Full replication.",
+            epilog="Full epilog.",
+            formatter_class=argparse.RawTextHelpFormatter,
+        )
+        full.add_argument("--force", action="store_true", help="Force full mode.")
+
+        suppressed = commands.add_parser(
+            "suppressed",
+            help="Suppress epilog only.",
+            epilog=argparse.SUPPRESS,
+            formatter_class=argparse.RawTextHelpFormatter,
+        )
+        suppressed.add_argument("--visible", action="store_true", help="Visible option.")
+
+        details = markdown_from_argparse._render_help_details(parser, heading_level=3)
+
+        self.assertIn("Sync epilog.", details)
+        self.assertIn("Full epilog.", details)
+        self.assertIn("Root epilog.", details)
+        self.assertIn("```\ndemo root\n```", details)
+        self.assertNotIn("==SUPPRESS==", details)
+        self.assertLess(details.index("Sync speed."), details.index("Sync epilog."))
+        self.assertLess(details.index("Force full mode."), details.index("Full epilog."))
+        self.assertLess(details.index("Visible option."), details.index("Root epilog."))
+
+    def test_subparser_action_with_only_suppressed_choices_is_omitted(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        commands = parser.add_subparsers(dest="command")
+        hidden = commands.add_parser("hidden", help=argparse.SUPPRESS)
+        hidden.add_argument("--hidden-option", help="Hidden option.")
+        parser.add_argument("--visible", action="store_true", help="Visible option.")
+
+        details = markdown_from_argparse._render_help_details(parser)
+
+        self.assertIn('<div id="--visible"></div>', details)
+        self.assertIn("Visible option.", details)
+        self.assertNotIn("SUBCOMMANDS", details)
+        self.assertNotIn("hidden", details)
+        self.assertNotIn("--hidden-option", details)
+
+    def test_subparser_without_description_or_help_still_renders_children(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        commands = parser.add_subparsers(dest="command")
+        status = commands.add_parser("status", aliases=["st"])
+        status.add_argument("--json", action="store_true", help="Emit JSON.")
+
+        details = markdown_from_argparse._render_help_details(parser)
+
+        self.assertIn("# status (st)", details)
+        self.assertIn('<div id="status~--json"></div>', details)
+        self.assertIn("Emit JSON.", details)
+        self.assertNotIn("SUBCOMMANDS", details)
+
+    def test_subparser_anchor_separator_distinguishes_nested_paths(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        commands = parser.add_subparsers(dest="command")
+
+        flat = commands.add_parser("a_b", help="Flat command.")
+        flat.add_argument("--flag", action="store_true", help="Flat flag.")
+
+        nested_root = commands.add_parser("a", help="Nested root.")
+        nested_commands = nested_root.add_subparsers(dest="nested_command")
+        nested = nested_commands.add_parser("b", help="Nested command.")
+        nested.add_argument("--flag", action="store_true", help="Nested flag.")
+
+        details = markdown_from_argparse._render_help_details(parser)
+
+        self.assertIn('<div id="a_b~--flag"></div>', details)
+        self.assertIn('<div id="a~b~--flag"></div>', details)
+        self.assertEqual(1, details.count('<div id="a_b~--flag"></div>'))
+        self.assertEqual(1, details.count('<div id="a~b~--flag"></div>'))
 
     def test_custom_help_action_is_rendered(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)

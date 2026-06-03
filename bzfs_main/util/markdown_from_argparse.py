@@ -11,6 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# Inline script metadata conforming to https://packaging.python.org/specifications/inline-script-metadata
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
 #
 """
 Automatically (re)generate README markdown sections directly from argparse parser definitions.
@@ -28,12 +34,12 @@ Example README_EXAMPLE.md skeleton:
 <!-- BEGIN_MANPAGE_DESCRIPTION -->
 <!-- END_MANPAGE_DESCRIPTION -->
 
-## Usage
+# Usage
 
 <!-- BEGIN_MANPAGE_USAGE -->
 <!-- END_MANPAGE_USAGE -->
 
-## Options
+# Options
 
 <!-- BEGIN_MANPAGE_DETAILS -->
 <!-- END_MANPAGE_DETAILS -->
@@ -101,6 +107,13 @@ def _argument_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Path of README markdown file to update. Example: path/to/README.md",
     )
+    cli.add_argument(
+        "--heading-level",
+        default=1,
+        type=int,
+        metavar="INT",
+        help="Markdown heading level for generated details sections. Must be >= 1. Default is '%(default)s'.",
+    )
     return cli
 
 
@@ -113,18 +126,18 @@ def main() -> None:
     readme_path: Path = args.readme
 
     readme = readme_path.read_text(encoding="utf-8")
-    readme = _render_readme(parser, readme)  # do the real work
+    readme = _render_readme(parser, readme, heading_level=args.heading_level)
     readme_path.write_text(readme, encoding="utf-8")
     print("Success.", file=sys.stderr)
 
 
-def _render_readme(parser: argparse.ArgumentParser, readme: str) -> str:
+def _render_readme(parser: argparse.ArgumentParser, readme: str, *, heading_level: int = 1) -> str:
     """Returns README text with generated sections replaced from argparse."""
+    assert heading_level >= 1, heading_level
     usage: list[str] = [TRIPLE_BACKTICK + "\n"] + _format_usage(parser).splitlines(keepends=True) + [TRIPLE_BACKTICK + "\n"]
-    help_details: str = _render_help_details(parser)
-
+    help_details: str = _render_help_details(parser, heading_level=heading_level)
     lines: list[str] = readme.splitlines(keepends=True)
-    if any("<!-- BEGIN_MANPAGE_DESCRIPTION -->" in line for line in lines):
+    if "<!-- BEGIN_MANPAGE_DESCRIPTION -->" in readme:
         description: str = "\n".join(_render_blocks(parser.description or "")).strip() + "\n"
         lines = _replace(lines, "<!-- BEGIN_MANPAGE_DESCRIPTION -->", [description], "<!-- END_MANPAGE_DESCRIPTION -->")
     lines = _replace(lines, "<!-- BEGIN_MANPAGE_USAGE -->", usage, end_tag="<!-- END_MANPAGE_USAGE -->")
@@ -136,10 +149,10 @@ def _replace(lines: list[str], begin_tag: str, replacement: list[str], end_tag: 
     """Replaces the lines between begin_tag and end_tag with the given replacement."""
     begin: int | None = next((i for i, line in enumerate(lines) if begin_tag in line), None)
     if begin is None:
-        raise ValueError(f"Not found: {begin_tag!r}")
+        raise ValueError(f"Marker not found: {begin_tag!r}")
     end: int | None = next((i for i, line in enumerate(lines[begin + 1 :], start=begin + 1) if end_tag in line), None)
     if end is None:
-        raise ValueError(f"Not found: {end_tag!r}")
+        raise ValueError(f"Marker not found: {end_tag!r}")
     return lines[: begin + 1] + replacement + lines[end:]
 
 
@@ -148,7 +161,7 @@ def _render_blocks(text: str, *, list_item: bool = False) -> list[str]:
 
     Assumes prose paragraphs are separated by blank lines and fenced examples use triple backticks. Prose is normalized and
     wrapped; headings and fenced code stay structural. In list_item mode, the first block forms the bullet body and later
-    blocks are indented beneath it, avoiding a Markdown parser while preserving readable generated option help.
+    blocks are indented beneath it, avoiding a full Markdown parser while preserving readable generated option help.
     """
     initial_indent: str = "*  " if list_item else ""
     subsequent_indent: str = "    " if list_item else ""
@@ -180,50 +193,101 @@ def _render_blocks(text: str, *, list_item: bool = False) -> list[str]:
     return results
 
 
-def _render_help_details(parser: argparse.ArgumentParser) -> str:
+def _render_help_details(parser: argparse.ArgumentParser, *, heading_level: int = 1) -> str:
     """Renders all argparse actions including their help text as anchored Markdown reference entries."""
-    results: list[str] = []
-    groups = parser._action_groups  # noqa: SLF001  # pylint: disable=protected-access  # argparse has no public iterator
-    for group in groups:
+    return "\n".join(_render_help_details_recursive(parser, heading_level, anchor_prefix=""))
+
+
+def _render_help_details_recursive(parser: argparse.ArgumentParser, heading_level: int, *, anchor_prefix: str) -> list[str]:
+    """Includes recursive descent into nested subparsers."""
+    all_results: list[str] = []
+    formatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
+    for group in parser._action_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
         actions = [
             action
             for action in group._group_actions  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
             if action.help != argparse.SUPPRESS and "--help" not in action.option_strings
         ]
-        if len(actions) == 0:
-            continue
-
-        title = None if group.title is None or group.title in _DEFAULT_GROUPS else group.title.upper()
-        if title:
-            results += [f"# {title}", ""]
-            if group.description and group.description != argparse.SUPPRESS:
-                results += _render_blocks(group.description)
-                results.append("")
-
+        results: list[str] = []
         for i, action in enumerate(actions):
-            anchor, title_line = _action_anchor_and_title_line(parser, action)
-            results += [f'<div id="{anchor}"></div>', "", title_line, ""]
+            subparser_details: list[str] = []
+            if not isinstance(action, argparse._SubParsersAction):  # noqa: SLF001  # pylint: disable=protected-access
+                anchor, title_line = _action_anchor_and_title_line(parser, action, anchor_prefix=anchor_prefix)
+                results += [f'<div id="{anchor}"></div>', "", title_line, ""]
+                is_list_item = True
+            else:
+                is_list_item = False
+                for name, title, subparser, subaction in _visible_subparser_actions(action):
+                    subparser_details += [f"{'#' * heading_level} {title}", ""]
+                    if subparser.description and subparser.description != argparse.SUPPRESS:
+                        subparser_details += _render_blocks(subparser.description) + [""]
+                    elif subaction is not None and subaction.help:
+                        help_text = formatter._expand_help(subaction)  # noqa: SLF001  # pylint: disable=protected-access
+                        subparser_details += _render_blocks(help_text) + [""]
+                    subparser_details += [TRIPLE_BACKTICK] + _format_usage(subparser).splitlines() + [TRIPLE_BACKTICK, ""]
+                    subparser_details += _render_help_details_recursive(
+                        subparser, heading_level + 1, anchor_prefix=f"{anchor_prefix}{name}~"
+                    )
+                if len(subparser_details) == 0:
+                    continue
+
             if action.help:
-                help_text = parser._get_formatter()._expand_help(action)  # noqa: SLF001  # pylint: disable=protected-access
-                results += _render_blocks(help_text, list_item=True)
-                results.append("")
+                help_text = formatter._expand_help(action)  # noqa: SLF001  # pylint: disable=protected-access
+                results += _render_blocks(help_text, list_item=is_list_item) + [""]
+            results += subparser_details
             if i != len(actions) - 1:
                 results += ["<!-- -->", ""]  # Prevent adjacent lists from merging
-    return "\n".join(results)
+
+        if len(results) > 0 and group.title and group.title not in _DEFAULT_GROUPS:
+            all_results += [f"{'#' * heading_level} {group.title.upper()}", ""]
+            if group.description and group.description != argparse.SUPPRESS:
+                all_results += _render_blocks(group.description) + [""]
+        all_results += results
+    if parser.epilog and parser.epilog != argparse.SUPPRESS:
+        all_results += _render_blocks(parser.epilog) + [""]
+    return all_results
 
 
-def _action_anchor_and_title_line(parser: argparse.ArgumentParser, action: argparse.Action) -> tuple[str, str]:
+def _visible_subparser_actions(
+    action: argparse._SubParsersAction,  # pylint: disable=protected-access
+) -> list[tuple[str, str, argparse.ArgumentParser, argparse.Action | None]]:
+    subactions: dict[str, argparse.Action] = {
+        subact.dest: subact for subact in action._get_subactions()  # noqa: SLF001  # pylint: disable=protected-access
+    }
+    results: list[tuple[str, str, argparse.ArgumentParser, argparse.Action | None]] = []
+    seen: set[int] = set()
+    for name, subparser in action.choices.items():
+        if id(subparser) not in seen:
+            seen.add(id(subparser))
+            subaction = subactions.get(name)
+            if subaction is None or subaction.help != argparse.SUPPRESS:
+                if subaction is not None and subaction.metavar:
+                    title = str(subaction.metavar)
+                else:
+                    aliases = [
+                        choice_name
+                        for choice_name, choice_parser in action.choices.items()
+                        if choice_parser is subparser and choice_name != name
+                    ]
+                    title = name if len(aliases) == 0 else f"{name} ({', '.join(aliases)})"
+                results.append((name, title, subparser, subaction))
+    return results
+
+
+def _action_anchor_and_title_line(
+    parser: argparse.ArgumentParser, action: argparse.Action, *, anchor_prefix: str = ""
+) -> tuple[str, str]:
     """Returns the README anchor and Markdown rendered title line for one argparse action."""
     formatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
     if not action.option_strings:
         label = formatter._metavar_formatter(action, action.dest)(1)[0]  # noqa: SLF001  # pylint: disable=protected-access
-        return label.replace(" ", "_"), f"**{label}**"
+        return anchor_prefix + label.replace(" ", "_"), f"**{label}**"
     elif action.nargs == 0:
         title_line = ", ".join(f"**{option}**" for option in action.option_strings)
     else:
         args: str = formatter._format_args(action, action.dest.upper())  # noqa: SLF001  # pylint: disable=protected-access
         title_line = ", ".join(f"**{option}** *{args}*" for option in action.option_strings)
-    return action.option_strings[0].replace(" ", "_"), title_line
+    return anchor_prefix + action.option_strings[0].replace(" ", "_"), title_line
 
 
 def _wrap_text(text: str, *, width: int = _WRAP_COLUMNS, initial_indent: str = "", subsequent_indent: str = "") -> list[str]:
