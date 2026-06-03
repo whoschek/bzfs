@@ -18,7 +18,7 @@
 - [Man Page](#Man-Page)
 # Introduction
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
-<!-- BEGIN_MANPAGE_DESCRIPTION -->
+<!-- BEGIN-MANPAGE-DESCRIPTION -->
 This companion program wraps [bzfs](README.md) for periodic snapshot creation, replication,
 pruning, and monitoring across N source hosts and M destination hosts, using one shared fleet-wide
 [jobconfig](bzfs_testbed/bzfs_job_testbed.py) script.
@@ -126,11 +126,11 @@ sleep between events. They exit after the interval specified by `--daemon-lifeti
 daemon is still running, `cron` may attempt to start another one. This is harmless because that
 extra process exits immediately with a message like this: "Exiting as same previous periodic job
 is still running without completion yet"
-<!-- END_MANPAGE_DESCRIPTION -->
+<!-- END-MANPAGE-DESCRIPTION -->
 <!-- FINE TO EDIT -->
 # Man Page
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
-<!-- BEGIN_MANPAGE_USAGE -->
+<!-- BEGIN-MANPAGE-USAGE -->
 ```
 usage: bzfs_jobrunner
        [-h]
@@ -176,9 +176,9 @@ usage: bzfs_jobrunner
        [--help, -h]
        --root-dataset-pairs SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
-<!-- END_MANPAGE_USAGE -->
+<!-- END-MANPAGE-USAGE -->
 
-<!-- BEGIN_MANPAGE_DETAILS -->
+<!-- BEGIN-MANPAGE-DETAILS -->
 <div id="--create-src-snapshots"></div>
 
 **--create-src-snapshots**
@@ -630,4 +630,4 @@ usage: bzfs_jobrunner
 
 *  Source and destination dataset pairs (excluding usernames and excluding hostnames, which will
     all be auto-appended later).
-<!-- END_MANPAGE_DETAILS -->
+<!-- END-MANPAGE-DETAILS -->

@@ -64,23 +64,47 @@ def suite() -> unittest.TestSuite:
 class TestUpdateReadme(AbstractTestCase):
     """Checks README help rendering for argparse features used by bzfs CLIs."""
 
+    def test_markdown_template_name(self) -> None:
+        def template_name(name: str) -> str:
+            return markdown_from_argparse._markdown_template_name(Path(name))
+
+        self.assertEqual("man page", template_name(""))
+        self.assertEqual("man page", template_name("README"))
+        self.assertEqual("man page", template_name("README.md"))
+        self.assertEqual("foo man page", template_name("foo"))
+        self.assertEqual("bzfs man page", template_name("bzfs"))
+        self.assertEqual("bzfs man page", template_name("bzfs.md"))
+        self.assertEqual("bzfs man page", template_name("README_bzfs.md"))
+        self.assertEqual("bzfs man page", template_name("README_bzfs.md"))
+        self.assertEqual("bzfs man page", template_name("README.bzfs.md"))
+        self.assertEqual("bzfs man page", template_name("README_bzfs_man.md"))
+        self.assertEqual("bzfs man page", template_name("README_bzfs_manpage.md"))
+        self.assertEqual("bzfs man page", template_name("README_bzfs_ManPage.md"))
+        self.assertEqual("bzfs man page", template_name("readme_bzfs_man_page.md"))
+        self.assertEqual("bzfs man page", template_name("readme_bzfs.man_page.md"))
+        self.assertEqual("bzfs_jobrunner man page", template_name("README_bzfs_jobrunner.md"))
+        self.assertEqual("bzfs_jobrunner man page", template_name("README.bzfs_jobrunner.md"))
+        self.assertEqual("postman man page", template_name("postman.md"))
+        self.assertEqual("postman man page", template_name("README_postman.md"))
+        self.assertEqual("postman man page", template_name("README.postman.md"))
+
     def test_replace_rejects_missing_begin_tag(self) -> None:
         """Covers missing generated-section start markers."""
         lines = ["prefix\n", "<!-- END -->\n"]
 
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(SystemExit) as cm:
             markdown_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
 
-        self.assertEqual("Marker not found: '<!-- BEGIN -->'", str(cm.exception))
+        self.assertEqual("ERROR: Marker not found: '<!-- BEGIN -->'", str(cm.exception))
 
     def test_replace_rejects_missing_end_tag(self) -> None:
         """Covers unterminated generated sections after a start marker."""
         lines = ["prefix\n", "<!-- BEGIN -->\n", "old generated text\n"]
 
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(SystemExit) as cm:
             markdown_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
 
-        self.assertEqual("Marker not found: '<!-- END -->'", str(cm.exception))
+        self.assertEqual("ERROR: Marker not found: '<!-- END -->'", str(cm.exception))
 
     def test_common_argparse_features_are_rendered_from_parser_model(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -92,7 +116,7 @@ class TestUpdateReadme(AbstractTestCase):
 
         details = markdown_from_argparse._render_help_details(parser)
 
-        self.assertIn('<div id="SRC"></div>', details)
+        self.assertIn('<div id="src"></div>', details)
         self.assertIn("**SRC**", details)
         self.assertNotIn('<div id="-h"></div>', details)
         self.assertIn("# TRANSFER OPTIONS", details)
@@ -130,15 +154,15 @@ class TestUpdateReadme(AbstractTestCase):
 
         details = markdown_from_argparse._render_help_details(parser)
 
-        self.assertIn('<div id="OPTIONAL_ITEM"></div>', details)
+        self.assertIn('<div id="optional_item"></div>', details)
         self.assertIn("**[OPTIONAL_ITEM]**", details)
-        self.assertIn('<div id="MANY_ITEM"></div>', details)
+        self.assertIn('<div id="many_items"></div>', details)
         self.assertIn("**[MANY_ITEM ...]**", details)
-        self.assertIn('<div id="REQUIRED_ITEM"></div>', details)
+        self.assertIn('<div id="required_items"></div>', details)
         self.assertIn("**REQUIRED_ITEM [REQUIRED_ITEM ...]**", details)
-        self.assertIn('<div id="ARG"></div>', details)
+        self.assertIn('<div id="remainder"></div>', details)
         self.assertIn("**...**", details)
-        self.assertIn('<div id="SRC_DST"></div>', details)
+        self.assertIn('<div id="pair"></div>', details)
         self.assertIn("**SRC DST**", details)
 
     def test_metavar_type_formatter_is_used_for_detail_titles(self) -> None:
@@ -148,7 +172,7 @@ class TestUpdateReadme(AbstractTestCase):
 
         details = markdown_from_argparse._render_help_details(parser)
 
-        self.assertIn('<div id="int"></div>', details)
+        self.assertIn('<div id="count"></div>', details)
         self.assertIn("**int**", details)
         self.assertIn("**--limit** *int*", details)
         self.assertNotIn("**COUNT**", details)
@@ -195,7 +219,7 @@ class TestUpdateReadme(AbstractTestCase):
         details = markdown_from_argparse._render_help_details(parser)
 
         self.assertIn("Mutually exclusive group: choose at most one of **int**, **--all**.", details)
-        self.assertLess(details.index("choose at most one of **int**"), details.index('<div id="int"></div>'))
+        self.assertLess(details.index("choose at most one of **int**"), details.index('<div id="count"></div>'))
         self.assertNotIn("choose at most one of **count**", details)
 
     def test_mutually_exclusive_group_positional_uses_tuple_metavar(self) -> None:
@@ -208,7 +232,7 @@ class TestUpdateReadme(AbstractTestCase):
         details = markdown_from_argparse._render_help_details(parser)
 
         self.assertIn("Mutually exclusive group: choose at most one of **SRC DST**, **--all**.", details)
-        self.assertLess(details.index("choose at most one of **SRC DST**"), details.index('<div id="SRC_DST"></div>'))
+        self.assertLess(details.index("choose at most one of **SRC DST**"), details.index('<div id="pair"></div>'))
         self.assertNotIn("choose at most one of **SRC**, **--all**", details)
 
     def test_recursive_subparsers_are_rendered_with_configurable_headings(self) -> None:
@@ -285,7 +309,7 @@ class TestUpdateReadme(AbstractTestCase):
         full_usage_index = next(
             details.index(marker.rsplit("\n", maxsplit=1)[-1]) for marker in full_usage_markers if marker in details
         )
-        self.assertLess(full_usage_index, details.index('<div id="sync~full~DATASET"></div>'))
+        self.assertLess(full_usage_index, details.index('<div id="sync~full~dataset"></div>'))
 
     def test_epilogs_are_rendered_after_parser_details(self) -> None:
         parser = argparse.ArgumentParser(
@@ -377,6 +401,34 @@ class TestUpdateReadme(AbstractTestCase):
         self.assertIn('<div id="a~b~--flag"></div>', details)
         self.assertEqual(1, details.count('<div id="a_b~--flag"></div>'))
         self.assertEqual(1, details.count('<div id="a~b~--flag"></div>'))
+
+    def test_generated_metadata_escapes_common_markdown_and_html_chars(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        parser.add_argument("src", metavar="SRC_<DATA>", help="Source.")
+        group = parser.add_argument_group("Danger & *Group* [A]")
+        group.add_argument("--path<tag>", metavar="NAME_[X]", help="Path.")
+        mode = group.add_mutually_exclusive_group()
+        mode.add_argument("--json<tag>", action="store_true", help="JSON.")
+        mode.add_argument("--text*plain", action="store_true", help="Text.")
+        commands = parser.add_subparsers(dest="command", title="Commands & *Modes*")
+        sync = commands.add_parser("sync*<fast>", help="Sync.")
+        sync.add_argument('--mode"fast', metavar="VAL&<X>", help="Mode.")
+
+        details = markdown_from_argparse._render_help_details(parser)
+
+        self.assertIn('<div id="src"></div>', details)
+        self.assertIn("**SRC_&lt;DATA&gt;**", details)
+        self.assertIn("# DANGER &amp; \\*GROUP\\* [A]", details)
+        self.assertIn('<div id="--path&lt;tag&gt;"></div>', details)
+        self.assertIn("**--path&lt;tag&gt;** *NAME_[X]*", details)
+        self.assertIn(
+            "Mutually exclusive group: choose at most one of **--json&lt;tag&gt;**, **--text\\*plain**.",
+            details,
+        )
+        self.assertIn("# COMMANDS &amp; \\*MODES\\*", details)
+        self.assertIn("# sync\\*&lt;fast&gt;", details)
+        self.assertIn('<div id="sync*&lt;fast&gt;~--mode&quot;fast"></div>', details)
+        self.assertIn('**--mode"fast** *VAL&amp;&lt;X&gt;*', details)
 
     def test_custom_help_action_is_rendered(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -483,7 +535,7 @@ class TestUpdateReadme(AbstractTestCase):
 
         details = markdown_from_argparse._render_help_details(parser)
 
-        self.assertIn('<div id="SRC_DATASET_DST_DATASET"></div>', details)
+        self.assertIn('<div id="root_dataset_pairs"></div>', details)
         self.assertIn("**SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]**", details)
         self.assertIn("**--include-snapshot-regex** *REGEX [REGEX ...]*", details)
         self.assertIn("**--compare-include-regex** *[REGEX ...]*", details)
@@ -568,7 +620,7 @@ class TestUpdateReadme(AbstractTestCase):
         text = "Intro.\n\n```\ndemo --flag"
         for list_item in (False, True):
             with self.subTest(list_item=list_item):
-                with self.assertRaises(ValueError) as cm:
+                with self.assertRaises(SystemExit) as cm:
                     markdown_from_argparse._render_blocks(text, list_item=list_item)
                 self.assertIn("Opening ``` fence without a matching closing fence", str(cm.exception))
                 self.assertIn(repr(text), str(cm.exception))
@@ -591,11 +643,11 @@ class TestUpdateReadme(AbstractTestCase):
 
         rendered = markdown_from_argparse._render_readme(parser, self.readme_template())
 
-        self.assertIn("<!-- BEGIN_MANPAGE_DESCRIPTION -->\nDemo description.\n<!-- END_MANPAGE_DESCRIPTION -->", rendered)
-        self.assertIn("<!-- BEGIN_MANPAGE_USAGE -->\n```\nusage: demo", rendered)
+        self.assertIn("<!-- BEGIN-MANPAGE-DESCRIPTION -->\nDemo description.\n<!-- END-MANPAGE-DESCRIPTION -->", rendered)
+        self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
         self.assertNotIn("\x1b[", rendered)
-        self.assertIn('<!-- BEGIN_MANPAGE_DETAILS -->\n<div id="--flag"></div>', rendered)
-        self.assertIn("<!-- END_MANPAGE_DETAILS -->\nafter generated details\n", rendered)
+        self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="--flag"></div>', rendered)
+        self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
         self.assertNotIn("old description", rendered)
         self.assertNotIn("old overview", rendered)
         self.assertNotIn("old details", rendered)
@@ -605,24 +657,24 @@ class TestUpdateReadme(AbstractTestCase):
         parser = self.make_demo_parser(description="Demo description.")
         readme = (
             "manual introduction\n"
-            "<!-- BEGIN_MANPAGE_USAGE -->\n"
+            "<!-- BEGIN-MANPAGE-USAGE -->\n"
             "old overview\n"
-            "<!-- END_MANPAGE_USAGE -->\n"
+            "<!-- END-MANPAGE-USAGE -->\n"
             "tail\n"
-            "<!-- BEGIN_MANPAGE_DETAILS -->\n"
+            "<!-- BEGIN-MANPAGE-DETAILS -->\n"
             "old details\n"
-            "<!-- END_MANPAGE_DETAILS -->\n"
+            "<!-- END-MANPAGE-DETAILS -->\n"
             "after generated details\n"
         )
 
         rendered = markdown_from_argparse._render_readme(parser, readme)
 
         self.assertIn("manual introduction\n", rendered)
-        self.assertNotIn("BEGIN_MANPAGE_DESCRIPTION", rendered)
+        self.assertNotIn("BEGIN-MANPAGE-DESCRIPTION", rendered)
         self.assertNotIn("Demo description.", rendered)
-        self.assertIn("<!-- BEGIN_MANPAGE_USAGE -->\n```\nusage: demo", rendered)
-        self.assertIn('<!-- BEGIN_MANPAGE_DETAILS -->\n<div id="--flag"></div>', rendered)
-        self.assertIn("<!-- END_MANPAGE_DETAILS -->\nafter generated details\n", rendered)
+        self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
+        self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="--flag"></div>', rendered)
+        self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
         self.assertNotIn("old overview", rendered)
         self.assertNotIn("old details", rendered)
 
@@ -634,7 +686,7 @@ class TestUpdateReadme(AbstractTestCase):
 
         self.assertEqual(2, cm.exception.code)
         self.assertIn("usage:", stderr.getvalue())
-        self.assertIn("the following arguments are required: --module, --readme", stderr.getvalue())
+        self.assertIn("the following arguments are required: --readme, --module", stderr.getvalue())
 
     def test_main_updates_readme_file(self) -> None:
         """Covers the update_readme command-line success path without invoking real parsers."""
@@ -653,14 +705,39 @@ class TestUpdateReadme(AbstractTestCase):
                 runpy.run_path(str(Path(markdown_from_argparse.__file__).resolve()), run_name="__main__")
 
             rendered = readme_path.read_text(encoding="utf-8")
-            self.assertIn("<!-- BEGIN_MANPAGE_DESCRIPTION -->\nDemo description.", rendered)
-            self.assertIn("<!-- BEGIN_MANPAGE_USAGE -->\n```\nusage: demo", rendered)
-            self.assertIn('<!-- BEGIN_MANPAGE_DETAILS -->\n<div id="--flag"></div>', rendered)
-            self.assertIn("<!-- END_MANPAGE_DETAILS -->\nafter generated details\n", rendered)
+            self.assertIn("<!-- BEGIN-MANPAGE-DESCRIPTION -->\nDemo description.", rendered)
+            self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
+            self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="--flag"></div>', rendered)
+            self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
             mock_import.assert_called_once_with("bzfs_main.bzfs")
             mock_import.return_value.argument_parser.assert_called_once_with()
             self.assertEqual("", stdout.getvalue())
-            self.assertEqual("Success.\n", stderr.getvalue())
+            self.assertIn("Successfully updated", stderr.getvalue())
+
+    def test_main_creates_missing_readme_from_template(self) -> None:
+        """Covers the command-line path that bootstraps a README skeleton."""
+        with TemporaryDirectory() as tmpdir:
+            readme_path = Path(tmpdir) / "GENERATED.md"
+            parser = self.make_demo_parser(description="Demo description.")
+
+            with (
+                patch.object(sys, "argv", ["update_readme", "--module", "bzfs_main.bzfs", "--readme", str(readme_path)]),
+                patch.object(importlib, "import_module") as mock_import,
+                capture_stdout() as stdout,
+                capture_stderr() as stderr,
+            ):
+                mock_import.return_value.argument_parser.return_value = parser
+                markdown_from_argparse.main()
+
+            rendered = readme_path.read_text(encoding="utf-8")
+            self.assertIn("# GENERATED", rendered)
+            self.assertIn("<!-- BEGIN-MANPAGE-DESCRIPTION -->\nDemo description.", rendered)
+            self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
+            self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="--flag"></div>', rendered)
+            mock_import.assert_called_once_with("bzfs_main.bzfs")
+            mock_import.return_value.argument_parser.assert_called_once_with()
+            self.assertEqual("", stdout.getvalue())
+            self.assertIn("Successfully created", stderr.getvalue())
 
     def test_main_updates_readme_with_real_cli_modules(self) -> None:
         """Covers README generation with the real bzfs and bzfs_jobrunner parsers."""
@@ -668,7 +745,7 @@ class TestUpdateReadme(AbstractTestCase):
             (
                 "bzfs_main.bzfs",
                 "README.md",
-                ("usage: bzfs [-h]", '<div id="SRC_DATASET_DST_DATASET"></div>', '<div id="--recursive"></div>'),
+                ("usage: bzfs [-h]", '<div id="root_dataset_pairs"></div>', '<div id="--recursive"></div>'),
             ),
             (
                 "bzfs_main.bzfs_jobrunner",
@@ -693,12 +770,12 @@ class TestUpdateReadme(AbstractTestCase):
                     rendered = readme_path.read_text(encoding="utf-8")
                     for fragment in expected_fragments:
                         self.assertIn(fragment, rendered)
-                    self.assertIn("<!-- END_MANPAGE_DETAILS -->\nafter generated details\n", rendered)
+                    self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
                     self.assertNotIn("old description", rendered)
                     self.assertNotIn("old overview", rendered)
                     self.assertNotIn("old details", rendered)
                     self.assertEqual("", stdout.getvalue())
-                    self.assertEqual("Success.\n", stderr.getvalue())
+                    self.assertIn("Successfully updated", stderr.getvalue())
 
     def test_main_rejects_unknown_module_without_modifying_file(self) -> None:
         """Covers the update_readme command-line import error path."""
@@ -745,16 +822,16 @@ class TestUpdateReadme(AbstractTestCase):
         """Returns a minimal README skeleton with the generated section markers."""
         return (
             "prefix\n"
-            "<!-- BEGIN_MANPAGE_DESCRIPTION -->\n"
+            "<!-- BEGIN-MANPAGE-DESCRIPTION -->\n"
             "old description\n"
-            "<!-- END_MANPAGE_DESCRIPTION -->\n"
+            "<!-- END-MANPAGE-DESCRIPTION -->\n"
             "between\n"
-            "<!-- BEGIN_MANPAGE_USAGE -->\n"
+            "<!-- BEGIN-MANPAGE-USAGE -->\n"
             "old overview\n"
-            "<!-- END_MANPAGE_USAGE -->\n"
+            "<!-- END-MANPAGE-USAGE -->\n"
             "tail\n"
-            "<!-- BEGIN_MANPAGE_DETAILS -->\n"
+            "<!-- BEGIN-MANPAGE-DETAILS -->\n"
             "old details\n"
-            "<!-- END_MANPAGE_DETAILS -->\n"
+            "<!-- END-MANPAGE-DETAILS -->\n"
             "after generated details\n"
         )
