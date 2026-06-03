@@ -102,6 +102,56 @@ class TestUpdateReadme(AbstractTestCase):
         self.assertIn("**--item** *NAME [NAME ...]*", details)
         self.assertNotIn("--hidden", details)
 
+    def test_required_options_are_marked_in_details(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        parser.add_argument("src", metavar="SRC", help="Source dataset.")
+        parser.add_argument("--required", required=True, metavar="VALUE", help="Required option.")
+        parser.add_argument("--optional", metavar="VALUE", help="Optional option.")
+        commands = parser.add_subparsers(dest="command", title="Commands")
+        sync = commands.add_parser("sync", help="Sync snapshots.", formatter_class=argparse.RawTextHelpFormatter)
+        sync.add_argument("--job-id", required=True, metavar="STRING", help="Job id.")
+
+        details = markdown_from_argparse._render_help_details(parser)
+
+        self.assertIn("**SRC**", details)
+        self.assertIn("**--required** *VALUE* _(required)_", details)
+        self.assertIn("**--optional** *VALUE*", details)
+        self.assertIn("**--job-id** *STRING* _(required)_", details)
+        self.assertNotIn("**SRC** _(required)_", details)
+        self.assertNotIn("**--optional** *VALUE* _(required)_", details)
+
+    def test_mutually_exclusive_groups_are_rendered_before_member_actions(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        mode = parser.add_mutually_exclusive_group(required=True)
+        mode.add_argument("--json", action="store_true", help="Emit JSON.")
+        mode.add_argument("--text", action="store_true", help="Emit text.")
+
+        output_group = parser.add_argument_group("Output Options")
+        output = output_group.add_mutually_exclusive_group()
+        output.add_argument("--table", action="store_true", help="Emit table.")
+        output.add_argument("--csv", action="store_true", help="Emit CSV.")
+
+        partially_hidden = parser.add_mutually_exclusive_group()
+        partially_hidden.add_argument("--visible", action="store_true", help="Visible alternative.")
+        partially_hidden.add_argument("--hidden", action="store_true", help=argparse.SUPPRESS)
+
+        commands = parser.add_subparsers(dest="command", title="Commands")
+        sync = commands.add_parser("sync", help="Sync snapshots.", formatter_class=argparse.RawTextHelpFormatter)
+        sync_mode = sync.add_mutually_exclusive_group(required=True)
+        sync_mode.add_argument("--full", action="store_true", help="Full replication.")
+        sync_mode.add_argument("--incremental", action="store_true", help="Incremental replication.")
+
+        details = markdown_from_argparse._render_help_details(parser, heading_level=3)
+
+        self.assertIn("Mutually exclusive group: choose exactly one of **--json**, **--text**.", details)
+        self.assertIn("Mutually exclusive group: choose at most one of **--table**, **--csv**.", details)
+        self.assertIn("Mutually exclusive group: choose exactly one of **--full**, **--incremental**.", details)
+        self.assertLess(details.index("choose exactly one of **--json**"), details.index('<div id="--json"></div>'))
+        self.assertLess(details.index("choose at most one of **--table**"), details.index('<div id="--table"></div>'))
+        self.assertLess(details.index("choose exactly one of **--full**"), details.index('<div id="sync~--full"></div>'))
+        self.assertEqual(3, details.count("Mutually exclusive group:"))
+        self.assertNotIn("--hidden", details)
+
     def test_recursive_subparsers_are_rendered_with_configurable_headings(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument("--root", action="store_true", help="Root option.")

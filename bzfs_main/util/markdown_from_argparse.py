@@ -202,6 +202,7 @@ def _render_help_details_recursive(parser: argparse.ArgumentParser, heading_leve
     """Includes recursive descent into nested subparsers."""
     all_results: list[str] = []
     formatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
+    mutually_exclusive_notes: dict[int, str] = _mutually_exclusive_group_notes(parser, formatter)
     for group in parser._action_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
         actions = [
             action
@@ -211,6 +212,8 @@ def _render_help_details_recursive(parser: argparse.ArgumentParser, heading_leve
         results: list[str] = []
         for i, action in enumerate(actions):
             subparser_details: list[str] = []
+            if note := mutually_exclusive_notes.get(id(action)):
+                results += _render_blocks(note) + [""]
             if not isinstance(action, argparse._SubParsersAction):  # noqa: SLF001  # pylint: disable=protected-access
                 anchor, title_line = _action_anchor_and_title_line(parser, action, anchor_prefix=anchor_prefix)
                 results += [f'<div id="{anchor}"></div>', "", title_line, ""]
@@ -246,6 +249,29 @@ def _render_help_details_recursive(parser: argparse.ArgumentParser, heading_leve
     if parser.epilog and parser.epilog != argparse.SUPPRESS:
         all_results += _render_blocks(parser.epilog) + [""]
     return all_results
+
+
+def _mutually_exclusive_group_notes(parser: argparse.ArgumentParser, formatter: argparse.HelpFormatter) -> dict[int, str]:
+    """Returns notes keyed by the first visible action in each mutually exclusive group."""
+    notes: dict[int, str] = {}
+    for group in parser._mutually_exclusive_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
+        visible_actions = [
+            action
+            for action in group._group_actions  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
+            if action.help != argparse.SUPPRESS and "--help" not in action.option_strings
+        ]
+        if len(visible_actions) >= 2:
+            quantifier = "exactly one" if group.required else "at most one"
+            choice_labels: list[str] = []
+            for action in visible_actions:
+                if action.option_strings:
+                    choice_labels.append(" / ".join(f"**{option}**" for option in action.option_strings))
+                else:
+                    d = action.dest
+                    label = formatter._metavar_formatter(action, d)(1)[0]  # noqa: SLF001  # pylint: disable=protected-access
+                    choice_labels.append(f"**{label}**")
+            notes[id(visible_actions[0])] = f"Mutually exclusive group: choose {quantifier} of {', '.join(choice_labels)}."
+    return notes
 
 
 def _visible_subparser_actions(
@@ -287,6 +313,8 @@ def _action_anchor_and_title_line(
     else:
         args: str = formatter._format_args(action, action.dest.upper())  # noqa: SLF001  # pylint: disable=protected-access
         title_line = ", ".join(f"**{option}** *{args}*" for option in action.option_strings)
+    if action.required:
+        title_line += " _(required)_"
     return anchor_prefix + action.option_strings[0].replace(" ", "_"), title_line
 
 

@@ -479,7 +479,7 @@ usage: bzfs_jobrunner
 
 <div id="--job-id"></div>
 
-**--job-id** *STRING*
+**--job-id** *STRING* _(required)_
 
 *  The identifier that remains constant across all runs of this particular job; will be included
     in the log file name infix. Example: mytestjob
@@ -626,7 +626,7 @@ usage: bzfs_jobrunner
 
 <div id="--root-dataset-pairs"></div>
 
-**--root-dataset-pairs** *SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]*
+**--root-dataset-pairs** *SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]* _(required)_
 
 *  Source and destination dataset pairs (excluding usernames and excluding hostnames, which will
     all be auto-appended later).
