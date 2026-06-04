@@ -150,6 +150,7 @@ class TestUpdateReadme(AbstractTestCase):
         parser.add_argument("many_items", nargs="*", metavar="MANY_ITEM", help="Many items.")
         parser.add_argument("required_items", nargs="+", metavar="REQUIRED_ITEM", help="Required items.")
         parser.add_argument("remainder", nargs=argparse.REMAINDER, metavar="ARG", help="Remaining arguments.")
+        parser.add_argument("--passthrough", nargs=argparse.REMAINDER, metavar="ARG", help="Optional remaining arguments.")
         parser.add_argument("pair", nargs=2, metavar=("SRC", "DST"), help="Source and destination pair.")
 
         details = markdown_from_argparse._render_help_details(parser)
@@ -161,7 +162,9 @@ class TestUpdateReadme(AbstractTestCase):
         self.assertIn('<div id="required_items"></div>', details)
         self.assertIn("**REQUIRED_ITEM [REQUIRED_ITEM ...]**", details)
         self.assertIn('<div id="remainder"></div>', details)
-        self.assertIn("**...**", details)
+        self.assertIn("**ARG**", details)
+        self.assertIn('<div id="--passthrough"></div>', details)
+        self.assertIn("**--passthrough** *...*", details)
         self.assertIn('<div id="pair"></div>', details)
         self.assertIn("**SRC DST**", details)
 

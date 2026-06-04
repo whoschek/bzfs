@@ -348,6 +348,8 @@ def _action_anchor_and_title_line(
     if not action.option_strings:
         dflt = formatter._get_default_metavar_for_positional(action)  # noqa: SLF001  # pylint: disable=protected-access
         positional_args = formatter._format_args(action, dflt)  # noqa: SLF001  # pylint: disable=protected-access
+        if action.nargs == argparse.REMAINDER and positional_args == "...":
+            positional_args = str(action.metavar or dflt)
         return anchor_prefix + action.dest.replace(" ", "_"), f"**{_escape_md(positional_args)}**"
     elif action.nargs == 0:
         title_line = ", ".join(f"**{_escape_md(option)}**" for option in action.option_strings)
