@@ -1282,10 +1282,10 @@ def _incremental_send_steps_wrapper(
     p: Params, src_snapshots: list[str], src_guids: list[str], included_guids: set[str], is_resume: bool
 ) -> list[tuple[str, str, str, list[str]]]:
     """Returns incremental send steps, optionally converting -I to -i."""
-    force_convert_I_to_i: bool = p.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", True)  # noqa: N806
+    force_convert_I_to_i: bool = not getenv_bool("no_force_convert_I_to_i", True)  # noqa: N806
     # force_convert_I_to_i == True implies that:
-    # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
-    # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
+    # Force convert 'zfs send -I' to a series of 'zfs send -i', for example as a workaround for
+    # zfs issue https://github.com/openzfs/zfs/issues/16394
     return incremental_send_steps(src_snapshots, src_guids, included_guids, is_resume, force_convert_I_to_i)
 
 
