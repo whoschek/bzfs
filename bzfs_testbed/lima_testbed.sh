@@ -23,7 +23,7 @@ set -eo pipefail
 TESTBED_NUM_SRC_VMS="${TESTBED_NUM_SRC_VMS:-1}"  # number of VMs acting as a replication source
 TESTBED_NUM_DST_VMS="${TESTBED_NUM_DST_VMS:-1}"  # number of VMs acting as a replication destination
 TESTBED_HOSTNAME_PREFIX="${TESTBED_HOSTNAME_PREFIX:-test}"  # VMs are named "${TESTBED_HOSTNAME_PREFIX}${GROUP}${COUNTER}"
-TESTBED_ZPOOL_CAPACITY_GB="${TESTBED_ZPOOL_CAPACITY_GB:-8}"  # 8GB test pool size by default; must be < $LIMA_VM_DISK
+TESTBED_ZPOOL_CAPACITY_GB="${TESTBED_ZPOOL_CAPACITY_GB:-10}"  # 10GB test pool size by default; must be < $LIMA_VM_DISK
 TESTBED_ZPOOL_CAPACITY_MB="${TESTBED_ZPOOL_CAPACITY_MB:-$((TESTBED_ZPOOL_CAPACITY_GB * 1024))}"
 export LIMA_VM_CONTAINERD="${LIMA_VM_CONTAINERD:-system}"  # rootful containerd is required for ZFS inside containerd
 testbed_hostname_prefix_ere="$(printf '%s\n' "$TESTBED_HOSTNAME_PREFIX" | sed 's/[][(){}.^$*+?|\\]/\\&/g')"  # regex escape

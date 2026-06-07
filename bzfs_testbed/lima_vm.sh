@@ -26,7 +26,7 @@
 set -eo pipefail
 LIMA_VM_TEMPLATE="${LIMA_VM_TEMPLATE:-template:ubuntu-24.04}"  # see `limactl create --list-templates` for available options
 LIMA_VM_NAME="${LIMA_VM_NAME:-mylimavm}"  # see `limactl list` for the name of all existing VMs
-LIMA_VM_DISK="${LIMA_VM_DISK:-15}"  # GiB
+LIMA_VM_DISK="${LIMA_VM_DISK:-20}"  # GiB
 LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(4, #cores)
 LIMA_VM_MEMORY="${LIMA_VM_MEMORY:-4}"  # GiB
 LIMA_VM_RECREATE="${LIMA_VM_RECREATE:-false}"  # to init VM from scratch
