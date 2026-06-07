@@ -61,7 +61,7 @@ jobs:
               echo
               echo "========================================================================"
               echo "git diff for lock file changes:"
-              git diff requirements*.txt
+              git --no-pager diff requirements*.txt
             } >> "$GITHUB_STEP_SUMMARY"
             echo "::warning::Consider refreshing lock files. Review the regenerated diff before deciding whether to push lockfile changes."
             exit 1

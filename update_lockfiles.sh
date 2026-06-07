@@ -14,4 +14,4 @@ uv pip compile --extra=dev --generate-hashes --universal --python-version=3.9 --
 echo
 echo "========================================================================"
 echo "git diff for lock file changes:"
-git diff requirements*.txt
+git --no-pager diff requirements*.txt
