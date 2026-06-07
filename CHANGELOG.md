@@ -2,6 +2,17 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0] - Not yet released
+
+- [bzfs] Fix bookkeeping on resume of interrupted zfs send of snapshot that is no longer the oldest selected snapshot
+  ([#113](https://github.com/whoschek/bzfs/issues/113)).
+- [bzfs] `--monitor-snapshots`: treat a missing real source or destination root as a health failure.
+- [bzfs] `--cache-snapshots`: also include `--skip-missing-snapshots` semantics and `--no-use-bookmark` semantics in
+  replication cache key.
+- [bzfs] Various small improvements to the test VM.
+- [bzfs] Also run nightly CI tests on AlmaLinux-10.2 and AlmaLinux-9.8.
+- [dev] Cut down the number of optional development dependencies and pin the remaining ones.
+
 ## [1.21.0] - May 15, 2026
 
 - [bzfs, bzfs_jobrunner] Make it possible to launch with other Python versions, via `uv`; this does not apply to
