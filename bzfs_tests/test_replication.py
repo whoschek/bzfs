@@ -47,6 +47,7 @@ from bzfs_main.replication import (
     _clear_resumable_recv_state_if_necessary,
     _compress_cmd,
     _create_zfs_filesystem,
+    _decode_resume_token,
     _decompress_cmd,
     _delete_snapshot_cmd,
     _estimate_send_size,
@@ -607,6 +608,7 @@ class TestReplication(AbstractTestCase):
             resume_recv=True,
             zfs_program="zfs",
             dry_run=False,
+            dry_run_no_send=False,
             verbose_zfs=False,
             dst=MagicMock(),
             log=MagicMock(),
@@ -619,6 +621,44 @@ class TestReplication(AbstractTestCase):
         self.assertEqual(["-t", "tok"], send_opts)
         self.assertEqual(["-s"], recv_opts)
         mock_run_ssh_command.assert_called_once()
+
+    @patch("bzfs_main.replication.is_zpool_feature_enabled_or_active", return_value=True)
+    def test_recv_resume_token_dryrun_send_adds_send_noop(self, _feat: MagicMock) -> None:
+        job = _make_job(
+            resume_recv=True,
+            zfs_program="zfs",
+            dry_run=True,
+            dry_run_no_send=True,
+            verbose_zfs=False,
+            dst=MagicMock(),
+            log=MagicMock(),
+            is_program_available=MagicMock(return_value=True),
+        )
+        job.dst_dataset_exists = {"pool/ds": True}
+        with patch.object(job, "run_ssh_command", return_value="tok\n"):
+            token, send_opts, recv_opts = _recv_resume_token(job, "pool/ds")
+        self.assertEqual("tok", token)
+        self.assertEqual(["-n", "-t", "tok"], send_opts)
+        self.assertEqual(["-s"], recv_opts)
+
+    def test_decode_resume_token_validates_source_dataset_and_name(self) -> None:
+        """Verifies decoded resume targets are syntactically valid and belong to the replicated source dataset."""
+        job = _make_job(
+            zfs_program="zfs",
+            src=MagicMock(sudo="sudo"),
+            log=MagicMock(),
+        )
+
+        def decode(stdout: str) -> str:
+            with patch.object(job, "run_ssh_command", return_value=stdout):
+                return _decode_resume_token(job, "token", "src/pool", "dst/pool")
+
+        self.assertEqual("src/pool@s1", decode("  toname = src/pool@s1\n  toguid = abc\n"))
+        self.assertEqual("src/pool#s1", decode("  toname = src/pool#s1\n  toguid = abc\n"))
+        with self.assertRaises(RetryableError):
+            decode("  toname = other/pool@s1\n  toguid = abc\n")
+        with self.assertRaises(AssertionError):
+            decode("  toname = src/pool@\n  toguid = abc\n")
 
     def test_create_zfs_filesystem_creates_missing(self) -> None:
         job = _make_job(

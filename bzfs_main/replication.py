@@ -184,7 +184,28 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
         latest_common_src_snapshot, dry_run_no_send, done_checking = full_result
     if latest_common_src_snapshot:
         # finally, incrementally replicate all selected snapshots from latest common snapshot until latest src snapshot
-        _replicate_dataset_incrementally(
+        recv_resume_token_result: tuple[str | None, list[str], list[str]] = _recv_resume_token(job, dst_dataset)
+        recv_resume_token, _send_resume_opts, _recv_resume_opts = recv_resume_token_result
+        if recv_resume_token:
+            latest_common_src_snapshot = _replicate_dataset_incrementally(
+                job,
+                src_dataset,
+                dst_dataset,
+                latest_common_src_snapshot,
+                latest_src_snapshot,
+                basis_src_snapshots_with_guids,
+                included_src_guids,
+                recv_resume_token_result,
+                props_cache,
+                dry_run_no_send,
+                done_checking,
+                tid,
+            )
+            recv_resume_token = None  # we have now caught up
+            recv_resume_token_result = (recv_resume_token,) + recv_resume_token_result[1:]
+            dry_run_no_send = dry_run_no_send or p.dry_run
+
+        latest_common_src_snapshot = _replicate_dataset_incrementally(
             job,
             src_dataset,
             dst_dataset,
@@ -192,6 +213,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
             latest_src_snapshot,
             basis_src_snapshots_with_guids,
             included_src_guids,
+            recv_resume_token_result,
             props_cache,
             dry_run_no_send,
             done_checking,
@@ -409,6 +431,7 @@ def _replicate_dataset_fully(
         curr_size: int = _estimate_send_size(job, src, dst_dataset, recv_resume_token, oldest_src_snapshot)
         humansize: str = _format_size(curr_size)
         if recv_resume_token:
+            oldest_src_snapshot = _decode_resume_token(job, recv_resume_token, src_dataset, dst_dataset)
             send_opts: list[str] = p.curr_zfs_send_program_opts + send_resume_opts  # e.g. curr + ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
@@ -446,14 +469,17 @@ def _replicate_dataset_incrementally(
     latest_src_snapshot: str,
     basis_src_snapshots_with_guids: list[str],
     included_src_guids: set[str],
+    recv_resume_token_result: tuple[str | None, list[str], list[str]],
     props_cache: dict[tuple[str, str, str], dict[str, str | None]],
     dry_run_no_send: bool,
     done_checking: bool,
     tid: str,
-) -> None:
+) -> str:
     """Incrementally replicates all selected snapshots from latest common snapshot until latest src snapshot."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
+    recv_resume_token, send_resume_opts, recv_resume_opts = recv_resume_token_result
+    set_opts: list[str] = []
 
     def replication_candidates() -> tuple[list[str], list[str]]:
         assert len(basis_src_snapshots_with_guids) > 0
@@ -480,32 +506,38 @@ def _replicate_dataset_incrementally(
         assert len(result_snapshots) == len(result_guids)
         return result_guids, result_snapshots
 
-    # collect the most recent common snapshot (which may be a bookmark) followed by all src snapshots
-    # (that are not a bookmark) that are more recent than that.
-    cand_guids, cand_snapshots = replication_candidates()
-    if len(cand_snapshots) == 1:
-        # latest_src_snapshot is a (true) snapshot that is equal to latest_common_src_snapshot or LESS recent
-        # than latest_common_src_snapshot. The latter case can happen if latest_common_src_snapshot is a
-        # bookmark whose snapshot has been deleted on src.
-        return  # nothing more tbd
-
-    recv_resume_token_result: tuple[str | None, list[str], list[str]] = _recv_resume_token(job, dst_dataset)
-    recv_resume_token, send_resume_opts, recv_resume_opts = recv_resume_token_result
-    recv_opts: list[str] = p.zfs_recv_program_opts.copy() + recv_resume_opts
-    recv_opts, set_opts = _add_recv_property_options(job, False, recv_opts, src_dataset, props_cache)
-    if p.no_stream:
-        # skip intermediate snapshots
+    if recv_resume_token:
+        estimate_send_sizes: list[int] = [_estimate_send_size(job, src, dst_dataset, recv_resume_token)]
+        decoded_src_snapshot: str = _decode_resume_token(job, recv_resume_token, src_dataset, dst_dataset)
         steps_todo: list[tuple[str, str, str, list[str]]] = [
-            ("-i", latest_common_src_snapshot, latest_src_snapshot, [latest_src_snapshot])
+            ("-i", latest_common_src_snapshot, decoded_src_snapshot, [decoded_src_snapshot])
         ]
     else:
-        # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
-        # a series of -i/-I send/receive steps that skip excluded src snapshots.
-        steps_todo = _incremental_send_steps_wrapper(
-            p, cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
-        )
+        # collect the most recent common snapshot (which may be a bookmark) followed by all src snapshots
+        # (that are not a bookmark) that are more recent than that.
+        cand_guids, cand_snapshots = replication_candidates()
+        if len(cand_snapshots) == 1:
+            # latest_src_snapshot is a (true) snapshot that is equal to latest_common_src_snapshot or LESS recent
+            # than latest_common_src_snapshot. The latter case can happen if latest_common_src_snapshot is a
+            # bookmark whose snapshot has been deleted on src.
+            return latest_common_src_snapshot  # nothing more tbd
+        if p.no_stream:
+            if not any(guid in included_src_guids for guid in cand_guids[1:]):
+                # The cand_snapshots list (and basis_src_snapshots_with_guids) can contain snapshots that are newer than
+                # what the user selected via --include/exclude-snapshot-*. These newer snapshots are irrelevant here.
+                # Example: A resume token represents @s3, and @s4 exists on src but is excluded by --exclude-snapshot-*.
+                # Replanning from @s3 sees [@s3, @s4] in cand_snapshots, but no selected snapshot remains after @s3, so
+                # replication is done.
+                return latest_common_src_snapshot  # nothing more tbd
+            # skip intermediate snapshots
+            steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot, [latest_src_snapshot])]
+        else:
+            # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
+            # a series of -i/-I send/receive steps that skip excluded src snapshots.
+            steps_todo = _incremental_send_steps_wrapper(p, cand_snapshots, cand_guids, included_src_guids, False)
+        estimate_send_sizes = _estimate_send_sizes_in_parallel(job, src, dst_dataset, recv_resume_token, steps_todo)
+
     log.log(LOG_TRACE, "steps_todo: %s", list_formatter(steps_todo, "; "))
-    estimate_send_sizes: list[int] = _estimate_send_sizes_in_parallel(job, src, dst_dataset, recv_resume_token, steps_todo)
     total_size: int = sum(estimate_send_sizes)
     total_num: int = sum(len(to_snapshots) for incr_flag, from_snap, to_snap, to_snapshots in steps_todo)
     done_size: int = 0
@@ -520,6 +552,8 @@ def _replicate_dataset_incrementally(
         else:
             send_opts = p.curr_zfs_send_program_opts + [incr_flag, from_snap, to_snap]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
+        recv_opts: list[str] = p.zfs_recv_program_opts.copy() + recv_resume_opts
+        recv_opts, set_opts = _add_recv_property_options(job, False, recv_opts, src_dataset, props_cache)
         recv_cmd: list[str] = p.split_args(
             f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
         )
@@ -538,7 +572,7 @@ def _replicate_dataset_incrementally(
         )
         done_size += curr_size
         done_num += curr_num_snapshots
-        recv_resume_token = None
+        latest_common_src_snapshot = to_snap
         with job.stats_lock:
             job.num_snapshots_replicated += curr_num_snapshots
         assert p.create_bookmarks
@@ -551,6 +585,7 @@ def _replicate_dataset_incrementally(
                 to_snapshots.append(to_snap)  # ensure latest common snapshot is bookmarked
             _create_zfs_bookmarks(job, src, src_dataset, to_snapshots)
     _zfs_set(job, set_opts, dst, dst_dataset)
+    return latest_common_src_snapshot
 
 
 def _format_size(num_bytes: int) -> str:
@@ -776,6 +811,15 @@ def _run_zfs_send_receive(
                 xprint(log, process.stderr, file=sys.stderr)
 
 
+def _clear_resumable_recv_state(job: Job, dst_dataset: str) -> bool:
+    p, log = job.params, job.params.log
+    log.warning(p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset)
+    cmd: list[str] = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
+    job.try_ssh_command(p.dst, LOG_TRACE, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+    log.log(LOG_TRACE, p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
+    return True
+
+
 def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr: str) -> bool:
     """Deletes leftover ZFS resume token state on the receiving dataset if necessary to continue operations.
 
@@ -790,14 +834,6 @@ def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr:
     - `zfs receive -A` fails if the receiving dataset has no ZFS resume token (anymore).
     """
 
-    def clear_resumable_recv_state() -> bool:
-        log.warning(p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset)
-        cmd: list[str] = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
-        job.try_ssh_command(p.dst, LOG_TRACE, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
-        log.log(LOG_TRACE, p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
-        return True
-
-    p, log = job.params, job.params.log
     # No i18n needed here. OpenZFS ships no translation catalogs, so gettext falls back to English msgids and locale settings
     # have no effect. If translations ever appear, revisit this or inject LC_ALL=C.
 
@@ -809,7 +845,7 @@ def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr:
         or "used in the initial send no longer exists" in stderr
         or re.search(r"incremental source [0-9a-fx]+ no longer exists", stderr)
     ):
-        return clear_resumable_recv_state()
+        return _clear_resumable_recv_state(job, dst_dataset)
 
     # "cannot receive resume stream: incompatible embedded data stream feature with encrypted receive."
     #     see https://github.com/openzfs/zfs/issues/12480
@@ -819,7 +855,7 @@ def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr:
         "cannot receive resume stream: incompatible embedded data stream feature with encrypted receive" in stderr
         or 'contains partially-complete state from "zfs receive -s"' in stderr
     ):
-        return clear_resumable_recv_state()
+        return _clear_resumable_recv_state(job, dst_dataset)
 
     elif (  # this signals normal behavior on interrupt of 'zfs receive -s' if running without --no-resume-recv
         "cannot receive new filesystem stream: checksum mismatch or incomplete stream" in stderr
@@ -839,7 +875,7 @@ def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr:
         and "use '-R' to destroy the following dataset" in stderr
         and f"\n{dst_dataset}/%recv\n" in stderr
     ):
-        return clear_resumable_recv_state()
+        return _clear_resumable_recv_state(job, dst_dataset)
 
     # Same cause as above, except that this error can occur during 'zfs rollback'
     # Also see https://github.com/openzfs/zfs/blob/master/cmd/zfs/zfs_main.c
@@ -849,7 +885,7 @@ def _clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr:
         and "use '-R' to force deletion of the following clones and dependents" in stderr
         and f"\n{dst_dataset}/%recv\n" in stderr
     ):
-        return clear_resumable_recv_state()
+        return _clear_resumable_recv_state(job, dst_dataset)
 
     return False
 
@@ -875,11 +911,38 @@ def _recv_resume_token(job: Job, dst_dataset: str) -> tuple[str | None, list[str
         if recv_resume_token == "-" or not recv_resume_token:  # noqa: S105
             recv_resume_token = None
         else:
-            send_resume_opts += ["-n"] if p.dry_run else []
+            send_resume_opts += ["-n"] if p.dry_run_no_send else []
             send_resume_opts += ["-v"] if p.verbose_zfs else []
             send_resume_opts += ["-t", recv_resume_token]
     recv_resume_opts = ["-s"]
     return recv_resume_token, send_resume_opts, recv_resume_opts
+
+
+def _decode_resume_token(job: Job, recv_resume_token: str, src_dataset: str, dst_dataset: str) -> str:
+    """Returns the source snapshot encoded in a ZFS receive resume token."""
+    p, log = job.params, job.params.log
+    decode_cmd: list[str] = p.split_args(f"{p.src.sudo} {p.zfs_program} send -n -v -t", recv_resume_token)
+    try:
+        decoded_resume_token: str = job.run_ssh_command(p.src, LOG_DEBUG, cmd=decode_cmd)
+    except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
+        stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+        retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
+        # op isn't idempotent so retries regather current state from the start of replicate_dataset()
+        raise RetryableError(display_msg="zfs send -t", retry_immediately_once=retry_immediately_once) from e
+
+    name_match: re.Match[str] | None = re.search(r"(?m)^\s+toname\s=\s(.+)$", decoded_resume_token)
+    guid_match: re.Match[str] | None = re.search(r"(?m)^\s+toguid\s=\s(.+)$", decoded_resume_token)
+    assert name_match is not None and guid_match is not None, f"Cannot parse {recv_resume_token}, {decoded_resume_token}"
+    decoded_src_snapshot: str = name_match.group(1)
+    decoded_src_guid: str = str(int(guid_match.group(1).strip(), base=16))
+    log.log(LOG_TRACE, f"decoded recv_resume_token src snapshot: {decoded_src_snapshot}, guid: {decoded_src_guid}")
+    assert "@" in decoded_src_snapshot or "#" in decoded_src_snapshot, decoded_src_snapshot
+    decoded_src_dataset, decoded_src_tag = decoded_src_snapshot.split("@" if "@" in decoded_src_snapshot else "#", 1)
+    if decoded_src_dataset != src_dataset:
+        _clear_resumable_recv_state(job, dst_dataset)
+        raise RetryableError(display_msg="stale zfs receive resume token", retry_immediately_once=True) from RuntimeError()
+    assert decoded_src_tag
+    return decoded_src_snapshot
 
 
 def _mbuffer_cmd(p: Params, loc: str, size_estimate_bytes: int, recordsize: int) -> str:

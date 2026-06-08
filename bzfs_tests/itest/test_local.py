@@ -2834,17 +2834,23 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1", "s2", "s3"])
 
     @staticmethod
-    def create_resumable_snapshots(lo: int, hi: int, size_in_bytes: int = 1024 * 1024) -> None:
+    def create_resumable_snapshots(
+        lo: int,
+        hi: int,
+        size_in_bytes: int = 1024 * 1024,
+        dataset: str | None = None,
+    ) -> None:
         """Large enough to be interruptible and resumable.
 
         interacts with bzfs.py/inject_dst_pipe_fail
         """
-        run_cmd(f"sudo -n zfs mount {ibase.SRC_ROOT_DATASET}".split())
+        dataset = dataset if dataset is not None else ibase.SRC_ROOT_DATASET
+        run_cmd(f"sudo -n zfs mount {dataset}".split())
         for j in range(lo, hi):
-            tmp_file = "/" + ibase.SRC_ROOT_DATASET + "/tmpfile"
+            tmp_file = "/" + dataset + "/tmpfile"
             run_cmd(f"sudo -n dd if=/dev/urandom of={tmp_file} bs={size_in_bytes} count=1".split())
-            take_snapshot(ibase.SRC_ROOT_DATASET, fix(f"s{j}"))
-        run_cmd(f"sudo -n zfs unmount {ibase.SRC_ROOT_DATASET}".split())
+            take_snapshot(dataset, fix(f"s{j}"))
+        run_cmd(f"sudo -n zfs unmount {dataset}".split())
 
     def test_snapshots_are_all_eventually_fully_replicated_even_though_every_recv_is_interrupted_and_resumed(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
@@ -3028,6 +3034,279 @@ class LocalTestCase(IntegrationTestCase):
                             self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, retries=1)
                 self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
                 self.assert_snapshots(ibase.DST_ROOT_DATASET, 1, "s")
+
+    def test_send_full_resume_recv_dryrun_recv(self) -> None:
+        """Verify --dryrun=recv sends resumable streams into zfs receive -n without changing dst."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+
+        destroy(ibase.DST_ROOT_DATASET, recursive=True)
+        self.create_resumable_snapshots(1, 2)
+        self.generate_recv_resume_token(None, ibase.SRC_ROOT_DATASET + "@" + fix("s1"), ibase.DST_ROOT_DATASET)
+        props = ["createtxg", "receive_resume_token"]
+        if is_zfs_at_least_2_2_0():
+            props.append("snapshots_changed")
+        expected_props = {prop: dataset_property(ibase.DST_ROOT_DATASET, prop) for prop in props}
+        token = self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [])
+
+        if is_zfs_at_least_2_2_0():
+            time.sleep(2.1)  # make any forbidden snapshots_changed update visible despite integer-second granularity
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--dryrun=recv")
+
+        actual_props = {prop: dataset_property(ibase.DST_ROOT_DATASET, prop) for prop in props}
+        self.assertEqual(expected_props, actual_props)
+        self.assertEqual(token, self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True))
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [])
+
+    def test_send_incr_resume_recv_dryrun_recv(self) -> None:
+        """Verify incremental --dryrun=recv resumes into zfs receive -n without changing dst."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+
+        self.create_resumable_snapshots(1, 2)
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [fix("s1")])
+
+        self.create_resumable_snapshots(2, 3)
+        self.generate_recv_resume_token(
+            ibase.SRC_ROOT_DATASET + "@" + fix("s1"),
+            ibase.SRC_ROOT_DATASET + "@" + fix("s2"),
+            ibase.DST_ROOT_DATASET,
+        )
+        props = ["createtxg", "receive_resume_token"]
+        if is_zfs_at_least_2_2_0():
+            props.append("snapshots_changed")
+        expected_props = {prop: dataset_property(ibase.DST_ROOT_DATASET, prop) for prop in props}
+        token = self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [fix("s1")])
+
+        if is_zfs_at_least_2_2_0():
+            time.sleep(2.1)  # make any forbidden snapshots_changed update visible despite integer-second granularity
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--dryrun=recv")
+
+        actual_props = {prop: dataset_property(ibase.DST_ROOT_DATASET, prop) for prop in props}
+        self.assertEqual(expected_props, actual_props)
+        self.assertEqual(token, self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True))
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [fix("s1")])
+
+    def assert_dst_snapshots_have_src_bookmarks(self, expected_names: list[str]) -> None:
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, expected_names)
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, expected_names)
+        dst_snapshot_guids = set(zfs_list([build(ibase.DST_ROOT_DATASET)], props=["guid"], types=["snapshot"], max_depth=1))
+        src_bookmark_guids = set(zfs_list([build(ibase.SRC_ROOT_DATASET)], props=["guid"], types=["bookmark"], max_depth=1))
+        self.assertSetEqual(dst_snapshot_guids, src_bookmark_guids)
+
+    def test_issue_113_resume_token_identity_drift(self) -> None:
+        """Reproduce issue #113 with deterministic full and incremental receive resume tokens."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+
+        bzfs_args = ("--no-stream", "--no-estimate-send-size", "--create-bookmarks=all")
+        self.create_resumable_snapshots(1, 2)
+        self.generate_recv_resume_token(None, ibase.SRC_ROOT_DATASET + "@" + fix("s1"), ibase.DST_ROOT_DATASET)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [])
+
+        self.create_resumable_snapshots(2, 3)
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, *bzfs_args)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_dst_snapshots_have_src_bookmarks(["s1", "s2"])
+
+        self.create_resumable_snapshots(3, 4)
+        self.generate_recv_resume_token(
+            ibase.SRC_ROOT_DATASET + "@" + fix("s2"),
+            ibase.SRC_ROOT_DATASET + "@" + fix("s3"),
+            ibase.DST_ROOT_DATASET,
+        )
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2"])
+
+        self.create_resumable_snapshots(4, 5)
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, *bzfs_args)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_dst_snapshots_have_src_bookmarks(["s1", "s2", "s3", "s4"])
+
+    def test_send_full_resume_recv_missing_token_source_snapshot(self) -> None:
+        """Verify stale full receive tokens are cleared when the token snapshot was destroyed on source."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+
+        destroy(ibase.DST_ROOT_DATASET, recursive=True)
+        self.create_resumable_snapshots(1, 2)
+        self.generate_recv_resume_token(None, ibase.SRC_ROOT_DATASET + "@" + fix("s1"), ibase.DST_ROOT_DATASET)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assertTrue(dataset_exists(ibase.DST_ROOT_DATASET))
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [])
+
+        destroy(ibase.SRC_ROOT_DATASET + "@" + fix("s1"))
+        self.create_resumable_snapshots(2, 3)
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--no-estimate-send-size",
+            retries=1,
+        )
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s2"])
+        self.assert_dst_snapshots_have_src_bookmarks(["s2"])
+
+    def test_send_incr_resume_recv_bookmarks_actual_resumed_snapshot(self) -> None:
+        """Verify resumed incremental sends bookmark and continue from the actual token target."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+
+        scenarios = [
+            ("resume_target_selected", 3, ".*s.*", [], ["s1", "s2", "s3"], ["s2", "s3"]),
+            ("resume_target_skipped", 3, ".*s3.*", [], ["s1", "s2", "s3"], ["s2", "s3"]),
+            ("resume_target_skipped_multiple_selected", 4, ".*s[34].*", [], ["s1", "s2", "s3", "s4"], ["s2", "s3", "s4"]),
+            ("resume_target_skipped_no_stream", 4, ".*s[34].*", ["--no-stream"], ["s1", "s2", "s4"], ["s2", "s4"]),
+        ]
+        for i, (name, max_snapshot, include_regex, extra_args, expected_dst, expected_bookmarks) in enumerate(scenarios):
+            with stop_on_failure_subtest(name=name):
+                if i > 0:
+                    self.tearDownAndSetup()
+                self.create_resumable_snapshots(1, 2)
+                self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, no_create_bookmark=True)
+                self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+                self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, [])
+
+                self.create_resumable_snapshots(2, 3)
+                self.generate_recv_resume_token(
+                    ibase.SRC_ROOT_DATASET + "@" + fix("s1"),
+                    ibase.SRC_ROOT_DATASET + "@" + fix("s2"),
+                    ibase.DST_ROOT_DATASET,
+                )
+                self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+                self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+
+                self.create_resumable_snapshots(3, max_snapshot + 1)
+                self.run_bzfs(
+                    ibase.SRC_ROOT_DATASET,
+                    ibase.DST_ROOT_DATASET,
+                    "-v",
+                    f"--include-snapshot-regex={include_regex}",
+                    "--no-estimate-send-size",
+                    *extra_args,
+                )
+                self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+                self.assert_snapshot_names(ibase.DST_ROOT_DATASET, expected_dst)
+                self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, expected_bookmarks)
+
+                destroy_snapshots(ibase.SRC_ROOT_DATASET, snapshots(ibase.SRC_ROOT_DATASET)[:2])
+                self.run_bzfs(
+                    ibase.SRC_ROOT_DATASET,
+                    ibase.DST_ROOT_DATASET,
+                    "-v",
+                    f"--include-snapshot-regex={include_regex}",
+                    "--no-estimate-send-size",
+                    *extra_args,
+                )
+                self.assert_snapshot_names(ibase.DST_ROOT_DATASET, expected_dst)
+
+    def test_send_incr_resume_recv_dryrun_recv_with_later_snapshot(self) -> None:
+        """Verify --dryrun=recv only validates the resume stream when later snapshots exist."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+
+        self.create_resumable_snapshots(1, 2)
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [fix("s1")])
+
+        self.create_resumable_snapshots(2, 3)
+        self.generate_recv_resume_token(
+            ibase.SRC_ROOT_DATASET + "@" + fix("s1"),
+            ibase.SRC_ROOT_DATASET + "@" + fix("s2"),
+            ibase.DST_ROOT_DATASET,
+        )
+        self.create_resumable_snapshots(3, 4)
+        props = ["createtxg", "receive_resume_token"]
+        if is_zfs_at_least_2_2_0():
+            props.append("snapshots_changed")
+        expected_props = {prop: dataset_property(ibase.DST_ROOT_DATASET, prop) for prop in props}
+        token = self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [fix("s1")])
+
+        if is_zfs_at_least_2_2_0():
+            time.sleep(2.1)  # make any forbidden snapshots_changed update visible despite integer-second granularity
+        dry_run_job = self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "-v", "--dryrun=recv")
+        log_text = Path(dry_run_job.params.log_params.log_file).read_text(encoding="utf-8")
+        pipeline_lines = [
+            line
+            for line in log_text.splitlines()
+            if "zfs send" in line and "zfs receive" in line and ("Executing:" in line or "Would execute:" in line)
+        ]
+        executing_lines = [line for line in pipeline_lines if "Executing:" in line]
+        would_execute_lines = [line for line in pipeline_lines if "Would execute:" in line]
+        self.assertEqual(1, len(executing_lines), "\n".join(pipeline_lines))
+        self.assertEqual(1, len(would_execute_lines), "\n".join(pipeline_lines))
+        self.assertIn("-t", executing_lines[0])
+        self.assertIn("@" + fix("s2"), would_execute_lines[0])
+        self.assertIn("@" + fix("s3"), would_execute_lines[0])
+
+        actual_props = {prop: dataset_property(ibase.DST_ROOT_DATASET, prop) for prop in props}
+        self.assertEqual(expected_props, actual_props)
+        self.assertEqual(token, self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True))
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [fix("s1")])
+
+    def test_send_incr_resume_recv_no_selected_snapshot_after_decoded_token(self) -> None:
+        """Verify resume-token replanning stops when newer source snapshots are excluded."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+
+        self.create_resumable_snapshots(1, 3)
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--create-bookmarks=all")
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2"])
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1", "s2"])
+
+        self.create_resumable_snapshots(3, 4)
+        self.generate_recv_resume_token(
+            ibase.SRC_ROOT_DATASET + "@" + fix("s2"),
+            ibase.SRC_ROOT_DATASET + "@" + fix("s3"),
+            ibase.DST_ROOT_DATASET,
+        )
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2"])
+
+        self.create_resumable_snapshots(4, 5)
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "-v",
+            "--no-stream",
+            "--include-snapshot-regex=.*s3.*",
+            "--no-estimate-send-size",
+        )
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2", "s3"])
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1", "s2", "s3"])
+
+    def test_send_full_resume_recv_token_from_different_source_dataset(self) -> None:
+        """Verify stale full receive tokens are cleared when the current source dataset differs."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+
+        old_src = create_filesystem(ibase.SRC_POOL, "tmp/oldsrc")
+        new_src = create_filesystem(ibase.SRC_POOL, "tmp/newsrc")
+        self.create_resumable_snapshots(1, 2, dataset=old_src)
+        take_snapshot(new_src, fix("n1"))
+
+        destroy(ibase.DST_ROOT_DATASET, recursive=True)
+        self.generate_recv_resume_token(None, old_src + "@" + fix("s1"), ibase.DST_ROOT_DATASET)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [])
+
+        self.run_bzfs(new_src, ibase.DST_ROOT_DATASET, "--no-estimate-send-size", retries=1)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["n1"])
 
     def test_compare_snapshot_lists_with_nonexisting_source(self) -> None:
         destroy(ibase.SRC_ROOT_DATASET, recursive=True)
