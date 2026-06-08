@@ -1306,6 +1306,53 @@ class LocalTestCase(IntegrationTestCase):
                 else:
                     self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s3", "s4", "s6"])
 
+    def test_excluded_common_snapshot_still_anchors_incremental_replication(self) -> None:
+        """Verify an excluded-but-common snapshot remains a valid incremental base by GUID."""
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s1_keep"))
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s2_base"))
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s3_keep"))
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--include-snapshot-regex=.*s2_base.*",
+        )
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s2_base"])
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--include-snapshot-regex=.*keep.*",
+        )
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s2_base", "s3_keep"])
+
+        destroy(ibase.SRC_ROOT_DATASET + "@" + fix("s2_base"))
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s4_keep"))
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--include-snapshot-regex=.*keep.*",
+        )
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s2_base", "s3_keep", "s4_keep"])
+
+    def test_no_stream_bookmark_anchor_survives_source_snapshot_retention(self) -> None:
+        """Verify no-stream replication leaves a bookmark anchor for later pruned source snapshots."""
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s1"))
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s2"))
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s3"))
+
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--no-stream", "--create-bookmarks=all")
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s3"])
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s3"])
+
+        destroy_snapshots(ibase.SRC_ROOT_DATASET, snapshots(ibase.SRC_ROOT_DATASET))
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s4"))
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--no-stream", "--create-bookmarks=all")
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s3", "s4"])
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s3", "s4"])
+
     def test_basic_replication_with_no_datasets_1(self) -> None:
         self.setup_basic()
         self.run_bzfs(expected_status=2)
@@ -2022,6 +2069,22 @@ class LocalTestCase(IntegrationTestCase):
             "--recursive",
         )
         self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET))
+
+    def test_skip_missing_snapshots_continue_creates_parent_for_selected_child(self) -> None:
+        """Verify recursive continue mode creates missing destination ancestors for selected descendants."""
+        child = create_filesystem(ibase.SRC_ROOT_DATASET, "child")
+        take_snapshot(child, fix("c1"))
+        destroy(ibase.DST_ROOT_DATASET)
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--recursive",
+            "--skip-missing-snapshots=continue",
+        )
+
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [])
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET + "/child", ["c1"])
 
     def test_no_common_snapshot_basic(self) -> None:
         self.setup_basic()
@@ -3895,6 +3958,26 @@ class LocalTestCase(IntegrationTestCase):
         self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET + "/zoo"))
         self.assertTrue(dataset_exists(ibase.DST_ROOT_DATASET + "/boo"))
 
+    def test_delete_dst_datasets_removes_receive_resume_token_state(self) -> None:
+        """Verify dataset pruning removes a dataset and its receive-resume state."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+
+        destroy(ibase.DST_ROOT_DATASET, recursive=True)
+        self.create_resumable_snapshots(1, 2)
+        self.generate_recv_resume_token(None, ibase.SRC_ROOT_DATASET + "@" + fix("s1"), ibase.DST_ROOT_DATASET)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+
+        self.run_bzfs(
+            DUMMY_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--skip-replication",
+            "--delete-dst-datasets",
+            retries=1,
+        )
+
+        self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET))
+
     def test_delete_dst_snapshots_and_empty_datasets(self) -> None:
         create_filesystems("axe")
         create_filesystems("foo/a")
@@ -4335,6 +4418,34 @@ class LocalTestCase(IntegrationTestCase):
             retries=1,
         )
         self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s3"])
+
+    def test_force_rollback_to_latest_snapshot_with_injected_recv_token(self) -> None:
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s1"))
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s2"))
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--no-use-bookmark", no_create_bookmark=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2"])
+
+        self.create_resumable_snapshots(3, 4)
+        self.generate_recv_resume_token(
+            ibase.SRC_ROOT_DATASET + "@" + fix("s2"),
+            ibase.SRC_ROOT_DATASET + "@" + fix("s3"),
+            ibase.DST_ROOT_DATASET,
+        )
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2"])
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--force-rollback-to-latest-snapshot",
+            "--no-use-bookmark",
+            "--create-bookmarks=none",
+            retries=1,
+        )
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2", "s3"])
 
     def test_delete_dst_snapshots_flat_with_injected_recv_token1(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
