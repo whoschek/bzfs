@@ -165,7 +165,7 @@ class TestSnapshotCache(AbstractTestCase):
         and code duplication across tests computing this label.
         """
         assert dst_dataset
-        filter_key = tuple(tuple(f) for f in job.params.snapshot_filters)
+        filter_key = (job.params.snapshot_filters, job.params.skip_missing_snapshots, job.params.use_bookmark)
         filter_hash_code: str = sha256_85_urlsafe_base64(str(filter_key))
         userhost_dir: str = sha256_85_urlsafe_base64(job.params.dst.cache_namespace())
         dst_dataset_hash: str = sha256_85_urlsafe_base64(dst_dataset)

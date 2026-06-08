@@ -4683,6 +4683,50 @@ class LocalTestCase(IntegrationTestCase):
         self.assertEqual(2, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
 
+    def test_cache_respects_skip_missing_snapshots_fail(self) -> None:
+        """Verify cache hits do not bypass explicit missing-snapshot failure policy."""
+        if not is_cache_snapshots_enabled():
+            self.skipTest("Cache not supported")
+
+        def _run_bzfs(*args: str, **kwargs: Any) -> bzfs.Job:
+            return self.run_bzfs(
+                *args,
+                **kwargs,
+                cache_snapshots=True,
+                force_stable_cache_namespace=True,
+                no_create_bookmark=True,
+            )
+
+        delay_secs = 2 * MATURITY_TIME_THRESHOLD_SECS
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s1"))
+        job = _run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+        self.assertEqual(0, job.num_cache_hits)
+        self.assertEqual(1, job.num_cache_misses)
+
+        time.sleep(delay_secs)
+        destroy(ibase.SRC_ROOT_DATASET + "@" + fix("s1"))
+        self.assert_snapshot_names(ibase.SRC_ROOT_DATASET, [])
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, [])
+        time.sleep(delay_secs)
+        job = _run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--skip-missing-snapshots=dataset",
+        )
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+        self.assertEqual(0, job.num_cache_hits)
+        self.assertEqual(1, job.num_cache_misses)
+
+        time.sleep(delay_secs)
+        _run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--skip-missing-snapshots=fail",
+            expected_status=DIE_STATUS,
+        )
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+
     def test_jobrunner_flat_simple(self) -> None:
 
         def run_jobrunner(*args: str, **kwargs: Any) -> bzfs_jobrunner.Job:

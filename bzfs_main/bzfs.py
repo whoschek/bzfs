@@ -1240,7 +1240,8 @@ class Job(MiniJob):
             stale_src_datasets1: list[str] = []
             maybe_stale_dst_datasets: list[str] = []
             userhost_dir: str = sha256_85_urlsafe_base64(p.dst.cache_namespace())
-            filter_key = tuple(tuple(f) for f in p.snapshot_filters)  # cache is only valid for same --include/excl-snapshot*
+            # filter_key: cache is only valid if same --include/excl-snapshot*, --skip-missing-snapshots, --no-use-bookmark
+            filter_key: tuple = (p.snapshot_filters, p.skip_missing_snapshots, p.use_bookmark)
             filter_hash_code: str = sha256_85_urlsafe_base64(str(filter_key))
             for src_dataset in src_datasets:
                 dst_dataset: str = src2dst(src_dataset)  # cache is only valid for identical destination dataset
