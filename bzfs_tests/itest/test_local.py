@@ -1893,6 +1893,36 @@ class LocalTestCase(IntegrationTestCase):
             inject_params=inject_params,
         )
 
+    def test_monitor_snapshots_missing_root_dataset_is_critical(self) -> None:
+        """Verify monitoring treats a missing real source or destination root as a health failure."""
+        plan = {"z": {"onsite": {"secondly": {"latest": {"critical": "1 hours"}}}}}
+        matching_snapshot = "z_onsite_29990101_000000_secondly"
+
+        with stop_on_failure_subtest(missing="src"):
+            take_snapshot(ibase.DST_ROOT_DATASET, matching_snapshot)
+            destroy(ibase.SRC_ROOT_DATASET, recursive=True)
+            self.run_bzfs(
+                ibase.SRC_ROOT_DATASET,
+                ibase.DST_ROOT_DATASET,
+                "--skip-replication",
+                "--monitor-snapshots",
+                str(plan),
+                expected_status=DIE_STATUS,
+            )
+
+        self.tearDownAndSetup()
+        with stop_on_failure_subtest(missing="dst"):
+            take_snapshot(ibase.SRC_ROOT_DATASET, matching_snapshot)
+            destroy(ibase.DST_ROOT_DATASET, recursive=True)
+            self.run_bzfs(
+                ibase.SRC_ROOT_DATASET,
+                ibase.DST_ROOT_DATASET,
+                "--skip-replication",
+                "--monitor-snapshots",
+                str(plan),
+                expected_status=DIE_STATUS,
+            )
+
     def test_periodic_job_locking(self) -> None:
         if self.param and self.param.get("ssh_mode", "local") != "local":
             self.skipTest(

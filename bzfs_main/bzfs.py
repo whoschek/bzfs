@@ -730,6 +730,10 @@ class Job(MiniJob):
 
         if p.monitor_snapshots_config.enable_monitor_snapshots and not failed:
             log.info("--monitor-snapshots: %s", task_description)
+            if len(basis_src_datasets) == 0 and not is_dummy(src):
+                die(f"Source dataset does not exist: {src.basis_root_dataset}")
+            if len(basis_dst_datasets) == 0:
+                die(f"Destination dataset does not exist: {dst.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             self.monitor_snapshots_task(src_datasets, dst_datasets, task_description)
 
