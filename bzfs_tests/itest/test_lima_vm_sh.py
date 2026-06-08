@@ -162,7 +162,7 @@ class TestLimaVmScript(unittest.TestCase):
         log_sequence = 0
 
         for template in [
-            "template:experimental/ubuntu-26.04",
+            "template:ubuntu-26.04",
             "template:ubuntu-24.04",
             "template:ubuntu-22.04",
             "template:almalinux-9",
