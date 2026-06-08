@@ -233,6 +233,10 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual([], params._fix_send_opts(["--dryrun", "-n", "-ed"]))
         self.assertEqual([], params._fix_send_opts(["-I", "s1"]))
         self.assertEqual(["--raw"], params._fix_send_opts(["-i", "s1", "--raw"]))
+        self.assertEqual([], params._fix_send_opts(["-is1"]))
+        self.assertEqual([], params._fix_send_opts(["-Is1"]))
+        self.assertEqual([], params._fix_send_opts(["-t1-deadbeef"]))
+        self.assertEqual([], params._fix_send_opts(["--resume=1-deadbeef"]))
         self.assertEqual(["-X", "d1,d2"], params._fix_send_opts(["-X", "d1,d2"]))
         self.assertEqual(
             ["--exclude", "d1,d2", "--redact", "b1"], params._fix_send_opts(["--exclude", "d1,d2", "--redact", "b1"])
@@ -242,8 +246,14 @@ class TestHelperFunctions(AbstractTestCase):
         mp = "mountpoint"
         cr = "createtxg"
         params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
+        self.assertEqual((["-o", "compression=lz4"], []), params._fix_recv_opts(["-o", "compression=lz4"], frozenset()))
+        self.assertEqual((["-o", "compression=lz4"], []), params._fix_recv_opts(["-ocompression=lz4"], frozenset()))
+        self.assertEqual((["-x", mp], []), params._fix_recv_opts(["-x", mp], frozenset([mp])))
+        self.assertEqual((["-x", mp], []), params._fix_recv_opts([f"-x{mp}"], frozenset([mp])))
         with self.assertRaises(SystemExit):
             params._fix_recv_opts(["-n", "-o", f"{mp}=foo"], frozenset([mp]))
+        with self.assertRaises(SystemExit):
+            params._fix_recv_opts(["-n", f"-o{mp}=foo"], frozenset([mp]))
         self.assertEqual(([], [mp]), params._fix_recv_opts(["-n"], frozenset([mp])))
         self.assertEqual((["-u", mp], [mp]), params._fix_recv_opts(["-n", "-u", mp], frozenset([mp])))
         self.assertEqual((["-x", mp], []), params._fix_recv_opts(["-n", "-x", mp], frozenset([mp])))

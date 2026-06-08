@@ -881,6 +881,24 @@ def _fix_send_recv_opts(
     assert "-" not in exclude_short_opts
     results: list[str] = []
     x_names: set[str] = set(preserve_properties)
+
+    def _append_include_arg(opt: str, arg: str) -> None:
+        if opt == "-o" and "=" in arg and arg.split("=", 1)[0] in preserve_properties:
+            die(f"--preserve-properties: Disallowed ZFS property found in --zfs-recv-program-opt(s): -o {arg}")
+        if opt == "-x":
+            x_names.discard(arg)
+        results.append(opt)
+        results.append(arg)
+
+    def _is_compact_exclude_arg(opt: str) -> bool:
+        # Compact option forms such as -isnap and --resume=<resume-token> carry the managed argument inline.
+        for exclude_arg_opt in exclude_arg_opts:
+            if len(exclude_arg_opt) == 2 and opt.startswith(exclude_arg_opt) and len(opt) > len(exclude_arg_opt):
+                return True
+            if exclude_arg_opt.startswith("--") and opt.startswith(exclude_arg_opt + "="):
+                return True
+        return False
+
     i = 0
     n = len(opts)
     while i < n:
@@ -889,22 +907,26 @@ def _fix_send_recv_opts(
         if opt in exclude_arg_opts:  # example: {"-X", "--exclude"}
             i += 1
             continue
+        elif _is_compact_exclude_arg(opt):
+            continue
         elif opt in include_arg_opts:  # example: {"-o", "-x"}
-            results.append(opt)
             if i < n:
-                if opt == "-o" and "=" in opts[i] and opts[i].split("=", 1)[0] in preserve_properties:
-                    die(f"--preserve-properties: Disallowed ZFS property found in --zfs-recv-program-opt(s): -o {opts[i]}")
-                if opt == "-x":
-                    x_names.discard(opts[i])
-                results.append(opts[i])
+                _append_include_arg(opt, opts[i])
                 i += 1
+            else:
+                results.append(opt)
         elif opt not in exclude_long_opts:  # example: {"--dryrun", "--verbose"}
-            if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
-                for char in exclude_short_opts:  # example: "den"
-                    opt = opt.replace(char, "")
-                if opt == "-":
-                    continue
-            results.append(opt)
+            for include_arg_opt in include_arg_opts:
+                if len(include_arg_opt) == 2 and opt.startswith(include_arg_opt) and len(opt) > len(include_arg_opt):
+                    _append_include_arg(include_arg_opt, opt[len(include_arg_opt) :])
+                    break
+            else:
+                if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
+                    for char in exclude_short_opts:  # example: "den"
+                        opt = opt.replace(char, "")
+                    if opt == "-":
+                        continue
+                results.append(opt)
     return results, sorted(x_names)
 
 

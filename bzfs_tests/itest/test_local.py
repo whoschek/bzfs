@@ -1522,6 +1522,18 @@ class LocalTestCase(IntegrationTestCase):
                     for name, value in props.items():
                         self.assertEqual(value, dataset_property(foo_a, name))
 
+    def test_zfs_send_program_opts_compact_managed_incremental_option(self) -> None:
+        """Verify compact bzfs-managed zfs send options are removed before replication."""
+        self.setup_basic()
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--no-estimate-send-size",
+            f"--zfs-send-program-opts=-i{ibase.SRC_ROOT_DATASET}@{fix('s1')}",
+        )
+
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2", "s3"])
+
     def test_basic_replication_recursive_with_exclude_dataset(self) -> None:
         self.assertTrue(dataset_exists(ibase.DST_ROOT_DATASET))
         self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET + "/foo"))
@@ -1897,6 +1909,23 @@ class LocalTestCase(IntegrationTestCase):
             self.assertEqual(value, dataset_property(ibase.DST_ROOT_DATASET + "/foo", name))
         for name, _ in excluded_props.items():
             self.assertEqual("-", dataset_property(ibase.DST_ROOT_DATASET + "/foo", name))
+
+    def test_zfs_recv_program_opts_compact_property_option(self) -> None:
+        """Verify compact zfs receive -o property syntax is passed through without mutation."""
+        if self.is_no_privilege_elevation():
+            self.skipTest("setting properties via zfs receive -o needs extra permissions")
+        zfs_set([ibase.SRC_ROOT_DATASET], {"compression": "gzip"})
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s1"))
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--zfs-send-program-opts=--props",
+            "--zfs-recv-program-opts=-u -ocompression=lz4",
+        )
+
+        self.assertEqual("lz4", dataset_property(ibase.DST_ROOT_DATASET, "compression"))
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
 
     def test_preserve_recordsize(self) -> None:
         if self.is_no_privilege_elevation():
