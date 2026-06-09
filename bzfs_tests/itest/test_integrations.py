@@ -39,6 +39,9 @@ from bzfs_tests.itest.test_remote import (
     FullRemoteTestCase,
     MinimalRemoteTestCase,
 )
+from bzfs_tests.itest.test_sanitize_recv_opts_for_dataset_type import (
+    SanitizeRecvOptsForDatasetTypeTestCase,
+)
 from bzfs_tests.itest.test_smoke_adhoc import (
     AdhocTestCase,
     SmokeTestCase,
@@ -57,6 +60,7 @@ def suite() -> unittest.TestSuite:
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHMasterIntermittentFailure))
+        suite.addTest(ParametrizedTestCase.parametrize(SanitizeRecvOptsForDatasetTypeTestCase))
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:

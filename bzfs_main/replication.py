@@ -31,6 +31,7 @@ import time
 from collections.abc import (
     Iterable,
     Iterator,
+    Mapping,
 )
 from concurrent.futures import (
     Executor,
@@ -1345,31 +1346,35 @@ def _add_recv_property_options(
     return recv_opts, set_opts
 
 
-_ZFS_RECV_X_PROPS_VOLUME_ONLY: Final[frozenset[str]] = frozenset({"volblocksize", "volsize"})
-_ZFS_RECV_O_PROPS_VOLUME_ONLY: Final[frozenset[str]] = _ZFS_RECV_X_PROPS_VOLUME_ONLY
-_ZFS_RECV_X_PROPS_FILESYSTEM_ONLY: Final[frozenset[str]] = frozenset({"casesensitivity", "normalization", "utf8only"})
-_ZFS_RECV_O_PROPS_FILESYSTEM_ONLY: Final[frozenset[str]] = frozenset(
-    {
-        # see https://github.com/openzfs/zfs/blob/master/module/zcommon/zfs_prop.c
-        "aclinherit",
-        "aclmode",
-        "acltype",
-        "atime",
-        "canmount",
-        "casesensitivity",
-        "devices",
-        "mountpoint",
-        "normalization",
-        "overlay",
-        "recordsize",
-        "relatime",
-        "sharenfs",
-        "sharesmb",
-        "snapdir",
-        "utf8only",
-        "xattr",
-    }
+_ZFS_RECV_PROPS_REJECTED_ON_ANY_DATASET: Final[frozenset[str]] = frozenset(
+    ["casesensitivity", "normalization", "utf8only", "volblocksize", "volsize"]
 )
+_ZFS_RECV_PROPS_REJECTED_ON_FILESYSTEM: Final[Mapping[str, frozenset[str]]] = {
+    "-x": _ZFS_RECV_PROPS_REJECTED_ON_ANY_DATASET,
+    "-o": _ZFS_RECV_PROPS_REJECTED_ON_ANY_DATASET,
+}
+_ZFS_RECV_PROPS_REJECTED_ON_ZVOL: Final[Mapping[str, frozenset[str]]] = {
+    "-x": _ZFS_RECV_PROPS_REJECTED_ON_ANY_DATASET,
+    "-o": frozenset(
+        {
+            # see https://github.com/openzfs/zfs/blob/master/module/zcommon/zfs_prop.c
+            "aclinherit",
+            "aclmode",
+            "acltype",
+            "atime",
+            "canmount",
+            "devices",
+            "mountpoint",
+            "overlay",
+            "recordsize",
+            "relatime",
+            "sharenfs",
+            "sharesmb",
+            "snapdir",
+            "xattr",
+        }.union(_ZFS_RECV_PROPS_REJECTED_ON_ANY_DATASET)
+    ),
+}
 
 
 def _sanitize_recv_opts_for_dataset_type(recv_opts: list[str], *, is_volume: bool) -> list[str]:
@@ -1379,15 +1384,15 @@ def _sanitize_recv_opts_for_dataset_type(recv_opts: list[str], *, is_volume: boo
     For example:
     drop -o canmount=<value> on zvols
     drop -o recordsize=<value> on zvols
-    drop -x casesensitivity on zvols
-    drop -o/-x volsize on filesystems
-    keep -x mountpoint on zvols
-    keep -o/-x volmode on filesystems
+    drop -o mountpoint=<value> on zvols
+    drop -o/-x casesensitivity on zvols and filesystems
+    drop -o/-x volsize on zvols and filesystems
+    keep -o/-x volmode on zvols and filesystems
     """
     if is_volume:
-        inapplicable_props_dict = {"-o": _ZFS_RECV_O_PROPS_FILESYSTEM_ONLY, "-x": _ZFS_RECV_X_PROPS_FILESYSTEM_ONLY}
+        inapplicable_props_dict = _ZFS_RECV_PROPS_REJECTED_ON_ZVOL
     else:
-        inapplicable_props_dict = {"-o": _ZFS_RECV_O_PROPS_VOLUME_ONLY, "-x": _ZFS_RECV_X_PROPS_VOLUME_ONLY}
+        inapplicable_props_dict = _ZFS_RECV_PROPS_REJECTED_ON_FILESYSTEM
 
     results: list[str] = []
     i = 0
