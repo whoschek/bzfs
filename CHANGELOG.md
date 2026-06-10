@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.22.0] - Not yet released
+## [1.22.0] - June 10, 2026
 
 - [bzfs] Fix bookkeeping on resume of interrupted zfs send of snapshot that is no longer the oldest selected snapshot
   ([#113](https://github.com/whoschek/bzfs/issues/113)).
@@ -12,6 +12,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Various small improvements to the test VM.
 - [bzfs] Also run nightly CI tests on AlmaLinux-10.2 and AlmaLinux-9.8.
 - [dev] Cut down the number of optional development dependencies and pin the remaining ones.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.21.0...v1.22.0
 
 ## [1.21.0] - May 15, 2026
 
