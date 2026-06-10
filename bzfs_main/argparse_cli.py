@@ -732,7 +732,7 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
              "matches one of the given blacklist values. This prevents a compromised or untrusted source from overwriting "
              "security-critical properties on the destination. The default is to preserve none, i.e. an empty blacklist.\n\n"
              "Example blacklist that protects against dangerous overwrites: "
-             "mountpoint overlay sharenfs sharesmb exec setuid devices encryption keyformat keylocation volsize\n\n"
+             "mountpoint overlay sharenfs sharesmb exec setuid devices encryption keyformat keylocation\n\n"
              "See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html and "
              "https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x\n\n"
              "Note: --preserve-properties uses the 'zfs recv -x' option and thus requires either OpenZFS ≥ 2.2.0 "
@@ -1192,7 +1192,7 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
         help="SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
              "--ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
              "keyword in ssh_config(5) for more information: "
-             "https://manpages.ubuntu.com/manpages/man5/ssh_config.5.html. Default: `%(default)s`\n\n")
+             "https://manpages.ubuntu.com/manpages/latest/man5/ssh_config.5.html. Default: `%(default)s`\n\n")
 
     locations = ["src", "dst"]
     for loc in locations:
@@ -1252,7 +1252,7 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
              "Concurrent SSH sessions are mostly used for metadata operations such as listing ZFS datasets and their "
              "snapshots. This client-side max sessions parameter must not be higher than the server-side "
              "sshd_config(5) MaxSessions parameter (which defaults to 10, see "
-             "https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html).\n\n"
+             "https://manpages.ubuntu.com/manpages/latest/man5/sshd_config.5.html).\n\n"
              f"*Note:* For better throughput, {PROG_NAME} uses one dedicated TCP connection per ZFS "
              "send/receive operation such that the dedicated connection is never used by any other "
              "concurrent SSH session, effectively ignoring the value of the "
@@ -1285,7 +1285,7 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
         "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets `pv` and `mbuffer` bandwidth rate limit for zfs send/receive data transfer (optional). "
              "Example: `100m` to cap throughput at 100 MB/sec. Default is unlimited. Also see "
-             "https://manpages.ubuntu.com/manpages/man1/pv.1.html\n\n")
+             "https://manpages.ubuntu.com/manpages/latest/man1/pv.1.html\n\n")
     parser.add_argument(
         "--daemon-lifetime", default="0 seconds", metavar="DURATION",
         # help="Exit the daemon after this much time has elapsed. Default is '0 seconds', i.e. no daemon mode. "

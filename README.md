@@ -1172,7 +1172,7 @@ usage: bzfs [-h]
     destination. The default is to preserve none, i.e. an empty blacklist.
 
     Example blacklist that protects against dangerous overwrites: mountpoint overlay sharenfs
-    sharesmb exec setuid devices encryption keyformat keylocation volsize
+    sharesmb exec setuid devices encryption keyformat keylocation
 
     See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html and
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x
@@ -1865,7 +1865,7 @@ usage: bzfs [-h]
 *  SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI.
     --ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the
     'Ciphers' keyword in ssh_config(5) for more information:
-    https://manpages.ubuntu.com/manpages/man5/ssh_config.5.html. Default:
+    https://manpages.ubuntu.com/manpages/latest/man5/ssh_config.5.html. Default:
     `^aes256-gcm@openssh.com`
 
 <!-- -->
@@ -1977,7 +1977,7 @@ usage: bzfs [-h]
     (default: 8, min: 1). Concurrent SSH sessions are mostly used for metadata operations such as
     listing ZFS datasets and their snapshots. This client-side max sessions parameter must not be
     higher than the server-side sshd_config(5) MaxSessions parameter (which defaults to 10, see
-    https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html).
+    https://manpages.ubuntu.com/manpages/latest/man5/sshd_config.5.html).
 
     *Note:* For better throughput, bzfs uses one dedicated TCP connection per ZFS send/receive
     operation such that the dedicated connection is never used by any other concurrent SSH
@@ -2034,7 +2034,7 @@ usage: bzfs [-h]
 
 *  Sets `pv` and `mbuffer` bandwidth rate limit for zfs send/receive data transfer (optional).
     Example: `100m` to cap throughput at 100 MB/sec. Default is unlimited. Also see
-    https://manpages.ubuntu.com/manpages/man1/pv.1.html
+    https://manpages.ubuntu.com/manpages/latest/man1/pv.1.html
 
 <!-- -->
 
