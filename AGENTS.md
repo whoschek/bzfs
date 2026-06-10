@@ -86,12 +86,12 @@ To understand the system's architecture and features, follow these steps:
 - If the `.venv` directory does not exist, create it and set it up with all development dependencies as follows:
 
   ```
-  python3 -m venv .venv                                        # Create a Python virtual environment
-  . .venv/bin/activate                                         # Activate the virtual environment
-  . ./preinstall_dev.sh                                        # Prepare install
+  python3 -m venv .venv                                            # Create a Python virtual environment
+  . .venv/bin/activate                                             # Activate the virtual environment
+  . ./preinstall_dev.sh                                            # Prepare install
   python3 -m pip install --require-hashes -r requirements-dev.txt  # Install all development dependencies
-  python3 -m pip install -e '.[dev]' --no-deps                 # Make source edits take effect without reinstalling
-  pre-commit install --install-hooks                           # Set up linters/formatters to run on every commit
+  python3 -m pip install -e '.[dev]' --no-deps                     # Make source edits take effect without reinstalling
+  pre-commit install --install-hooks                               # Set up linters/formatters to run on every commit
   ```
 
 # Command Verification Rules
@@ -158,10 +158,10 @@ For tasks that change code, tests, or scripts in this repository, you MUST follo
        - Look for a file literally named `spec.md` in the same directory as `<path/to/plan.md>`. Example:
          `plan2go=.agent/plan.md` implies `.agent/spec.md`.
        - If said `spec.md` does not exist, you MUST stop and ask the User how to proceed.
-       - Else, transform the requirements/specifications in said `spec.md` into an implementation plan that is effective
-         and safe to execute for an AI agent. To do so, analyze the current repo + code, and consider using tools such
-         as skills and subagents if available. NEVER write any code in this phase. Write the resulting plan into
-         `<path/to/plan.md>`.
+       - Else, transform the requirements/specifications in said `spec.md` into an implementation plan that is
+         consistent with `AGENTS.md`, effective and safe to execute for an AI agent. To do so, analyze the current
+         repo + code, and consider using tools such as skills and subagents if available. NEVER write any code in this
+         phase. Write the resulting plan into `<path/to/plan.md>`.
      - To understand what needs to be done read `<path/to/plan.md>`.
      - Update `<path/to/plan.md>` whenever any of these change: plan, goals, constraints/assumptions, key decisions,
        lessons, steps, progress state (Done/Now/Next). `<path/to/plan.md>` is the canonical source of truth for the plan

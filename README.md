@@ -380,13 +380,13 @@ bzfs_jobrunner --help
 # Alternatively, setup the environment for software development:
 git clone https://github.com/whoschek/bzfs.git
 cd bzfs
-python3 -m venv .venv                                        # Create a Python virtual environment
-. .venv/bin/activate                                         # Activate the virtual environment
-. ./preinstall_dev.sh                                        # Prepare install
+python3 -m venv .venv                                            # Create a Python virtual environment
+. .venv/bin/activate                                             # Activate the virtual environment
+. ./preinstall_dev.sh                                            # Prepare install
 python3 -m pip install --require-hashes -r requirements-dev.txt  # Install all development dependencies
-python3 -m pip install -e '.[dev]' --no-deps                 # Make source edits take effect without reinstalling
-pre-commit install --install-hooks                           # Set up linters/formatters to run on every commit
-pre-commit run --all-files                                   # Manually run linters/formatters
+python3 -m pip install -e '.[dev]' --no-deps                     # Make source edits take effect without reinstalling
+pre-commit install --install-hooks                               # Set up linters/formatters to run on every commit
+pre-commit run --all-files                                       # Manually run linters/formatters
 ```
 
 
@@ -466,7 +466,7 @@ sudo -n ls                         # verify non-interactive sudo works
 # export bzfs_test_mode=unit       # unit tests only (takes < 5 seconds)
 export bzfs_test_mode=smoke        # small, quick integration test subset (takes < 1 minute)
 # export bzfs_test_mode=functional # most integration tests but only in a single local config (takes ~3 minutes)
-# unset bzfs_test_mode             # all tests (takes ~15 mins)
+# unset bzfs_test_mode             # all tests (takes ~15 minutes)
 
 export bzfs_test_no_run_quietly=true  # print more than just a progress bar
 

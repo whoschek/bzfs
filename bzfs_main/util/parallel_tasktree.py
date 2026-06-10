@@ -13,8 +13,8 @@
 # limitations under the License.
 #
 """Fault-tolerant, dependency-aware workflow scheduling and execution of parallel operations, ensuring that ancestor datasets
-finish before descendants start; The design maximizes throughput while preventing inconsistent dataset states during
-replication or snapshot deletion.
+finish before descendants start (parent-before-child order); The design maximizes throughput while preventing inconsistent
+dataset states during replication or snapshot deletion.
 
 This module contains only generic scheduling and coordination (the "algorithm"). Error handling, retries, and skip policies
 are customizable and implemented by callers via the CompletionCallback API or wrappers such as ``parallel_tasktree_policy``.
@@ -148,7 +148,7 @@ class ParallelTaskTree:
 
         Purpose:
         --------
-        - Process hierarchical datasets in parallel while respecting parent-child dependencies
+        - Process hierarchical datasets in parallel while respecting parent-child dependencies (parent-before-child order)
         - Provide dependency-aware workflow scheduling; error handling and retries are implemented by callers via
         ``CompletionCallback`` or thin wrappers
         - Maximize throughput by processing independent dataset subtrees in parallel
@@ -167,7 +167,7 @@ class ParallelTaskTree:
         - The implementation uses a priority queue-based scheduler that maintains two key invariants:
 
         - Dependency Ordering: Children are only made available for start of processing after their parent completes,
-            preventing inconsistent dataset states.
+            preventing inconsistent dataset states (parent-before-child order).
 
         - Priority: Among the datasets available for start of processing, the "smallest" is always processed next, according
             to a customizable priority callback function, which by default sorts by lexicographical order (not dataset size),
