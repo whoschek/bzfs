@@ -20,9 +20,9 @@ name: Tests
 
 on:
   push:
-    branches: ["main", "branch-1.23.x", "branch-1.22.x", "branch-1.21.x", "branch-1.20.x", "branch-1.19.x", "branch-1.18.x"]
+    branches: ["main", "branch-1.27.x", "branch-1.26.x", "branch-1.25.x", "branch-1.24.x", "branch-1.23.x", "branch-1.22.x"]
   pull_request:
-    branches: ["main", "branch-1.23.x", "branch-1.22.x", "branch-1.21.x", "branch-1.20.x", "branch-1.19.x", "branch-1.18.x"]
+    branches: ["main", "branch-1.27.x", "branch-1.26.x", "branch-1.25.x", "branch-1.24.x", "branch-1.23.x", "branch-1.22.x"]
   workflow_dispatch:
     inputs:
       run_all_jobs:
