@@ -30,17 +30,6 @@ if [[ "$SSH_PROGRAM" == "hpnssh" ]]; then  # see https://www.psc.edu/hpn-ssh-hom
     sudo dnf -y copr enable rapier1/hpnssh  # see https://copr.fedorainfracloud.org/coprs/rapier1/hpnssh/
     sudo dnf -y install hpnssh-clients hpnssh-server
     hpnssh -V  # print version number
-
-    # This workaround is not necessary for AlmaLinux < 10.2.
-    # AlmaLinux-10.2 default OpenSSH policy backend files include post-quantum KEX algorithm names that are rejected by
-    # hpnssh/hpnsshd-10.2p1_hpn18.8.0-4 with an error like 'Unsupported KEX algorithm "mlkem768nistp256-sha256"'.
-    # This temporary test VM workaround disables these not-yet-supported post-quantum KEX algorithms.
-    sudo sed -i -E \
-        -e 's/mlkem768x25519-sha256,?//g' \
-        -e 's/mlkem768nistp256-sha256,?//g' \
-        -e 's/mlkem1024nistp384-sha384,?//g' \
-        /etc/crypto-policies/back-ends/openssh*.config
-
     sudo systemctl disable --now hpnsshd.socket || true  # disable hpnsshd service listening on port 22
     sudo systemctl disable --now hpnsshd || true         # disable hpnsshd service listening on port 2222
     sudo sed -i -E '/^[[:space:]]*#?[[:space:]]*Port[[:space:]]+[0-9]+/d' /etc/hpnssh/sshd_config  # remove existing ports
