@@ -57,17 +57,7 @@ fi
 sudo dnf -y install epel-release
 sudo dnf repoinfo epel
 sudo dnf -y install pv --enablerepo=epel
-if ! sudo dnf -y install mbuffer --enablerepo=epel; then
-    # workaround for the fact that EPEL for Almalinux-10 does not (yet) contain an RPM for `mbuffer`
-    # see https://rpmfind.net/linux/rpm2html/search.php?query=mbuffer(x86-64)
-    # guardrail: includepkgs=mbuffer prevents accidentally pulling a bunch of other EL9 packages into EL10
-    sudo rpm --import https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
-    sudo dnf -y install mbuffer \
-        --repofrompath="epel9,https://dl.fedoraproject.org/pub/epel/9/Everything/$(rpm --eval '%{_arch}')/" \
-        --setopt=epel9.gpgcheck=1 \
-        --setopt=epel9.includepkgs=mbuffer \
-        --enablerepo=epel9
-fi
+sudo dnf -y install mbuffer --enablerepo=epel
 
 # Install ZFS:
 sudo dnf install -y "https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval '%{dist}').noarch.rpm"
