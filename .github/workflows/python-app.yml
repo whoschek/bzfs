@@ -188,7 +188,7 @@ jobs:
           ./test.sh
           echo "bzfs-testrun-success"
 
-  test_ubuntu_24_04_hpnssh: # currently uses zfs-2.2.9
+  test_ubuntu_24_04_hpnssh: # currently uses zfs-2.2.10
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_hpnssh' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_hpnssh')
     runs-on: ubuntu-24.04
@@ -244,7 +244,7 @@ jobs:
         if: ${{ matrix.python-version == '3.15-dev' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
         uses: ./.github/actions/coverage-upload
 
-  test_ubuntu_24_04_zfs_2_4: # currently uses zfs-2.4.2
+  test_ubuntu_24_04_zfs_2_4: # currently uses zfs-2.4.3
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_4' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_4')
     runs-on: ubuntu-24.04
@@ -335,7 +335,7 @@ jobs:
         if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
 
-  test_ubuntu_24_04_zfs_2_3: # currently uses zfs-2.3.7
+  test_ubuntu_24_04_zfs_2_3: # currently uses zfs-2.3.6
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_3' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_3')
     runs-on: ubuntu-24.04
@@ -374,7 +374,7 @@ jobs:
         if: ${{ matrix.python-version == '3.14' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
         uses: ./.github/actions/coverage-upload
 
-  test_ubuntu_24_04_zfs_2_2: # currently uses zfs-2.2.9
+  test_ubuntu_24_04_zfs_2_2: # currently uses zfs-2.2.10
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_2' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_2')
     runs-on: ubuntu-24.04
@@ -519,7 +519,7 @@ jobs:
         if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
 
-  test_almalinux_10_zfs_2_4_hpnssh: # currently uses almalinux-10.2, zfs-2.4.2, python-3.12
+  test_almalinux_10_zfs_2_4_hpnssh: # currently uses almalinux-10.2, zfs-2.4.3, python-3.12
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_10_zfs_2_4_hpnssh' || contains(github.event.inputs.job_names, 'test_almalinux_10_zfs_2_4_hpnssh')
     runs-on: ubuntu-24.04
@@ -542,7 +542,7 @@ jobs:
         if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
 
-  test_almalinux_10_zfs_2_3: # currently uses almalinux-10.2, zfs-2.3.7, python-3.12
+  test_almalinux_10_zfs_2_3: # currently uses almalinux-10.2, zfs-2.3.8, python-3.12
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_10_zfs_2_3' || contains(github.event.inputs.job_names, 'test_almalinux_10_zfs_2_3')
     runs-on: ubuntu-24.04
@@ -565,7 +565,7 @@ jobs:
         if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
 
-  test_almalinux_9_zfs_2_2: # currently uses almalinux-9.8, zfs-2.2.9, python-3.9
+  test_almalinux_9_zfs_2_2: # currently uses almalinux-9.8, zfs-2.2.10, python-3.9
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_9_zfs_2_2' || contains(github.event.inputs.job_names, 'test_almalinux_9_zfs_2_2')
     runs-on: ubuntu-24.04
@@ -588,7 +588,7 @@ jobs:
         if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
 
-  test_almalinux_9_zfs_2_2_hpnssh: # currently uses almalinux-9.8, zfs-2.2.9, python-3.9
+  test_almalinux_9_zfs_2_2_hpnssh: # currently uses almalinux-9.8, zfs-2.2.10, python-3.9
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_almalinux_9_zfs_2_2_hpnssh' || contains(github.event.inputs.job_names, 'test_almalinux_9_zfs_2_2_hpnssh')
     runs-on: ubuntu-24.04
@@ -636,7 +636,7 @@ jobs:
         if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
 
-  test_freebsd_14_4: # currently uses zfs-2.2.9
+  test_freebsd_14_4: # currently uses zfs-2.2.10
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_14_4' || contains(github.event.inputs.job_names, 'test_freebsd_14_4')
     runs-on: ubuntu-24.04

@@ -171,9 +171,9 @@ class TestLimaVmScript(unittest.TestCase):
             "template:rocky-10",
         ]:
             if "ubuntu-26.04" in template:
-                zfs_versions = ["", "zfs-2.4", "tag:zfs-2.4.2", "tag:zfs-2.3.7"]
+                zfs_versions = ["", "zfs-2.4", "tag:zfs-2.4.3", "tag:zfs-2.3.8"]
             elif "ubuntu-24.04" in template:
-                zfs_versions = ["", "zfs-2.4", "tag:zfs-2.4.2", "tag:zfs-2.3.7", "tag:zfs-2.2.9"]
+                zfs_versions = ["", "zfs-2.4", "tag:zfs-2.4.3", "tag:zfs-2.3.8", "tag:zfs-2.2.10"]
             elif "ubuntu-22.04" in template:
                 zfs_versions = [""]
             else:  # RHEL/EL family

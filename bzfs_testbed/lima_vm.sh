@@ -187,7 +187,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
         sudo modprobe zfs
         sudo systemctl start zfs-zed.service
     elif [[ "$LIMA_ZFS_VERSION" =~ ^tag:zfs-[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
-        # EXPERIMENTAL: build and install zfs from source via git 'tag:zfs-2.4.2', 'tag:zfs-2.3.7', 'tag:zfs-2.2.9'
+        # EXPERIMENTAL: build and install zfs from source via git 'tag:zfs-2.4.3', 'tag:zfs-2.3.8', 'tag:zfs-2.2.10'
         sudo apt-get -y install git
         upstream_zfs_git_tag="${LIMA_ZFS_VERSION#tag:}"  # strip 'tag:' prefix
         git ls-remote --tags --refs --exit-code https://github.com/openzfs/zfs.git "refs/tags/$upstream_zfs_git_tag" # verify
@@ -206,7 +206,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
             make native-deb-utils
             rm ../openzfs-zfs-dracut_*.deb  # instead use initramfs
 
-            # Make it possible for `apt-get` to install a lower zfs kernel module version (such as zfs-2.3.7) even if
+            # Make it possible for `apt-get` to install a lower zfs kernel module version (such as zfs-2.3.8) even if
             # a higher zfs kernel module version (such as zfs-2.4.1 on ubuntu-26.04) is already present on-disk.
             sudo mkdir -p /usr/share/dkms/modules_to_force_install
             printf 'zfs_version-override\n' | sudo tee /usr/share/dkms/modules_to_force_install/zfs > /dev/null
