@@ -922,6 +922,8 @@ def _fix_send_recv_opts(
                     break
             else:
                 if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
+                    if "=" in opt:
+                        die(f"Invalid short opt {opt!r} within {opts}")
                     for char in exclude_short_opts:  # example: "den"
                         opt = opt.replace(char, "")
                     if opt == "-":

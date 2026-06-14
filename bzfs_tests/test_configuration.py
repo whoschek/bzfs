@@ -228,6 +228,10 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual(["-x", "--dryrun"], params._fix_recv_opts(["-x", "--dryrun"], frozenset())[0])
         self.assertEqual(["-x", "--dryrun"], params._fix_recv_opts(["-x", "--dryrun", "-n"], frozenset())[0])
         self.assertEqual(["-x"], params._fix_recv_opts(["-x"], frozenset())[0])
+        with self.assertRaises(SystemExit):
+            params._fix_recv_opts(["-n=foo"], frozenset())
+        with self.assertRaises(SystemExit):
+            params._fix_recv_opts(["-Fn=foo"], frozenset())
 
         self.assertEqual([], params._fix_send_opts(["-n"]))
         self.assertEqual([], params._fix_send_opts(["--dryrun", "-n", "-ed"]))
@@ -241,6 +245,10 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual(
             ["--exclude", "d1,d2", "--redact", "b1"], params._fix_send_opts(["--exclude", "d1,d2", "--redact", "b1"])
         )
+        with self.assertRaises(SystemExit):
+            params._fix_send_opts(["-n=foo"])
+        with self.assertRaises(SystemExit):
+            params._fix_send_opts(["-ed=foo"])
 
     def test_fix_recv_opts_with_preserve_properties(self) -> None:
         mp = "mountpoint"
