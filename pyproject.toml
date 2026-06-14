@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build==0.11.16"]
+requires = ["uv_build==0.11.19"]
 build-backend = "uv_build"
 
 [tool.bzfs]
