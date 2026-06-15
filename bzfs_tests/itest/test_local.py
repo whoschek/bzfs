@@ -3284,10 +3284,11 @@ class LocalTestCase(IntegrationTestCase):
             self.skipTest("ZFS has no bookmark feature")
 
         scenarios = [
-            ("resume_target_selected", 3, ".*s.*", [], ["s1", "s2", "s3"], ["s2", "s3"]),
-            ("resume_target_skipped", 3, ".*s3.*", [], ["s1", "s2", "s3"], ["s2", "s3"]),
-            ("resume_target_skipped_multiple_selected", 4, ".*s[34].*", [], ["s1", "s2", "s3", "s4"], ["s2", "s3", "s4"]),
-            ("resume_target_skipped_no_stream", 4, ".*s[34].*", ["--no-stream"], ["s1", "s2", "s4"], ["s2", "s4"]),
+            ("resume_target_selected1", 3, ".*s.*", [], ["s1", "s2", "s3"], ["s2", "s3"]),
+            ("resume_target_selected2", 3, ".*s2.*", [], ["s1", "s2"], ["s2"]),
+            ("resume_target_skipped", 3, ".*s3.*", [], ["s1", "s3"], ["s3"]),
+            ("resume_target_skipped_multiple_selected", 4, ".*s[34].*", [], ["s1", "s3", "s4"], ["s3", "s4"]),
+            ("resume_target_skipped_no_stream", 4, ".*s[34].*", ["--no-stream"], ["s1", "s4"], ["s4"]),
         ]
         for i, (name, max_snapshot, include_regex, extra_args, expected_dst, expected_bookmarks) in enumerate(scenarios):
             with stop_on_failure_subtest(name=name):
@@ -3315,6 +3316,7 @@ class LocalTestCase(IntegrationTestCase):
                     f"--include-snapshot-regex={include_regex}",
                     "--no-estimate-send-size",
                     *extra_args,
+                    retries=1,
                 )
                 self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
                 self.assert_snapshot_names(ibase.DST_ROOT_DATASET, expected_dst)
@@ -3410,6 +3412,30 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
         self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2", "s3"])
         self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1", "s2", "s3"])
+
+    def test_send_incr_resume_recv_excluded_token_target_is_aborted(self) -> None:
+        """Verify a receive token for an excluded snapshot is cleared instead of received."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+
+        self.create_resumable_snapshots(1, 2)
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+
+        self.create_resumable_snapshots(2, 3)
+        self.generate_recv_resume_token(
+            ibase.SRC_ROOT_DATASET + "@" + fix("s1"),
+            ibase.SRC_ROOT_DATASET + "@" + fix("s2"),
+            ibase.DST_ROOT_DATASET,
+        )
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+        self.create_resumable_snapshots(3, 4)
+
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--include-snapshot-regex=.*s[13].*", retries=1)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s3"])
 
     def test_send_full_resume_recv_token_from_different_source_dataset(self) -> None:
         """Verify stale full receive tokens are cleared when the current source dataset differs."""

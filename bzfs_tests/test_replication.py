@@ -651,7 +651,7 @@ class TestReplication(AbstractTestCase):
 
         def decode(stdout: str) -> str:
             with patch.object(job, "run_ssh_command", return_value=stdout):
-                return _decode_resume_token(job, "token", "src/pool", "dst/pool")
+                return _decode_resume_token(job, "token", "src/pool", "dst/pool", {"2748"})
 
         self.assertEqual("src/pool@s1", decode("  toname = src/pool@s1\n  toguid = abc\n"))
         self.assertEqual("src/pool#s1", decode("  toname = src/pool#s1\n  toguid = abc\n"))

@@ -175,6 +175,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
             oldest_src_snapshot,
             latest_src_snapshot,
             latest_dst_snapshot,
+            included_src_guids,
             dst_snapshots_with_guids,
             props_cache,
             dry_run_no_send,
@@ -384,6 +385,7 @@ def _replicate_dataset_fully(
     oldest_src_snapshot: str,
     latest_src_snapshot: str,
     latest_dst_snapshot: str,
+    included_src_guids: set[str],
     dst_snapshots_with_guids: list[str],
     props_cache: dict[tuple[str, str, str], dict[str, str | None]],
     dry_run_no_send: bool,
@@ -432,7 +434,7 @@ def _replicate_dataset_fully(
         curr_size: int = _estimate_send_size(job, src, dst_dataset, recv_resume_token, oldest_src_snapshot)
         humansize: str = _format_size(curr_size)
         if recv_resume_token:
-            oldest_src_snapshot = _decode_resume_token(job, recv_resume_token, src_dataset, dst_dataset)
+            oldest_src_snapshot = _decode_resume_token(job, recv_resume_token, src_dataset, dst_dataset, included_src_guids)
             send_opts: list[str] = p.curr_zfs_send_program_opts + send_resume_opts  # e.g. curr + ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
@@ -509,7 +511,9 @@ def _replicate_dataset_incrementally(
 
     if recv_resume_token:
         estimate_send_sizes: list[int] = [_estimate_send_size(job, src, dst_dataset, recv_resume_token)]
-        decoded_src_snapshot: str = _decode_resume_token(job, recv_resume_token, src_dataset, dst_dataset)
+        decoded_src_snapshot: str = _decode_resume_token(
+            job, recv_resume_token, src_dataset, dst_dataset, included_src_guids
+        )
         steps_todo: list[tuple[str, str, str, list[str]]] = [
             ("-i", latest_common_src_snapshot, decoded_src_snapshot, [decoded_src_snapshot])
         ]
@@ -919,8 +923,10 @@ def _recv_resume_token(job: Job, dst_dataset: str) -> tuple[str | None, list[str
     return recv_resume_token, send_resume_opts, recv_resume_opts
 
 
-def _decode_resume_token(job: Job, recv_resume_token: str, src_dataset: str, dst_dataset: str) -> str:
-    """Returns the source snapshot encoded in a ZFS receive resume token."""
+def _decode_resume_token(
+    job: Job, recv_resume_token: str, src_dataset: str, dst_dataset: str, included_src_guids: set[str]
+) -> str:
+    """Returns the source snapshot and GUID encoded in a ZFS receive resume token."""
     p, log = job.params, job.params.log
     decode_cmd: list[str] = p.split_args(f"{p.src.sudo} {p.zfs_program} send -n -v -t", recv_resume_token)
     try:
@@ -941,7 +947,12 @@ def _decode_resume_token(job: Job, recv_resume_token: str, src_dataset: str, dst
     decoded_src_dataset, decoded_src_tag = decoded_src_snapshot.split("@" if "@" in decoded_src_snapshot else "#", 1)
     if decoded_src_dataset != src_dataset:
         _clear_resumable_recv_state(job, dst_dataset)
-        raise RetryableError(display_msg="stale zfs receive resume token", retry_immediately_once=True) from RuntimeError()
+        msg = "stale zfs receive resume token"
+        raise RetryableError(display_msg=msg, retry_immediately_once=True) from RuntimeError(msg)
+    if decoded_src_guid not in included_src_guids:
+        _clear_resumable_recv_state(job, dst_dataset)
+        msg = "zfs receive resume token is not a selected source snapshot"
+        raise RetryableError(display_msg=msg, retry_immediately_once=True) from RuntimeError(msg)
     assert decoded_src_tag
     return decoded_src_snapshot
 
