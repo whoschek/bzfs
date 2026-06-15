@@ -62,7 +62,7 @@ class AbstractTestCase(unittest.TestCase):
         args: argparse.Namespace,
         log_params: configuration.LogParams | None = None,
         log: logging.Logger | None = None,
-        inject_params: dict[str, bool] | None = None,
+        inject_params: dict[str, bool | int] | None = None,
     ) -> configuration.Params:
         log_params = log_params if log_params is not None else MagicMock(spec=configuration.LogParams)
         if not hasattr(log_params, "isatty"):

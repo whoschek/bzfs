@@ -215,7 +215,7 @@ class Params(MiniParams):
         sys_argv: list[str],
         log_params: LogParams,
         log: Logger,
-        inject_params: dict[str, bool] | None = None,  # for testing only
+        inject_params: dict[str, bool | int] | None = None,  # for testing only
     ) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
@@ -227,7 +227,7 @@ class Params(MiniParams):
         self.sys_argv: Final[list[str]] = sys_argv
         self.log_params: Final[LogParams] = log_params
         self.log: Logger = log
-        self.inject_params: Final[dict[str, bool]] = inject_params if inject_params is not None else {}  # for testing only
+        self.inject_params: Final[dict[str, bool | int]] = inject_params if inject_params is not None else {}  # testing-only
         self.one_or_more_whitespace_regex: Final[re.Pattern[str]] = re.compile(r"\s+")
         self.two_or_more_spaces_regex: Final[re.Pattern[str]] = re.compile(r"  +")
         self._unset_matching_env_vars(args)
@@ -246,6 +246,7 @@ class Params(MiniParams):
         self.verbose_destroy: Final[str] = "" if args.quiet else "-v"
 
         self.zfs_send_program_opts: Final[list[str]] = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
+        self.zfs_send_resume_opts: Final[list[str]] = self._fix_send_resume_opts(self.split_args(args.zfs_send_program_opts))
         zfs_recv_program_opts: list[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             zfs_recv_program_opts.append(self.validate_arg_str(extra_opt, allow_all=True))
@@ -364,6 +365,7 @@ class Params(MiniParams):
         self.r2r_mode: str = "off"  # deferred to validate_task() phase
 
         self.curr_zfs_send_program_opts: list[str] = []
+        self.curr_zfs_send_resume_opts: list[str] = []
         self.zfs_recv_ox_names: set[str] = set()
         self.available_programs: dict[str, dict[str, str]] = {}
         self.zpool_features: dict[str, dict[str, dict[str, str]]] = {r.location: {} for r in [self.src, self.dst]}
@@ -421,6 +423,17 @@ class Params(MiniParams):
             exclude_short_opts="den",
             include_arg_opts={"-X", "--exclude", "--redact"},
             exclude_arg_opts=frozenset({"-i", "-I", "-t", "--resume"}),
+        )[0]
+
+    @staticmethod
+    def _fix_send_resume_opts(opts: list[str]) -> list[str]:
+        """Returns sanitized CLI options for `zfs send -t` resume sends."""
+        return _fix_send_recv_opts(
+            Params._fix_send_opts(opts),
+            exclude_long_opts={"--backup", "--holds", "--props", "--replicate", "--skip-missing"},
+            exclude_short_opts="bhpRsU",
+            include_arg_opts=set(),
+            exclude_arg_opts=frozenset({"-X", "--exclude", "--redact"}),
         )[0]
 
     def _program_name(self, program: str) -> str:

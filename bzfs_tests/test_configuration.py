@@ -250,6 +250,14 @@ class TestHelperFunctions(AbstractTestCase):
         with self.assertRaises(SystemExit):
             params._fix_send_opts(["-ed=foo"])
 
+        self.assertEqual(
+            ["--raw", "--compressed", "--large-block"],
+            params._fix_send_resume_opts(["--raw", "--compressed", "--large-block"]),
+        )
+        self.assertEqual(["-cw"], params._fix_send_resume_opts(["-bchpRsUw"]))
+        self.assertEqual([], params._fix_send_resume_opts(["--skip-missing"]))
+        self.assertEqual([], params._fix_send_resume_opts(["--props", "-p", "--backup", "-b", "--holds", "-h", "-s", "-U"]))
+
     def test_fix_recv_opts_with_preserve_properties(self) -> None:
         mp = "mountpoint"
         cr = "createtxg"

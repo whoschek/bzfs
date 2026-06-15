@@ -43,6 +43,7 @@ from bzfs_main.filter import (
     SNAPSHOT_REGEX_FILTER_NAME,
 )
 from bzfs_main.replication import (
+    INJECT_DST_PIPE_FAIL_KBYTES,
     _check_zfs_dataset_busy,
     _clear_resumable_recv_state_if_necessary,
     _compress_cmd,
@@ -102,7 +103,7 @@ def suite() -> unittest.TestSuite:
 def _make_params(**kwargs: object) -> MagicMock:
     """Creates a Params mock with split_args helper."""
     params = MagicMock()
-    params.split_args.side_effect = lambda *parts: shlex.split(" ".join(str(p) for p in parts if p))
+    params.split_args.side_effect = lambda *parts, **_kwargs: shlex.split(" ".join(str(p) for p in parts if p))
     params.bwlimit = ""
     for key, value in kwargs.items():
         setattr(params, key, value)
@@ -738,7 +739,7 @@ class TestReplication(AbstractTestCase):
 
     def test_zfs_get_uses_cache(self) -> None:
         job = _make_job(zfs_program="zfs", log=MagicMock())
-        remote = MagicMock()
+        remote = MagicMock(location="src")
         cache: dict = {}
         with patch.object(job, "run_ssh_command", return_value="prop\tval\n") as mock_run_ssh_command:
             result1 = _zfs_get(job, remote, "pool/ds", "none", "property,value", "prop", True, cache)
@@ -746,6 +747,31 @@ class TestReplication(AbstractTestCase):
         self.assertEqual({"prop": "val"}, result1)
         self.assertEqual(result1, result2)
         mock_run_ssh_command.assert_called_once()
+
+    def test_zfs_get_cache_is_scoped_by_remote_and_dataset(self) -> None:
+        job = _make_job(zfs_program="zfs", log=MagicMock())
+        src = MagicMock(location="src")
+        dst = MagicMock(location="dst")
+        cache: dict = {}
+        values = iter(["prop\tsrc-val\n", "prop\tdst-val\n", "prop\tchild-val\n"])
+        with patch.object(job, "run_ssh_command", side_effect=lambda *_args, **_kwargs: next(values)) as run_ssh_command:
+            src_result = _zfs_get(job, src, "pool/ds", "none", "property,value", "prop", True, cache)
+            dst_result = _zfs_get(job, dst, "pool/ds", "none", "property,value", "prop", True, cache)
+            child_result = _zfs_get(job, dst, "pool/ds/child", "none", "property,value", "prop", True, cache)
+        self.assertEqual({"prop": "src-val"}, src_result)
+        self.assertEqual({"prop": "dst-val"}, dst_result)
+        self.assertEqual({"prop": "child-val"}, child_result)
+        self.assertEqual(3, run_ssh_command.call_count)
+
+    def test_zfs_get_refresh_discards_stale_cache_before_command(self) -> None:
+        job = _make_job(zfs_program="zfs", log=MagicMock())
+        remote = MagicMock(location="dst")
+        cache_key = ("dst", "pool/ds", "none", "property,value", "prop")
+        cache: dict[tuple[str, ...], dict[str, str | None]] = {cache_key: {"prop": "stale"}}
+        with patch.object(job, "run_ssh_command", side_effect=subprocess.CalledProcessError(1, "zfs get")):
+            with self.assertRaises(subprocess.CalledProcessError):
+                _zfs_get(job, remote, "pool/ds", "none", "property,value", "prop", True, cache, refresh=True)
+        self.assertNotIn(cache_key, cache)
 
     def test_sanitize_recv_opts_for_dataset_type_returns_new_list(self) -> None:
         recv_opts = [
@@ -932,6 +958,51 @@ class TestReplication(AbstractTestCase):
         ):
             src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertIn("dd bs=64", src)
+
+    def test_prepare_src_pipe_inject_dataset_fail_uses_resumable_cutoff_once(self) -> None:
+        """Purpose: Verify dataset-specific test injection reaches resumable receive state and is consumed once."""
+
+        def avail(prog: str, loc: str) -> bool:
+            return prog == "sh"
+
+        job = _prepare_job(is_program_available=avail)
+        job.inject_params["inject_src_pipe_fail_pool/ds"] = True
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
+        ):
+            src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
+            retry_src, _retry_loc, _retry_dst = _prepare_zfs_send_receive(
+                job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B"
+            )
+        self.assertIn(f"dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES}", src)
+        self.assertNotIn(f"dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES}", retry_src)
+
+    def test_prepare_src_pipe_inject_fail_offset_once(self) -> None:
+        def avail(prog: str, loc: str) -> bool:
+            return prog == "sh"
+
+        job = _prepare_job(is_program_available=avail)
+        job.inject_params["inject_src_pipe_fail_offset"] = 123
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
+            patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
+            patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
+        ):
+            src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
+            retry_src, _retry_loc, _retry_dst = _prepare_zfs_send_receive(
+                job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B"
+            )
+        self.assertIn("(dd bs=1 count=123 2>/dev/null && false)", src)
+        self.assertNotIn("inject_src_pipe_fail_offset", job.inject_params)
+        self.assertNotIn("dd bs=1 count=123", retry_src)
 
     def test_prepare_src_pipe_inject_garble(self) -> None:
         def avail(prog: str, loc: str) -> bool:

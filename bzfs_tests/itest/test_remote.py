@@ -216,7 +216,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
 
     def inject_unavailable_program(self, *flags: str, expected_error: int = 0) -> None:
         self.setup_basic()
-        inject_params: dict[str, bool] = {}
+        inject_params: dict[str, bool | int] = {}
         for flag in flags:
             inject_params[flag] = True
         self.run_bzfs(
@@ -300,7 +300,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.setup_basic()
         for i in range(2):
             with stop_on_failure_subtest(i=i):
-                inject_params: dict[str, bool] = {}
+                inject_params: dict[str, bool | int] = {}
                 if i == 0:
                     inject_params[flag] = True
                 self.run_bzfs(

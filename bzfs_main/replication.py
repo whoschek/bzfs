@@ -166,7 +166,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
 
     log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
     log.log(LOG_TRACE, "latest_dst_snapshot: %s", latest_dst_snapshot)
-    props_cache: dict[tuple[str, str, str], dict[str, str | None]] = {}  # fresh empty ZFS props cache for each dataset
+    props_cache: dict[tuple[str, ...], dict[str, str | None]] = {}  # fresh empty ZFS props cache for each dataset
     dry_run_no_send: bool = False
     if not latest_common_src_snapshot:
         # no common snapshot exists; delete all dst snapshots and perform a full send of the oldest selected src snapshot
@@ -388,7 +388,7 @@ def _replicate_dataset_fully(
     latest_dst_snapshot: str,
     included_src_guids: set[str],
     dst_snapshots_with_guids: list[str],
-    props_cache: dict[tuple[str, str, str], dict[str, str | None]],
+    props_cache: dict[tuple[str, ...], dict[str, str | None]],
     dry_run_no_send: bool,
     done_checking: bool,
     tid: str,
@@ -436,7 +436,7 @@ def _replicate_dataset_fully(
         humansize: str = _format_size(curr_size)
         if recv_resume_token:
             oldest_src_snapshot = _decode_resume_token(job, recv_resume_token, src_dataset, dst_dataset, included_src_guids)
-            send_opts: list[str] = p.curr_zfs_send_program_opts + send_resume_opts  # e.g. curr + ["-t", "1-c740b4779-..."]
+            send_opts: list[str] = p.curr_zfs_send_resume_opts + send_resume_opts  # e.g. curr + ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
@@ -474,7 +474,7 @@ def _replicate_dataset_incrementally(
     basis_src_snapshots_with_guids: list[str],
     included_src_guids: set[str],
     recv_resume_token_result: tuple[str | None, list[str], list[str]],
-    props_cache: dict[tuple[str, str, str], dict[str, str | None]],
+    props_cache: dict[tuple[str, ...], dict[str, str | None]],
     dry_run_no_send: bool,
     done_checking: bool,
     tid: str,
@@ -554,7 +554,7 @@ def _replicate_dataset_incrementally(
         humansize: str = _format_size(total_size) + "/" + _format_size(done_size) + "/" + _format_size(curr_size)
         human_num: str = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
         if recv_resume_token:
-            send_opts: list[str] = p.curr_zfs_send_program_opts + send_resume_opts  # e.g. curr + ["-t", "1-c740b4779-..."]
+            send_opts: list[str] = p.curr_zfs_send_resume_opts + send_resume_opts  # e.g. curr + ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [incr_flag, from_snap, to_snap]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
@@ -653,9 +653,16 @@ def _prepare_zfs_send_receive(
 
     # assemble pipeline running on source leg
     src_pipe: str = ""
-    if job.inject_params.get("inject_src_pipe_fail", False):
+    src_pipe_fail_offset = job.inject_params.pop("inject_src_pipe_fail_offset", None)
+    if src_pipe_fail_offset is not None:
+        assert isinstance(src_pipe_fail_offset, int)
+        src_pipe = f"{src_pipe} | (dd bs=1 count={src_pipe_fail_offset} 2>/dev/null && false)"
+    elif job.inject_params.pop(f"inject_src_pipe_fail_{src_dataset}", False):
+        # for testing; forward enough bytes that zfs receive can usually leave resumable state
+        src_pipe = f"{src_pipe} | (dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES} 2>/dev/null && false)"
+    elif job.inject_params.get("inject_src_pipe_fail", False):
         # for testing; initially forward some bytes and then fail
-        src_pipe = f"{src_pipe} | dd bs=64 count=1 2>/dev/null && false"
+        src_pipe = f"{src_pipe} | (dd bs=64 count=1 2>/dev/null && false)"
     if job.inject_params.get("inject_src_pipe_garble", False):
         src_pipe = f"{src_pipe} | gzip -1 -c -n"  # for testing; forward garbled bytes
     if pv_src_cmd and pv_src_cmd != "cat":
@@ -1191,7 +1198,8 @@ def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_
     p = job.params
     if p.no_estimate_send_size:
         return 0
-    zfs_send_program_opts: list[str] = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
+    zfs_send_program_opts: list[str] = p.curr_zfs_send_resume_opts if recv_resume_token else p.curr_zfs_send_program_opts
+    zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in zfs_send_program_opts]
     zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
     if recv_resume_token:
         zfs_send_program_opts += ["-t", recv_resume_token]
@@ -1272,7 +1280,8 @@ def _zfs_get(
     output_columns: str,
     propnames: str,
     splitlines: bool,
-    props_cache: dict[tuple[str, str, str], dict[str, str | None]],
+    props_cache: dict[tuple[str, ...], dict[str, str | None]],
+    refresh: bool = False,
 ) -> dict[str, str | None]:
     """Returns the results of 'zfs get' CLI on the given dataset on the given remote."""
     assert dataset
@@ -1281,7 +1290,9 @@ def _zfs_get(
     if not propnames:
         return {}
     p = job.params
-    cache_key: tuple[str, str, str] = (sources, output_columns, propnames)
+    cache_key: tuple[str, ...] = (remote.location, dataset, sources, output_columns, propnames)
+    if refresh:
+        props_cache.pop(cache_key, None)
     props: dict[str, str | None] | None = props_cache.get(cache_key)
     if props is None:
         cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
@@ -1312,7 +1323,7 @@ def _incremental_send_steps_wrapper(
 
 
 def _add_recv_property_options(
-    job: Job, full_send: bool, recv_opts: list[str], dataset: str, cache: dict[tuple[str, str, str], dict[str, str | None]]
+    job: Job, full_send: bool, recv_opts: list[str], dataset: str, cache: dict[tuple[str, ...], dict[str, str | None]]
 ) -> tuple[list[str], list[str]]:
     """Reads the ZFS properties of the given src dataset; Appends zfs recv -o and -x values to a recv_opts copy according to
     CLI params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""

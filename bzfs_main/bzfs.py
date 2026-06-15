@@ -293,8 +293,8 @@ class Job(MiniJob):
         self.progress_update_intervals: tuple[float, float] | None = None  # for testing only
         self.error_injection_triggers: dict[str, Counter[str]] = {}  # for testing only
         self.delete_injection_triggers: dict[str, Counter[str]] = {}  # for testing only
-        self.param_injection_triggers: dict[str, dict[str, bool]] = {}  # for testing only
-        self.inject_params: dict[str, bool] = {}  # for testing only
+        self.param_injection_triggers: dict[str, dict[str, bool | int]] = {}  # for testing only
+        self.inject_params: dict[str, bool | int] = {}  # for testing only
         self.injection_lock: threading.Lock = threading.Lock()  # for testing only
         self.max_command_line_bytes: int | None = None  # for testing only
 
@@ -437,6 +437,7 @@ class Job(MiniJob):
                     src.root_dataset = src.basis_root_dataset = src_root_dataset
                     dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
                     p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
+                    p.curr_zfs_send_resume_opts = p.zfs_send_resume_opts.copy()
                     if p.daemon_lifetime_nanos > 0:
                         self.timeout_nanos = (
                             None if p.timeout_duration_nanos is None else time.monotonic_ns() + p.timeout_duration_nanos
@@ -604,6 +605,7 @@ class Job(MiniJob):
 
         if is_zpool_feature_enabled_or_active(p, dst, "feature@large_blocks"):
             append_if_absent(p.curr_zfs_send_program_opts, "--large-block")
+            append_if_absent(p.curr_zfs_send_resume_opts, "--large-block")
 
         self.max_workers = {}
         self.max_datasets_per_minibatch_on_list_snaps = {}

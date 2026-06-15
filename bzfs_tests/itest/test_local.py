@@ -98,6 +98,7 @@ from bzfs_tests.itest.ibase import (
     create_volumes,
     fix,
     is_cache_snapshots_enabled,
+    is_zfs_at_least_2_1_0,
     is_zfs_at_least_2_2_0,
     is_zpool_feature_enabled_or_active,
     is_zpool_recv_resume_feature_enabled_or_active,
@@ -2974,6 +2975,20 @@ class LocalTestCase(IntegrationTestCase):
             take_snapshot(dataset, fix(f"s{j}"))
         run_cmd(f"sudo -n zfs unmount {dataset}".split())
 
+    @staticmethod
+    def create_resumable_snapshots_tree(
+        src_root_dataset: str, src_datasets: list[str], snapshot_tag: str, size_in_bytes: int = 1024 * 1024
+    ) -> None:
+        """Large enough to be interruptible and resumable; interacts with bzfs.py/inject_dst_pipe_fail"""
+        for dataset in src_datasets:
+            run_cmd(f"sudo -n zfs mount {dataset}".split())
+            tmp_file = "/" + dataset + "/tmpfile"
+            try:
+                run_cmd(f"sudo -n dd if=/dev/urandom of={tmp_file} bs={size_in_bytes} count=1".split())
+            finally:
+                run_cmd(f"sudo -n zfs unmount {dataset}".split())
+        take_snapshot(src_root_dataset, snapshot_tag, recursive=True)
+
     def test_snapshots_are_all_eventually_fully_replicated_even_though_every_recv_is_interrupted_and_resumed(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
@@ -3001,6 +3016,143 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_snapshots(ibase.DST_ROOT_DATASET, n - 1, "s")
         self.assertGreater(max_iters, 2)
         self.assertGreater(k, 2)
+
+    def test_generate_recv_resume_token_with_tree_targets_child_dataset(self) -> None:
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        dataset_props: list[str] = self.encryption_dataset_props()
+        snapshot_tag = fix("s1")
+        src_tree = create_filesystem(ibase.SRC_ROOT_DATASET, "tree", props=dataset_props)
+        src_target = create_filesystem(src_tree, "b")
+        src_descendant = create_filesystem(src_target, "c")
+        src_datasets = [src_tree, src_target, src_descendant]
+        self.create_resumable_snapshots_tree(src_tree, src_datasets, snapshot_tag)
+
+        dst_tree = ibase.DST_ROOT_DATASET + "/tree"
+        target_dst = dst_tree + "/b"
+        self.assertFalse(dataset_exists(dst_tree))
+        self.generate_recv_resume_token_with_tree(src_tree, None, snapshot_tag, src_target, dst_tree)
+
+        self.assert_receive_resume_token(dst_tree, exists=False)
+        token = self.assert_receive_resume_token(target_dst, exists=True)
+        self.assertFalse(dataset_exists(target_dst + "/c"))
+        self.assert_snapshot_names(dst_tree, [snapshot_tag])
+        self.assert_snapshot_names(target_dst, [])
+
+        decoded = subprocess.run(
+            SUDO_CMD + ["zfs", "send", "-n", "-v", "-t", token],
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+            check=True,
+        )
+        self.assertIn(f"toname = {src_target}@{snapshot_tag}", decoded.stdout + decoded.stderr)
+
+        send = subprocess.Popen(SUDO_CMD + ["zfs", "send", "-t", token], stdout=PIPE, stderr=PIPE)
+        assert send.stdout is not None
+        recv = subprocess.run(
+            SUDO_CMD + ["zfs", "receive", "-F", "-u", "-s", target_dst],
+            stdin=send.stdout,
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+            check=True,
+        )
+        send.stdout.close()
+        _, send_stderr = send.communicate()
+        self.assertEqual(0, send.returncode, send_stderr.decode("utf-8", errors="replace"))
+        self.assertEqual("", recv.stderr)
+        self.assert_receive_resume_token(target_dst, exists=False)
+        self.assert_snapshot_names(target_dst, [snapshot_tag])
+
+    def test_raw_recursive_replication_package(self) -> None:
+        if not is_zfs_at_least_2_1_0():
+            self.skipTest("zfs mount issue")
+        self.assert__raw_recursive_replication_package(validate_encryptionroot=False)
+
+    def assert__raw_recursive_replication_package(self, validate_encryptionroot: bool) -> None:
+        """Verify raw per-dataset recursive replication keeps one inherited encryption tree."""
+        all_send_opts = [
+            "--zfs-send-program-opts=--raw --compressed",
+            "--zfs-send-program-opts=--raw --compressed -R -s",
+        ]
+        k = -1
+        for send_opts in all_send_opts:
+            for retries in range(2 if is_zpool_recv_resume_feature_enabled_or_active() else 1):
+                for i in range(1 + 3):
+                    k += 1
+                    with stop_on_failure_subtest(k=k, i=i, retries=retries, send_opts=send_opts):
+                        self.tearDownAndSetup()
+                        dataset_props: list[str] = self.encryption_dataset_props()
+                        snapshot_tag = fix("s1")
+                        src_tree = create_filesystem(ibase.SRC_ROOT_DATASET, "tree", props=dataset_props)
+                        src_target = create_filesystem(src_tree, "b")
+                        src_descendant = create_filesystem(src_target, "c")
+                        src_datasets = [src_tree, src_target, src_descendant]
+                        self.create_resumable_snapshots_tree(src_tree, src_datasets, snapshot_tag)
+
+                        dst_tree = ibase.DST_ROOT_DATASET + "/tree"
+                        self.assertFalse(dataset_exists(dst_tree))
+                        inject_params = None
+                        fail_src_dataset = None
+                        if i > 0:
+                            # force a zfs recv failure
+                            fail_src_dataset = [src_tree, src_target, src_descendant][i - 1]
+                            if "-R" in send_opts:
+                                fail_offset = self._recv_resume_token_with_tree_fail_offset(
+                                    src_tree, None, snapshot_tag, fail_src_dataset
+                                )
+                                inject_params = {"inject_src_pipe_fail_offset": fail_offset}
+                            else:
+                                inject_params = {f"inject_src_pipe_fail_{fail_src_dataset}": True}
+                        # print(f"xxx0={inject_params}")
+                        self.run_bzfs(
+                            src_tree,
+                            dst_tree,
+                            "--recursive",
+                            send_opts,
+                            inject_params=None if inject_params is None else inject_params.copy(),
+                            retries=0 if inject_params is None or retries == 0 else 1,
+                            expected_status=0 if inject_params is None or retries > 0 else 1,
+                        )
+
+                        target_dst = dst_tree + "/b"
+                        dst_descendant = target_dst + "/c"
+                        dst_datasets = [dst_tree, target_dst, dst_descendant]
+                        if inject_params is not None and retries == 0:
+                            # validate that zfs recv failed as expected
+                            fail_dst_dataset = dst_datasets[i - 1]
+                            for dst_dataset in dst_datasets:
+                                dst_dataset_should_exist = dst_datasets.index(dst_dataset) <= dst_datasets.index(
+                                    fail_dst_dataset
+                                )
+                                # print(f"xxx1={dst_dataset}, dataset_should_exist={dst_dataset_should_exist}")
+                                self.assertEqual(dataset_exists(dst_dataset), dst_dataset_should_exist)
+                                if dst_dataset_should_exist:
+                                    self.assert_receive_resume_token(dst_dataset, exists=dst_dataset == fail_dst_dataset)
+                                if dst_datasets.index(dst_dataset) < dst_datasets.index(fail_dst_dataset):
+                                    self.assert_snapshot_names(dst_dataset, [snapshot_tag])
+                                elif dst_dataset_should_exist:
+                                    self.assert_snapshot_names(dst_dataset, [])
+                        else:
+                            # validate replication succeeded as expected (potentially after one retry)
+                            for dst_dataset in dst_datasets:
+                                self.assertTrue(dataset_exists(dst_dataset), dst_dataset)
+                                self.assert_receive_resume_token(dst_dataset, exists=False)
+                                self.assert_snapshot_names(dst_dataset, [snapshot_tag])
+
+                            if validate_encryptionroot:
+                                expected_encryptionroot = dst_tree if self.is_encryption_mode() else "-"
+                                for dst_dataset in dst_datasets:
+                                    self.assertEqual(
+                                        expected_encryptionroot, dataset_property(dst_dataset, "encryptionroot"), dst_dataset
+                                    )
+                                    dst_snapshot = f"{dst_dataset}@{snapshot_tag}"
+                                    self.assertEqual(
+                                        expected_encryptionroot,
+                                        snapshot_property(dst_snapshot, "encryptionroot"),
+                                        dst_snapshot,
+                                    )
 
     def test_send_full_no_resume_recv_with_resume_token_present(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():

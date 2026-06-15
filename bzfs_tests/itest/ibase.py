@@ -71,6 +71,7 @@ from bzfs_main.util.utils import (
     get_home_directory,
     getenv_any,
     getenv_bool,
+    is_descendant,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
@@ -207,11 +208,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         self.setUp()
 
     def setup_basic(self, volume: bool = False) -> None:
-        compression_props = ["-o", "compression=on"]
-        encryption_props = ["-o", f"encryption={ENCRYPTION_ALGO}"]
-        encryption_props += ["-o", "keyformat=passphrase", "-o", f"keylocation={KEYLOCATION}"]
-
-        dataset_props = encryption_props + compression_props if self.is_encryption_mode() else compression_props
+        dataset_props: list[str] = self.encryption_dataset_props()
         src_foo = create_filesystem(SRC_ROOT_DATASET, "foo", props=dataset_props)
         src_foo_a = create_volume(src_foo, "a", size="1M") if volume else create_filesystem(src_foo, "a")
         src_foo_b = create_filesystem(src_foo, "b")
@@ -246,6 +243,13 @@ class IntegrationTestCase(ParametrizedTestCase):
         self.assert_snapshots(DST_ROOT_DATASET + "/foo/a", 3, "u")
         self.assertFalse(dataset_exists(DST_ROOT_DATASET + "/foo/b"))  # b/c src has no snapshots
 
+    def encryption_dataset_props(self) -> list[str]:
+        compression_props = ["-o", "compression=on"]
+        encryption_props = ["-o", f"encryption={ENCRYPTION_ALGO}"]
+        encryption_props += ["-o", "keyformat=passphrase", "-o", f"keylocation={KEYLOCATION}"]
+        dataset_props = encryption_props + compression_props if self.is_encryption_mode() else compression_props
+        return dataset_props
+
     @staticmethod
     def log_dir_opt() -> list[str]:
         return ["--log-dir", os.path.join(get_home_directory(), argparse_cli.LOG_DIR_DEFAULT + "-test")]
@@ -261,8 +265,8 @@ class IntegrationTestCase(ParametrizedTestCase):
         expected_status: int | list[int] = 0,
         error_injection_triggers: dict[str, Counter] | None = None,
         delete_injection_triggers: dict[str, Counter] | None = None,
-        param_injection_triggers: dict[str, dict[str, bool]] | None = None,
-        inject_params: dict[str, bool] | None = None,
+        param_injection_triggers: dict[str, dict[str, bool | int]] | None = None,
+        inject_params: dict[str, bool | int] | None = None,
         max_command_line_bytes: int | None = None,
         creation_prefix: str | None = None,
         max_exceptions_to_summarize: int | None = None,
@@ -342,6 +346,8 @@ class IntegrationTestCase(ParametrizedTestCase):
                 src_permissions += ",destroy,mount"
             # optional_dst_permissions = ",canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize"
             optional_dst_permissions = ",keylocation,compression"
+            if self.is_encryption_mode():
+                optional_dst_permissions += ",change-key"
             dst_permissions = "mount,create,receive,rollback,destroy" + optional_dst_permissions
             cmd = f"sudo -n zfs allow -u {os_username()} {src_permissions}".split(" ") + [SRC_POOL_NAME]
             if dataset_exists(SRC_POOL_NAME):
@@ -574,6 +580,119 @@ class IntegrationTestCase(ParametrizedTestCase):
         self.assertTrue(receive_resume_token)
         self.assertNotEqual("-", receive_resume_token)
         self.assertNotIn(dst_dataset + to_snapshot[to_snapshot.index("@") :], snapshots(dst_dataset))
+
+    def _recv_resume_token_with_tree_fail_offset(
+        self,
+        src_root_dataset: str,
+        from_snapshot: str | None,
+        to_snapshot: str,
+        failing_src_dataset: str,
+        cut_bytes: int = INJECT_DST_PIPE_FAIL_KBYTES * 1024,
+    ) -> int:
+        """Returns a byte offset inside a recursive stream substream.
+
+        Assumes failing_src_dataset is contained below src_root_dataset. A temporary stream is scanned to locate that
+        dataset substream, then the returned offset can be used to truncate a fresh send so receive state belongs to the
+        matching destination dataset.
+        """
+        self.assertNotIn("@", to_snapshot)
+        self.assertTrue(to_snapshot)
+        if from_snapshot is not None:
+            self.assertNotIn("@", from_snapshot)
+            self.assertTrue(from_snapshot)
+        self.assertTrue(is_descendant(failing_src_dataset, src_root_dataset))
+        target_marker = f"{failing_src_dataset}@{to_snapshot}".encode()
+        stream_fd, stream_name = tempfile.mkstemp(prefix="bzfs_recv_resume_tree.")
+        os.close(stream_fd)
+        stream_path = Path(stream_name)
+        try:
+            send_cmd = SUDO_CMD + ["zfs", "send", "--raw", "--compressed", "-R"]
+            if from_snapshot is not None:
+                send_cmd += ["-i", f"{src_root_dataset}@{from_snapshot}"]
+            send_cmd.append(f"{src_root_dataset}@{to_snapshot}")
+            with stream_path.open("wb") as stream_file:
+                subprocess.run(send_cmd, stdout=stream_file, stderr=PIPE, check=True)
+            stream = stream_path.read_bytes()
+            stream_size = len(stream)
+            target_offset = stream.rfind(target_marker)
+            self.assertGreaterEqual(target_offset, 0, f"marker not found in recursive send stream: {target_marker!r}")
+
+            src_datasets = cast(list[str], run_cmd(SUDO_CMD + ["zfs", "list", "-H", "-o", "name", "-r", src_root_dataset]))
+            offsets: list[int] = []
+            for dataset in src_datasets:
+                marker = f"{dataset}@{to_snapshot}".encode()
+                offset = stream.rfind(marker)
+                if offset >= 0:
+                    offsets.append(offset)
+            offsets.sort()
+
+            cutoff = target_offset + cut_bytes
+            next_offset = next((offset for offset in offsets if offset > target_offset), None)
+            self.assertLess(cutoff, stream_size, f"target stream too short; add more payload to {failing_src_dataset}")
+            if next_offset is not None:
+                self.assertLess(
+                    cutoff,
+                    next_offset,
+                    f"target stream too short; add more payload to {failing_src_dataset} or reduce cut_bytes",
+                )
+            return cutoff
+        finally:
+            stream_path.unlink(missing_ok=True)
+
+    def generate_recv_resume_token_with_tree(
+        self,
+        src_root_dataset: str,
+        from_snapshot: str | None,
+        to_snapshot: str,
+        failing_src_dataset: str,
+        dst_root_dataset: str,
+        cut_bytes: int = INJECT_DST_PIPE_FAIL_KBYTES * 1024,
+    ) -> None:
+        """Creates a resumable receive token inside a recursive replication stream.
+
+        Assumes failing_src_dataset is contained below src_root_dataset. A temporary stream is scanned to locate that
+        dataset substream, then a fresh send is truncated there so receive state belongs to the matching destination
+        dataset below dst_root_dataset.
+        """
+        cutoff = self._recv_resume_token_with_tree_fail_offset(
+            src_root_dataset, from_snapshot, to_snapshot, failing_src_dataset, cut_bytes
+        )
+        target_dst_dataset = dst_root_dataset + failing_src_dataset.removeprefix(src_root_dataset)
+        send_cmd = SUDO_CMD + ["zfs", "send", "--raw", "--compressed", "-R"]
+        if from_snapshot is not None:
+            send_cmd += ["-i", f"{src_root_dataset}@{from_snapshot}"]
+        send_cmd.append(f"{src_root_dataset}@{to_snapshot}")
+        send = subprocess.Popen(send_cmd, stdout=PIPE, stderr=PIPE)
+        assert send.stdout is not None
+        head = subprocess.Popen(["head", "-c", str(cutoff)], stdin=send.stdout, stdout=PIPE, stderr=PIPE)
+        send.stdout.close()
+        assert head.stdout is not None
+        recv = subprocess.Popen(
+            SUDO_CMD + ["zfs", "receive", "-F", "-u", "-s", dst_root_dataset],
+            stdin=head.stdout,
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+        )
+        head.stdout.close()
+        recv_stdout, recv_stderr = recv.communicate()
+        _head_stdout, head_stderr = head.communicate()
+        _send_stdout, send_stderr = send.communicate()
+        if recv_stdout:
+            logging.getLogger(__name__).warning(f"generate_recv_resume_token_with_tree stdout: {recv_stdout}")
+        if head_stderr or send_stderr:
+            logging.getLogger(__name__).warning(
+                "generate_recv_resume_token_with_tree pipe stderr: %s%s",
+                head_stderr.decode("utf-8", errors="replace"),
+                send_stderr.decode("utf-8", errors="replace"),
+            )
+        self.assertNotEqual(0, recv.returncode)
+        self.assertIn("Partially received snapshot is saved", recv_stderr)
+
+        receive_resume_token = dataset_property(target_dst_dataset, "receive_resume_token")
+        self.assertTrue(receive_resume_token)
+        self.assertNotEqual("-", receive_resume_token)
+        self.assertNotIn(target_dst_dataset + "@" + to_snapshot, snapshots(target_dst_dataset))
 
     def assert_receive_resume_token(self, dataset: str, exists: bool) -> str:
         receive_resume_token = dataset_property(dataset, "receive_resume_token")
