@@ -131,7 +131,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
     list_result: bool | tuple[list[str], list[str], list[str], set[str], str, str] = _list_and_filter_src_and_dst_snapshots(
-        job, src_dataset, dst_dataset
+        job, src_dataset, dst_dataset, tid
     )
     if isinstance(list_result, bool):
         return list_result
@@ -143,13 +143,14 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
         latest_src_snapshot,
         oldest_src_snapshot,
     ) = list_result
-    log.debug("latest_src_snapshot: %s", latest_src_snapshot)
+    assert latest_src_snapshot
+    assert oldest_src_snapshot
     latest_dst_snapshot: str = ""
     latest_common_src_snapshot: str = ""
     done_checking: bool = False
 
     if job.dst_dataset_exists[dst_dataset]:
-        rollback_result: bool | tuple[str, str, bool] = _rollback_dst_dataset_if_necessary(
+        rollback_result: tuple[str, str, bool] = _rollback_dst_dataset_if_necessary(
             job,
             dst_dataset,
             latest_src_snapshot,
@@ -158,9 +159,10 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
             done_checking,
             tid,
         )
-        if isinstance(rollback_result, bool):
-            return rollback_result
         latest_dst_snapshot, latest_common_src_snapshot, done_checking = rollback_result
+        if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
+            log.info(f"{tid} Already up-to-date: %s", dst_dataset)
+            return True
 
     log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
     log.log(LOG_TRACE, "latest_dst_snapshot: %s", latest_dst_snapshot)
@@ -225,7 +227,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
 
 
 def _list_and_filter_src_and_dst_snapshots(
-    job: Job, src_dataset: str, dst_dataset: str
+    job: Job, src_dataset: str, dst_dataset: str, tid: str
 ) -> bool | tuple[list[str], list[str], list[str], set[str], str, str]:
     """On replication, list and filter src and dst snapshots."""
     p, log = job.params, job.params.log
@@ -292,6 +294,10 @@ def _list_and_filter_src_and_dst_snapshots(
             if p.recursive and not job.dst_dataset_exists[dst_dataset]:
                 log.warning("Also skipping descendant datasets as dst dataset does not exist for %s", src_dataset)
             return job.dst_dataset_exists[dst_dataset]
+    log.debug("latest_src_snapshot: %s", latest_src_snapshot)
+    if latest_src_snapshot == "":
+        log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
+        return True
     return (
         basis_src_snapshots_with_guids,
         src_snapshots_with_guids,
@@ -310,7 +316,7 @@ def _rollback_dst_dataset_if_necessary(
     dst_snapshots_with_guids: list[str],
     done_checking: bool,
     tid: str,
-) -> bool | tuple[str, str, bool]:
+) -> tuple[str, str, bool]:
     """On replication, rollback dst if necessary; error out if not permitted."""
     p, log = job.params, job.params.log
     dst = p.dst
@@ -324,9 +330,6 @@ def _rollback_dst_dataset_if_necessary(
             done_checking = done_checking or _check_zfs_dataset_busy(job, dst, dst_dataset)
             cmd: list[str] = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
             job.try_ssh_command(dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
-    elif latest_src_snapshot == "":
-        log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
-        return True
 
     # find most recent snapshot (or bookmark) that src and dst have in common - we'll start to replicate
     # from there up to the most recent src snapshot. any two snapshots are "common" iff their ZFS GUIDs (i.e.
@@ -350,6 +353,7 @@ def _rollback_dst_dataset_if_necessary(
         # found latest common snapshot but dst has an even newer snapshot. rollback dst to that common snapshot.
         assert latest_common_guid
         _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids, {latest_common_guid})
+        assert latest_common_dst_snapshot
         if not (p.force_rollback_to_latest_common_snapshot or p.force):
             die(
                 f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
@@ -372,9 +376,6 @@ def _rollback_dst_dataset_if_necessary(
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
             raise RetryableError(display_msg="zfs rollback", retry_immediately_once=retry_immediately_once) from e
 
-    if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
-        log.info(f"{tid} Already up-to-date: %s", dst_dataset)
-        return True
     return latest_dst_snapshot, latest_common_src_snapshot, done_checking
 
 

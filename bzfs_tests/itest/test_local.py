@@ -3311,6 +3311,62 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s2"])
         self.assert_dst_snapshots_have_src_bookmarks(["s2"])
 
+    def test_send_full_resume_recv_no_selected_source_snapshot_is_noop(self) -> None:
+        """Verify filtered full-receive resume state remains untouched when no source item is selected."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+
+        destroy(ibase.DST_ROOT_DATASET, recursive=True)
+        self.create_resumable_snapshots(1, 2)
+        self.generate_recv_resume_token(None, ibase.SRC_ROOT_DATASET + "@" + fix("s1"), ibase.DST_ROOT_DATASET)
+        token = self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.SRC_ROOT_DATASET, ["s1"])
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [])
+        if are_bookmarks_enabled("src"):
+            self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, [])
+
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--include-snapshot-regex=!.*")
+
+        self.assertEqual(token, self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True))
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [])
+        if are_bookmarks_enabled("src"):
+            self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, [])
+
+    def test_send_incr_resume_recv_no_selected_source_snapshot_is_noop(self) -> None:
+        """Verify filtered incremental receive resume state remains untouched when no source snapshot is selected."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+
+        self.create_resumable_snapshots(1, 2)
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET)
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1"])
+
+        self.create_resumable_snapshots(2, 3)
+        self.generate_recv_resume_token(
+            ibase.SRC_ROOT_DATASET + "@" + fix("s1"),
+            ibase.SRC_ROOT_DATASET + "@" + fix("s2"),
+            ibase.DST_ROOT_DATASET,
+        )
+        token = self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.SRC_ROOT_DATASET, ["s1", "s2"])
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1"])
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--include-snapshot-regex=!.*",
+            "--no-estimate-send-size",
+        )
+
+        self.assertEqual(token, self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True))
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1"])
+
     def test_send_incr_resume_recv_bookmarks_actual_resumed_snapshot(self) -> None:
         """Verify resumed incremental sends bookmark and continue from the actual token target."""
         if not is_zpool_recv_resume_feature_enabled_or_active():
