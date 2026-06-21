@@ -283,7 +283,9 @@ def human_readable_float(number: float) -> str:
     result = f"{number:.{precision}f}"
     assert "." in result
     result = result.rstrip("0").rstrip(".")  # Remove trailing zeros and trailing decimal point if empty
-    return "0" if result == "-0" else result
+    if result == "-0":
+        result = "0"
+    return result
 
 
 def percent(number: int, total: int, *, print_total: bool = False) -> str:
@@ -979,18 +981,17 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
         tz = None
     elif tz_spec == "UTC":
         tz = timezone.utc
-    else:
-        if match := re.fullmatch(r"([+-])(\d\d):?(\d\d)", tz_spec):
-            sign, hours, minutes = match.groups()
-            offset: int = int(hours) * 60 + int(minutes)
-            offset = -offset if sign == "-" else offset
-            tz = timezone(timedelta(minutes=offset))
-        elif "/" in tz_spec:
-            from zoneinfo import ZoneInfo  # lazy import for startup perf
+    elif match := re.fullmatch(r"([+-])(\d\d):?(\d\d)", tz_spec):
+        sign, hours, minutes = match.groups()
+        offset: int = int(hours) * 60 + int(minutes)
+        offset = -offset if sign == "-" else offset
+        tz = timezone(timedelta(minutes=offset))
+    elif "/" in tz_spec:
+        from zoneinfo import ZoneInfo  # lazy import for startup perf
 
-            tz = ZoneInfo(tz_spec)
-        else:
-            raise ValueError(f"Invalid timezone specification: {tz_spec}")
+        tz = ZoneInfo(tz_spec)
+    else:
+        raise ValueError(f"Invalid timezone specification: {tz_spec}")
     return tz
 
 
