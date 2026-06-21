@@ -3157,6 +3157,41 @@ class LocalTestCase(IntegrationTestCase):
                 self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
                 self.assert_snapshots(ibase.DST_ROOT_DATASET, 1, "s")
 
+    def test_send_full_resume_recv_raw_token_requires_raw_send_options(self) -> None:
+        """Verify raw receive tokens are discarded before a non-raw retry.
+
+        Purpose: prevent bzfs from silently raw-resuming a token when the current send options no longer request raw.
+        Assumptions: OpenZFS encodes raw receive-resume state as `rawok` in `zfs send -n -v -t`.
+        """
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if not self.is_encryption_mode():
+            self.skipTest("Requires encrypted dataset test mode")
+
+        src_dataset = create_filesystem(
+            ibase.SRC_ROOT_DATASET,
+            "rawtoken",
+            props=self.encryption_dataset_props(),
+        )
+        dst_dataset = ibase.DST_ROOT_DATASET + "/rawtoken"
+        self.create_resumable_snapshots(1, 2, dataset=src_dataset)
+        self.generate_recv_resume_token(None, src_dataset + "@" + fix("s1"), dst_dataset)
+        token = self.assert_receive_resume_token(dst_dataset, exists=True)
+        decode_result = subprocess.run(
+            SUDO_CMD + ["zfs", "send", "-n", "-v", "-t", token],
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+            check=True,
+        )
+        self.assertIn("rawok = 1", decode_result.stdout + decode_result.stderr)
+
+        self.run_bzfs(src_dataset, dst_dataset, "--zfs-send-program-opts=", retries=1)
+
+        self.assert_receive_resume_token(dst_dataset, exists=False)
+        self.assert_snapshot_names(dst_dataset, ["s1"])
+        self.assertEqual("off", dataset_property(dst_dataset, "encryption"))
+
     def test_send_full_resume_recv_dryrun_recv(self) -> None:
         """Verify --dryrun=recv sends resumable streams into zfs receive -n without changing dst."""
         if not is_zpool_recv_resume_feature_enabled_or_active():

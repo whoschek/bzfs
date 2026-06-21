@@ -939,6 +939,7 @@ def _decode_resume_token(
 
     name_match: re.Match[str] | None = re.search(r"(?m)^\s+toname\s=\s(.+)$", decoded_resume_token)
     guid_match: re.Match[str] | None = re.search(r"(?m)^\s+toguid\s=\s(.+)$", decoded_resume_token)
+    rawok_match: re.Match[str] | None = re.search(r"(?m)^\s+rawok\s=", decoded_resume_token)
     assert name_match is not None and guid_match is not None, f"Cannot parse {recv_resume_token}, {decoded_resume_token}"
     decoded_src_snapshot: str = name_match.group(1)
     decoded_src_guid: str = str(int(guid_match.group(1).strip(), base=16))
@@ -947,11 +948,19 @@ def _decode_resume_token(
     decoded_src_dataset, decoded_src_tag = decoded_src_snapshot.split("@" if "@" in decoded_src_snapshot else "#", 1)
     if decoded_src_dataset != src_dataset:
         _clear_resumable_recv_state(job, dst_dataset)
-        msg = "stale zfs receive resume token"
+        msg = "because zfs receive resume token is stale"
         raise RetryableError(display_msg=msg, retry_immediately_once=True) from RuntimeError(msg)
     if decoded_src_guid not in included_src_guids:
         _clear_resumable_recv_state(job, dst_dataset)
-        msg = "zfs receive resume token is not a selected source snapshot"
+        msg = "because zfs receive resume token is not a selected source snapshot"
+        raise RetryableError(display_msg=msg, retry_immediately_once=True) from RuntimeError(msg)
+
+    def _is_raw_zfs_send(send_opts: Iterable[str]) -> bool:
+        return any(opt == "--raw" or ("w" in opt and opt.startswith("-") and not opt.startswith("--")) for opt in send_opts)
+
+    if rawok_match and not _is_raw_zfs_send(p.curr_zfs_send_program_opts):
+        _clear_resumable_recv_state(job, dst_dataset)
+        msg = f"as zfs receive resume token raw mode conflicts with --zfs-send-program-opts: {p.curr_zfs_send_program_opts}"
         raise RetryableError(display_msg=msg, retry_immediately_once=True) from RuntimeError(msg)
     assert decoded_src_tag
     return decoded_src_snapshot
