@@ -156,7 +156,7 @@ jobs:
           python3 -m venv .venv
           . .venv/bin/activate
           . ./preinstall_dev.sh
-          python3 -m pip install pip-audit==2.10.0
+          python3 -m pip install pip-audit==2.10.1
           pip-audit --requirement requirements*.txt
 
   test_ubuntu_24_04_fast: # currently uses zfs-2.2.2

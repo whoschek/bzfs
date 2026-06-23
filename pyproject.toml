@@ -60,11 +60,11 @@ dev = [  # for development only
   "pre-commit==4.6.0 ; python_version >= '3.10'",  # see https://github.com/pre-commit/pre-commit
   "pre-commit-hooks==6.0.0 ; python_version >= '3.10'",  # see https://github.com/pre-commit/pre-commit-hooks
   "black==26.5.1 ; python_version >= '3.10'",      # see https://github.com/psf/black
-  "ruff==0.15.15",                                 # see https://github.com/astral-sh/ruff
+  "ruff==0.15.17",                                 # see https://github.com/astral-sh/ruff
   "coverage==7.10.7 ; python_version < '3.10'",    # see https://github.com/nedbat/coveragepy
   "coverage==7.14.0 ; python_version >= '3.10'",   # see https://github.com/nedbat/coveragepy
   "mypy==v1.20.2 ; python_version >= '3.10'",      # see https://github.com/python/mypy
-  "pylint==4.0.5 ; python_version >= '3.10'",      # see https://github.com/pylint-dev/pylint
+  "pylint==4.0.6 ; python_version >= '3.10'",      # see https://github.com/pylint-dev/pylint
   "isort==8.0.1 ; python_version >= '3.10'",       # see https://github.com/PyCQA/isort
   "pydocstringformatter==0.7.5 ; python_version >= '3.9'",     # see https://github.com/DanielNoord/pydocstringformatter
   "conventional-pre-commit==4.4.0 ; python_version >= '3.9'",  # see https://github.com/compilerla/conventional-pre-commit
