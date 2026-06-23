@@ -800,7 +800,7 @@ grep -E "^__ZFS__(src|dst)" <<< "$shell_output"
     def _run_logged_testbed_script(self, log_path: str, action: str) -> None:
         """Runs `lima_testbed.sh` for the default 1x1 testbed and preserves combined logs."""
         env = {key: value for key, value in os.environ.items() if not key.startswith("LIMA_")}
-        env["LIMA_VM_TEMPLATE"] = "template:ubuntu-25.10"
+        env["LIMA_VM_TEMPLATE"] = "template:ubuntu-26.04"
         env["TESTBED_HOSTNAME_PREFIX"] = "test"
         env["TESTBED_NUM_SRC_VMS"] = "1"
         env["TESTBED_NUM_DST_VMS"] = "1"
