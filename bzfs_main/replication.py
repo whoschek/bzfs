@@ -281,6 +281,8 @@ def _list_and_filter_src_and_dst_snapshots(
     included_src_guids: set[str] = set()
     for line in src_snapshots_with_guids:
         guid, snapshot = line.split("\t", 1)
+        assert guid
+        assert snapshot
         if "@" in snapshot:
             included_src_guids.add(guid)
             latest_src_snapshot = snapshot
@@ -454,7 +456,7 @@ def _replicate_dataset_fully(
             job, src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "full_zfs_send"
         )
         latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
-        if not dry_run_no_send and not p.dry_run:
+        if not p.dry_run:
             job.dst_dataset_exists[dst_dataset] = True
         with job.stats_lock:
             job.num_snapshots_replicated += 1
