@@ -2,6 +2,14 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.23.0] - Not yet released
+
+- [bzfs] Make it possible to use `zfs send -R -s` aka sending a recursive stream package. Example usage: `bzfs
+  --recursive --zfs-send-program-opts='--raw --compressed -R -s' <src_root_dataset> <dst_root_dataset>``
+- [bzfs] Clear zfs receive resume token if it does not represent a selected source snapshot.
+- [bzfs] Clear zfs receive resume token when its raw mode flag conflicts with `--zfs-send-program-opts`.
+- [bzfs] Also run nightly CI tests on zfs-2.4.3 and zfs-2.3.8 and zfs-2.2.10.
+
 ## [1.22.0] - June 10, 2026
 
 - [bzfs] Fix bookkeeping on resume of interrupted zfs send of snapshot that is no longer the oldest selected snapshot
