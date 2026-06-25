@@ -19,6 +19,8 @@
 # inside of that VM.
 # By default uses ubuntu-24.04 with zfs-2.4 or default ZFS depending on the value of $LIMA_ZFS_VERSION.
 # Cold start of the guest VM takes ~30 seconds with defaults; warm start takes ~1.5 seconds.
+# To create an ubuntu-26.04 guest VM use: export LIMA_VM_TEMPLATE=template:ubuntu-26.04
+# To create an ubuntu-24.04 guest VM use: export LIMA_VM_TEMPLATE=template:ubuntu-24.04
 # To create an AlmaLinux-10 guest VM use: export LIMA_VM_TEMPLATE=template:almalinux-10
 # To create an AlmaLinux-9 guest VM use: export LIMA_VM_TEMPLATE=template:almalinux-9
 
