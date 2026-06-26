@@ -35,6 +35,8 @@ on:
         options:
           - test_release_packaging
           - test_check_zizmor
+          - test_ubuntu_26_04
+          - test_ubuntu_26_04_hpnssh
           - test_ubuntu_24_04_fast
           - test_ubuntu_24_04_hpnssh
           - test_ubuntu_24_04_zfs_2_4
@@ -159,6 +161,88 @@ jobs:
           python3 -m pip install pip-audit==2.10.1
           pip-audit --requirement requirements*.txt
 
+  test_ubuntu_26_04: # currently uses zfs-2.4.1
+    needs: create_iteration_test_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_26_04' || contains(github.event.inputs.job_names, 'test_ubuntu_26_04')
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
+        python-version: ["3.14"]
+      fail-fast: false
+    timeout-minutes: 200
+    steps:
+      - uses: *actions_checkout
+        with:
+          persist-credentials: false
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display ZFS version and Python version
+        uses: ./.github/actions/print-versions
+      - name: Run pre-commit
+        uses: ./.github/actions/pre-commit
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Run tests
+        run: |
+          ./test.sh
+      - name: Run tests and generate code coverage
+        run: |
+          ./coverage.sh
+          echo "bzfs-testrun-success"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
+
+  test_ubuntu_26_04_hpnssh: # currently uses zfs-2.4.1
+    needs: create_iteration_test_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_26_04_hpnssh' || contains(github.event.inputs.job_names, 'test_ubuntu_26_04_hpnssh')
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
+        python-version: ["3.14t"]
+      fail-fast: false
+    timeout-minutes: 200
+    steps:
+      - uses: *actions_checkout
+        with:
+          persist-credentials: false
+      - name: Show iteration info ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        run: echo "Now running iteration ${MATRIX_ITERATION} of ${NUM_RUNS}"
+        env:
+          MATRIX_ITERATION: ${{ matrix.iteration }}
+      - name: Install hpnssh
+        run: |
+          # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
+          ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:rapier1/hpnssh
+
+          # Force apt to use the amd64 index because the PPA's amd64v3 index lacks the installable hpnssh packages
+          sudo sed -i '/^Components: /a Architectures: amd64' /etc/apt/sources.list.d/rapier1-ubuntu-hpnssh-*.sources
+
+          ./.github-workflow-scripts/apt-get-update-with-retries.sh
+          sudo apt-get -y install hpnssh-client hpnssh-server
+          hpnssh -V
+      - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+        uses: ./.github/actions/common
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display ZFS version and Python version
+        uses: ./.github/actions/print-versions
+      - name: Run tests
+        run: |
+          echo "Now running test.sh ..."
+          ./test.sh
+      - name: Run tests and generate code coverage
+        run: |
+          ./coverage.sh
+          echo "bzfs-testrun-success"
+      - name: Upload code coverage report to workflow run page
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        uses: ./.github/actions/coverage-upload
+
   test_ubuntu_24_04_fast: # currently uses zfs-2.2.2
     needs: create_iteration_test_matrix
     if: (github.event_name != 'workflow_dispatch' && github.event.schedule != '0 3 * * *') || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_fast' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_fast')
@@ -215,7 +299,7 @@ jobs:
 
           # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
           ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:rapier1/hpnssh
-          sudo apt-get -y install hpnssh
+          sudo apt-get -y install hpnssh-client hpnssh-server
           hpnssh -V
 
           ./.github-workflow-scripts/install_ubuntu_24_04_pv_fr.sh
@@ -342,7 +426,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.14", "3.14t"]
+        python-version: ["3.11"]
       fail-fast: false
     timeout-minutes: 200
     steps:
@@ -371,7 +455,7 @@ jobs:
           ./coverage.sh
           echo "bzfs-testrun-success"
       - name: Upload code coverage report to workflow run page
-        if: ${{ matrix.python-version == '3.14' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
 
   test_ubuntu_24_04_zfs_2_2: # currently uses zfs-2.2.10
@@ -381,7 +465,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.11"]
+        python-version: ["3.10"]
       fail-fast: false
     timeout-minutes: 200
     steps:
@@ -450,7 +534,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.10", "3.9"]
+        python-version: ["3.10"]
       fail-fast: false
     timeout-minutes: 210
     steps:
@@ -481,7 +565,7 @@ jobs:
           ./coverage.sh
           echo "bzfs-testrun-success"
       - name: Upload code coverage report to workflow run page
-        if: ${{ matrix.python-version == '3.10' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
 
   test_ubuntu_22_04_zfs_0_8: # currently uses zfs-0.8.3
@@ -690,6 +774,8 @@ jobs:
     if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
     runs-on: ubuntu-24.04
     needs:
+      - test_ubuntu_26_04
+      - test_ubuntu_26_04_hpnssh
       - test_ubuntu_24_04_hpnssh
       - test_ubuntu_24_04_zfs_2_4
       - test_ubuntu_24_04_zfs_2_4_latest
@@ -711,6 +797,16 @@ jobs:
           persist-credentials: false
       - name: Download coverage artifact
         uses: &actions_download_artifact actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # aka v8.0.1
+        with:
+          name: coverage-test_ubuntu_26_04
+          path: coverage-test_ubuntu_26_04
+      - name: Download coverage artifact
+        uses: *actions_download_artifact
+        with:
+          name: coverage-test_ubuntu_26_04_hpnssh
+          path: coverage-test_ubuntu_26_04_hpnssh
+      - name: Download coverage artifact
+        uses: *actions_download_artifact
         with:
           name: coverage-test_ubuntu_24_04_hpnssh
           path: coverage-test_ubuntu_24_04_hpnssh

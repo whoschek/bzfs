@@ -131,7 +131,9 @@ repos:
     rev: 914e7df21a07ef503a81201c76d2b11c789d3fca  # aka v1.7.12
     hooks:
       - id: actionlint                  # Validate semantics (and some syntax) of GitHub Workflow YAML files
-        args: [--shellcheck=tools/shellcheck]
+        args:
+          - --shellcheck=tools/shellcheck
+          - '-ignore=^label "ubuntu-26\.04" is unknown\.'  # ignore false error for now, until actionlint catches up
   # - repo: https://github.com/woodruffw/zizmor-pre-commit  # also see https://github.com/zizmorcore/zizmor
   #   rev: 9257c6050c0261b8c57e712f632dc4a8010109a9  # aka v1.25.2
   #   hooks:
