@@ -233,6 +233,7 @@ jobs:
         uses: ./.github/actions/print-versions
       - name: Run tests
         run: |
+          export bzfs_test_ssh_program=hpnssh
           echo "Now running test.sh ..."
           ./test.sh
       - name: Run tests and generate code coverage
