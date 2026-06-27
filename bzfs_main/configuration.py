@@ -246,7 +246,7 @@ class Params(MiniParams):
         self.verbose_destroy: Final[str] = "" if args.quiet else "-v"
 
         self.zfs_send_program_opts: Final[list[str]] = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
-        self.zfs_send_resume_opts: Final[list[str]] = self._fix_send_resume_opts(self.split_args(args.zfs_send_program_opts))
+        self.zfs_send_resume_opts: Final[list[str]] = self._fix_send_resume_opts(self.zfs_send_program_opts)
         zfs_recv_program_opts: list[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             zfs_recv_program_opts.append(self.validate_arg_str(extra_opt, allow_all=True))
@@ -429,7 +429,7 @@ class Params(MiniParams):
     def _fix_send_resume_opts(opts: list[str]) -> list[str]:
         """Returns sanitized CLI options for `zfs send -t` resume sends."""
         return _fix_send_recv_opts(
-            Params._fix_send_opts(opts),
+            opts,
             exclude_long_opts={"--backup", "--holds", "--props", "--replicate", "--skip-missing"},
             exclude_short_opts="bhpRsU",
             include_arg_opts=set(),
