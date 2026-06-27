@@ -320,7 +320,7 @@ class Params(MiniParams):
         for opt in bad_pv_opts.intersection(self.pv_program_opts):
             die(f"--pv-program-opts: {opt} is disallowed for security reasons.")
         if self.bwlimit:
-            self.pv_program_opts.extend([f"--rate-limit={self.bwlimit}"])
+            self.pv_program_opts.append(f"--rate-limit={self.bwlimit}")
         self.shell_program_local: Final[str] = "sh"
         self.shell_program: Final[str] = self._program_name(args.shell_program)
         self.ssh_program: str = self._program_name(args.ssh_program)
