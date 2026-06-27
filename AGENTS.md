@@ -313,7 +313,8 @@ Your goal is to improve quality with zero functional regressions.
 Use this for complex bugs, high-risk refactors, and ambiguous design choices. Before implementing, compare 2 to 5
 materially different approaches. For each approach, summarize the core idea, supporting evidence from the repo or
 failing behavior, key benefits and risks, validation strategy, and impact on `bzfs` safety invariants such as
-idempotence, resumability, snapshot/GUID correctness, CLI compatibility, and partial-failure recovery.
+idempotence, resumability, snapshot/GUID correctness, CLI compatibility, and partial-failure recovery. You have plenty
+of time; go slow and make sure everything is correct.
 
 Then select one approach and briefly explain why it is the best fit. Keep the analysis concise and evidence-based:
 provide a decision record with the assumptions, tradeoffs, evidence, and conclusion needed for review. If one approach
