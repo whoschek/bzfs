@@ -495,7 +495,7 @@ bzfs-test        # when installed via pip
 03. Select `All workflows` -> `Tests` in the left sidebar.
 04. Open the `Run workflow` dropdown menu on the right. The UI looks like
     [this screenshot](https://raw.githubusercontent.com/whoschek/bzfs/main/bzfs_docs/run_workflow_dialog.jpg).
-05. Select a single job (for example `test_ubuntu_24_04` or `test_freebsd_15_0` or `test_almalinux_10_zfs_2_4_hpnssh`) or
+05. Select a single job (for example `test_ubuntu_26_04` or `test_ubuntu_24_04` or `test_freebsd_15_1` or `test_almalinux_10_zfs_2_4_hpnssh`) or
     choose `Run all jobs` to run the test suite on the full matrix of all supported platforms.
 06. Select the branch to test, usually the branch that contains your changes.
 07. Click the 'Run workflow' button to start the run.
