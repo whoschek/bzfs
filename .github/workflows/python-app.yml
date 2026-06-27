@@ -50,13 +50,13 @@ on:
           - test_almalinux_10_zfs_2_3
           - test_almalinux_9_zfs_2_2
           - test_almalinux_9_zfs_2_2_hpnssh
-          - test_freebsd_15_0
+          - test_freebsd_15_1
           - test_freebsd_14_4
           - test_freebsd_13_5
           - none
         default: "test_ubuntu_24_04_fast"
       job_names:
-        description: "Names of jobs to run, e.g. 'test_ubuntu_24_04,test_almalinux_10_zfs_2_3,test_freebsd_15_0'"
+        description: "Names of jobs to run, e.g. 'test_ubuntu_24_04,test_almalinux_10_zfs_2_3,test_freebsd_15_1'"
         type: string
         default: ""
       bzfs_test_mode:
@@ -696,9 +696,9 @@ jobs:
         if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: ./.github/actions/coverage-upload
 
-  test_freebsd_15_0: # currently uses zfs-2.4.0rcX
+  test_freebsd_15_1: # currently uses zfs-2.4.2
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_15_0' || contains(github.event.inputs.job_names, 'test_freebsd_15_0')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_15_1' || contains(github.event.inputs.job_names, 'test_freebsd_15_1')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -711,9 +711,9 @@ jobs:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@d1e65811565151536c0c894fff74f06351ed26e6 # aka v1.4.5; see https://github.com/vmactions/freebsd-vm
+        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@4441bea20b31bfa77329a5af583199362489567e # aka v1.4.9; see https://github.com/vmactions/freebsd-vm
         with:
-          release: "15.0"
+          release: "15.1"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
           run: |
             ./.github-workflow-scripts/test_freebsd_14_1.sh
@@ -789,7 +789,7 @@ jobs:
       - test_almalinux_10_zfs_2_3
       - test_almalinux_9_zfs_2_2
       - test_almalinux_9_zfs_2_2_hpnssh
-      - test_freebsd_15_0
+      - test_freebsd_15_1
       - test_freebsd_14_4
       - test_freebsd_13_5
     steps:
@@ -869,8 +869,8 @@ jobs:
       - name: Download coverage artifact
         uses: *actions_download_artifact
         with:
-          name: coverage-test_freebsd_15_0
-          path: coverage-test_freebsd_15_0
+          name: coverage-test_freebsd_15_1
+          path: coverage-test_freebsd_15_1
       - name: Download coverage artifact
         uses: *actions_download_artifact
         with:
