@@ -198,15 +198,11 @@ class TestUpdateReadme(AbstractTestCase):
         self.assertLess(details.index("choose at most one of **int**"), details.index('<div id="int"></div>'))
         self.assertNotIn("choose at most one of **count**", details)
 
-    @unittest.skipIf(
-        sys.version_info < (3, 12),
-        "argparse rejects nargs='*' positionals in mutually exclusive groups on Python < 3.12",
-    )
     def test_mutually_exclusive_group_positional_uses_tuple_metavar(self) -> None:
         """Covers tuple metavar labels where argparse accepts starred positional groups."""
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         group = parser.add_mutually_exclusive_group()
-        group.add_argument("pair", nargs="*", metavar=("SRC", "DST"), help="Dataset pairs.")
+        group.add_argument("pair", nargs="*", metavar=("SRC", "DST"), default=[], help="Dataset pairs.")
         group.add_argument("--all", action="store_true", help="Include all pairs.")
 
         details = markdown_from_argparse._render_help_details(parser)
