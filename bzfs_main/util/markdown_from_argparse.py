@@ -94,6 +94,12 @@ Existing file content outside of the marker pair sections is retained as-is. Thi
 custom document headers/footers/notes, and other forms of customization.
 
 The [BEGIN|END]-MANPAGE-DESCRIPTION marker pair is optional.
+
+The renderer expects argparse parser `description`, `epilog`, and `help=` text in the form of blank-line-separated blocks,
+where the first block of each `help=` text is prose.
+The renderer wraps ordinary prose. It preserves Markdown headings, lists, blockquotes, pipe tables, and fenced code blocks,
+using simple heuristics. It automatically fences blocks indented with 4 spaces or a tab, and blocks that appear to contain
+aligned columns, again using simple heuristics. Use triple-backtick fences for examples whose layout must survive unchanged.
 """,
         epilog="""
 # Examples
@@ -189,9 +195,10 @@ def _replace(lines: list[str], begin_tag: str, replacement: list[str], end_tag: 
 def _render_blocks(text: str, *, list_item: bool = False) -> list[str]:
     """Renders argparse help into the README's supported Markdown subset.
 
-    Assumes prose paragraphs are separated by blank lines and fenced examples use triple backticks. Prose is normalized and
-    wrapped; headings and fenced code stay structural. In list_item mode, the first block forms the bullet body and later
-    blocks are indented beneath it, avoiding a full Markdown parser while preserving readable generated option help.
+    In list_item mode, argparse action help is expected to start with prose as the bullet body, separated from
+    later blocks by a blank line, with those later blocks indented beneath it. This is a small block renderer, not a full
+    Markdown parser; mixed prose plus verbatim text in one physical block is ambiguous, and structured first-block action
+    help is outside the intended contract.
     """
     initial_indent: str = "*  " if list_item else ""
     subsequent_indent: str = "    " if list_item else ""
@@ -216,11 +223,98 @@ def _render_blocks(text: str, *, list_item: bool = False) -> list[str]:
         indent: str = initial_indent if i == 0 else subsequent_indent
         if block.startswith(TRIPLE_BACKTICK) and block.endswith(TRIPLE_BACKTICK):
             results += [""] + [indent + line for line in block.splitlines()] + [""]
-        elif re.fullmatch(r"#{1,6} .+", block):  # Keep Markdown headings unwrapped
-            results.append(indent + block)
+        elif _is_markdown_block(block):
+            results += [indent + line for line in block.splitlines()]
+        elif _is_verbatim_block(block):
+            results += [""] + [indent + line for line in [TRIPLE_BACKTICK] + block.splitlines() + [TRIPLE_BACKTICK]] + [""]
         else:
             results += _wrap_text(" ".join(block.split()), initial_indent=indent, subsequent_indent=subsequent_indent)
     return results
+
+
+def _is_markdown_block(block: str) -> bool:
+    """Returns True when wrapping would break explicit Markdown structure.
+
+    This is a small block-level recognizer. Its job is not to understand all Markdown; it only answers: "Would normal prose
+    wrapping destroy an explicit Markdown structure here?"
+
+    The deeper principle is conservative explicitness: preserve syntax that is obviously Markdown, but do not infer ambiguous
+    things like shell commands, config formats, YAML, HTTP examples, or project-specific conventions. For those the author
+    should specify explicit fenced code blocks. This keeps the renderer simple and avoids content-specific workarounds.
+    """
+
+    # First, split the block into nonblank physical lines. This removes blank lines and trailing whitespace, but preserves
+    # leading indentation. Preserving leading indentation matters for nested lists.
+    lines: list[str] = [line.rstrip() for line in block.splitlines() if line.strip()]
+
+    # 0. Single-line markdown headings are explicit Markdown syntax and should not be wrapped. Recognizes headings like:
+    #    # Heading
+    #    ### Heading
+    markdown_heading = r"#{1,6} .+"
+    if len(lines) == 1 and re.fullmatch(markdown_heading, lines[0]):
+        return True
+
+    # 1. Empty and one-line non-heading blocks are not Markdown structures under these rules. They are ordinary prose for
+    # the caller to wrap.
+    if len(lines) < 2:
+        return False
+
+    # 2. Markdown pipe tables. This recognizes the canonical Markdown table shape:
+    #
+    #    | Name | Meaning |
+    #    | --- | --- |
+    #    | A | B |
+    #
+    # The first line must look like a table header by containing "|". The second line must be a separator row with at least
+    # two columns, each made from at least three dashes, with optional alignment colons.
+    #
+    # Principle: once a block starts as a Markdown table, trust the author and preserve the whole block line-for-line.
+    # Wrapping table rows would destroy the table.
+    table_separator = r"\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*"
+    if "|" in lines[0] and re.fullmatch(table_separator, lines[1]):
+        return True
+
+    # 3. List blocks. The first line must declare the list; later indented lines may continue the current item.
+    #
+    #    - unordered item
+    #    * unordered item
+    #    + unordered item
+    #    1. ordered item
+    #
+    # Leading indentation is allowed, so nested lists work:
+    #
+    #    - Parent
+    #      - Child
+    list_line = r"\s*(?:[-*+]|\d+\.)\s+\S.*"
+    continuation_line = r"\s+\S.*"
+    if re.fullmatch(list_line, lines[0]):
+        return all(re.fullmatch(list_line, line) or re.fullmatch(continuation_line, line) for line in lines[1:])
+
+    # 4. Homogeneous blockquote blocks. If prose and blockquote syntax are mixed in the same blank-line block, do not guess;
+    # the author should separate them with a blank line or use explicit fences.
+    #
+    #    > blockquote
+    blockquote_line = r"\s*>\s?.*"
+    return all(re.fullmatch(blockquote_line, line) for line in lines)
+
+
+def _is_verbatim_block(block: str) -> bool:
+    """Returns True when physical line layout should be fenced instead of wrapped.
+
+    The recognizer stays layout-based: specifically indented lines are manual code blocks, and repeated wide internal
+    whitespace suggests aligned text columns.
+    """
+    # Split the block into nonblank physical lines.
+    lines = [line.rstrip() for line in block.splitlines() if line.strip()]
+
+    # Manual code block: line indented by at least 4 spaces (or 1 tab)
+    if any(line.startswith(("    ", "\t")) for line in lines):
+        return True
+
+    # Manual text table aligned with whitespace: checks whether at least two lines contain a non-space character that
+    # is not common sentence punctuation, followed by two or more whitespace characters, then another non-space character.
+    has_aligned_columns = sum(bool(re.search(r"[^\s.!?:;]\s{2,}\S", line)) for line in lines) >= 2
+    return has_aligned_columns
 
 
 def _render_help_details(parser: argparse.ArgumentParser, *, heading_level: int = 1) -> str:

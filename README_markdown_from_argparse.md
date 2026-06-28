@@ -56,6 +56,13 @@ reordering of sections, adding custom document headers/footers/notes, and other 
 customization.
 
 The [BEGIN|END]-MANPAGE-DESCRIPTION marker pair is optional.
+
+The renderer expects argparse parser `description`, `epilog`, and `help=` text in the form of
+blank-line-separated blocks, where the first block of each `help=` text is prose. The renderer
+wraps ordinary prose. It preserves Markdown headings, lists, blockquotes, pipe tables, and fenced
+code blocks, using simple heuristics. It automatically fences blocks indented with 4 spaces or a
+tab, and blocks that appear to contain aligned columns, again using simple heuristics. Use
+triple-backtick fences for examples whose layout must survive unchanged.
 <!-- END-MANPAGE-DESCRIPTION -->
 
 # Options

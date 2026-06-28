@@ -618,6 +618,413 @@ class TestUpdateReadme(AbstractTestCase):
             markdown_from_argparse._render_blocks("```\ncmd1 \\\ncmd2\n\ncmd output\n```"),
         )
 
+    def test_render_blocks_preserves_realistic_line_oriented_blocks(self) -> None:
+        """Covers third-party argparse help that relies on meaningful line layout."""
+        cases: tuple[tuple[str, str, list[str]], ...] = (
+            (
+                "pipx_environment_variables",
+                self.block(
+                    "optional environment variables:",
+                    "  PIPX_HOME              Overrides default pipx location.",
+                    "  PIPX_GLOBAL_HOME       Used instead of PIPX_HOME with --global.",
+                    "  PIPX_DEFAULT_PYTHON    Overrides default python used for commands.",
+                ),
+                self.fenced_lines(
+                    "optional environment variables:",
+                    "  PIPX_HOME              Overrides default pipx location.",
+                    "  PIPX_GLOBAL_HOME       Used instead of PIPX_HOME with --global.",
+                    "  PIPX_DEFAULT_PYTHON    Overrides default python used for commands.",
+                ),
+            ),
+            (
+                "subcommand_catalog",
+                self.block(
+                    "Commands:",
+                    "  install       Install packages into isolated environments.",
+                    "  inject        Add dependencies to an existing environment.",
+                    "  run           Run an app in a temporary environment.",
+                ),
+                self.fenced_lines(
+                    "Commands:",
+                    "  install       Install packages into isolated environments.",
+                    "  inject        Add dependencies to an existing environment.",
+                    "  run           Run an app in a temporary environment.",
+                ),
+            ),
+            (
+                "option_summary_with_continuation",
+                self.block(
+                    "Options:",
+                    "  --index-url URL       Base URL of Python Package Index.",
+                    "  --pip-args ARGS       Arguments forwarded to pip install.",
+                    "                         Quote this value when passing multiple flags.",
+                ),
+                self.fenced_lines(
+                    "Options:",
+                    "  --index-url URL       Base URL of Python Package Index.",
+                    "  --pip-args ARGS       Arguments forwarded to pip install.",
+                    "                         Quote this value when passing multiple flags.",
+                ),
+            ),
+            (
+                "exit_code_columns",
+                self.block(
+                    "Exit codes:",
+                    "  0  Command completed successfully.",
+                    "  1  Command failed.",
+                ),
+                self.fenced_lines(
+                    "Exit codes:",
+                    "  0  Command completed successfully.",
+                    "  1  Command failed.",
+                ),
+            ),
+            (
+                "markdown_table",
+                self.block(
+                    "| Variable | Purpose |",
+                    "| --- | --- |",
+                    "| PIPX_HOME | Virtual environment root. |",
+                    "| PIPX_BIN_DIR | App symlink directory. |",
+                ),
+                [
+                    "| Variable | Purpose |",
+                    "| --- | --- |",
+                    "| PIPX_HOME | Virtual environment root. |",
+                    "| PIPX_BIN_DIR | App symlink directory. |",
+                ],
+            ),
+            (
+                "markdown_unordered_list",
+                self.block(
+                    "- Install the package.",
+                    "- Expose console scripts.",
+                    "- Keep dependencies isolated.",
+                ),
+                [
+                    "- Install the package.",
+                    "- Expose console scripts.",
+                    "- Keep dependencies isolated.",
+                ],
+            ),
+            (
+                "markdown_nested_list",
+                self.block(
+                    "- Global mode:",
+                    "  - reads PIPX_GLOBAL_HOME",
+                    "  - writes PIPX_GLOBAL_BIN_DIR",
+                    "- User mode:",
+                    "  - reads PIPX_HOME",
+                    "  - writes PIPX_BIN_DIR",
+                ),
+                [
+                    "- Global mode:",
+                    "  - reads PIPX_GLOBAL_HOME",
+                    "  - writes PIPX_GLOBAL_BIN_DIR",
+                    "- User mode:",
+                    "  - reads PIPX_HOME",
+                    "  - writes PIPX_BIN_DIR",
+                ],
+            ),
+            (
+                "markdown_list_with_continuation_lines",
+                self.block(
+                    "- Install the package into an isolated environment.",
+                    "  Continue with symlink creation for exposed commands.",
+                    "- Reuse the environment on later runs.",
+                    "  Continue without changing unrelated applications.",
+                ),
+                [
+                    "- Install the package into an isolated environment.",
+                    "  Continue with symlink creation for exposed commands.",
+                    "- Reuse the environment on later runs.",
+                    "  Continue without changing unrelated applications.",
+                ],
+            ),
+            (
+                "markdown_numbered_steps",
+                self.block(
+                    "1. Create a virtual environment.",
+                    "2. Install the requested package.",
+                    "3. Link exposed applications.",
+                ),
+                [
+                    "1. Create a virtual environment.",
+                    "2. Install the requested package.",
+                    "3. Link exposed applications.",
+                ],
+            ),
+            (
+                "ordinary_hard_wrapped_prose",
+                self.block(
+                    "This paragraph was manually wrapped in source",
+                    "but it has no columns, examples, or Markdown",
+                    "structure that needs physical line preservation.",
+                ),
+                [
+                    "This paragraph was manually wrapped in source but it has no columns, examples, or Markdown",
+                    "structure that needs physical line preservation.",
+                ],
+            ),
+        )
+
+        for name, text, expected in cases:
+            with self.subTest(name=name):
+                self.assertListEqual(expected, markdown_from_argparse._render_blocks(text))
+
+    def test_render_blocks_wraps_realistic_prose_blocks(self) -> None:
+        """Covers prose that mentions CLI syntax without requiring line preservation."""
+        cases: tuple[tuple[str, str, list[str]], ...] = (
+            (
+                "inline_command_reference",
+                "Use `pipx install black` when you want the command available on PATH without adding the package to "
+                "the application runtime dependencies.",
+                [
+                    "Use `pipx install black` when you want the command available on PATH without adding the package to",
+                    "the application runtime dependencies.",
+                ],
+            ),
+            (
+                "inline_environment_variable_reference",
+                "Set PIPX_HOME only when you need a different virtual environment root; most users should keep the "
+                "default directory so upgrades remain predictable.",
+                [
+                    "Set PIPX_HOME only when you need a different virtual environment root; most users should keep the",
+                    "default directory so upgrades remain predictable.",
+                ],
+            ),
+            (
+                "inline_option_names",
+                "The --quiet and --verbose options adjust logging verbosity for troubleshooting but do not change package "
+                "installation behavior or dependency resolution.",
+                [
+                    "The --quiet and --verbose options adjust logging verbosity for troubleshooting but do not change",
+                    "package installation behavior or dependency resolution.",
+                ],
+            ),
+            (
+                "inline_paths",
+                "Applications are linked into /usr/local/bin or another configured bin directory so shells can find them "
+                "without activating the virtual environment first.",
+                [
+                    "Applications are linked into /usr/local/bin or another configured bin directory so shells can find",
+                    "them without activating the virtual environment first.",
+                ],
+            ),
+            (
+                "inline_url",
+                "See https://pipx.pypa.io/latest/how-to/troubleshoot/ for troubleshooting guidance before deleting "
+                "environments or changing global configuration.",
+                [
+                    "See https://pipx.pypa.io/latest/how-to/troubleshoot/ for troubleshooting guidance before deleting",
+                    "environments or changing global configuration.",
+                ],
+            ),
+            (
+                "inline_json_reference",
+                "The JSON output is intended for automation; callers should treat unknown fields as forward-compatible "
+                "extensions instead of hard failures.",
+                [
+                    "The JSON output is intended for automation; callers should treat unknown fields as",
+                    "forward-compatible extensions instead of hard failures.",
+                ],
+            ),
+            (
+                "inline_key_value_reference",
+                "Use backend=uv in examples as shorthand for selecting the uv backend; the actual command-line flag "
+                "remains --backend uv.",
+                [
+                    "Use backend=uv in examples as shorthand for selecting the uv backend; the actual command-line flag",
+                    "remains --backend uv.",
+                ],
+            ),
+            (
+                "colon_sentence",
+                "Note: global installation changes where environments and manual pages are stored, but it does not imply "
+                "that package installation itself runs with elevated privileges.",
+                [
+                    "Note: global installation changes where environments and manual pages are stored, but it does not",
+                    "imply that package installation itself runs with elevated privileges.",
+                ],
+            ),
+            (
+                "semicolon_sentence",
+                "The cache speeds up repeated runs; it is safe to remove because pipx can rebuild temporary environments "
+                "when the same app is invoked again.",
+                [
+                    "The cache speeds up repeated runs; it is safe to remove because pipx can rebuild temporary",
+                    "environments when the same app is invoked again.",
+                ],
+            ),
+            (
+                "parenthetical_sentence",
+                "The selected interpreter must satisfy the project requirement (Python 3.10 or newer) before the package "
+                "manager starts resolving dependencies.",
+                [
+                    "The selected interpreter must satisfy the project requirement (Python 3.10 or newer) before the",
+                    "package manager starts resolving dependencies.",
+                ],
+            ),
+            (
+                "hyphenated_terms",
+                "The package manager uses best-effort clean-up after failures so partially-created environments do not "
+                "hide later successful installation attempts.",
+                [
+                    "The package manager uses best-effort clean-up after failures so partially-created environments do",
+                    "not hide later successful installation attempts.",
+                ],
+            ),
+            (
+                "quoted_terms",
+                'When the documentation says "app", it means a console script exposed by the installed package rather '
+                "than an arbitrary importable module.",
+                [
+                    'When the documentation says "app", it means a console script exposed by the installed package',
+                    "rather than an arbitrary importable module.",
+                ],
+            ),
+            (
+                "comma_series",
+                "The command accepts package names, local directories, wheel files, source archives, and version control "
+                "URLs through the same package specification argument.",
+                [
+                    "The command accepts package names, local directories, wheel files, source archives, and version",
+                    "control URLs through the same package specification argument.",
+                ],
+            ),
+            (
+                "manual_line_break_prose",
+                self.block(
+                    "This source paragraph is wrapped by hand",
+                    "because it was written in a narrow editor,",
+                    "but it still represents ordinary prose.",
+                ),
+                [
+                    "This source paragraph is wrapped by hand because it was written in a narrow editor, but it still",
+                    "represents ordinary prose.",
+                ],
+            ),
+            (
+                "sentence_spacing_prose",
+                self.block(
+                    "This prose uses sentence spacing.  It is still ordinary text.",
+                    "Another sentence follows here.  It should not become fenced code.",
+                ),
+                [
+                    "This prose uses sentence spacing. It is still ordinary text. Another sentence follows here. It",
+                    "should not become fenced code.",
+                ],
+            ),
+            (
+                "two_space_indented_continuation_prose",
+                self.block(
+                    "Run this command to do xyz",
+                    "  pipx install PACKAGE_SPEC",
+                    "Check the output for errors.",
+                ),
+                ["Run this command to do xyz pipx install PACKAGE_SPEC Check the output for errors."],
+            ),
+            (
+                "option_metavar_sentence",
+                "Pass --python PYTHON when the package must be installed with a specific interpreter, such as python3.12 "
+                "or an absolute executable path.",
+                [
+                    "Pass --python PYTHON when the package must be installed with a specific interpreter, such as",
+                    "python3.12 or an absolute executable path.",
+                ],
+            ),
+            (
+                "pep_reference",
+                "PEP 582 support is experimental, and projects should not assume that local __pypackages__ discovery "
+                "will stay unchanged across future releases.",
+                [
+                    "PEP 582 support is experimental, and projects should not assume that local __pypackages__",
+                    "discovery will stay unchanged across future releases.",
+                ],
+            ),
+            (
+                "negative_guidance",
+                "Do not use --force as a routine upgrade mechanism because it can replace files that would otherwise warn "
+                "about conflicting application names.",
+                [
+                    "Do not use --force as a routine upgrade mechanism because it can replace files that would",
+                    "otherwise warn about conflicting application names.",
+                ],
+            ),
+            (
+                "multi_clause_warning",
+                "If installation fails after dependencies are downloaded, rerun the same command first; changing several "
+                "options at once makes diagnosis harder.",
+                [
+                    "If installation fails after dependencies are downloaded, rerun the same command first; changing",
+                    "several options at once makes diagnosis harder.",
+                ],
+            ),
+            (
+                "markdown_inline_link",
+                "Read the [installation guide](https://pipx.pypa.io/latest/installation/) when choosing between "
+                "package-manager installation and zipapp installation.",
+                [
+                    "Read the [installation guide](https://pipx.pypa.io/latest/installation/) when choosing between",
+                    "package-manager installation and zipapp installation.",
+                ],
+            ),
+        )
+
+        for name, text, expected in cases:
+            with self.subTest(name=name):
+                self.assertListEqual(expected, markdown_from_argparse._render_blocks(text))
+
+    def test_render_blocks_preserves_line_oriented_blocks_after_list_item_intro(self) -> None:
+        """Covers structured continuation blocks inside generated option bullets."""
+        text = self.block(
+            "Supported environment variables:",
+            "",
+            "PIPX_HOME              Virtual environment root.",
+            "PIPX_BIN_DIR           App symlink directory.",
+            "PIPX_DEFAULT_BACKEND   Package manager backend.",
+        )
+
+        self.assertListEqual(
+            [
+                "*  Supported environment variables:",
+                "",
+                "",
+                "    ```",
+                "    PIPX_HOME              Virtual environment root.",
+                "    PIPX_BIN_DIR           App symlink directory.",
+                "    PIPX_DEFAULT_BACKEND   Package manager backend.",
+                "    ```",
+                "",
+            ],
+            markdown_from_argparse._render_blocks(text, list_item=True),
+        )
+
+    def test_render_blocks_keeps_line_oriented_blocks_between_prose_paragraphs(self) -> None:
+        """Covers mixed prose and structured examples in parser descriptions."""
+        text = self.block(
+            "Common installation forms are shown below.",
+            "",
+            "    pipx install PACKAGE_SPEC",
+            "",
+            "Use the form that matches the package source.",
+        )
+
+        self.assertListEqual(
+            [
+                "Common installation forms are shown below.",
+                "",
+                "",
+                "```",
+                "    pipx install PACKAGE_SPEC",
+                "```",
+                "",
+                "",
+                "Use the form that matches the package source.",
+            ],
+            markdown_from_argparse._render_blocks(text),
+        )
+
     def test_render_blocks_rejects_unmatched_fenced_code(self) -> None:
         """Covers malformed Markdown examples before README output is written."""
         text = "Intro.\n\n```\ndemo --flag"
@@ -819,6 +1226,16 @@ class TestUpdateReadme(AbstractTestCase):
         )
         parser.add_argument("--flag", action="store_true", help="Flag help.")
         return parser
+
+    @staticmethod
+    def block(*lines: str) -> str:
+        """Returns test input with explicit physical line boundaries."""
+        return "\n".join(lines)
+
+    @staticmethod
+    def fenced_lines(*lines: str, indent: str = "") -> list[str]:
+        """Returns the expected plain Markdown fence for preserved text."""
+        return ["", f"{indent}```", *(f"{indent}{line}" for line in lines), f"{indent}```", ""]
 
     @staticmethod
     def readme_template() -> str:
