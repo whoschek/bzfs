@@ -91,7 +91,7 @@ The [BEGIN|END]-MANPAGE-DESCRIPTION marker pair is optional.
 
 **--heading-level** *INT*
 
-*  Markdown heading level for generated subparser sections. Must be >= 1. Default is '1'.
+*  Markdown heading level for generated group/subparser sections. Must be >= 1. Default is '1'.
 
 # Examples
 

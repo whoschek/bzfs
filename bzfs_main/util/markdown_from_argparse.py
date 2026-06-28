@@ -130,13 +130,13 @@ python3 -m bzfs_main.util.markdown_from_argparse --readme=README.md --module=bzf
         default=1,
         type=int,
         metavar="INT",
-        help="Markdown heading level for generated subparser sections. Must be >= 1. Default is '%(default)s'.",
+        help="Markdown heading level for generated group/subparser sections. Must be >= 1. Default is '%(default)s'.",
     )
     return cli
 
 
 def _markdown_template_name(readme_path: Path) -> str:
-    s = readme_path.stem  # basename without file extension
+    s: str = readme_path.stem  # basename without file extension
     s = re.sub(r"^README[ _.-]?", "", s, flags=re.IGNORECASE)  # remove prefix if present
     s = re.sub(r"[ _.-]man([ _.-]?page)?$", "", s, flags=re.IGNORECASE)  # remove suffix if present
     s = s + " man page"
@@ -151,7 +151,7 @@ def main() -> None:
     assert isinstance(parser, argparse.ArgumentParser)
     readme_path: Path = args.readme
     if readme_path.exists():
-        readme = readme_path.read_text(encoding="utf-8")
+        readme: str = readme_path.read_text(encoding="utf-8")
         msg = "updated"
     else:
         readme = _markdown_file_template(_markdown_template_name(readme_path))
