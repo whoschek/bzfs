@@ -57,12 +57,29 @@ customization.
 
 The [BEGIN|END]-MANPAGE-DESCRIPTION marker pair is optional.
 
+Subparser sections are rendered recursively. Subparsers can be nested arbitrarily.
+
 The renderer expects argparse parser `description`, `epilog`, and `help=` text in the form of
-blank-line-separated blocks, where the first block of each `help=` text is prose. The renderer
-wraps ordinary prose. It preserves Markdown headings, lists, blockquotes, pipe tables, and fenced
-code blocks, using simple heuristics. It automatically fences blocks indented with 4 spaces or a
-tab, and blocks that appear to contain aligned columns, again using simple heuristics. Use
-triple-backtick fences for examples whose layout must survive unchanged.
+blank-line-separated blocks, where the first block of each `help=` text is prose.
+
+Supported Markdown input contract:
+
+- Blank lines separate blocks. In action help, the first block becomes the generated option bullet text; later blocks are
+  indented under it.
+- Ordinary prose blocks are rewrapped.
+- Single-line Markdown headings (`#` through `######`) are preserved.
+- Markdown pipe tables are preserved when the first row contains `|` and the second row is a separator row.
+- Homogeneous Markdown list blocks are preserved when the first line starts an ordered or unordered list and following
+  nonblank lines are list items or indented continuations.
+- Homogeneous multiline blockquote blocks are preserved when every nonblank line starts with `>`.
+- Triple-backtick fenced code blocks are preserved, including blank lines inside the fence. Opening and closing fences
+  must be balanced.
+- Blocks indented with four spaces or one tab are fenced as code.
+- Blocks with repeated aligned columns are fenced as code.
+
+Ambiguous layouts are treated as prose and may be rewrapped. Use explicit triple-backtick fences
+for shell sessions, configuration, YAML, JSON, mixed prose and examples, or any layout that must
+survive unchanged.
 <!-- END-MANPAGE-DESCRIPTION -->
 
 # Options

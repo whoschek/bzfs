@@ -55,14 +55,44 @@ from bzfs_tests.tools import (
 ###############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
-        TestUpdateReadme,
+        TestMarkdownFromArgparse,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
 
 ###############################################################################
-class TestUpdateReadme(AbstractTestCase):
-    """Checks README help rendering for argparse features used by bzfs CLIs."""
+class TestMarkdownFromArgparse(AbstractTestCase):
+    """Tests README generation from argparse parser definitions."""
+
+    @staticmethod
+    def _renderer(
+        parser: argparse.ArgumentParser | None = None, *, readme: str = "", heading_level: int = 1
+    ) -> markdown_from_argparse.MarkdownFromArgparse:
+        """Returns a renderer instance for tests that exercise class internals."""
+        if parser is None:
+            parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        args = argparse.Namespace(heading_level=heading_level)
+        return markdown_from_argparse.MarkdownFromArgparse(parser=parser, readme=readme, args=args)
+
+    @classmethod
+    def _render_help_details(cls, parser: argparse.ArgumentParser, *, heading_level: int = 1) -> str:
+        """Returns rendered argparse details through the renderer class."""
+        return cls._renderer(parser, heading_level=heading_level)._render_help_details()
+
+    @classmethod
+    def _render_blocks(cls, text: str, *, is_list: bool = False) -> list[str]:
+        """Returns rendered Markdown blocks through the renderer class."""
+        return cls._renderer()._render_blocks(text, is_list=is_list)
+
+    @classmethod
+    def _render_readme(cls, parser: argparse.ArgumentParser, readme: str) -> str:
+        """Returns a rendered README through the renderer class."""
+        return cls._renderer(parser, readme=readme).render_readme()
+
+    @classmethod
+    def _format_usage(cls, parser: argparse.ArgumentParser) -> str:
+        """Returns formatted parser usage through the renderer class."""
+        return cls._renderer(parser)._format_usage(parser)
 
     def test_markdown_template_name(self) -> None:
         def template_name(name: str) -> str:
@@ -93,7 +123,7 @@ class TestUpdateReadme(AbstractTestCase):
         lines = ["prefix\n", "<!-- END -->\n"]
 
         with self.assertRaises(SystemExit) as cm:
-            markdown_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
+            self._renderer()._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
 
         self.assertEqual("ERROR: Marker not found: '<!-- BEGIN -->'", str(cm.exception))
 
@@ -102,7 +132,7 @@ class TestUpdateReadme(AbstractTestCase):
         lines = ["prefix\n", "<!-- BEGIN -->\n", "old generated text\n"]
 
         with self.assertRaises(SystemExit) as cm:
-            markdown_from_argparse._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
+            self._renderer()._replace(lines, "<!-- BEGIN -->", ["replacement\n"], "<!-- END -->")
 
         self.assertEqual("ERROR: Marker not found: '<!-- END -->'", str(cm.exception))
 
@@ -114,7 +144,7 @@ class TestUpdateReadme(AbstractTestCase):
         group.add_argument("--item", nargs="+", metavar="NAME", help="Name to process.")
         group.add_argument("--hidden", help=argparse.SUPPRESS)
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn('<div id="src"></div>', details)
         self.assertIn("**SRC**", details)
@@ -135,7 +165,7 @@ class TestUpdateReadme(AbstractTestCase):
         sync = commands.add_parser("sync", help="Sync snapshots.", formatter_class=argparse.RawTextHelpFormatter)
         sync.add_argument("--job-id", required=True, metavar="STRING", help="Job id.")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn("**SRC**", details)
         self.assertIn("**--required** *VALUE* _(required)_", details)
@@ -153,7 +183,7 @@ class TestUpdateReadme(AbstractTestCase):
         parser.add_argument("--passthrough", nargs=argparse.REMAINDER, metavar="ARG", help="Optional remaining arguments.")
         parser.add_argument("pair", nargs=2, metavar=("SRC", "DST"), help="Source and destination pair.")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn('<div id="optional_item"></div>', details)
         self.assertIn("**[OPTIONAL_ITEM]**", details)
@@ -173,7 +203,7 @@ class TestUpdateReadme(AbstractTestCase):
         parser.add_argument("count", type=int, help="Number of items.")
         parser.add_argument("--limit", type=int, help="Limit rows.")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn('<div id="count"></div>', details)
         self.assertIn("**int**", details)
@@ -202,7 +232,7 @@ class TestUpdateReadme(AbstractTestCase):
         sync_mode.add_argument("--full", action="store_true", help="Full replication.")
         sync_mode.add_argument("--incremental", action="store_true", help="Incremental replication.")
 
-        details = markdown_from_argparse._render_help_details(parser, heading_level=3)
+        details = self._render_help_details(parser, heading_level=3)
 
         self.assertIn("Mutually exclusive group: choose exactly one of **--json**, **--text**.", details)
         self.assertIn("Mutually exclusive group: choose at most one of **--table**, **--csv**.", details)
@@ -219,7 +249,7 @@ class TestUpdateReadme(AbstractTestCase):
         group.add_argument("count", nargs="?", type=int, help="Number of items.")
         group.add_argument("--all", action="store_true", help="Include all items.")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn("Mutually exclusive group: choose at most one of **int**, **--all**.", details)
         self.assertLess(details.index("choose at most one of **int**"), details.index('<div id="count"></div>'))
@@ -232,7 +262,7 @@ class TestUpdateReadme(AbstractTestCase):
         group.add_argument("pair", nargs="*", metavar=("SRC", "DST"), default=[], help="Dataset pairs.")
         group.add_argument("--all", action="store_true", help="Include all pairs.")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn("Mutually exclusive group: choose at most one of **SRC DST**, **--all**.", details)
         self.assertLess(details.index("choose at most one of **SRC DST**"), details.index('<div id="pair"></div>'))
@@ -258,7 +288,7 @@ class TestUpdateReadme(AbstractTestCase):
         prune.add_argument("--dry-run", action="store_true", help="Show planned pruning.")
         commands.add_parser("hidden", help=argparse.SUPPRESS)
 
-        details = markdown_from_argparse._render_help_details(parser, heading_level=3)
+        details = self._render_help_details(parser, heading_level=3)
 
         self.assertIn('<div id="--root"></div>', details)
         self.assertIn("### COMMANDS", details)
@@ -293,7 +323,7 @@ class TestUpdateReadme(AbstractTestCase):
         full = sync_modes.add_parser("full", help="Full replication.", formatter_class=argparse.RawTextHelpFormatter)
         full.add_argument("dataset", metavar="DATASET", help="Dataset to replicate.")
 
-        details = markdown_from_argparse._render_help_details(parser, heading_level=3)
+        details = self._render_help_details(parser, heading_level=3)
 
         self.assertIn("### sync\n\nSynchronize selected snapshots.\n\n```\nusage: demo sync", details)
         self.assertTrue(  # Python <= 3.12 splits the option and metavar; newer argparse keeps them on one line.
@@ -347,7 +377,7 @@ class TestUpdateReadme(AbstractTestCase):
         )
         suppressed.add_argument("--visible", action="store_true", help="Visible option.")
 
-        details = markdown_from_argparse._render_help_details(parser, heading_level=3)
+        details = self._render_help_details(parser, heading_level=3)
 
         self.assertIn("Sync epilog.", details)
         self.assertIn("Full epilog.", details)
@@ -365,7 +395,7 @@ class TestUpdateReadme(AbstractTestCase):
         hidden.add_argument("--hidden-option", help="Hidden option.")
         parser.add_argument("--visible", action="store_true", help="Visible option.")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn('<div id="--visible"></div>', details)
         self.assertIn("Visible option.", details)
@@ -379,7 +409,7 @@ class TestUpdateReadme(AbstractTestCase):
         status = commands.add_parser("status", aliases=["st"])
         status.add_argument("--json", action="store_true", help="Emit JSON.")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn("# status (st)", details)
         self.assertIn('<div id="status~--json"></div>', details)
@@ -398,7 +428,7 @@ class TestUpdateReadme(AbstractTestCase):
         nested = nested_commands.add_parser("b", help="Nested command.")
         nested.add_argument("--flag", action="store_true", help="Nested flag.")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn('<div id="a_b~--flag"></div>', details)
         self.assertIn('<div id="a~b~--flag"></div>', details)
@@ -417,7 +447,7 @@ class TestUpdateReadme(AbstractTestCase):
         sync = commands.add_parser("sync*<fast>", help="Sync.")
         sync.add_argument('--mode"fast', metavar="VAL&<X>", help="Mode.")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn('<div id="src"></div>', details)
         self.assertIn("**SRC_&lt;DATA&gt;**", details)
@@ -437,7 +467,7 @@ class TestUpdateReadme(AbstractTestCase):
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument("--help, -h", action="help", help="Show help.")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertNotIn('<div id="-h"></div>', details)
         self.assertIn('<div id="--help,_-h"></div>', details)
@@ -456,7 +486,7 @@ class TestUpdateReadme(AbstractTestCase):
                 )
                 parser.add_argument(visible_option, metavar="VALUE", help="Visible option.")
 
-                details = markdown_from_argparse._render_help_details(parser)
+                details = self._render_help_details(parser)
 
                 self.assertNotIn(help_anchor, details)
                 self.assertNotIn(help_title, details)
@@ -536,7 +566,7 @@ class TestUpdateReadme(AbstractTestCase):
             help="Workers min %(min)s default %(default)s.",
         )
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn('<div id="root_dataset_pairs"></div>', details)
         self.assertIn("**SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]**", details)
@@ -581,7 +611,7 @@ class TestUpdateReadme(AbstractTestCase):
         parser.add_argument("--version", action="version", version="demo-1", help="Display version.")
         parser.add_argument("--timeout", action=bzfs_jobrunner.RejectArgumentAction, nargs=0, help=argparse.SUPPRESS)
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn("**--create-src-snapshots**", details)
         self.assertIn("**--src-host** *STRING*", details)
@@ -597,26 +627,38 @@ class TestUpdateReadme(AbstractTestCase):
         """Covers Markdown blocks that argparse help embeds in README sections."""
         text = "# Heading\n\n```\ndemo --option value \\\n--second value\n\nplain output\n```"
 
-        rendered = "\n".join(markdown_from_argparse._render_blocks(text))
+        rendered = "\n".join(self._render_blocks(text))
 
         self.assertIn("# Heading", rendered)
         self.assertIn("```", rendered)
         self.assertIn("demo --option value \\\n--second value", rendered)
         self.assertIn("\n\nplain output", rendered)
 
-    def test_render_blocks_without_language_uses_plain_fence_in_list_item(self) -> None:
+    def test_render_blocks_without_language_uses_plain_fence_in_is_list(self) -> None:
         """Covers source-authored plain fenced examples in action help."""
         self.assertListEqual(
             ["*  Intro.", "", "", "    ```", "    demo --flag", "    ```", ""],
-            markdown_from_argparse._render_blocks("Intro.\n\n```\ndemo --flag\n```", list_item=True),
+            self._render_blocks("Intro.\n\n```\ndemo --flag\n```", is_list=True),
         )
 
     def test_render_blocks_preserves_explicit_line_continuations(self) -> None:
         """Covers explicit shell continuation lines authored in argparse help."""
         self.assertListEqual(
             ["", "```", "cmd1 \\", "cmd2", "", "cmd output", "```", ""],
-            markdown_from_argparse._render_blocks("```\ncmd1 \\\ncmd2\n\ncmd output\n```"),
+            self._render_blocks("```\ncmd1 \\\ncmd2\n\ncmd output\n```"),
         )
+
+    def test_render_blocks_wraps_mixed_blockquote_and_prose(self) -> None:
+        """Covers mixed blockquote/prose blocks being treated as prose."""
+        block = self.block("> quoted text", "ordinary prose")
+
+        self.assertListEqual(["> quoted text ordinary prose"], self._render_blocks(block))
+
+    def test_render_blocks_preserves_homogeneous_blockquote(self) -> None:
+        """Covers homogeneous blockquote blocks being preserved."""
+        block = self.block("> quoted text", "> more quoted text")
+
+        self.assertListEqual(["> quoted text", "> more quoted text"], self._render_blocks(block))
 
     def test_render_blocks_preserves_realistic_line_oriented_blocks(self) -> None:
         """Covers third-party argparse help that relies on meaningful line layout."""
@@ -770,7 +812,7 @@ class TestUpdateReadme(AbstractTestCase):
 
         for name, text, expected in cases:
             with self.subTest(name=name):
-                self.assertListEqual(expected, markdown_from_argparse._render_blocks(text))
+                self.assertListEqual(expected, self._render_blocks(text))
 
     def test_render_blocks_wraps_realistic_prose_blocks(self) -> None:
         """Covers prose that mentions CLI syntax without requiring line preservation."""
@@ -973,9 +1015,9 @@ class TestUpdateReadme(AbstractTestCase):
 
         for name, text, expected in cases:
             with self.subTest(name=name):
-                self.assertListEqual(expected, markdown_from_argparse._render_blocks(text))
+                self.assertListEqual(expected, self._render_blocks(text))
 
-    def test_render_blocks_preserves_line_oriented_blocks_after_list_item_intro(self) -> None:
+    def test_render_blocks_preserves_line_oriented_blocks_after_is_list_intro(self) -> None:
         """Covers structured continuation blocks inside generated option bullets."""
         text = self.block(
             "Supported environment variables:",
@@ -997,7 +1039,7 @@ class TestUpdateReadme(AbstractTestCase):
                 "    ```",
                 "",
             ],
-            markdown_from_argparse._render_blocks(text, list_item=True),
+            self._render_blocks(text, is_list=True),
         )
 
     def test_render_blocks_keeps_line_oriented_blocks_between_prose_paragraphs(self) -> None:
@@ -1022,16 +1064,16 @@ class TestUpdateReadme(AbstractTestCase):
                 "",
                 "Use the form that matches the package source.",
             ],
-            markdown_from_argparse._render_blocks(text),
+            self._render_blocks(text),
         )
 
     def test_render_blocks_rejects_unmatched_fenced_code(self) -> None:
         """Covers malformed Markdown examples before README output is written."""
         text = "Intro.\n\n```\ndemo --flag"
-        for list_item in (False, True):
-            with self.subTest(list_item=list_item):
+        for is_list in (False, True):
+            with self.subTest(is_list=is_list):
                 with self.assertRaises(SystemExit) as cm:
-                    markdown_from_argparse._render_blocks(text, list_item=list_item)
+                    self._render_blocks(text, is_list=is_list)
                 self.assertIn("Opening ``` fence without a matching closing fence", str(cm.exception))
                 self.assertIn(repr(text), str(cm.exception))
 
@@ -1041,7 +1083,7 @@ class TestUpdateReadme(AbstractTestCase):
         group = parser.add_argument_group("Advanced Options")
         group.add_argument("--bare", action="store_true")
 
-        details = markdown_from_argparse._render_help_details(parser)
+        details = self._render_help_details(parser)
 
         self.assertIn("# ADVANCED OPTIONS", details)
         self.assertIn("**--bare**", details)
@@ -1051,7 +1093,7 @@ class TestUpdateReadme(AbstractTestCase):
         """Covers full README replacement with a small parser."""
         parser = self.make_demo_parser(description="Demo description.")
 
-        rendered = markdown_from_argparse._render_readme(parser, self.readme_template())
+        rendered = self._render_readme(parser, self.readme_template())
 
         self.assertIn("<!-- BEGIN-MANPAGE-DESCRIPTION -->\nDemo description.\n<!-- END-MANPAGE-DESCRIPTION -->", rendered)
         self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
@@ -1077,7 +1119,7 @@ class TestUpdateReadme(AbstractTestCase):
             "after generated details\n"
         )
 
-        rendered = markdown_from_argparse._render_readme(parser, readme)
+        rendered = self._render_readme(parser, readme)
 
         self.assertIn("manual introduction\n", rendered)
         self.assertNotIn("BEGIN-MANPAGE-DESCRIPTION", rendered)
@@ -1208,7 +1250,7 @@ class TestUpdateReadme(AbstractTestCase):
         parser = self.make_demo_parser(description="Demo description.")
 
         with patch.dict(os.environ, {"COLUMNS": "120", "PYTHON_COLORS": "1"}):
-            usage = markdown_from_argparse._format_usage(parser)
+            usage = self._format_usage(parser)
 
             self.assertTrue(usage.startswith("usage: demo"))
             self.assertNotIn("\x1b[", usage)
