@@ -485,7 +485,7 @@ class MarkdownFromArgparse:
 
     def _wrap_text(self, text: str, *, first_indent: str = "", later_indent: str = "") -> list[str]:
         """Wraps prose without splitting words, option names, or paths."""
-        return textwrap.wrap(
+        lines: list[str] = textwrap.wrap(
             text,
             width=_WRAP_TEXT_WIDTH,
             initial_indent=first_indent,
@@ -493,6 +493,13 @@ class MarkdownFromArgparse:
             break_long_words=False,
             break_on_hyphens=False,
         )
+        for i in range(1, len(lines)):
+            # Escape list markers that wrapping moved to column zero, where Markdown would otherwise start a nested list.
+            continuation: str = lines[i][len(later_indent) :]
+            continuation = re.sub(r"^([-*+]\s)", r"\\\1", continuation)  # "- item" -> "\\- item"
+            continuation = re.sub(r"^(\d+)([.)])(\s)", r"\1\\\2\3", continuation)  # "1. x" -> "1\\. x", "1) x" -> "1\\) x"
+            lines[i] = later_indent + continuation
+        return lines
 
     def _expand_help(self, action: argparse.Action, formatter: argparse.HelpFormatter) -> str:
         help_text: str = formatter._expand_help(action)  # noqa: SLF001  # pylint: disable=protected-access
