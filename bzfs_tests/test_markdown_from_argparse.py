@@ -293,12 +293,19 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn('<div id="--root"></div>', details)
         self.assertIn("### COMMANDS", details)
         self.assertIn("Available commands.", details)
+        self.assertIn("- **sync**: Sync snapshots.", details)
+        self.assertIn("- **prune (trim)**: Prune snapshots.", details)
+        self.assertLess(details.index("Available commands."), details.index("- **sync**: Sync snapshots."))
+        self.assertLess(details.index("- **sync**: Sync snapshots."), details.index("### sync"))
         self.assertIn("### sync", details)
         self.assertIn("Synchronize selected snapshots.", details)
         self.assertIn('<div id="sync~--speed"></div>', details)
         self.assertIn("**--speed** *{fast,safe}*", details)
         self.assertIn("#### SYNC MODES", details)
         self.assertIn("Sync variants.", details)
+        self.assertIn("- **full**: Full replication.", details)
+        self.assertLess(details.index("Sync variants."), details.index("- **full**: Full replication."))
+        self.assertLess(details.index("- **full**: Full replication."), details.index("#### full"))
         self.assertIn("#### full", details)
         self.assertIn('<div id="sync~full~--force"></div>', details)
         self.assertIn("### prune (trim)", details)
@@ -308,6 +315,39 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertNotIn('<div id="--dry-run"></div>', details)
         self.assertEqual(1, details.count("### prune (trim)"))
         self.assertNotIn("hidden", details)
+
+    def test_subparser_details_are_deferred_until_after_parent_options(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        parser.add_argument("--root", action="store_true", help="Root option.")
+        commands = parser.add_subparsers(dest="command")
+
+        sync = commands.add_parser("sync", help="Sync snapshots.", formatter_class=argparse.RawTextHelpFormatter)
+        sync.add_argument("--speed", choices=["fast", "safe"], help="Sync speed.")
+        modes = sync.add_subparsers(dest="mode")
+        full = modes.add_parser("full", help="Full replication.", formatter_class=argparse.RawTextHelpFormatter)
+        full.add_argument("--force", action="store_true", help="Force full mode.")
+
+        details = self._render_help_details(parser, heading_level=3)
+
+        self.assertLess(details.index("- **sync**: Sync snapshots."), details.index('<div id="--root"></div>'))
+        self.assertLess(details.index('<div id="--root"></div>'), details.index("### sync"))
+        self.assertLess(details.index("- **full**: Full replication."), details.index('<div id="sync~--speed"></div>'))
+        self.assertLess(details.index('<div id="sync~--speed"></div>'), details.index("#### full"))
+
+    def test_subparser_overview_preserves_multiblock_help(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        commands = parser.add_subparsers(dest="command", title="Commands")
+        commands.add_parser(
+            "sync",
+            help="Sync snapshots.\n\n```shell\ndemo sync --dry-run\n```",
+            formatter_class=argparse.RawTextHelpFormatter,
+        )
+
+        details = self._render_help_details(parser, heading_level=3)
+
+        self.assertIn("- **sync**: Sync snapshots.\n\n\n  ```shell\n  demo sync --dry-run\n  ```", details)
+        self.assertNotIn("- **sync**: Sync snapshots. ```shell demo sync --dry-run ```", details)
+        self.assertLess(details.index("- **sync**: Sync snapshots."), details.index("### sync"))
 
     def test_subparser_usage_blocks_are_rendered_under_subparser_headings(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -384,9 +424,11 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn("Root epilog.", details)
         self.assertIn("```\ndemo root\n```", details)
         self.assertNotIn("==SUPPRESS==", details)
+        self.assertLess(details.index("Root option."), details.index("Root epilog."))
+        self.assertLess(details.index("Root epilog."), details.index("### sync"))
         self.assertLess(details.index("Sync speed."), details.index("Sync epilog."))
         self.assertLess(details.index("Force full mode."), details.index("Full epilog."))
-        self.assertLess(details.index("Visible option."), details.index("Root epilog."))
+        self.assertLess(details.index("Root epilog."), details.index("Visible option."))
 
     def test_subparser_action_with_only_suppressed_choices_is_omitted(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -637,7 +679,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
     def test_render_blocks_without_language_uses_plain_fence_in_is_list(self) -> None:
         """Covers source-authored plain fenced examples in action help."""
         self.assertListEqual(
-            ["*  Intro.", "", "", "    ```", "    demo --flag", "    ```", ""],
+            ["- Intro.", "", "", "  ```", "  demo --flag", "  ```", ""],
             self._render_blocks("Intro.\n\n```\ndemo --flag\n```", is_list=True),
         )
 
@@ -1029,14 +1071,14 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         self.assertListEqual(
             [
-                "*  Supported environment variables:",
+                "- Supported environment variables:",
                 "",
                 "",
-                "    ```",
-                "    PIPX_HOME              Virtual environment root.",
-                "    PIPX_BIN_DIR           App symlink directory.",
-                "    PIPX_DEFAULT_BACKEND   Package manager backend.",
-                "    ```",
+                "  ```",
+                "  PIPX_HOME              Virtual environment root.",
+                "  PIPX_BIN_DIR           App symlink directory.",
+                "  PIPX_DEFAULT_BACKEND   Package manager backend.",
+                "  ```",
                 "",
             ],
             self._render_blocks(text, is_list=True),
@@ -1087,7 +1129,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         self.assertIn("# ADVANCED OPTIONS", details)
         self.assertIn("**--bare**", details)
-        self.assertNotIn("*  None", details)
+        self.assertNotIn("- None", details)
 
     def test_render_readme_replaces_generated_sections(self) -> None:
         """Covers full README replacement with a small parser."""

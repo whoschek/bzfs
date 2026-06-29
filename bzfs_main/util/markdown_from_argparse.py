@@ -233,8 +233,8 @@ class MarkdownFromArgparse:
         parser; mixed prose plus verbatim text in one physical block is ambiguous, and structured first-block action help is
         outside the intended contract.
         """
-        first_indent: str = "*  " if is_list else ""
-        later_indent: str = "    " if is_list else ""
+        first_indent: str = "- " if is_list else ""
+        later_indent: str = "  " if is_list else ""
         if text.count(TRIPLE_BACKTICK) % 2 != 0:
             self._die(
                 f"Malformed argparse help text: Opening {TRIPLE_BACKTICK} fence without a matching closing fence; "
@@ -357,6 +357,7 @@ class MarkdownFromArgparse:
     def _render_help_details_recursive(self, parser: ArgumentParser, heading_level: int, *, anchor_prefix: str) -> list[str]:
         """Includes recursive descent into nested subparsers."""
         all_results: list[str] = []
+        sub_results: list[str] = []
         formatter: argparse.HelpFormatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
         mutually_exclusive_notes: dict[int, str] = self._mutually_exclusive_group_notes(parser, formatter)
         for group in parser._action_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
@@ -375,14 +376,21 @@ class MarkdownFromArgparse:
                     visible_subparser_actions: list[tuple] = self._visible_subparser_actions(action)
                     if len(visible_subparser_actions) == 0:
                         continue
+                    for _name, title, _subparser, subaction in visible_subparser_actions:  # generate command overview list
+                        prefix = f"**{_escape_md(title)}**"
+                        gist: list[str] = []
+                        if subaction is not None and subaction.help:
+                            gist = self._render_blocks(f"{prefix}: {self._expand_help(subaction, formatter)}", is_list=True)
+                        details += gist if len(gist) > 0 else [f"- {prefix}"]
+                    details += [""]
                     for name, title, subparser, subaction in visible_subparser_actions:  # generate command details
-                        details += [f"{'#' * heading_level} {_escape_md(title)}", ""]
+                        sub_results += [f"{'#' * heading_level} {_escape_md(title)}", ""]
                         if subparser.description and subparser.description != argparse.SUPPRESS:
-                            details += self._render_blocks(subparser.description) + [""]
+                            sub_results += self._render_blocks(subparser.description) + [""]
                         elif subaction is not None and subaction.help:
-                            details += self._render_blocks(self._expand_help(subaction, formatter)) + [""]
-                        details += [TRIPLE_BACKTICK] + self._format_usage(subparser).splitlines() + [TRIPLE_BACKTICK, ""]
-                        details += self._render_help_details_recursive(  # recurse into nested subparser
+                            sub_results += self._render_blocks(self._expand_help(subaction, formatter)) + [""]
+                        sub_results += [TRIPLE_BACKTICK] + self._format_usage(subparser).splitlines() + [TRIPLE_BACKTICK, ""]
+                        sub_results += self._render_help_details_recursive(  # recurse into nested subparser
                             subparser, heading_level + 1, anchor_prefix=f"{anchor_prefix}{name}~"
                         )
 
@@ -399,6 +407,7 @@ class MarkdownFromArgparse:
             all_results += results
         if parser.epilog and parser.epilog != argparse.SUPPRESS:
             all_results += self._render_blocks(parser.epilog) + [""]
+        all_results += sub_results
         return all_results
 
     def _mutually_exclusive_group_notes(self, parser: ArgumentParser, fmt: argparse.HelpFormatter) -> dict[int, str]:
