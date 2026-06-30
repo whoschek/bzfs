@@ -361,15 +361,15 @@ class MarkdownFromArgparse:
         formatter: argparse.HelpFormatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
         mutually_exclusive_notes: dict[int, str] = self._mutually_exclusive_group_notes(parser, formatter)
         for group in parser._action_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
-            results: list[str] = []
+            group_results: list[str] = []
             actions: list[argparse.Action] = self._visible_group_actions(group)
             for i, action in enumerate(actions):
-                details: list[str] = []
+                gists: list[str] = []
                 if note := mutually_exclusive_notes.get(id(action)):
-                    results += self._render_blocks(note) + [""]
+                    group_results += self._render_blocks(note) + [""]
                 if not isinstance(action, argparse._SubParsersAction):  # noqa: SLF001  # pylint: disable=protected-access
                     anchor, title_line = self._action_anchor_and_title_line(parser, action, anchor_prefix=anchor_prefix)
-                    results += [f'<div id="{html.escape(anchor, quote=True)}"></div>', "", title_line, ""]
+                    group_results += [f'<div id="{html.escape(anchor, quote=True)}"></div>', "", title_line, ""]
                     is_list = True
                 else:
                     is_list = False
@@ -381,8 +381,8 @@ class MarkdownFromArgparse:
                         gist: list[str] = []
                         if subaction is not None and subaction.help:
                             gist = self._render_blocks(f"{prefix}: {self._expand_help(subaction, formatter)}", is_list=True)
-                        details += gist if len(gist) > 0 else [f"- {prefix}"]
-                    details += [""]
+                        gists += gist if len(gist) > 0 else [f"- {prefix}"]
+                    gists += [""]
                     for name, title, subparser, subaction in visible_subparser_actions:  # generate command details
                         sub_results += [f"{'#' * heading_level} {_escape_md(title)}", ""]
                         if subparser.description and subparser.description != argparse.SUPPRESS:
@@ -395,16 +395,16 @@ class MarkdownFromArgparse:
                         )
 
                 if action.help:
-                    results += self._render_blocks(self._expand_help(action, formatter), is_list=is_list) + [""]
-                results += details
+                    group_results += self._render_blocks(self._expand_help(action, formatter), is_list=is_list) + [""]
+                group_results += gists
                 if i != len(actions) - 1:
-                    results += ["<!-- -->", ""]  # Prevent adjacent lists from merging
+                    group_results += ["<!-- -->", ""]  # Prevent adjacent lists from merging
 
-            if len(results) > 0 and group.title and group.title not in _DEFAULT_GROUPS:
+            if len(group_results) > 0 and group.title and group.title not in _DEFAULT_GROUPS:
                 all_results += [f"{'#' * heading_level} {_escape_md(group.title)}", ""]
                 if group.description and group.description != argparse.SUPPRESS:
                     all_results += self._render_blocks(group.description) + [""]
-            all_results += results
+            all_results += group_results
         if parser.epilog and parser.epilog != argparse.SUPPRESS:
             all_results += self._render_blocks(parser.epilog) + [""]
         all_results += sub_results
