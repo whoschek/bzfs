@@ -1424,7 +1424,7 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
     for period, label in {"yearly": "years", "monthly": "months", "weekly": "weeks", "daily": "days", "hourly": "hours",
                           "minutely": "minutes", "secondly": "seconds", "millisecondly": "milliseconds"}.items():
         anchor_group = parser.add_argument_group(
-            f"{period.title()} period anchors", "Use these options to customize when snapshots that happen "
+            f"{period.title()} Period Anchors", "Use these options to customize when snapshots that happen "
             f"every N {label} are scheduled to be created on the source by the --create-src-snapshots option.")
         for f in [f for f in dataclasses.fields(PeriodAnchors) if f.name.startswith(period + "_")]:
             min_ = f.metadata.get("min")

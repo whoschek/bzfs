@@ -401,7 +401,7 @@ class MarkdownFromArgparse:
                     results += ["<!-- -->", ""]  # Prevent adjacent lists from merging
 
             if len(results) > 0 and group.title and group.title not in _DEFAULT_GROUPS:
-                all_results += [f"{'#' * heading_level} {_escape_md(group.title.upper())}", ""]
+                all_results += [f"{'#' * heading_level} {_escape_md(group.title)}", ""]
                 if group.description and group.description != argparse.SUPPRESS:
                     all_results += self._render_blocks(group.description) + [""]
             all_results += results

@@ -149,7 +149,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn('<div id="src"></div>', details)
         self.assertIn("**SRC**", details)
         self.assertNotIn('<div id="-h"></div>', details)
-        self.assertIn("# TRANSFER OPTIONS", details)
+        self.assertIn("# Transfer Options", details)
         self.assertIn("Controls transfer behavior.", details)
         self.assertIn("**--mode** *{fast,safe}*", details)
         self.assertIn("Choose mode. Default: safe.", details)
@@ -291,7 +291,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         details = self._render_help_details(parser, heading_level=3)
 
         self.assertIn('<div id="--root"></div>', details)
-        self.assertIn("### COMMANDS", details)
+        self.assertIn("### Commands", details)
         self.assertIn("Available commands.", details)
         self.assertIn("- **sync**: Sync snapshots.", details)
         self.assertIn("- **prune (trim)**: Prune snapshots.", details)
@@ -301,7 +301,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn("Synchronize selected snapshots.", details)
         self.assertIn('<div id="sync~--speed"></div>', details)
         self.assertIn("**--speed** *{fast,safe}*", details)
-        self.assertIn("#### SYNC MODES", details)
+        self.assertIn("#### Sync Modes", details)
         self.assertIn("Sync variants.", details)
         self.assertIn("- **full**: Full replication.", details)
         self.assertLess(details.index("Sync variants."), details.index("- **full**: Full replication."))
@@ -493,14 +493,14 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         self.assertIn('<div id="src"></div>', details)
         self.assertIn("**SRC_&lt;DATA&gt;**", details)
-        self.assertIn("# DANGER &amp; \\*GROUP\\* [A]", details)
+        self.assertIn("# Danger &amp; \\*Group\\* [A]", details)
         self.assertIn('<div id="--path&lt;tag&gt;"></div>', details)
         self.assertIn("**--path&lt;tag&gt;** *NAME_[X]*", details)
         self.assertIn(
             "Mutually exclusive group: choose at most one of **--json&lt;tag&gt;**, **--text\\*plain**.",
             details,
         )
-        self.assertIn("# COMMANDS &amp; \\*MODES\\*", details)
+        self.assertIn("# Commands &amp; \\*Modes\\*", details)
         self.assertIn("# sync\\*&lt;fast&gt;", details)
         self.assertIn('<div id="sync*&lt;fast&gt;~--mode&quot;fast"></div>', details)
         self.assertIn('**--mode"fast** *VAL&amp;&lt;X&gt;*', details)
@@ -1084,6 +1084,86 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             self._render_blocks(text, is_list=True),
         )
 
+    def test_render_blocks_escapes_wrapped_list_marker_in_is_list_prose(self) -> None:
+        """Covers wrapped action prose that would otherwise become a nested Markdown list."""
+        unordered_marker_text = (
+            "This example alerts the user if the *oldest* src or dst snapshot named "
+            "`prod_onsite_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning] or more than 300 + 60x36 "
+            "minutes old [critical], where 36 is the number of period cycles specified in `src_snapshot_plan` or "
+            "`dst_snapshot_plan`, respectively. Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on."
+        )
+
+        self.assertListEqual(
+            [
+                "- This example alerts the user if the *oldest* src or dst snapshot named",
+                "  `prod_onsite_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning] or more than 300",
+                "  \\+ 60x36 minutes old [critical], where 36 is the number of period cycles specified in",
+                "  `src_snapshot_plan` or `dst_snapshot_plan`, respectively. Analog for the latest snapshot named",
+                "  `prod_<timestamp>_daily`, and so on.",
+            ],
+            self._render_blocks(unordered_marker_text, is_list=True),
+        )
+
+        ordered_marker_text = f"{'word ' * 19}42. ordered-looking text that must remain prose after wrapping."
+        self.assertListEqual(
+            [
+                "- word word word word word word word word word word word word word word word word word word word",
+                "  42\\. ordered-looking text that must remain prose after wrapping.",
+            ],
+            self._render_blocks(ordered_marker_text, is_list=True),
+        )
+
+        paren_ordered_marker_text = f"{'word ' * 19}1) ordered-looking text that must remain prose after wrapping."
+        self.assertListEqual(
+            [
+                "- word word word word word word word word word word word word word word word word word word word",
+                "  1\\) ordered-looking text that must remain prose after wrapping.",
+            ],
+            self._render_blocks(paren_ordered_marker_text, is_list=True),
+        )
+
+        non_list_prefix = "prefix " * 14
+        self.assertListEqual(
+            [
+                "prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix",
+                "\\+ marker-looking text that must remain prose after wrapping.",
+            ],
+            self._render_blocks(f"{non_list_prefix}+ marker-looking text that must remain prose after wrapping."),
+        )
+        self.assertListEqual(
+            [
+                "prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix",
+                "42\\. ordered-looking text that must remain prose after wrapping.",
+            ],
+            self._render_blocks(f"{non_list_prefix}42. ordered-looking text that must remain prose after wrapping."),
+        )
+        self.assertListEqual(
+            [
+                "prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix",
+                "1\\) ordered-looking text that must remain prose after wrapping.",
+            ],
+            self._render_blocks(f"{non_list_prefix}1) ordered-looking text that must remain prose after wrapping."),
+        )
+        for marker in ("-", "*"):
+            with self.subTest(marker=marker):
+                self.assertListEqual(
+                    [
+                        "- abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc",
+                        f"  \\{marker} marker-looking text that must remain prose after wrapping.",
+                    ],
+                    self._render_blocks(
+                        f"{'abc ' * 24}{marker} marker-looking text that must remain prose after wrapping.",
+                        is_list=True,
+                    ),
+                )
+
+    def test_render_blocks_preserves_single_line_markdown_list_after_is_list_intro(self) -> None:
+        """Covers source-authored Markdown list markers in later action-help blocks."""
+        self.assertListEqual(
+            ["- Intro.", "", "  * Source-authored nested item."],
+            self._render_blocks("Intro.\n\n* Source-authored nested item.", is_list=True),
+        )
+
     def test_render_blocks_keeps_line_oriented_blocks_between_prose_paragraphs(self) -> None:
         """Covers mixed prose and structured examples in parser descriptions."""
         text = self.block(
@@ -1127,7 +1207,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn("# ADVANCED OPTIONS", details)
+        self.assertIn("# Advanced Options", details)
         self.assertIn("**--bare**", details)
         self.assertNotIn("- None", details)
 

@@ -183,8 +183,8 @@ usage: bzfs_jobrunner
 
 **--create-src-snapshots**
 
-*  Take snapshots on the selected source hosts as necessary. Typically, this command should be
-    called by a program (or cron job) running on each src host.
+- Take snapshots on the selected source hosts as necessary. Typically, this command should be
+  called by a program (or cron job) running on each src host.
 
 <!-- -->
 
@@ -192,10 +192,10 @@ usage: bzfs_jobrunner
 
 **--replicate**
 
-*  Replicate snapshots from the selected source hosts to the selected destinations hosts as
-    necessary. For pull mode (recommended), this command should be called by a program (or cron
-    job) running on each dst host; for push mode, on the src host; for pull-push mode on a
-    third-party host, maybe with `--r2r=pull` or `--r2r=push`.
+- Replicate snapshots from the selected source hosts to the selected destinations hosts as
+  necessary. For pull mode (recommended), this command should be called by a program (or cron job)
+  running on each dst host; for push mode, on the src host; for pull-push mode on a third-party
+  host, maybe with `--r2r=pull` or `--r2r=push`.
 
 <!-- -->
 
@@ -203,8 +203,8 @@ usage: bzfs_jobrunner
 
 **--prune-src-snapshots**
 
-*  Prune snapshots on the selected source hosts as necessary. Typically, this command should be
-    called by a program (or cron job) running on each src host.
+- Prune snapshots on the selected source hosts as necessary. Typically, this command should be
+  called by a program (or cron job) running on each src host.
 
 <!-- -->
 
@@ -212,8 +212,8 @@ usage: bzfs_jobrunner
 
 **--prune-src-bookmarks**
 
-*  Prune bookmarks on the selected source hosts as necessary. Typically, this command should be
-    called by a program (or cron job) running on each src host.
+- Prune bookmarks on the selected source hosts as necessary. Typically, this command should be
+  called by a program (or cron job) running on each src host.
 
 <!-- -->
 
@@ -221,8 +221,8 @@ usage: bzfs_jobrunner
 
 **--prune-dst-snapshots**
 
-*  Prune snapshots on the selected destination hosts as necessary. Typically, this command should
-    be called by a program (or cron job) running on each dst host.
+- Prune snapshots on the selected destination hosts as necessary. Typically, this command should
+  be called by a program (or cron job) running on each dst host.
 
 <!-- -->
 
@@ -230,9 +230,9 @@ usage: bzfs_jobrunner
 
 **--monitor-src-snapshots**
 
-*  Alert the user if snapshots on the selected source hosts are too old, using
-    --monitor-snapshot-plan (see below). Typically, this command should be called by a program (or
-    cron job) running on each src host.
+- Alert the user if snapshots on the selected source hosts are too old, using
+  --monitor-snapshot-plan (see below). Typically, this command should be called by a program (or
+  cron job) running on each src host.
 
 <!-- -->
 
@@ -240,9 +240,9 @@ usage: bzfs_jobrunner
 
 **--monitor-dst-snapshots**
 
-*  Alert the user if snapshots on the selected destination hosts are too old, using
-    --monitor-snapshot-plan (see below). Typically, this command should be called by a program (or
-    cron job) running on each dst host.
+- Alert the user if snapshots on the selected destination hosts are too old, using
+  --monitor-snapshot-plan (see below). Typically, this command should be called by a program (or
+  cron job) running on each dst host.
 
 <!-- -->
 
@@ -250,8 +250,8 @@ usage: bzfs_jobrunner
 
 **--localhost** *STRING*
 
-*  Hostname of localhost. Default is the hostname without the domain name, querying the Operating
-    System.
+- Hostname of localhost. Default is the hostname without the domain name, querying the Operating
+  System.
 
 <!-- -->
 
@@ -259,8 +259,8 @@ usage: bzfs_jobrunner
 
 **--src-hosts** *LIST_STRING*
 
-*  Hostnames of the sources to operate on. Specify a Python list literal such as `"['src1',
-    'src2']"`. If omitted, reads the same list literal from stdin.
+- Hostnames of the sources to operate on. Specify a Python list literal such as `"['src1',
+  'src2']"`. If omitted, reads the same list literal from stdin.
 
 <!-- -->
 
@@ -268,11 +268,11 @@ usage: bzfs_jobrunner
 
 **--src-host** *STRING*
 
-*  For subsetting --src-hosts; Can be specified multiple times; Indicates to only use the
-    --src-hosts that are contained in the specified --src-host values (optional).
+- For subsetting --src-hosts; Can be specified multiple times; Indicates to only use the
+  --src-hosts that are contained in the specified --src-host values (optional).
 
-    Example: `--src-host=src1 --src-host=src2 --src-hosts="['src1', 'src2', 'src3', 'src4']"`
-    indicates to effectively only use `--src-hosts="['src1', 'src2']"`.
+  Example: `--src-host=src1 --src-host=src2 --src-hosts="['src1', 'src2', 'src3', 'src4']"`
+  indicates to effectively only use `--src-hosts="['src1', 'src2']"`.
 
 <!-- -->
 
@@ -280,25 +280,25 @@ usage: bzfs_jobrunner
 
 **--dst-hosts** *DICT_STRING*
 
-*  Dictionary that maps each destination hostname to a list of zero or more logical replication
-    target names (the infix portion of snapshot name). As hostname use the real output of the
-    `hostname` CLI. The target is an arbitrary user-defined name that serves as an abstraction of
-    the destination hostnames for a group of snapshots, like target 'onsite', 'offsite',
-    'hotspare', a geographically independent datacenter like 'us-west', or similar. Rather than
-    the snapshot name embedding (i.e. hardcoding) a list of destination hostnames where it should
-    be sent to, the snapshot name embeds the user-defined target name, which is later mapped by
-    this jobconfig to a list of destination hostnames.
+- Dictionary that maps each destination hostname to a list of zero or more logical replication
+  target names (the infix portion of snapshot name). As hostname use the real output of the
+  `hostname` CLI. The target is an arbitrary user-defined name that serves as an abstraction of
+  the destination hostnames for a group of snapshots, like target 'onsite', 'offsite', 'hotspare',
+  a geographically independent datacenter like 'us-west', or similar. Rather than the snapshot
+  name embedding (i.e. hardcoding) a list of destination hostnames where it should be sent to, the
+  snapshot name embeds the user-defined target name, which is later mapped by this jobconfig to a
+  list of destination hostnames.
 
-    Example: `"{'nas': ['onsite'], 'bak-us-west': ['us-west'], 'bak-eu-west': ['eu-west'],
-    'archive': ['offsite']}"`.
+  Example: `"{'nas': ['onsite'], 'bak-us-west': ['us-west'], 'bak-eu-west': ['eu-west'],
+  'archive': ['offsite']}"`.
 
-    With this, given a snapshot name, we can find the destination hostnames to which the snapshot
-    shall be replicated. Also, given a snapshot name and its own name, a destination host can
-    determine if it shall replicate the given snapshot from the source host, or if the snapshot is
-    intended for another destination host, in which case it skips the snapshot. A destination host
-    will receive replicas of snapshots for all targets that map to that destination host.
+  With this, given a snapshot name, we can find the destination hostnames to which the snapshot
+  shall be replicated. Also, given a snapshot name and its own name, a destination host can
+  determine if it shall replicate the given snapshot from the source host, or if the snapshot is
+  intended for another destination host, in which case it skips the snapshot. A destination host
+  will receive replicas of snapshots for all targets that map to that destination host.
 
-    Removing a mapping can be used to temporarily suspend replication to a given destination host.
+  Removing a mapping can be used to temporarily suspend replication to a given destination host.
 
 <!-- -->
 
@@ -306,11 +306,11 @@ usage: bzfs_jobrunner
 
 **--dst-host** *STRING*
 
-*  For subsetting --dst-hosts; Can be specified multiple times; Indicates to only use the
-    --dst-hosts keys that are contained in the specified --dst-host values (optional).
+- For subsetting --dst-hosts; Can be specified multiple times; Indicates to only use the
+  --dst-hosts keys that are contained in the specified --dst-host values (optional).
 
-    Example: `--dst-host=dst1 --dst-host=dst2 --dst-hosts="{'dst1': ..., 'dst2': ..., 'dst3': ...,
-    'dst4': ...}"` indicates to effectively only use `--dst-hosts="{'dst1': ..., 'dst2': ...}"`.
+  Example: `--dst-host=dst1 --dst-host=dst2 --dst-hosts="{'dst1': ..., 'dst2': ..., 'dst3': ...,
+  'dst4': ...}"` indicates to effectively only use `--dst-hosts="{'dst1': ..., 'dst2': ...}"`.
 
 <!-- -->
 
@@ -318,16 +318,16 @@ usage: bzfs_jobrunner
 
 **--retain-dst-targets** *DICT_STRING*
 
-*  Dictionary that maps each destination hostname to a list of zero or more logical replication
-    target names (the infix portion of snapshot name).
+- Dictionary that maps each destination hostname to a list of zero or more logical replication
+  target names (the infix portion of snapshot name).
 
-    Example: `"{'nas': ['onsite'], 'bak-us-west': ['us-west'], 'bak-eu-west': ['eu-west'],
-    'archive': ['offsite']}"`. Has same format as --dst-hosts.
+  Example: `"{'nas': ['onsite'], 'bak-us-west': ['us-west'], 'bak-eu-west': ['eu-west'],
+  'archive': ['offsite']}"`. Has same format as --dst-hosts.
 
-    As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored
-    whose target has no mapping to that destination host in this dictionary. Do not remove a
-    mapping here unless you are sure it's ok to delete all those snapshots on that destination
-    host! If in doubt, use --dryrun mode first.
+  As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored
+  whose target has no mapping to that destination host in this dictionary. Do not remove a mapping
+  here unless you are sure it's ok to delete all those snapshots on that destination host! If in
+  doubt, use --dryrun mode first.
 
 <!-- -->
 
@@ -335,18 +335,18 @@ usage: bzfs_jobrunner
 
 **--dst-root-datasets** *DICT_STRING*
 
-*  Dictionary that maps each destination hostname to a root dataset located on that destination
-    host. The root dataset name is an (optional) prefix that will be prepended to each dataset
-    that is replicated to that destination host. For backup use cases, this is the backup ZFS pool
-    or a ZFS dataset path within that pool, whereas for cloning, master slave replication, or
-    replication from a primary to a secondary, this can also be the empty string.
+- Dictionary that maps each destination hostname to a root dataset located on that destination
+  host. The root dataset name is an (optional) prefix that will be prepended to each dataset that
+  is replicated to that destination host. For backup use cases, this is the backup ZFS pool or a
+  ZFS dataset path within that pool, whereas for cloning, master slave replication, or replication
+  from a primary to a secondary, this can also be the empty string.
 
-    `^SRC_HOST` and `^DST_HOST` are optional magic substitution tokens that will be auto-replaced
-    at runtime with the actual hostname. This can be used to force the use of a separate
-    destination root dataset per source host or per destination host.
+  `^SRC_HOST` and `^DST_HOST` are optional magic substitution tokens that will be auto-replaced at
+  runtime with the actual hostname. This can be used to force the use of a separate destination
+  root dataset per source host or per destination host.
 
-    Example: `"{'nas': 'tank2/bak', 'bak-us-west': 'backups/bak001', 'bak-eu-west':
-    'backups/bak999', 'archive': 'archives/zoo/^SRC_HOST', 'hotspare': ''}"`
+  Example: `"{'nas': 'tank2/bak', 'bak-us-west': 'backups/bak001', 'bak-eu-west':
+  'backups/bak999', 'archive': 'archives/zoo/^SRC_HOST', 'hotspare': ''}"`
 
 <!-- -->
 
@@ -354,27 +354,26 @@ usage: bzfs_jobrunner
 
 **--src-snapshot-plan** *DICT_STRING*
 
-*  Retention periods for snapshots to be used if pruning src, and when creating new snapshots on
-    src. Snapshots that do not match a retention period will be deleted. A zero or missing
-    retention period indicates that no snapshots shall be retained (or even be created) for the
-    given period.
+- Retention periods for snapshots to be used if pruning src, and when creating new snapshots on
+  src. Snapshots that do not match a retention period will be deleted. A zero or missing retention
+  period indicates that no snapshots shall be retained (or even be created) for the given period.
 
-    Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36, 'daily': 31,
-    'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west': {'secondly': 0, 'minutely': 0, 'hourly':
-    36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'eu-west': {'secondly': 0,
-    'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test':
-    {'offsite': {'12hourly': 42, 'weekly': 12}}}"`. This example will, for the organization 'prod'
-    and the intended logical target 'onsite', create and then retain secondly snapshots that were
-    created less than 40 seconds ago, yet retain the latest 40 secondly snapshots regardless of
-    creation time. Analog for the latest 40 minutely snapshots, 36 hourly snapshots, etc. It will
-    also create and retain snapshots for the targets 'us-west' and 'eu-west' within the 'prod'
-    organization. In addition, it will create and retain snapshots every 12 hours and every week
-    for the 'test' organization, and name them as being intended for the 'offsite' replication
-    target. The example creates snapshots with names like `prod_onsite_<timestamp>_secondly`,
-    `prod_onsite_<timestamp>_minutely`, `prod_us-west_<timestamp>_hourly`,
-    `prod_us-west_<timestamp>_daily`, `prod_eu-west_<timestamp>_hourly`,
-    `prod_eu-west_<timestamp>_daily`, `test_offsite_<timestamp>_12hourly`,
-    `test_offsite_<timestamp>_weekly`, and so on.
+  Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36, 'daily': 31,
+  'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west': {'secondly': 0, 'minutely': 0, 'hourly':
+  36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'eu-west': {'secondly': 0,
+  'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test':
+  {'offsite': {'12hourly': 42, 'weekly': 12}}}"`. This example will, for the organization 'prod'
+  and the intended logical target 'onsite', create and then retain secondly snapshots that were
+  created less than 40 seconds ago, yet retain the latest 40 secondly snapshots regardless of
+  creation time. Analog for the latest 40 minutely snapshots, 36 hourly snapshots, etc. It will
+  also create and retain snapshots for the targets 'us-west' and 'eu-west' within the 'prod'
+  organization. In addition, it will create and retain snapshots every 12 hours and every week for
+  the 'test' organization, and name them as being intended for the 'offsite' replication target.
+  The example creates snapshots with names like `prod_onsite_<timestamp>_secondly`,
+  `prod_onsite_<timestamp>_minutely`, `prod_us-west_<timestamp>_hourly`,
+  `prod_us-west_<timestamp>_daily`, `prod_eu-west_<timestamp>_hourly`,
+  `prod_eu-west_<timestamp>_daily`, `test_offsite_<timestamp>_12hourly`,
+  `test_offsite_<timestamp>_weekly`, and so on.
 
 <!-- -->
 
@@ -382,8 +381,8 @@ usage: bzfs_jobrunner
 
 **--src-bookmark-plan** *DICT_STRING*
 
-*  Retention periods for bookmarks to be used if pruning src. Has same format as
-    --src-snapshot-plan.
+- Retention periods for bookmarks to be used if pruning src. Has same format as
+  --src-snapshot-plan.
 
 <!-- -->
 
@@ -391,8 +390,8 @@ usage: bzfs_jobrunner
 
 **--dst-snapshot-plan** *DICT_STRING*
 
-*  Retention periods for snapshots to be used if pruning dst. Has same format as
-    --src-snapshot-plan.
+- Retention periods for snapshots to be used if pruning dst. Has same format as
+  --src-snapshot-plan.
 
 <!-- -->
 
@@ -400,30 +399,30 @@ usage: bzfs_jobrunner
 
 **--monitor-snapshot-plan** *DICT_STRING*
 
-*  Alert the user if the ZFS 'creation' time property of the latest or oldest snapshot for any
-    specified snapshot pattern within the selected datasets is too old wrt. the specified age
-    limit. The purpose is to check if snapshots are successfully taken on schedule, successfully
-    replicated on schedule, and successfully pruned on schedule. Process exit code is 0, 1, 2 on
-    OK, WARNING, CRITICAL, respectively.
+- Alert the user if the ZFS 'creation' time property of the latest or oldest snapshot for any
+  specified snapshot pattern within the selected datasets is too old wrt. the specified age limit.
+  The purpose is to check if snapshots are successfully taken on schedule, successfully replicated
+  on schedule, and successfully pruned on schedule. Process exit code is 0, 1, 2 on OK, WARNING,
+  CRITICAL, respectively.
 
-    Example DICT_STRING: `"{'prod': {'onsite': {'100millisecondly': {'warning': '650
-    milliseconds', 'critical': '2 seconds'}, 'secondly': {'warning': '2 seconds', 'critical': '14
-    seconds'}, 'minutely': {'warning': '30 seconds', 'critical': '300 seconds'}, 'hourly':
-    {'warning': '30 minutes', 'critical': '300 minutes'}, 'daily': {'warning': '4 hours',
-    'critical': '8 hours'}, 'weekly': {'warning': '2 days', 'critical': '8 days'}, 'monthly':
-    {'warning': '2 days', 'critical': '8 days'}, 'yearly': {'warning': '5 days', 'critical': '14
-    days'}, '10minutely': {'warning': '0 minutes', 'critical': '0 minutes'}}, '': {'daily':
-    {'warning': '4 hours', 'critical': '8 hours'}}}}"`. This example alerts the user if the
-    *latest* src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more than 30 minutes
-    late (i.e. more than 30+60=90 minutes old) [warning] or more than 300 minutes late (i.e. more
-    than 300+60=360 minutes old) [critical]. In addition, the example alerts the user if the
-    *oldest* src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more than 30 + 60x36
-    minutes old [warning] or more than 300 + 60x36 minutes old [critical], where 36 is the number
-    of period cycles specified in `src_snapshot_plan` or `dst_snapshot_plan`, respectively. Analog
-    for the latest snapshot named `prod_<timestamp>_daily`, and so on.
+  Example DICT_STRING: `"{'prod': {'onsite': {'100millisecondly': {'warning': '650 milliseconds',
+  'critical': '2 seconds'}, 'secondly': {'warning': '2 seconds', 'critical': '14 seconds'},
+  'minutely': {'warning': '30 seconds', 'critical': '300 seconds'}, 'hourly': {'warning': '30
+  minutes', 'critical': '300 minutes'}, 'daily': {'warning': '4 hours', 'critical': '8 hours'},
+  'weekly': {'warning': '2 days', 'critical': '8 days'}, 'monthly': {'warning': '2 days',
+  'critical': '8 days'}, 'yearly': {'warning': '5 days', 'critical': '14 days'}, '10minutely':
+  {'warning': '0 minutes', 'critical': '0 minutes'}}, '': {'daily': {'warning': '4 hours',
+  'critical': '8 hours'}}}}"`. This example alerts the user if the *latest* src or dst snapshot
+  named `prod_onsite_<timestamp>_hourly` is more than 30 minutes late (i.e. more than 30+60=90
+  minutes old) [warning] or more than 300 minutes late (i.e. more than 300+60=360 minutes old)
+  [critical]. In addition, the example alerts the user if the *oldest* src or dst snapshot named
+  `prod_onsite_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning] or more than 300
+  \+ 60x36 minutes old [critical], where 36 is the number of period cycles specified in
+  `src_snapshot_plan` or `dst_snapshot_plan`, respectively. Analog for the latest snapshot named
+  `prod_<timestamp>_daily`, and so on.
 
-    Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall
-    be checked for the given snapshot name pattern.
+  Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be
+  checked for the given snapshot name pattern.
 
 <!-- -->
 
@@ -431,7 +430,7 @@ usage: bzfs_jobrunner
 
 **--ssh-src-user** *STRING*
 
-*  Remote SSH username on src hosts to connect to (optional). Examples: 'root', 'alice'.
+- Remote SSH username on src hosts to connect to (optional). Examples: 'root', 'alice'.
 
 <!-- -->
 
@@ -439,7 +438,7 @@ usage: bzfs_jobrunner
 
 **--ssh-dst-user** *STRING*
 
-*  Remote SSH username on dst hosts to connect to (optional). Examples: 'root', 'alice'.
+- Remote SSH username on dst hosts to connect to (optional). Examples: 'root', 'alice'.
 
 <!-- -->
 
@@ -447,7 +446,7 @@ usage: bzfs_jobrunner
 
 **--ssh-src-port** *INT*
 
-*  Remote SSH port on src host to connect to (optional).
+- Remote SSH port on src host to connect to (optional).
 
 <!-- -->
 
@@ -455,7 +454,7 @@ usage: bzfs_jobrunner
 
 **--ssh-dst-port** *INT*
 
-*  Remote SSH port on dst host to connect to (optional).
+- Remote SSH port on dst host to connect to (optional).
 
 <!-- -->
 
@@ -463,8 +462,8 @@ usage: bzfs_jobrunner
 
 **--ssh-src-config-file** *FILE*
 
-*  Path to SSH ssh_config(5) file to connect to src (optional); will be passed into ssh -F CLI.
-    The basename must contain the substring 'bzfs_ssh_config'.
+- Path to SSH ssh_config(5) file to connect to src (optional); will be passed into ssh -F CLI. The
+  basename must contain the substring 'bzfs_ssh_config'.
 
 <!-- -->
 
@@ -472,8 +471,8 @@ usage: bzfs_jobrunner
 
 **--ssh-dst-config-file** *FILE*
 
-*  Path to SSH ssh_config(5) file to connect to dst (optional); will be passed into ssh -F CLI.
-    The basename must contain the substring 'bzfs_ssh_config'.
+- Path to SSH ssh_config(5) file to connect to dst (optional); will be passed into ssh -F CLI. The
+  basename must contain the substring 'bzfs_ssh_config'.
 
 <!-- -->
 
@@ -481,8 +480,8 @@ usage: bzfs_jobrunner
 
 **--job-id** *STRING* _(required)_
 
-*  The identifier that remains constant across all runs of this particular job; will be included
-    in the log file name infix. Example: mytestjob
+- The identifier that remains constant across all runs of this particular job; will be included in
+  the log file name infix. Example: mytestjob
 
 <!-- -->
 
@@ -490,8 +489,8 @@ usage: bzfs_jobrunner
 
 **--job-run** *STRING*
 
-*  The identifier of this particular run of the overall job; will be included in the log file name
-    suffix. Default is a hex UUID. Example: 0badc0f003a011f0a94aef02ac16083c
+- The identifier of this particular run of the overall job; will be included in the log file name
+  suffix. Default is a hex UUID. Example: 0badc0f003a011f0a94aef02ac16083c
 
 <!-- -->
 
@@ -499,11 +498,10 @@ usage: bzfs_jobrunner
 
 **--workers** *INT[%]*
 
-*  The maximum number of jobs to run in parallel at any time; can be given as a positive integer,
-    optionally followed by the % percent character (min: 1, default: 100%). Percentages are
-    relative to the number of CPU cores on the machine. Example: 200% uses twice as many parallel
-    jobs as there are cores on the machine; 75% uses num_procs = num_cores * 0.75. Examples: 1, 4,
-    75%, 150%
+- The maximum number of jobs to run in parallel at any time; can be given as a positive integer,
+  optionally followed by the % percent character (min: 1, default: 100%). Percentages are relative
+  to the number of CPU cores on the machine. Example: 200% uses twice as many parallel jobs as
+  there are cores on the machine; 75% uses num_procs = num_cores * 0.75. Examples: 1, 4, 75%, 150%
 
 <!-- -->
 
@@ -511,8 +509,8 @@ usage: bzfs_jobrunner
 
 **--work-period-seconds** *FLOAT*
 
-*  Reduces bandwidth spikes by spreading out the start of worker jobs over this much time; 0
-    disables this feature (default: 0). Examples: 0, 60, 86400
+- Reduces bandwidth spikes by spreading out the start of worker jobs over this much time; 0
+  disables this feature (default: 0). Examples: 0, 60, 86400
 
 <!-- -->
 
@@ -520,9 +518,9 @@ usage: bzfs_jobrunner
 
 **--jitter**
 
-*  Randomize job start time and host order to avoid potential thundering herd problems in large
-    distributed systems (optional). Randomizing job start time is only relevant if
-    --work-period-seconds > 0.
+- Randomize job start time and host order to avoid potential thundering herd problems in large
+  distributed systems (optional). Randomizing job start time is only relevant if
+  --work-period-seconds > 0.
 
 <!-- -->
 
@@ -530,8 +528,8 @@ usage: bzfs_jobrunner
 
 **--worker-timeout-seconds** *FLOAT*
 
-*  If this much time has passed after a worker process has started executing, kill the straggling
-    worker (optional). Other workers remain unaffected. Examples: 60, 3600
+- If this much time has passed after a worker process has started executing, kill the straggling
+  worker (optional). Other workers remain unaffected. Examples: 60, 3600
 
 <!-- -->
 
@@ -539,9 +537,9 @@ usage: bzfs_jobrunner
 
 **--repeat-if-took-more-than-seconds** *FLOAT*
 
-*  Repeat the entire workflow if it took longer than this much time and was successful. Use this
-    (with the POSIX `timeout` CLI) before migrating VM storage to converge replication and reduce
-    cutover downtime. Default is infinity, i.e. never repeat the workflow. Examples: 1, 0.1
+- Repeat the entire workflow if it took longer than this much time and was successful. Use this
+  (with the POSIX `timeout` CLI) before migrating VM storage to converge replication and reduce
+  cutover downtime. Default is infinity, i.e. never repeat the workflow. Examples: 1, 0.1
 
 <!-- -->
 
@@ -549,10 +547,10 @@ usage: bzfs_jobrunner
 
 **--spawn-process-per-job**
 
-*  Spawn a Python process per subjob instead of a Python thread per subjob (optional). The former
-    is only recommended for a job operating in parallel on a large number of hosts as it helps
-    avoid exceeding per-process limits such as the default max number of open file descriptors, at
-    the expense of increased startup latency.
+- Spawn a Python process per subjob instead of a Python thread per subjob (optional). The former
+  is only recommended for a job operating in parallel on a large number of hosts as it helps avoid
+  exceeding per-process limits such as the default max number of open file descriptors, at the
+  expense of increased startup latency.
 
 <!-- -->
 
@@ -560,9 +558,9 @@ usage: bzfs_jobrunner
 
 **--jobrunner-dryrun**
 
-*  Do a dry run (aka 'no-op') to print what operations would happen if the command were to be
-    executed for real (optional). This option treats both the ZFS source and destination as
-    read-only. Can also be used to check if the configuration options are valid.
+- Do a dry run (aka 'no-op') to print what operations would happen if the command were to be
+  executed for real (optional). This option treats both the ZFS source and destination as
+  read-only. Can also be used to check if the configuration options are valid.
 
 <!-- -->
 
@@ -570,8 +568,8 @@ usage: bzfs_jobrunner
 
 **--jobrunner-log-level** *{CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}*
 
-*  Only emit jobrunner messages with equal or higher priority than this log level. Default is
-    'INFO'.
+- Only emit jobrunner messages with equal or higher priority than this log level. Default is
+  'INFO'.
 
 <!-- -->
 
@@ -579,8 +577,8 @@ usage: bzfs_jobrunner
 
 **--daemon-replication-frequency** *STRING*
 
-*  Specifies how often the bzfs daemon shall replicate from src to dst if --daemon-lifetime is
-    nonzero.
+- Specifies how often the bzfs daemon shall replicate from src to dst if --daemon-lifetime is
+  nonzero.
 
 <!-- -->
 
@@ -588,7 +586,7 @@ usage: bzfs_jobrunner
 
 **--daemon-prune-src-frequency** *STRING*
 
-*  Specifies how often the bzfs daemon shall prune src if --daemon-lifetime is nonzero.
+- Specifies how often the bzfs daemon shall prune src if --daemon-lifetime is nonzero.
 
 <!-- -->
 
@@ -596,7 +594,7 @@ usage: bzfs_jobrunner
 
 **--daemon-prune-dst-frequency** *STRING*
 
-*  Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.
+- Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.
 
 <!-- -->
 
@@ -604,7 +602,7 @@ usage: bzfs_jobrunner
 
 **--daemon-monitor-snapshots-frequency** *STRING*
 
-*  Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.
+- Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.
 
 <!-- -->
 
@@ -612,7 +610,7 @@ usage: bzfs_jobrunner
 
 **--version**
 
-*  Display version information and exit.
+- Display version information and exit.
 
 <!-- -->
 
@@ -620,7 +618,7 @@ usage: bzfs_jobrunner
 
 **--help, -h**
 
-*  Show this help message and exit.
+- Show this help message and exit.
 
 <!-- -->
 
@@ -628,6 +626,6 @@ usage: bzfs_jobrunner
 
 **--root-dataset-pairs** *SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]* _(required)_
 
-*  Source and destination dataset pairs (excluding usernames and excluding hostnames, which will
-    all be auto-appended later).
+- Source and destination dataset pairs (excluding usernames and excluding hostnames, which will
+  all be auto-appended later).
 <!-- END-MANPAGE-DETAILS -->

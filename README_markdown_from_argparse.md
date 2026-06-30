@@ -89,8 +89,8 @@ survive unchanged.
 
 **--readme** *PATH* _(required)_
 
-*  Path of README markdown file to update. If the file does not exist a template will be
-    generated. Example: path/to/README.md
+- Path of README markdown file to update. If the file does not exist a template will be generated.
+  Example: path/to/README.md
 
 <!-- -->
 
@@ -98,7 +98,7 @@ survive unchanged.
 
 **--module** *STRING* _(required)_
 
-*  Python module containing the parser factory. Example: 'bzfs_main.bzfs'
+- Python module containing the parser factory. Example: 'bzfs_main.bzfs'
 
 <!-- -->
 
@@ -106,8 +106,8 @@ survive unchanged.
 
 **--function** *STRING*
 
-*  Name of the no-argument parser factory function within the Python module. The function must
-    return an instance of argparse.ArgumentParser. Default is 'argument_parser'.
+- Name of the no-argument parser factory function within the Python module. The function must
+  return an instance of argparse.ArgumentParser. Default is 'argument_parser'.
 
 <!-- -->
 
@@ -115,7 +115,7 @@ survive unchanged.
 
 **--heading-level** *INT*
 
-*  Markdown heading level for generated group/subparser sections. Must be >= 1. Default is '1'.
+- Markdown heading level for generated group/subparser sections. Must be >= 1. Default is '1'.
 
 # Examples
 
