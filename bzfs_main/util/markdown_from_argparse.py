@@ -362,7 +362,7 @@ class MarkdownFromArgparse:
         mutually_exclusive_notes: dict[int, str] = self._mutually_exclusive_group_notes(parser, formatter)
         for group in parser._action_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
             results: list[str] = []
-            actions: list[argparse.Action] = self._visible_group_actions(parser, group)
+            actions: list[argparse.Action] = self._visible_group_actions(group)
             for i, action in enumerate(actions):
                 details: list[str] = []
                 if note := mutually_exclusive_notes.get(id(action)):
@@ -414,7 +414,7 @@ class MarkdownFromArgparse:
         """Returns notes keyed by the first visible action in each mutually exclusive group."""
         notes: dict[int, str] = {}
         for group in parser._mutually_exclusive_groups:  # noqa: SLF001  # pylint: disable=protected-access
-            actions: list[argparse.Action] = self._visible_group_actions(parser, group)
+            actions: list[argparse.Action] = self._visible_group_actions(group)
             if len(actions) >= 2:
                 quantifier: str = "exactly one" if group.required else "at most one"
                 choice_labels: list[str] = []
@@ -431,18 +431,12 @@ class MarkdownFromArgparse:
         return notes
 
     def _visible_group_actions(
-        self, parser: ArgumentParser, group: argparse._ArgumentGroup  # pylint: disable=protected-access
+        self, group: argparse._ArgumentGroup  # pylint: disable=protected-access
     ) -> list[argparse.Action]:
         """Returns documented actions from one argparse action group."""
         results: list[argparse.Action] = []
-        prefix: str = "-" if "-" in parser.prefix_chars else parser.prefix_chars[0]
-        help_option_strings: tuple[str, str] = (f"{prefix}h", f"{prefix}{prefix}help")
         for action in group._group_actions:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
-            if action.help != argparse.SUPPRESS and not (
-                isinstance(action, argparse._HelpAction)  # noqa: SLF001  # pylint: disable=protected-access
-                and action.dest == "help"
-                and tuple(action.option_strings) == help_option_strings
-            ):
+            if action.help != argparse.SUPPRESS:
                 results.append(action)
         return results
 

@@ -85,6 +85,14 @@ survive unchanged.
 # Options
 
 <!-- BEGIN-MANPAGE-DETAILS -->
+<div id="-h"></div>
+
+**-h**, **--help**
+
+- show this help message and exit
+
+<!-- -->
+
 <div id="--readme"></div>
 
 **--readme** *PATH* _(required)_

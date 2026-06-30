@@ -148,7 +148,9 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         self.assertIn('<div id="src"></div>', details)
         self.assertIn("**SRC**", details)
-        self.assertNotIn('<div id="-h"></div>', details)
+        self.assertIn('<div id="-h"></div>', details)
+        self.assertIn("**-h**, **--help**", details)
+        self.assertIn("show this help message and exit", details)
         self.assertIn("# Transfer Options", details)
         self.assertIn("Controls transfer behavior.", details)
         self.assertIn("**--mode** *{fast,safe}*", details)
@@ -505,17 +507,18 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn('<div id="sync*&lt;fast&gt;~--mode&quot;fast"></div>', details)
         self.assertIn('**--mode"fast** *VAL&amp;&lt;X&gt;*', details)
 
-    def test_custom_help_action_is_rendered(self) -> None:
+    def test_default_and_custom_help_actions_are_rendered(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument("--help, -h", action="help", help="Show help.")
 
         details = self._render_help_details(parser)
 
-        self.assertNotIn('<div id="-h"></div>', details)
+        self.assertIn('<div id="-h"></div>', details)
+        self.assertIn("**-h**, **--help**", details)
         self.assertIn('<div id="--help,_-h"></div>', details)
         self.assertIn("**--help, -h**", details)
 
-    def test_default_help_action_is_hidden_for_alternate_prefix_chars(self) -> None:
+    def test_default_help_action_is_rendered_for_alternate_prefix_chars(self) -> None:
         cases = (
             ("+/", "+visible", '<div id="+h"></div>', "**+h**, **++help**"),
             ("+-", "+visible", '<div id="-h"></div>', "**-h**, **--help**"),
@@ -530,9 +533,9 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
                 details = self._render_help_details(parser)
 
-                self.assertNotIn(help_anchor, details)
-                self.assertNotIn(help_title, details)
-                self.assertNotIn("show this help message and exit", details)
+                self.assertIn(help_anchor, details)
+                self.assertIn(help_title, details)
+                self.assertIn("show this help message and exit", details)
                 self.assertIn(f'<div id="{visible_option}"></div>', details)
                 self.assertIn(f"**{visible_option}** *VALUE*", details)
 
@@ -1220,7 +1223,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn("<!-- BEGIN-MANPAGE-DESCRIPTION -->\nDemo description.\n<!-- END-MANPAGE-DESCRIPTION -->", rendered)
         self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
         self.assertNotIn("\x1b[", rendered)
-        self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="--flag"></div>', rendered)
+        self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="-h"></div>', rendered)
+        self.assertIn('<div id="--flag"></div>', rendered)
         self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
         self.assertNotIn("old description", rendered)
         self.assertNotIn("old overview", rendered)
@@ -1247,7 +1251,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertNotIn("BEGIN-MANPAGE-DESCRIPTION", rendered)
         self.assertNotIn("Demo description.", rendered)
         self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
-        self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="--flag"></div>', rendered)
+        self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="-h"></div>', rendered)
+        self.assertIn('<div id="--flag"></div>', rendered)
         self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
         self.assertNotIn("old overview", rendered)
         self.assertNotIn("old details", rendered)
@@ -1281,7 +1286,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             rendered = readme_path.read_text(encoding="utf-8")
             self.assertIn("<!-- BEGIN-MANPAGE-DESCRIPTION -->\nDemo description.", rendered)
             self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
-            self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="--flag"></div>', rendered)
+            self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="-h"></div>', rendered)
+            self.assertIn('<div id="--flag"></div>', rendered)
             self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
             mock_import.assert_called_once_with("bzfs_main.bzfs")
             mock_import.return_value.argument_parser.assert_called_once_with()
@@ -1307,7 +1313,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             self.assertIn("# GENERATED", rendered)
             self.assertIn("<!-- BEGIN-MANPAGE-DESCRIPTION -->\nDemo description.", rendered)
             self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
-            self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="--flag"></div>', rendered)
+            self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="-h"></div>', rendered)
+            self.assertIn('<div id="--flag"></div>', rendered)
             mock_import.assert_called_once_with("bzfs_main.bzfs")
             mock_import.return_value.argument_parser.assert_called_once_with()
             self.assertEqual("", stdout.getvalue())

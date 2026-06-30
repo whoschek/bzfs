@@ -479,9 +479,6 @@ This is harmless because that extra process exits immediately with a message lik
         "--version", action="version", version=f"{PROG_NAME}-{bzfs_main.argparse_cli.__version__}, by {PROG_AUTHOR}",
         help="Display version information and exit.\n\n")
     parser.add_argument(
-        "--help, -h", action="help",  # trick to ensure both --help and -h are shown in the help msg
-        help="Show this help message and exit.\n\n")
-    parser.add_argument(
         "--root-dataset-pairs", required=True, nargs="+", action=bzfs_main.argparse_actions.DatasetPairsAction,
         metavar="SRC_DATASET DST_DATASET",
         help="Source and destination dataset pairs (excluding usernames and excluding hostnames, which will all be "

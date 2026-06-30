@@ -639,7 +639,6 @@ usage: bzfs [-h]
             [--zfs-recv-x-include-regex [REGEX ...]]
             [--zfs-recv-x-exclude-regex REGEX [REGEX ...]]
             [--version]
-            [--help, -h]
             SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
 <!-- END-MANPAGE-USAGE -->
@@ -677,6 +676,14 @@ usage: bzfs [-h]
   datasets that are currently available for start of processing. Initially, only the roots of the
   selected dataset subtrees are available for start of processing. The degree of parallelism is
   configurable with the --threads option (see below).
+
+<div id="-h"></div>
+
+**-h**, **--help**
+
+- show this help message and exit
+
+<!-- -->
 
 <div id="--recursive"></div>
 
@@ -2271,14 +2278,6 @@ usage: bzfs [-h]
 **--version**
 
 - Display version information and exit.
-
-<!-- -->
-
-<div id="--help,_-h"></div>
-
-**--help, -h**
-
-- Show this help message and exit.
 
 # Yearly Period Anchors
 

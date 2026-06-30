@@ -173,12 +173,19 @@ usage: bzfs_jobrunner
        [--daemon-prune-dst-frequency STRING]
        [--daemon-monitor-snapshots-frequency STRING]
        [--version]
-       [--help, -h]
        --root-dataset-pairs SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
 <!-- END-MANPAGE-USAGE -->
 
 <!-- BEGIN-MANPAGE-DETAILS -->
+<div id="-h"></div>
+
+**-h**, **--help**
+
+- show this help message and exit
+
+<!-- -->
+
 <div id="--create-src-snapshots"></div>
 
 **--create-src-snapshots**
@@ -611,14 +618,6 @@ usage: bzfs_jobrunner
 **--version**
 
 - Display version information and exit.
-
-<!-- -->
-
-<div id="--help,_-h"></div>
-
-**--help, -h**
-
-- Show this help message and exit.
 
 <!-- -->
 
