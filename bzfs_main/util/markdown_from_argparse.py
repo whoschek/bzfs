@@ -246,7 +246,7 @@ class MarkdownFromArgparse:
         for i, part in enumerate(text.strip("\n").split(TRIPLE_BACKTICK)):
             if i % 2 != 0:
                 blocks.append(TRIPLE_BACKTICK + part + TRIPLE_BACKTICK)
-            else:
+            else:  # blocks are separated by a blank line
                 blocks += [block for block in re.split(r"\n\s*\n", part) if block.strip()]
 
         results: list[str] = []
@@ -305,7 +305,7 @@ class MarkdownFromArgparse:
         #
         # Principle: once a block starts as a Markdown table, trust the author and preserve the whole block line-for-line.
         # Wrapping table rows would destroy the table.
-        table_separator = r"\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*"
+        table_separator = r"\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*"
         if "|" in lines[0] and re.fullmatch(table_separator, lines[1]):
             return True
 
@@ -320,13 +320,13 @@ class MarkdownFromArgparse:
         #
         #    - Parent
         #      - Child
-        list_line = r"\s*(?:[-*+]|\d+\.)\s+\S.*"
+        list_line = r"\s*([-*+]|\d+\.)\s+\S.*"
         continuation_line = r"\s+\S.*"
         if re.fullmatch(list_line, lines[0]):
             return all(re.fullmatch(list_line, line) or re.fullmatch(continuation_line, line) for line in lines[1:])
 
-        # 4. Homogeneous blockquote blocks. If prose and blockquote syntax are mixed in the same blank-line block, do not
-        # guess; the author should separate them with a blank line or use explicit fences.
+        # 4. Homogeneous blockquote blocks. If prose and blockquote syntax are mixed in the same block, do not guess;
+        # the author should separate them with a blank line or use explicit fences.
         #
         #    > blockquote
         blockquote_line = r"\s*>\s?.*"
@@ -377,14 +377,14 @@ class MarkdownFromArgparse:
                     if len(visible_subparser_actions) == 0:
                         continue
                     for _name, title, _subparser, subaction in visible_subparser_actions:  # generate command overview list
-                        prefix = f"**{_escape_md(title)}**"
+                        prefix = _bold(_escape_md(title))
                         gist: list[str] = []
                         if subaction is not None and subaction.help:
                             gist = self._render_blocks(f"{prefix}: {self._expand_help(subaction, formatter)}", is_list=True)
                         gists += gist if len(gist) > 0 else [f"- {prefix}"]
                     gists += [""]
                     for name, title, subparser, subaction in visible_subparser_actions:  # generate command details
-                        sub_results += [f"{'#' * heading_level} {_escape_md(title)}", ""]
+                        sub_results += [_heading(heading_level, _escape_md(title)), ""]
                         if subparser.description and subparser.description != argparse.SUPPRESS:
                             sub_results += self._render_blocks(subparser.description) + [""]
                         elif subaction is not None and subaction.help:
@@ -401,7 +401,7 @@ class MarkdownFromArgparse:
                     group_results += ["<!-- -->", ""]  # Prevent adjacent lists from merging
 
             if len(group_results) > 0 and group.title and group.title not in _DEFAULT_GROUPS:
-                all_results += [f"{'#' * heading_level} {_escape_md(group.title)}", ""]
+                all_results += [_heading(heading_level, _escape_md(group.title)), ""]
                 if group.description and group.description != argparse.SUPPRESS:
                     all_results += self._render_blocks(group.description) + [""]
             all_results += group_results
@@ -420,13 +420,13 @@ class MarkdownFromArgparse:
                 choice_labels: list[str] = []
                 for action in actions:
                     if action.option_strings:
-                        choice_labels.append(" / ".join(f"**{_escape_md(option)}**" for option in action.option_strings))
+                        choice_labels.append(" / ".join(_bold(_escape_md(option)) for option in action.option_strings))
                     else:
                         # pylint: disable-next=protected-access
                         met: str = fmt._get_default_metavar_for_positional(action)  # noqa: SLF001
                         metavars = fmt._metavar_formatter(action, met)(1)  # noqa: SLF001  # pylint: disable=protected-access
                         label = " ".join(metavars)
-                        choice_labels.append(f"**{_escape_md(label)}**")
+                        choice_labels.append(_bold(_escape_md(label)))
                 notes[id(actions[0])] = f"Mutually exclusive group: choose {quantifier} of {', '.join(choice_labels)}."
         return notes
 
@@ -475,13 +475,13 @@ class MarkdownFromArgparse:
             positional_args: str = formatter._format_args(action, dflt)  # noqa: SLF001  # pylint: disable=protected-access
             if action.nargs == argparse.REMAINDER and positional_args == "...":
                 positional_args = str(action.metavar or dflt)
-            return anchor_prefix + action.dest.replace(" ", "_"), f"**{_escape_md(positional_args)}**"
+            return anchor_prefix + action.dest.replace(" ", "_"), _bold(_escape_md(positional_args))
         elif action.nargs == 0:
-            title_line = ", ".join(f"**{_escape_md(opt)}**" for opt in action.option_strings)
+            title_line = ", ".join(_bold(_escape_md(opt)) for opt in action.option_strings)
         else:
             dflt = formatter._get_default_metavar_for_optional(action)  # noqa: SLF001  # pylint: disable=protected-access
             option_args = formatter._format_args(action, dflt)  # noqa: SLF001  # pylint: disable=protected-access
-            title_line = ", ".join(f"**{_escape_md(opt)}** *{_escape_md(option_args)}*" for opt in action.option_strings)
+            title_line = ", ".join(f"{_bold(_escape_md(opt))} *{_escape_md(option_args)}*" for opt in action.option_strings)
         if action.required:
             title_line += " _(required)_"
         return anchor_prefix + action.option_strings[0].replace(" ", "_"), title_line
@@ -528,6 +528,16 @@ class MarkdownFromArgparse:
 
     def _die(self, msg: str) -> NoReturn:
         raise SystemExit(f"ERROR: {msg}")
+
+
+def _bold(text: str) -> str:
+    """Returns strongly emphasized Markdown."""
+    return f"**{text}**"
+
+
+def _heading(heading_level: int, text: str) -> str:
+    """Returns a Markdown heading."""
+    return f"{'#' * heading_level} {text}"
 
 
 def _escape_md(text: str) -> str:
