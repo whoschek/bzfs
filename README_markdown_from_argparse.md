@@ -90,7 +90,7 @@ survive unchanged.
 <!-- BEGIN-MANPAGE-DETAILS -->
 <div id="-h"></div>
 
-**-h**, **--help** <a class="man-option-permalink" href="#-h" aria-label="Permalink to -h" title="Permalink to -h">&#x1F517;</a>
+**-h**, **--help** <a href="#-h" title="Permalink to -h" aria-label="Permalink to -h" class="man-option-permalink">&#x1F517;</a>
 
 - show this help message and exit
 
@@ -98,7 +98,7 @@ survive unchanged.
 
 <div id="--readme"></div>
 
-**--readme** *PATH* _(required)_ <a class="man-option-permalink" href="#--readme" aria-label="Permalink to --readme" title="Permalink to --readme">&#x1F517;</a>
+**--readme** *PATH* _(required)_ <a href="#--readme" title="Permalink to --readme" aria-label="Permalink to --readme" class="man-option-permalink">&#x1F517;</a>
 
 - Path of README markdown file to update. If the file does not exist a template will be generated.
   Example: path/to/README.md
@@ -107,7 +107,7 @@ survive unchanged.
 
 <div id="--module"></div>
 
-**--module** *STRING* _(required)_ <a class="man-option-permalink" href="#--module" aria-label="Permalink to --module" title="Permalink to --module">&#x1F517;</a>
+**--module** *STRING* _(required)_ <a href="#--module" title="Permalink to --module" aria-label="Permalink to --module" class="man-option-permalink">&#x1F517;</a>
 
 - Python module containing the parser factory. Example: 'bzfs_main.bzfs'
 
@@ -115,7 +115,7 @@ survive unchanged.
 
 <div id="--function"></div>
 
-**--function** *STRING* <a class="man-option-permalink" href="#--function" aria-label="Permalink to --function" title="Permalink to --function">&#x1F517;</a>
+**--function** *STRING* <a href="#--function" title="Permalink to --function" aria-label="Permalink to --function" class="man-option-permalink">&#x1F517;</a>
 
 - Name of the no-argument parser factory function within the Python module. The function must
   return an instance of argparse.ArgumentParser. Default is 'argument_parser'.
@@ -124,7 +124,7 @@ survive unchanged.
 
 <div id="--heading-level"></div>
 
-**--heading-level** *INT* <a class="man-option-permalink" href="#--heading-level" aria-label="Permalink to --heading-level" title="Permalink to --heading-level">&#x1F517;</a>
+**--heading-level** *INT* <a href="#--heading-level" title="Permalink to --heading-level" aria-label="Permalink to --heading-level" class="man-option-permalink">&#x1F517;</a>
 
 - Markdown heading level for generated group/subparser sections. Must be >= 1. Default is '1'.
 

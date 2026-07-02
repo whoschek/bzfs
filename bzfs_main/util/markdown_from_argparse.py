@@ -556,7 +556,7 @@ def _html_permalink(anchor: str) -> str:
     """Returns an inline self-link that the user can copy and paste to refer to the section identified by the anchor."""
     label = html.escape(f"Permalink to {anchor}", quote=True)
     fragment = urllib.parse.quote(anchor, safe="-._~")
-    return f'<a class="man-option-permalink" href="#{fragment}" aria-label="{label}" title="{label}">&#x1F517;</a>'
+    return f'<a href="#{fragment}" title="{label}" aria-label="{label}" class="man-option-permalink">&#x1F517;</a>'
 
 
 def _escape_md(text: str) -> str:

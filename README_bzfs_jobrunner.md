@@ -180,7 +180,7 @@ usage: bzfs_jobrunner
 <!-- BEGIN-MANPAGE-DETAILS -->
 <div id="-h"></div>
 
-**-h**, **--help** <a class="man-option-permalink" href="#-h" aria-label="Permalink to -h" title="Permalink to -h">&#x1F517;</a>
+**-h**, **--help** <a href="#-h" title="Permalink to -h" aria-label="Permalink to -h" class="man-option-permalink">&#x1F517;</a>
 
 - show this help message and exit
 
@@ -188,7 +188,7 @@ usage: bzfs_jobrunner
 
 <div id="--create-src-snapshots"></div>
 
-**--create-src-snapshots** <a class="man-option-permalink" href="#--create-src-snapshots" aria-label="Permalink to --create-src-snapshots" title="Permalink to --create-src-snapshots">&#x1F517;</a>
+**--create-src-snapshots** <a href="#--create-src-snapshots" title="Permalink to --create-src-snapshots" aria-label="Permalink to --create-src-snapshots" class="man-option-permalink">&#x1F517;</a>
 
 - Take snapshots on the selected source hosts as necessary. Typically, this command should be
   called by a program (or cron job) running on each src host.
@@ -197,7 +197,7 @@ usage: bzfs_jobrunner
 
 <div id="--replicate"></div>
 
-**--replicate** <a class="man-option-permalink" href="#--replicate" aria-label="Permalink to --replicate" title="Permalink to --replicate">&#x1F517;</a>
+**--replicate** <a href="#--replicate" title="Permalink to --replicate" aria-label="Permalink to --replicate" class="man-option-permalink">&#x1F517;</a>
 
 - Replicate snapshots from the selected source hosts to the selected destinations hosts as
   necessary. For pull mode (recommended), this command should be called by a program (or cron job)
@@ -208,7 +208,7 @@ usage: bzfs_jobrunner
 
 <div id="--prune-src-snapshots"></div>
 
-**--prune-src-snapshots** <a class="man-option-permalink" href="#--prune-src-snapshots" aria-label="Permalink to --prune-src-snapshots" title="Permalink to --prune-src-snapshots">&#x1F517;</a>
+**--prune-src-snapshots** <a href="#--prune-src-snapshots" title="Permalink to --prune-src-snapshots" aria-label="Permalink to --prune-src-snapshots" class="man-option-permalink">&#x1F517;</a>
 
 - Prune snapshots on the selected source hosts as necessary. Typically, this command should be
   called by a program (or cron job) running on each src host.
@@ -217,7 +217,7 @@ usage: bzfs_jobrunner
 
 <div id="--prune-src-bookmarks"></div>
 
-**--prune-src-bookmarks** <a class="man-option-permalink" href="#--prune-src-bookmarks" aria-label="Permalink to --prune-src-bookmarks" title="Permalink to --prune-src-bookmarks">&#x1F517;</a>
+**--prune-src-bookmarks** <a href="#--prune-src-bookmarks" title="Permalink to --prune-src-bookmarks" aria-label="Permalink to --prune-src-bookmarks" class="man-option-permalink">&#x1F517;</a>
 
 - Prune bookmarks on the selected source hosts as necessary. Typically, this command should be
   called by a program (or cron job) running on each src host.
@@ -226,7 +226,7 @@ usage: bzfs_jobrunner
 
 <div id="--prune-dst-snapshots"></div>
 
-**--prune-dst-snapshots** <a class="man-option-permalink" href="#--prune-dst-snapshots" aria-label="Permalink to --prune-dst-snapshots" title="Permalink to --prune-dst-snapshots">&#x1F517;</a>
+**--prune-dst-snapshots** <a href="#--prune-dst-snapshots" title="Permalink to --prune-dst-snapshots" aria-label="Permalink to --prune-dst-snapshots" class="man-option-permalink">&#x1F517;</a>
 
 - Prune snapshots on the selected destination hosts as necessary. Typically, this command should
   be called by a program (or cron job) running on each dst host.
@@ -235,7 +235,7 @@ usage: bzfs_jobrunner
 
 <div id="--monitor-src-snapshots"></div>
 
-**--monitor-src-snapshots** <a class="man-option-permalink" href="#--monitor-src-snapshots" aria-label="Permalink to --monitor-src-snapshots" title="Permalink to --monitor-src-snapshots">&#x1F517;</a>
+**--monitor-src-snapshots** <a href="#--monitor-src-snapshots" title="Permalink to --monitor-src-snapshots" aria-label="Permalink to --monitor-src-snapshots" class="man-option-permalink">&#x1F517;</a>
 
 - Alert the user if snapshots on the selected source hosts are too old, using
   --monitor-snapshot-plan (see below). Typically, this command should be called by a program (or
@@ -245,7 +245,7 @@ usage: bzfs_jobrunner
 
 <div id="--monitor-dst-snapshots"></div>
 
-**--monitor-dst-snapshots** <a class="man-option-permalink" href="#--monitor-dst-snapshots" aria-label="Permalink to --monitor-dst-snapshots" title="Permalink to --monitor-dst-snapshots">&#x1F517;</a>
+**--monitor-dst-snapshots** <a href="#--monitor-dst-snapshots" title="Permalink to --monitor-dst-snapshots" aria-label="Permalink to --monitor-dst-snapshots" class="man-option-permalink">&#x1F517;</a>
 
 - Alert the user if snapshots on the selected destination hosts are too old, using
   --monitor-snapshot-plan (see below). Typically, this command should be called by a program (or
@@ -255,7 +255,7 @@ usage: bzfs_jobrunner
 
 <div id="--localhost"></div>
 
-**--localhost** *STRING* <a class="man-option-permalink" href="#--localhost" aria-label="Permalink to --localhost" title="Permalink to --localhost">&#x1F517;</a>
+**--localhost** *STRING* <a href="#--localhost" title="Permalink to --localhost" aria-label="Permalink to --localhost" class="man-option-permalink">&#x1F517;</a>
 
 - Hostname of localhost. Default is the hostname without the domain name, querying the Operating
   System.
@@ -264,7 +264,7 @@ usage: bzfs_jobrunner
 
 <div id="--src-hosts"></div>
 
-**--src-hosts** *LIST_STRING* <a class="man-option-permalink" href="#--src-hosts" aria-label="Permalink to --src-hosts" title="Permalink to --src-hosts">&#x1F517;</a>
+**--src-hosts** *LIST_STRING* <a href="#--src-hosts" title="Permalink to --src-hosts" aria-label="Permalink to --src-hosts" class="man-option-permalink">&#x1F517;</a>
 
 - Hostnames of the sources to operate on. Specify a Python list literal such as `"['src1',
   'src2']"`. If omitted, reads the same list literal from stdin.
@@ -273,7 +273,7 @@ usage: bzfs_jobrunner
 
 <div id="--src-host"></div>
 
-**--src-host** *STRING* <a class="man-option-permalink" href="#--src-host" aria-label="Permalink to --src-host" title="Permalink to --src-host">&#x1F517;</a>
+**--src-host** *STRING* <a href="#--src-host" title="Permalink to --src-host" aria-label="Permalink to --src-host" class="man-option-permalink">&#x1F517;</a>
 
 - For subsetting --src-hosts; Can be specified multiple times; Indicates to only use the
   --src-hosts that are contained in the specified --src-host values (optional).
@@ -285,7 +285,7 @@ usage: bzfs_jobrunner
 
 <div id="--dst-hosts"></div>
 
-**--dst-hosts** *DICT_STRING* <a class="man-option-permalink" href="#--dst-hosts" aria-label="Permalink to --dst-hosts" title="Permalink to --dst-hosts">&#x1F517;</a>
+**--dst-hosts** *DICT_STRING* <a href="#--dst-hosts" title="Permalink to --dst-hosts" aria-label="Permalink to --dst-hosts" class="man-option-permalink">&#x1F517;</a>
 
 - Dictionary that maps each destination hostname to a list of zero or more logical replication
   target names (the infix portion of snapshot name). As hostname use the real output of the
@@ -311,7 +311,7 @@ usage: bzfs_jobrunner
 
 <div id="--dst-host"></div>
 
-**--dst-host** *STRING* <a class="man-option-permalink" href="#--dst-host" aria-label="Permalink to --dst-host" title="Permalink to --dst-host">&#x1F517;</a>
+**--dst-host** *STRING* <a href="#--dst-host" title="Permalink to --dst-host" aria-label="Permalink to --dst-host" class="man-option-permalink">&#x1F517;</a>
 
 - For subsetting --dst-hosts; Can be specified multiple times; Indicates to only use the
   --dst-hosts keys that are contained in the specified --dst-host values (optional).
@@ -323,7 +323,7 @@ usage: bzfs_jobrunner
 
 <div id="--retain-dst-targets"></div>
 
-**--retain-dst-targets** *DICT_STRING* <a class="man-option-permalink" href="#--retain-dst-targets" aria-label="Permalink to --retain-dst-targets" title="Permalink to --retain-dst-targets">&#x1F517;</a>
+**--retain-dst-targets** *DICT_STRING* <a href="#--retain-dst-targets" title="Permalink to --retain-dst-targets" aria-label="Permalink to --retain-dst-targets" class="man-option-permalink">&#x1F517;</a>
 
 - Dictionary that maps each destination hostname to a list of zero or more logical replication
   target names (the infix portion of snapshot name).
@@ -340,7 +340,7 @@ usage: bzfs_jobrunner
 
 <div id="--dst-root-datasets"></div>
 
-**--dst-root-datasets** *DICT_STRING* <a class="man-option-permalink" href="#--dst-root-datasets" aria-label="Permalink to --dst-root-datasets" title="Permalink to --dst-root-datasets">&#x1F517;</a>
+**--dst-root-datasets** *DICT_STRING* <a href="#--dst-root-datasets" title="Permalink to --dst-root-datasets" aria-label="Permalink to --dst-root-datasets" class="man-option-permalink">&#x1F517;</a>
 
 - Dictionary that maps each destination hostname to a root dataset located on that destination
   host. The root dataset name is an (optional) prefix that will be prepended to each dataset that
@@ -359,7 +359,7 @@ usage: bzfs_jobrunner
 
 <div id="--src-snapshot-plan"></div>
 
-**--src-snapshot-plan** *DICT_STRING* <a class="man-option-permalink" href="#--src-snapshot-plan" aria-label="Permalink to --src-snapshot-plan" title="Permalink to --src-snapshot-plan">&#x1F517;</a>
+**--src-snapshot-plan** *DICT_STRING* <a href="#--src-snapshot-plan" title="Permalink to --src-snapshot-plan" aria-label="Permalink to --src-snapshot-plan" class="man-option-permalink">&#x1F517;</a>
 
 - Retention periods for snapshots to be used if pruning src, and when creating new snapshots on
   src. Snapshots that do not match a retention period will be deleted. A zero or missing retention
@@ -386,7 +386,7 @@ usage: bzfs_jobrunner
 
 <div id="--src-bookmark-plan"></div>
 
-**--src-bookmark-plan** *DICT_STRING* <a class="man-option-permalink" href="#--src-bookmark-plan" aria-label="Permalink to --src-bookmark-plan" title="Permalink to --src-bookmark-plan">&#x1F517;</a>
+**--src-bookmark-plan** *DICT_STRING* <a href="#--src-bookmark-plan" title="Permalink to --src-bookmark-plan" aria-label="Permalink to --src-bookmark-plan" class="man-option-permalink">&#x1F517;</a>
 
 - Retention periods for bookmarks to be used if pruning src. Has same format as
   --src-snapshot-plan.
@@ -395,7 +395,7 @@ usage: bzfs_jobrunner
 
 <div id="--dst-snapshot-plan"></div>
 
-**--dst-snapshot-plan** *DICT_STRING* <a class="man-option-permalink" href="#--dst-snapshot-plan" aria-label="Permalink to --dst-snapshot-plan" title="Permalink to --dst-snapshot-plan">&#x1F517;</a>
+**--dst-snapshot-plan** *DICT_STRING* <a href="#--dst-snapshot-plan" title="Permalink to --dst-snapshot-plan" aria-label="Permalink to --dst-snapshot-plan" class="man-option-permalink">&#x1F517;</a>
 
 - Retention periods for snapshots to be used if pruning dst. Has same format as
   --src-snapshot-plan.
@@ -404,7 +404,7 @@ usage: bzfs_jobrunner
 
 <div id="--monitor-snapshot-plan"></div>
 
-**--monitor-snapshot-plan** *DICT_STRING* <a class="man-option-permalink" href="#--monitor-snapshot-plan" aria-label="Permalink to --monitor-snapshot-plan" title="Permalink to --monitor-snapshot-plan">&#x1F517;</a>
+**--monitor-snapshot-plan** *DICT_STRING* <a href="#--monitor-snapshot-plan" title="Permalink to --monitor-snapshot-plan" aria-label="Permalink to --monitor-snapshot-plan" class="man-option-permalink">&#x1F517;</a>
 
 - Alert the user if the ZFS 'creation' time property of the latest or oldest snapshot for any
   specified snapshot pattern within the selected datasets is too old wrt. the specified age limit.
@@ -435,7 +435,7 @@ usage: bzfs_jobrunner
 
 <div id="--ssh-src-user"></div>
 
-**--ssh-src-user** *STRING* <a class="man-option-permalink" href="#--ssh-src-user" aria-label="Permalink to --ssh-src-user" title="Permalink to --ssh-src-user">&#x1F517;</a>
+**--ssh-src-user** *STRING* <a href="#--ssh-src-user" title="Permalink to --ssh-src-user" aria-label="Permalink to --ssh-src-user" class="man-option-permalink">&#x1F517;</a>
 
 - Remote SSH username on src hosts to connect to (optional). Examples: 'root', 'alice'.
 
@@ -443,7 +443,7 @@ usage: bzfs_jobrunner
 
 <div id="--ssh-dst-user"></div>
 
-**--ssh-dst-user** *STRING* <a class="man-option-permalink" href="#--ssh-dst-user" aria-label="Permalink to --ssh-dst-user" title="Permalink to --ssh-dst-user">&#x1F517;</a>
+**--ssh-dst-user** *STRING* <a href="#--ssh-dst-user" title="Permalink to --ssh-dst-user" aria-label="Permalink to --ssh-dst-user" class="man-option-permalink">&#x1F517;</a>
 
 - Remote SSH username on dst hosts to connect to (optional). Examples: 'root', 'alice'.
 
@@ -451,7 +451,7 @@ usage: bzfs_jobrunner
 
 <div id="--ssh-src-port"></div>
 
-**--ssh-src-port** *INT* <a class="man-option-permalink" href="#--ssh-src-port" aria-label="Permalink to --ssh-src-port" title="Permalink to --ssh-src-port">&#x1F517;</a>
+**--ssh-src-port** *INT* <a href="#--ssh-src-port" title="Permalink to --ssh-src-port" aria-label="Permalink to --ssh-src-port" class="man-option-permalink">&#x1F517;</a>
 
 - Remote SSH port on src host to connect to (optional).
 
@@ -459,7 +459,7 @@ usage: bzfs_jobrunner
 
 <div id="--ssh-dst-port"></div>
 
-**--ssh-dst-port** *INT* <a class="man-option-permalink" href="#--ssh-dst-port" aria-label="Permalink to --ssh-dst-port" title="Permalink to --ssh-dst-port">&#x1F517;</a>
+**--ssh-dst-port** *INT* <a href="#--ssh-dst-port" title="Permalink to --ssh-dst-port" aria-label="Permalink to --ssh-dst-port" class="man-option-permalink">&#x1F517;</a>
 
 - Remote SSH port on dst host to connect to (optional).
 
@@ -467,7 +467,7 @@ usage: bzfs_jobrunner
 
 <div id="--ssh-src-config-file"></div>
 
-**--ssh-src-config-file** *FILE* <a class="man-option-permalink" href="#--ssh-src-config-file" aria-label="Permalink to --ssh-src-config-file" title="Permalink to --ssh-src-config-file">&#x1F517;</a>
+**--ssh-src-config-file** *FILE* <a href="#--ssh-src-config-file" title="Permalink to --ssh-src-config-file" aria-label="Permalink to --ssh-src-config-file" class="man-option-permalink">&#x1F517;</a>
 
 - Path to SSH ssh_config(5) file to connect to src (optional); will be passed into ssh -F CLI. The
   basename must contain the substring 'bzfs_ssh_config'.
@@ -476,7 +476,7 @@ usage: bzfs_jobrunner
 
 <div id="--ssh-dst-config-file"></div>
 
-**--ssh-dst-config-file** *FILE* <a class="man-option-permalink" href="#--ssh-dst-config-file" aria-label="Permalink to --ssh-dst-config-file" title="Permalink to --ssh-dst-config-file">&#x1F517;</a>
+**--ssh-dst-config-file** *FILE* <a href="#--ssh-dst-config-file" title="Permalink to --ssh-dst-config-file" aria-label="Permalink to --ssh-dst-config-file" class="man-option-permalink">&#x1F517;</a>
 
 - Path to SSH ssh_config(5) file to connect to dst (optional); will be passed into ssh -F CLI. The
   basename must contain the substring 'bzfs_ssh_config'.
@@ -485,7 +485,7 @@ usage: bzfs_jobrunner
 
 <div id="--job-id"></div>
 
-**--job-id** *STRING* _(required)_ <a class="man-option-permalink" href="#--job-id" aria-label="Permalink to --job-id" title="Permalink to --job-id">&#x1F517;</a>
+**--job-id** *STRING* _(required)_ <a href="#--job-id" title="Permalink to --job-id" aria-label="Permalink to --job-id" class="man-option-permalink">&#x1F517;</a>
 
 - The identifier that remains constant across all runs of this particular job; will be included in
   the log file name infix. Example: mytestjob
@@ -494,7 +494,7 @@ usage: bzfs_jobrunner
 
 <div id="--job-run"></div>
 
-**--job-run** *STRING* <a class="man-option-permalink" href="#--job-run" aria-label="Permalink to --job-run" title="Permalink to --job-run">&#x1F517;</a>
+**--job-run** *STRING* <a href="#--job-run" title="Permalink to --job-run" aria-label="Permalink to --job-run" class="man-option-permalink">&#x1F517;</a>
 
 - The identifier of this particular run of the overall job; will be included in the log file name
   suffix. Default is a hex UUID. Example: 0badc0f003a011f0a94aef02ac16083c
@@ -503,7 +503,7 @@ usage: bzfs_jobrunner
 
 <div id="--workers"></div>
 
-**--workers** *INT[%]* <a class="man-option-permalink" href="#--workers" aria-label="Permalink to --workers" title="Permalink to --workers">&#x1F517;</a>
+**--workers** *INT[%]* <a href="#--workers" title="Permalink to --workers" aria-label="Permalink to --workers" class="man-option-permalink">&#x1F517;</a>
 
 - The maximum number of jobs to run in parallel at any time; can be given as a positive integer,
   optionally followed by the % percent character (min: 1, default: 100%). Percentages are relative
@@ -514,7 +514,7 @@ usage: bzfs_jobrunner
 
 <div id="--work-period-seconds"></div>
 
-**--work-period-seconds** *FLOAT* <a class="man-option-permalink" href="#--work-period-seconds" aria-label="Permalink to --work-period-seconds" title="Permalink to --work-period-seconds">&#x1F517;</a>
+**--work-period-seconds** *FLOAT* <a href="#--work-period-seconds" title="Permalink to --work-period-seconds" aria-label="Permalink to --work-period-seconds" class="man-option-permalink">&#x1F517;</a>
 
 - Reduces bandwidth spikes by spreading out the start of worker jobs over this much time; 0
   disables this feature (default: 0). Examples: 0, 60, 86400
@@ -523,7 +523,7 @@ usage: bzfs_jobrunner
 
 <div id="--jitter"></div>
 
-**--jitter** <a class="man-option-permalink" href="#--jitter" aria-label="Permalink to --jitter" title="Permalink to --jitter">&#x1F517;</a>
+**--jitter** <a href="#--jitter" title="Permalink to --jitter" aria-label="Permalink to --jitter" class="man-option-permalink">&#x1F517;</a>
 
 - Randomize job start time and host order to avoid potential thundering herd problems in large
   distributed systems (optional). Randomizing job start time is only relevant if
@@ -533,7 +533,7 @@ usage: bzfs_jobrunner
 
 <div id="--worker-timeout-seconds"></div>
 
-**--worker-timeout-seconds** *FLOAT* <a class="man-option-permalink" href="#--worker-timeout-seconds" aria-label="Permalink to --worker-timeout-seconds" title="Permalink to --worker-timeout-seconds">&#x1F517;</a>
+**--worker-timeout-seconds** *FLOAT* <a href="#--worker-timeout-seconds" title="Permalink to --worker-timeout-seconds" aria-label="Permalink to --worker-timeout-seconds" class="man-option-permalink">&#x1F517;</a>
 
 - If this much time has passed after a worker process has started executing, kill the straggling
   worker (optional). Other workers remain unaffected. Examples: 60, 3600
@@ -542,7 +542,7 @@ usage: bzfs_jobrunner
 
 <div id="--repeat-if-took-more-than-seconds"></div>
 
-**--repeat-if-took-more-than-seconds** *FLOAT* <a class="man-option-permalink" href="#--repeat-if-took-more-than-seconds" aria-label="Permalink to --repeat-if-took-more-than-seconds" title="Permalink to --repeat-if-took-more-than-seconds">&#x1F517;</a>
+**--repeat-if-took-more-than-seconds** *FLOAT* <a href="#--repeat-if-took-more-than-seconds" title="Permalink to --repeat-if-took-more-than-seconds" aria-label="Permalink to --repeat-if-took-more-than-seconds" class="man-option-permalink">&#x1F517;</a>
 
 - Repeat the entire workflow if it took longer than this much time and was successful. Use this
   (with the POSIX `timeout` CLI) before migrating VM storage to converge replication and reduce
@@ -552,7 +552,7 @@ usage: bzfs_jobrunner
 
 <div id="--spawn-process-per-job"></div>
 
-**--spawn-process-per-job** <a class="man-option-permalink" href="#--spawn-process-per-job" aria-label="Permalink to --spawn-process-per-job" title="Permalink to --spawn-process-per-job">&#x1F517;</a>
+**--spawn-process-per-job** <a href="#--spawn-process-per-job" title="Permalink to --spawn-process-per-job" aria-label="Permalink to --spawn-process-per-job" class="man-option-permalink">&#x1F517;</a>
 
 - Spawn a Python process per subjob instead of a Python thread per subjob (optional). The former
   is only recommended for a job operating in parallel on a large number of hosts as it helps avoid
@@ -563,7 +563,7 @@ usage: bzfs_jobrunner
 
 <div id="--jobrunner-dryrun"></div>
 
-**--jobrunner-dryrun** <a class="man-option-permalink" href="#--jobrunner-dryrun" aria-label="Permalink to --jobrunner-dryrun" title="Permalink to --jobrunner-dryrun">&#x1F517;</a>
+**--jobrunner-dryrun** <a href="#--jobrunner-dryrun" title="Permalink to --jobrunner-dryrun" aria-label="Permalink to --jobrunner-dryrun" class="man-option-permalink">&#x1F517;</a>
 
 - Do a dry run (aka 'no-op') to print what operations would happen if the command were to be
   executed for real (optional). This option treats both the ZFS source and destination as
@@ -573,7 +573,7 @@ usage: bzfs_jobrunner
 
 <div id="--jobrunner-log-level"></div>
 
-**--jobrunner-log-level** *{CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}* <a class="man-option-permalink" href="#--jobrunner-log-level" aria-label="Permalink to --jobrunner-log-level" title="Permalink to --jobrunner-log-level">&#x1F517;</a>
+**--jobrunner-log-level** *{CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}* <a href="#--jobrunner-log-level" title="Permalink to --jobrunner-log-level" aria-label="Permalink to --jobrunner-log-level" class="man-option-permalink">&#x1F517;</a>
 
 - Only emit jobrunner messages with equal or higher priority than this log level. Default is
   'INFO'.
@@ -582,7 +582,7 @@ usage: bzfs_jobrunner
 
 <div id="--daemon-replication-frequency"></div>
 
-**--daemon-replication-frequency** *STRING* <a class="man-option-permalink" href="#--daemon-replication-frequency" aria-label="Permalink to --daemon-replication-frequency" title="Permalink to --daemon-replication-frequency">&#x1F517;</a>
+**--daemon-replication-frequency** *STRING* <a href="#--daemon-replication-frequency" title="Permalink to --daemon-replication-frequency" aria-label="Permalink to --daemon-replication-frequency" class="man-option-permalink">&#x1F517;</a>
 
 - Specifies how often the bzfs daemon shall replicate from src to dst if --daemon-lifetime is
   nonzero.
@@ -591,7 +591,7 @@ usage: bzfs_jobrunner
 
 <div id="--daemon-prune-src-frequency"></div>
 
-**--daemon-prune-src-frequency** *STRING* <a class="man-option-permalink" href="#--daemon-prune-src-frequency" aria-label="Permalink to --daemon-prune-src-frequency" title="Permalink to --daemon-prune-src-frequency">&#x1F517;</a>
+**--daemon-prune-src-frequency** *STRING* <a href="#--daemon-prune-src-frequency" title="Permalink to --daemon-prune-src-frequency" aria-label="Permalink to --daemon-prune-src-frequency" class="man-option-permalink">&#x1F517;</a>
 
 - Specifies how often the bzfs daemon shall prune src if --daemon-lifetime is nonzero.
 
@@ -599,7 +599,7 @@ usage: bzfs_jobrunner
 
 <div id="--daemon-prune-dst-frequency"></div>
 
-**--daemon-prune-dst-frequency** *STRING* <a class="man-option-permalink" href="#--daemon-prune-dst-frequency" aria-label="Permalink to --daemon-prune-dst-frequency" title="Permalink to --daemon-prune-dst-frequency">&#x1F517;</a>
+**--daemon-prune-dst-frequency** *STRING* <a href="#--daemon-prune-dst-frequency" title="Permalink to --daemon-prune-dst-frequency" aria-label="Permalink to --daemon-prune-dst-frequency" class="man-option-permalink">&#x1F517;</a>
 
 - Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.
 
@@ -607,7 +607,7 @@ usage: bzfs_jobrunner
 
 <div id="--daemon-monitor-snapshots-frequency"></div>
 
-**--daemon-monitor-snapshots-frequency** *STRING* <a class="man-option-permalink" href="#--daemon-monitor-snapshots-frequency" aria-label="Permalink to --daemon-monitor-snapshots-frequency" title="Permalink to --daemon-monitor-snapshots-frequency">&#x1F517;</a>
+**--daemon-monitor-snapshots-frequency** *STRING* <a href="#--daemon-monitor-snapshots-frequency" title="Permalink to --daemon-monitor-snapshots-frequency" aria-label="Permalink to --daemon-monitor-snapshots-frequency" class="man-option-permalink">&#x1F517;</a>
 
 - Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.
 
@@ -615,7 +615,7 @@ usage: bzfs_jobrunner
 
 <div id="--version"></div>
 
-**--version** <a class="man-option-permalink" href="#--version" aria-label="Permalink to --version" title="Permalink to --version">&#x1F517;</a>
+**--version** <a href="#--version" title="Permalink to --version" aria-label="Permalink to --version" class="man-option-permalink">&#x1F517;</a>
 
 - Display version information and exit.
 
@@ -623,7 +623,7 @@ usage: bzfs_jobrunner
 
 <div id="--root-dataset-pairs"></div>
 
-**--root-dataset-pairs** *SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]* _(required)_ <a class="man-option-permalink" href="#--root-dataset-pairs" aria-label="Permalink to --root-dataset-pairs" title="Permalink to --root-dataset-pairs">&#x1F517;</a>
+**--root-dataset-pairs** *SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]* _(required)_ <a href="#--root-dataset-pairs" title="Permalink to --root-dataset-pairs" aria-label="Permalink to --root-dataset-pairs" class="man-option-permalink">&#x1F517;</a>
 
 - Source and destination dataset pairs (excluding usernames and excluding hostnames, which will
   all be auto-appended later).

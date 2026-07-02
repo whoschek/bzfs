@@ -187,13 +187,13 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         details = self._render_help_details(parser)
 
         self.assertIn(
-            '**--root** *VALUE* <a class="man-option-permalink" href="#--root" '
-            'aria-label="Permalink to --root" title="Permalink to --root">&#x1F517;</a>',
+            '**--root** *VALUE* <a href="#--root" title="Permalink to --root" '
+            'aria-label="Permalink to --root" class="man-option-permalink">&#x1F517;</a>',
             details,
         )
         self.assertIn(
-            '**--speed** *{fast,safe}* <a class="man-option-permalink" href="#sync~--speed" '
-            'aria-label="Permalink to sync~--speed" title="Permalink to sync~--speed">&#x1F517;</a>',
+            '**--speed** *{fast,safe}* <a href="#sync~--speed" title="Permalink to sync~--speed" '
+            'aria-label="Permalink to sync~--speed" class="man-option-permalink">&#x1F517;</a>',
             details,
         )
 
@@ -543,9 +543,9 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn('<div id="sync*&lt;fast&gt;~--mode&quot;fast"></div>', details)
         self.assertIn('**--mode"fast** *VAL&amp;&lt;X&gt;*', details)
         self.assertIn(
-            '<a class="man-option-permalink" href="#sync%2A%3Cfast%3E~--mode%22fast" '
-            'aria-label="Permalink to sync*&lt;fast&gt;~--mode&quot;fast" '
-            'title="Permalink to sync*&lt;fast&gt;~--mode&quot;fast">&#x1F517;</a>',
+            '<a href="#sync%2A%3Cfast%3E~--mode%22fast" '
+            'title="Permalink to sync*&lt;fast&gt;~--mode&quot;fast" '
+            'aria-label="Permalink to sync*&lt;fast&gt;~--mode&quot;fast" class="man-option-permalink">&#x1F517;</a>',
             details,
         )
 
