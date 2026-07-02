@@ -295,19 +295,19 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn('<div id="--root"></div>', details)
         self.assertIn("### Commands", details)
         self.assertIn("Available commands.", details)
-        self.assertIn("- **sync**: Sync snapshots.", details)
-        self.assertIn("- **prune (trim)**: Prune snapshots.", details)
-        self.assertLess(details.index("Available commands."), details.index("- **sync**: Sync snapshots."))
-        self.assertLess(details.index("- **sync**: Sync snapshots."), details.index("### sync"))
+        self.assertIn("- [**sync**](#sync~): Sync snapshots.", details)
+        self.assertIn("- [**prune (trim)**](#prune~): Prune snapshots.", details)
+        self.assertLess(details.index("Available commands."), details.index("- [**sync**](#sync~): Sync snapshots."))
+        self.assertLess(details.index("- [**sync**](#sync~): Sync snapshots."), details.index("### sync"))
         self.assertIn("### sync", details)
         self.assertIn("Synchronize selected snapshots.", details)
         self.assertIn('<div id="sync~--speed"></div>', details)
         self.assertIn("**--speed** *{fast,safe}*", details)
         self.assertIn("#### Sync Modes", details)
         self.assertIn("Sync variants.", details)
-        self.assertIn("- **full**: Full replication.", details)
-        self.assertLess(details.index("Sync variants."), details.index("- **full**: Full replication."))
-        self.assertLess(details.index("- **full**: Full replication."), details.index("#### full"))
+        self.assertIn("- [**full**](#sync~full~): Full replication.", details)
+        self.assertLess(details.index("Sync variants."), details.index("- [**full**](#sync~full~): Full replication."))
+        self.assertLess(details.index("- [**full**](#sync~full~): Full replication."), details.index("#### full"))
         self.assertIn("#### full", details)
         self.assertIn('<div id="sync~full~--force"></div>', details)
         self.assertIn("### prune (trim)", details)
@@ -331,9 +331,11 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser, heading_level=3)
 
-        self.assertLess(details.index("- **sync**: Sync snapshots."), details.index('<div id="--root"></div>'))
+        self.assertLess(details.index("- [**sync**](#sync~): Sync snapshots."), details.index('<div id="--root"></div>'))
         self.assertLess(details.index('<div id="--root"></div>'), details.index("### sync"))
-        self.assertLess(details.index("- **full**: Full replication."), details.index('<div id="sync~--speed"></div>'))
+        self.assertLess(
+            details.index("- [**full**](#sync~full~): Full replication."), details.index('<div id="sync~--speed"></div>')
+        )
         self.assertLess(details.index('<div id="sync~--speed"></div>'), details.index("#### full"))
 
     def test_subparser_overview_preserves_multiblock_help(self) -> None:
@@ -347,9 +349,20 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser, heading_level=3)
 
-        self.assertIn("- **sync**: Sync snapshots.\n\n\n  ```shell\n  demo sync --dry-run\n  ```", details)
-        self.assertNotIn("- **sync**: Sync snapshots. ```shell demo sync --dry-run ```", details)
-        self.assertLess(details.index("- **sync**: Sync snapshots."), details.index("### sync"))
+        self.assertIn("- [**sync**](#sync~): Sync snapshots.\n\n\n  ```shell\n  demo sync --dry-run\n  ```", details)
+        self.assertNotIn("- [**sync**](#sync~): Sync snapshots. ```shell demo sync --dry-run ```", details)
+        self.assertLess(details.index("- [**sync**](#sync~): Sync snapshots."), details.index("### sync"))
+
+    def test_subparser_overview_escapes_markdown_link_label_brackets(self) -> None:
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        commands = parser.add_subparsers(dest="command", title="Commands")
+        commands.add_parser("bad]name[ok", help="Bad link label.", formatter_class=argparse.RawTextHelpFormatter)
+
+        details = self._render_help_details(parser)
+
+        self.assertIn("- [**bad\\]name\\[ok**](#bad%5Dname%5Bok~): Bad link label.", details)
+        self.assertIn('<div id="bad]name[ok~"></div>', details)
+        self.assertLess(details.index("- [**bad\\]name\\[ok**]"), details.index("# bad]name[ok"))
 
     def test_subparser_usage_blocks_are_rendered_under_subparser_headings(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -478,6 +491,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn('<div id="a~b~--flag"></div>', details)
         self.assertEqual(1, details.count('<div id="a_b~--flag"></div>'))
         self.assertEqual(1, details.count('<div id="a~b~--flag"></div>'))
+        self.assertIn('<div id="a_b~"></div>', details)
 
     def test_generated_metadata_escapes_common_markdown_and_html_chars(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -503,6 +517,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             details,
         )
         self.assertIn("# Commands &amp; \\*Modes\\*", details)
+        self.assertIn("- [**sync\\*&lt;fast&gt;**](#sync%2A%3Cfast%3E~): Sync.", details)
         self.assertIn("# sync\\*&lt;fast&gt;", details)
         self.assertIn('<div id="sync*&lt;fast&gt;~--mode&quot;fast"></div>', details)
         self.assertIn('**--mode"fast** *VAL&amp;&lt;X&gt;*', details)

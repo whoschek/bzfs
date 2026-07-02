@@ -31,6 +31,7 @@ import os
 import re
 import sys
 import textwrap
+import urllib.parse
 from argparse import (
     ArgumentParser,
 )
@@ -100,6 +101,9 @@ custom document headers/footers/notes, and other forms of customization.
 The [BEGIN|END]-MANPAGE-DESCRIPTION marker pair is optional.
 
 Subparser sections are rendered recursively. Subparsers can be nested arbitrarily.
+
+Generated option entries and subparser headings include explicit HTML `id` anchors, so user-written HTML or Markdown
+links can link to them with URL fragments.
 
 The renderer expects argparse parser `description`, `epilog`, and `help=` text in the form of blank-line-separated blocks,
 where the first block of each `help=` text is prose.
@@ -369,29 +373,31 @@ class MarkdownFromArgparse:
                     group_results += self._render_blocks(note) + [""]
                 if not isinstance(action, argparse._SubParsersAction):  # noqa: SLF001  # pylint: disable=protected-access
                     anchor, title_line = self._action_anchor_and_title_line(parser, action, anchor_prefix=anchor_prefix)
-                    group_results += [f'<div id="{html.escape(anchor, quote=True)}"></div>', "", title_line, ""]
+                    group_results += [_html_anchor(anchor), "", title_line, ""]
                     is_list = True
                 else:
                     is_list = False
                     visible_subparser_actions: list[tuple] = self._visible_subparser_actions(action)
                     if len(visible_subparser_actions) == 0:
                         continue
-                    for _name, title, _subparser, subaction in visible_subparser_actions:  # generate command overview list
-                        prefix = _bold(_escape_md(title))
+                    for name, title, _subparser, subaction in visible_subparser_actions:  # generate command overview list
+                        sub_anchor_prefix = f"{anchor_prefix}{name}~"
+                        prefix = _link(_bold(_escape_md(title)), sub_anchor_prefix)
                         gist: list[str] = []
                         if subaction is not None and subaction.help:
                             gist = self._render_blocks(f"{prefix}: {self._expand_help(subaction, formatter)}", is_list=True)
                         gists += gist if len(gist) > 0 else [f"- {prefix}"]
                     gists += [""]
                     for name, title, subparser, subaction in visible_subparser_actions:  # generate command details
-                        sub_results += [_heading(heading_level, _escape_md(title)), ""]
+                        sub_anchor_prefix = f"{anchor_prefix}{name}~"
+                        sub_results += [_html_anchor(sub_anchor_prefix), "", _heading(heading_level, _escape_md(title)), ""]
                         if subparser.description and subparser.description != argparse.SUPPRESS:
                             sub_results += self._render_blocks(subparser.description) + [""]
                         elif subaction is not None and subaction.help:
                             sub_results += self._render_blocks(self._expand_help(subaction, formatter)) + [""]
                         sub_results += [TRIPLE_BACKTICK] + self._format_usage(subparser).splitlines() + [TRIPLE_BACKTICK, ""]
                         sub_results += self._render_help_details_recursive(  # recurse into nested subparser
-                            subparser, heading_level + 1, anchor_prefix=f"{anchor_prefix}{name}~"
+                            subparser, heading_level + 1, anchor_prefix=sub_anchor_prefix
                         )
 
                 if action.help:
@@ -538,6 +544,17 @@ def _bold(text: str) -> str:
 def _heading(heading_level: int, text: str) -> str:
     """Returns a Markdown heading."""
     return f"{'#' * heading_level} {text}"
+
+
+def _link(text: str, fragment: str) -> str:
+    """Returns an inline Markdown link that points to a URL-encoded fragment."""
+    text = text.replace("[", "\\[").replace("]", "\\]")  # escape Markdown link-label delimiters
+    fragment = urllib.parse.quote(fragment, safe="-._~")  # encode chars unsafe in URL fragments
+    return f"[{text}](#{fragment})"
+
+
+def _html_anchor(anchor: str) -> str:
+    return f'<div id="{html.escape(anchor, quote=True)}"></div>'
 
 
 def _escape_md(text: str) -> str:

@@ -59,6 +59,9 @@ The [BEGIN|END]-MANPAGE-DESCRIPTION marker pair is optional.
 
 Subparser sections are rendered recursively. Subparsers can be nested arbitrarily.
 
+Generated option entries and subparser headings include explicit HTML `id` anchors, so
+user-written HTML or Markdown links can link to them with URL fragments.
+
 The renderer expects argparse parser `description`, `epilog`, and `help=` text in the form of
 blank-line-separated blocks, where the first block of each `help=` text is prose.
 
