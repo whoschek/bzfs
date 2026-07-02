@@ -644,9 +644,7 @@ usage: bzfs [-h]
 <!-- END-MANPAGE-USAGE -->
 
 <!-- BEGIN-MANPAGE-DETAILS -->
-<div id="root_dataset_pairs"></div>
-
-**SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]** <a class="man-option-permalink" href="#root_dataset_pairs" aria-label="Permalink to root_dataset_pairs" title="Permalink to root_dataset_pairs">&#x1F517;</a>
+<span id="root_dataset_pairs" class="man-option-title">**SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]**</span> <a href="#root_dataset_pairs" title="Permalink to root_dataset_pairs" aria-label="Permalink to root_dataset_pairs" class="man-option-permalink">&#x1F517;</a>
 
 - SRC_DATASET: Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS
   filesystem or ZFS volume. Format is [[user@]host:]dataset. The host name can also be an IPv4
@@ -677,17 +675,13 @@ usage: bzfs [-h]
   selected dataset subtrees are available for start of processing. The degree of parallelism is
   configurable with the --threads option (see below).
 
-<div id="-h"></div>
-
-**-h**, **--help** <a class="man-option-permalink" href="#-h" aria-label="Permalink to -h" title="Permalink to -h">&#x1F517;</a>
+<span id="-h" class="man-option-title">**-h**, **--help**</span> <a href="#-h" title="Permalink to -h" aria-label="Permalink to -h" class="man-option-permalink">&#x1F517;</a>
 
 - show this help message and exit
 
 <!-- -->
 
-<div id="--recursive"></div>
-
-**--recursive**, **-r** <a class="man-option-permalink" href="#--recursive" aria-label="Permalink to --recursive" title="Permalink to --recursive">&#x1F517;</a>
+<span id="--recursive" class="man-option-title">**--recursive**, **-r**</span> <a href="#--recursive" title="Permalink to --recursive" aria-label="Permalink to --recursive" class="man-option-permalink">&#x1F517;</a>
 
 - During snapshot creation, replication, deletion and comparison, also consider descendant
   datasets, i.e. datasets within the dataset tree, including children, and children of children,
@@ -695,9 +689,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--include-dataset"></div>
-
-**--include-dataset** *DATASET [DATASET ...]* <a class="man-option-permalink" href="#--include-dataset" aria-label="Permalink to --include-dataset" title="Permalink to --include-dataset">&#x1F517;</a>
+<span id="--include-dataset" class="man-option-title">**--include-dataset** *DATASET [DATASET ...]*</span> <a href="#--include-dataset" title="Permalink to --include-dataset" aria-label="Permalink to --include-dataset" class="man-option-permalink">&#x1F517;</a>
 
 - During snapshot creation, replication, deletion and comparison, select any ZFS dataset (and its
   descendants) that is contained within SRC_DATASET (DST_DATASET in case of deletion) if its
@@ -721,18 +713,14 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--exclude-dataset"></div>
-
-**--exclude-dataset** *DATASET [DATASET ...]* <a class="man-option-permalink" href="#--exclude-dataset" aria-label="Permalink to --exclude-dataset" title="Permalink to --exclude-dataset">&#x1F517;</a>
+<span id="--exclude-dataset" class="man-option-title">**--exclude-dataset** *DATASET [DATASET ...]*</span> <a href="#--exclude-dataset" title="Permalink to --exclude-dataset" aria-label="Permalink to --exclude-dataset" class="man-option-permalink">&#x1F517;</a>
 
 - Same syntax as --include-dataset (see above) except that the option is automatically translated
   to an --exclude-dataset-regex (see below).
 
 <!-- -->
 
-<div id="--include-dataset-regex"></div>
-
-**--include-dataset-regex** *REGEX [REGEX ...]* <a class="man-option-permalink" href="#--include-dataset-regex" aria-label="Permalink to --include-dataset-regex" title="Permalink to --include-dataset-regex">&#x1F517;</a>
+<span id="--include-dataset-regex" class="man-option-title">**--include-dataset-regex** *REGEX [REGEX ...]*</span> <a href="#--include-dataset-regex" title="Permalink to --include-dataset-regex" aria-label="Permalink to --include-dataset-regex" class="man-option-permalink">&#x1F517;</a>
 
 - During snapshot creation, replication (and deletion) and comparison, select any ZFS dataset (and
   its descendants) that is contained within SRC_DATASET (DST_DATASET in case of deletion) if its
@@ -756,9 +744,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--exclude-dataset-regex"></div>
-
-**--exclude-dataset-regex** *REGEX [REGEX ...]* <a class="man-option-permalink" href="#--exclude-dataset-regex" aria-label="Permalink to --exclude-dataset-regex" title="Permalink to --exclude-dataset-regex">&#x1F517;</a>
+<span id="--exclude-dataset-regex" class="man-option-title">**--exclude-dataset-regex** *REGEX [REGEX ...]*</span> <a href="#--exclude-dataset-regex" title="Permalink to --exclude-dataset-regex" aria-label="Permalink to --exclude-dataset-regex" class="man-option-permalink">&#x1F517;</a>
 
 - Same syntax as --include-dataset-regex (see above) except that the default is
   `(?:.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*` (exclude tmp datasets). Example: `!.*` (exclude no
@@ -766,9 +752,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--exclude-dataset-property"></div>
-
-**--exclude-dataset-property** *STRING* <a class="man-option-permalink" href="#--exclude-dataset-property" aria-label="Permalink to --exclude-dataset-property" title="Permalink to --exclude-dataset-property">&#x1F517;</a>
+<span id="--exclude-dataset-property" class="man-option-title">**--exclude-dataset-property** *STRING*</span> <a href="#--exclude-dataset-property" title="Permalink to --exclude-dataset-property" aria-label="Permalink to --exclude-dataset-property" class="man-option-permalink">&#x1F517;</a>
 
 - The name of a ZFS dataset user property (optional). If this option is specified, the effective
   value (potentially inherited) of that user property is read via 'zfs list' for each selected
@@ -794,9 +778,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--include-snapshot-regex"></div>
-
-**--include-snapshot-regex** *REGEX [REGEX ...]* <a class="man-option-permalink" href="#--include-snapshot-regex" aria-label="Permalink to --include-snapshot-regex" title="Permalink to --include-snapshot-regex">&#x1F517;</a>
+<span id="--include-snapshot-regex" class="man-option-title">**--include-snapshot-regex** *REGEX [REGEX ...]*</span> <a href="#--include-snapshot-regex" title="Permalink to --include-snapshot-regex" aria-label="Permalink to --include-snapshot-regex" class="man-option-permalink">&#x1F517;</a>
 
 - During replication, deletion and comparison, select any source ZFS snapshot that has a name
   (i.e. the part after the '@') that matches at least one of the given include regular expressions
@@ -821,18 +803,14 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--exclude-snapshot-regex"></div>
-
-**--exclude-snapshot-regex** *REGEX [REGEX ...]* <a class="man-option-permalink" href="#--exclude-snapshot-regex" aria-label="Permalink to --exclude-snapshot-regex" title="Permalink to --exclude-snapshot-regex">&#x1F517;</a>
+<span id="--exclude-snapshot-regex" class="man-option-title">**--exclude-snapshot-regex** *REGEX [REGEX ...]*</span> <a href="#--exclude-snapshot-regex" title="Permalink to --exclude-snapshot-regex" aria-label="Permalink to --exclude-snapshot-regex" class="man-option-permalink">&#x1F517;</a>
 
 - Same syntax as --include-snapshot-regex (see above) except that the default is to exclude no
   snapshots.
 
 <!-- -->
 
-<div id="--include-snapshot-times-and-ranks"></div>
-
-**--include-snapshot-times-and-ranks** *TIMERANGE [RANKRANGE ...]* <a class="man-option-permalink" href="#--include-snapshot-times-and-ranks" aria-label="Permalink to --include-snapshot-times-and-ranks" title="Permalink to --include-snapshot-times-and-ranks">&#x1F517;</a>
+<span id="--include-snapshot-times-and-ranks" class="man-option-title">**--include-snapshot-times-and-ranks** *TIMERANGE [RANKRANGE ...]*</span> <a href="#--include-snapshot-times-and-ranks" title="Permalink to --include-snapshot-times-and-ranks" aria-label="Permalink to --include-snapshot-times-and-ranks" class="man-option-permalink">&#x1F517;</a>
 
 - This option takes as input parameters a time range filter and an optional rank range filter. It
   separately computes the results for each filter and selects the UNION of both results. To
@@ -958,9 +936,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--include-snapshot-plan"></div>
-
-**--include-snapshot-plan** *DICT_STRING* <a class="man-option-permalink" href="#--include-snapshot-plan" aria-label="Permalink to --include-snapshot-plan" title="Permalink to --include-snapshot-plan">&#x1F517;</a>
+<span id="--include-snapshot-plan" class="man-option-title">**--include-snapshot-plan** *DICT_STRING*</span> <a href="#--include-snapshot-plan" title="Permalink to --include-snapshot-plan" aria-label="Permalink to --include-snapshot-plan" class="man-option-permalink">&#x1F517;</a>
 
 - Replication periods to be used if replicating snapshots within the selected destination
   datasets. Has the same format as --create-src-snapshots-plan and
@@ -985,9 +961,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--new-snapshot-filter-group"></div>
-
-**--new-snapshot-filter-group** <a class="man-option-permalink" href="#--new-snapshot-filter-group" aria-label="Permalink to --new-snapshot-filter-group" title="Permalink to --new-snapshot-filter-group">&#x1F517;</a>
+<span id="--new-snapshot-filter-group" class="man-option-title">**--new-snapshot-filter-group**</span> <a href="#--new-snapshot-filter-group" title="Permalink to --new-snapshot-filter-group" aria-label="Permalink to --new-snapshot-filter-group" class="man-option-permalink">&#x1F517;</a>
 
 - Starts a new snapshot filter group containing separate --{include|exclude}-snapshot-* filter
   options. The program separately computes the results for each filter group and selects the UNION
@@ -1010,9 +984,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--create-src-snapshots"></div>
-
-**--create-src-snapshots** <a class="man-option-permalink" href="#--create-src-snapshots" aria-label="Permalink to --create-src-snapshots" title="Permalink to --create-src-snapshots">&#x1F517;</a>
+<span id="--create-src-snapshots" class="man-option-title">**--create-src-snapshots**</span> <a href="#--create-src-snapshots" title="Permalink to --create-src-snapshots" aria-label="Permalink to --create-src-snapshots" class="man-option-permalink">&#x1F517;</a>
 
 - Do nothing if the --create-src-snapshots flag is missing. Otherwise, before the replication step
   (see below), atomically create new snapshots of the source datasets selected via
@@ -1049,9 +1021,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--create-src-snapshots-plan"></div>
-
-**--create-src-snapshots-plan** *DICT_STRING* <a class="man-option-permalink" href="#--create-src-snapshots-plan" aria-label="Permalink to --create-src-snapshots-plan" title="Permalink to --create-src-snapshots-plan">&#x1F517;</a>
+<span id="--create-src-snapshots-plan" class="man-option-title">**--create-src-snapshots-plan** *DICT_STRING*</span> <a href="#--create-src-snapshots-plan" title="Permalink to --create-src-snapshots-plan" aria-label="Permalink to --create-src-snapshots-plan" class="man-option-permalink">&#x1F517;</a>
 
 - Creation periods that specify a schedule for when new snapshots shall be created on src within
   the selected datasets. Has the same format as --delete-dst-snapshots-except-plan.
@@ -1084,9 +1054,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--create-src-snapshots-timeformat"></div>
-
-**--create-src-snapshots-timeformat** *STRFTIME_SPEC* <a class="man-option-permalink" href="#--create-src-snapshots-timeformat" aria-label="Permalink to --create-src-snapshots-timeformat" title="Permalink to --create-src-snapshots-timeformat">&#x1F517;</a>
+<span id="--create-src-snapshots-timeformat" class="man-option-title">**--create-src-snapshots-timeformat** *STRFTIME_SPEC*</span> <a href="#--create-src-snapshots-timeformat" title="Permalink to --create-src-snapshots-timeformat" aria-label="Permalink to --create-src-snapshots-timeformat" class="man-option-permalink">&#x1F517;</a>
 
 - Default is `%Y-%m-%d_%H:%M:%S`. For the strftime format, see
   https://docs.python.org/3.11/library/datetime.html#strftime-strptime-behavior. Examples:
@@ -1099,9 +1067,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--create-src-snapshots-timezone"></div>
-
-**--create-src-snapshots-timezone** *TZ_SPEC* <a class="man-option-permalink" href="#--create-src-snapshots-timezone" aria-label="Permalink to --create-src-snapshots-timezone" title="Permalink to --create-src-snapshots-timezone">&#x1F517;</a>
+<span id="--create-src-snapshots-timezone" class="man-option-title">**--create-src-snapshots-timezone** *TZ_SPEC*</span> <a href="#--create-src-snapshots-timezone" title="Permalink to --create-src-snapshots-timezone" aria-label="Permalink to --create-src-snapshots-timezone" class="man-option-permalink">&#x1F517;</a>
 
 - Default is the local timezone of the system running bzfs. When creating a new snapshot on the
   source, fetch the current time in the specified timezone, and feed that time, and the value of
@@ -1117,18 +1083,14 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--create-src-snapshots-even-if-not-due"></div>
-
-**--create-src-snapshots-even-if-not-due** <a class="man-option-permalink" href="#--create-src-snapshots-even-if-not-due" aria-label="Permalink to --create-src-snapshots-even-if-not-due" title="Permalink to --create-src-snapshots-even-if-not-due">&#x1F517;</a>
+<span id="--create-src-snapshots-even-if-not-due" class="man-option-title">**--create-src-snapshots-even-if-not-due**</span> <a href="#--create-src-snapshots-even-if-not-due" title="Permalink to --create-src-snapshots-even-if-not-due" aria-label="Permalink to --create-src-snapshots-even-if-not-due" class="man-option-permalink">&#x1F517;</a>
 
 - Take snapshots immediately regardless of the creation time of any existing snapshot, even if
   snapshots are periodic and not actually due per the schedule.
 
 <!-- -->
 
-<div id="--zfs-send-program-opts"></div>
-
-**--zfs-send-program-opts** *STRING* <a class="man-option-permalink" href="#--zfs-send-program-opts" aria-label="Permalink to --zfs-send-program-opts" title="Permalink to --zfs-send-program-opts">&#x1F517;</a>
+<span id="--zfs-send-program-opts" class="man-option-title">**--zfs-send-program-opts** *STRING*</span> <a href="#--zfs-send-program-opts" title="Permalink to --zfs-send-program-opts" aria-label="Permalink to --zfs-send-program-opts" class="man-option-permalink">&#x1F517;</a>
 
 - Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. The
   value is split on runs of one or more whitespace characters. Default is '--raw --compressed'. To
@@ -1138,9 +1100,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--zfs-recv-program-opts"></div>
-
-**--zfs-recv-program-opts** *STRING* <a class="man-option-permalink" href="#--zfs-recv-program-opts" aria-label="Permalink to --zfs-recv-program-opts" title="Permalink to --zfs-recv-program-opts">&#x1F517;</a>
+<span id="--zfs-recv-program-opts" class="man-option-title">**--zfs-recv-program-opts** *STRING*</span> <a href="#--zfs-recv-program-opts" title="Permalink to --zfs-recv-program-opts" aria-label="Permalink to --zfs-recv-program-opts" class="man-option-permalink">&#x1F517;</a>
 
 - Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive'
   CLI. The value is split on runs of one or more whitespace characters. Default is '-u'. To run
@@ -1151,9 +1111,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--zfs-recv-program-opt"></div>
-
-**--zfs-recv-program-opt** *STRING* <a class="man-option-permalink" href="#--zfs-recv-program-opt" aria-label="Permalink to --zfs-recv-program-opt" title="Permalink to --zfs-recv-program-opt">&#x1F517;</a>
+<span id="--zfs-recv-program-opt" class="man-option-title">**--zfs-recv-program-opt** *STRING*</span> <a href="#--zfs-recv-program-opt" title="Permalink to --zfs-recv-program-opt" aria-label="Permalink to --zfs-recv-program-opt" class="man-option-permalink">&#x1F517;</a>
 
 - Parameter to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive'
   CLI. The value can contain spaces and is not split. This option can be specified multiple times.
@@ -1162,9 +1120,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--preserve-properties"></div>
-
-**--preserve-properties** *STRING [STRING ...]* <a class="man-option-permalink" href="#--preserve-properties" aria-label="Permalink to --preserve-properties" title="Permalink to --preserve-properties">&#x1F517;</a>
+<span id="--preserve-properties" class="man-option-title">**--preserve-properties** *STRING [STRING ...]*</span> <a href="#--preserve-properties" title="Permalink to --preserve-properties" aria-label="Permalink to --preserve-properties" class="man-option-permalink">&#x1F517;</a>
 
 - On replication, preserve the current value of ZFS properties with the given names on the
   destination datasets. The destination ignores the property value it zfs receive's from the
@@ -1184,9 +1140,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--force-rollback-to-latest-snapshot"></div>
-
-**--force-rollback-to-latest-snapshot** <a class="man-option-permalink" href="#--force-rollback-to-latest-snapshot" aria-label="Permalink to --force-rollback-to-latest-snapshot" title="Permalink to --force-rollback-to-latest-snapshot">&#x1F517;</a>
+<span id="--force-rollback-to-latest-snapshot" class="man-option-title">**--force-rollback-to-latest-snapshot**</span> <a href="#--force-rollback-to-latest-snapshot" title="Permalink to --force-rollback-to-latest-snapshot" aria-label="Permalink to --force-rollback-to-latest-snapshot" class="man-option-permalink">&#x1F517;</a>
 
 - Before replication, rollback the destination dataset to its most recent destination snapshot (if
   there is one), via 'zfs rollback', just in case the destination dataset was modified since its
@@ -1194,9 +1148,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--force-rollback-to-latest-common-snapshot"></div>
-
-**--force-rollback-to-latest-common-snapshot** <a class="man-option-permalink" href="#--force-rollback-to-latest-common-snapshot" aria-label="Permalink to --force-rollback-to-latest-common-snapshot" title="Permalink to --force-rollback-to-latest-common-snapshot">&#x1F517;</a>
+<span id="--force-rollback-to-latest-common-snapshot" class="man-option-title">**--force-rollback-to-latest-common-snapshot**</span> <a href="#--force-rollback-to-latest-common-snapshot" title="Permalink to --force-rollback-to-latest-common-snapshot" aria-label="Permalink to --force-rollback-to-latest-common-snapshot" class="man-option-permalink">&#x1F517;</a>
 
 - Before replication, delete destination ZFS snapshots that are more recent than the most recent
   common snapshot ('conflicting snapshots'), via 'zfs rollback'. Do no rollback if no common
@@ -1204,9 +1156,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--force"></div>
-
-**--force** <a class="man-option-permalink" href="#--force" aria-label="Permalink to --force" title="Permalink to --force">&#x1F517;</a>
+<span id="--force" class="man-option-title">**--force**</span> <a href="#--force" title="Permalink to --force" aria-label="Permalink to --force" class="man-option-permalink">&#x1F517;</a>
 
 - Same as --force-rollback-to-latest-common-snapshot (see above), except that additionally, if no
   common snapshot exists, then delete all destination snapshots before starting replication, and
@@ -1221,9 +1171,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--force-destroy-dependents"></div>
-
-**--force-destroy-dependents** <a class="man-option-permalink" href="#--force-destroy-dependents" aria-label="Permalink to --force-destroy-dependents" title="Permalink to --force-destroy-dependents">&#x1F517;</a>
+<span id="--force-destroy-dependents" class="man-option-title">**--force-destroy-dependents**</span> <a href="#--force-destroy-dependents" title="Permalink to --force-destroy-dependents" aria-label="Permalink to --force-destroy-dependents" class="man-option-permalink">&#x1F517;</a>
 
 - On destination, --force and --force-rollback-to-latest-common-snapshot and --delete-* will add
   the '-R' flag to their use of 'zfs rollback' and 'zfs destroy', causing them to delete
@@ -1231,18 +1179,14 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--force-unmount"></div>
-
-**--force-unmount** <a class="man-option-permalink" href="#--force-unmount" aria-label="Permalink to --force-unmount" title="Permalink to --force-unmount">&#x1F517;</a>
+<span id="--force-unmount" class="man-option-title">**--force-unmount**</span> <a href="#--force-unmount" title="Permalink to --force-unmount" aria-label="Permalink to --force-unmount" class="man-option-permalink">&#x1F517;</a>
 
 - On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f' flag to
   their use of 'zfs rollback' and 'zfs destroy'.
 
 <!-- -->
 
-<div id="--force-once"></div>
-
-**--force-once**, **--f1** <a class="man-option-permalink" href="#--force-once" aria-label="Permalink to --force-once" title="Permalink to --force-once">&#x1F517;</a>
+<span id="--force-once" class="man-option-title">**--force-once**, **--f1**</span> <a href="#--force-once" title="Permalink to --force-once" aria-label="Permalink to --force-once" class="man-option-permalink">&#x1F517;</a>
 
 - Use the --force option or --force-rollback-to-latest-common-snapshot option at most once to
   resolve a conflict, then abort with an error on any subsequent conflict. This helps to
@@ -1250,9 +1194,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--skip-parent"></div>
-
-**--skip-parent** <a class="man-option-permalink" href="#--skip-parent" aria-label="Permalink to --skip-parent" title="Permalink to --skip-parent">&#x1F517;</a>
+<span id="--skip-parent" class="man-option-title">**--skip-parent**</span> <a href="#--skip-parent" title="Permalink to --skip-parent" aria-label="Permalink to --skip-parent" class="man-option-permalink">&#x1F517;</a>
 
 - During replication and deletion, skip processing of the SRC_DATASET and DST_DATASET and only
   process their descendant datasets, i.e. children, and children of children, etc (with
@@ -1262,9 +1204,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--skip-missing-snapshots"></div>
-
-**--skip-missing-snapshots** *[{fail,dataset,continue}]* <a class="man-option-permalink" href="#--skip-missing-snapshots" aria-label="Permalink to --skip-missing-snapshots" title="Permalink to --skip-missing-snapshots">&#x1F517;</a>
+<span id="--skip-missing-snapshots" class="man-option-title">**--skip-missing-snapshots** *[{fail,dataset,continue}]*</span> <a href="#--skip-missing-snapshots" title="Permalink to --skip-missing-snapshots" aria-label="Permalink to --skip-missing-snapshots" class="man-option-permalink">&#x1F517;</a>
 
 - During replication, handle source datasets that select no snapshots (and no relevant bookmarks)
   as follows:
@@ -1281,9 +1221,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--retries"></div>
-
-**--retries** *INT* <a class="man-option-permalink" href="#--retries" aria-label="Permalink to --retries" title="Permalink to --retries">&#x1F517;</a>
+<span id="--retries" class="man-option-title">**--retries** *INT*</span> <a href="#--retries" title="Permalink to --retries" aria-label="Permalink to --retries" class="man-option-permalink">&#x1F517;</a>
 
 - The maximum number of times a retryable replication or deletion step shall be retried if it
   fails, for example because of network hiccups (default: 2, min: 0). Also consider this option if
@@ -1292,25 +1230,19 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--retry-min-sleep-secs"></div>
-
-**--retry-min-sleep-secs** *FLOAT* <a class="man-option-permalink" href="#--retry-min-sleep-secs" aria-label="Permalink to --retry-min-sleep-secs" title="Permalink to --retry-min-sleep-secs">&#x1F517;</a>
+<span id="--retry-min-sleep-secs" class="man-option-title">**--retry-min-sleep-secs** *FLOAT*</span> <a href="#--retry-min-sleep-secs" title="Permalink to --retry-min-sleep-secs" aria-label="Permalink to --retry-min-sleep-secs" class="man-option-permalink">&#x1F517;</a>
 
 - The minimum duration to sleep between retries (default: 0).
 
 <!-- -->
 
-<div id="--retry-initial-max-sleep-secs"></div>
-
-**--retry-initial-max-sleep-secs** *FLOAT* <a class="man-option-permalink" href="#--retry-initial-max-sleep-secs" aria-label="Permalink to --retry-initial-max-sleep-secs" title="Permalink to --retry-initial-max-sleep-secs">&#x1F517;</a>
+<span id="--retry-initial-max-sleep-secs" class="man-option-title">**--retry-initial-max-sleep-secs** *FLOAT*</span> <a href="#--retry-initial-max-sleep-secs" title="Permalink to --retry-initial-max-sleep-secs" aria-label="Permalink to --retry-initial-max-sleep-secs" class="man-option-permalink">&#x1F517;</a>
 
 - The initial maximum duration to sleep between retries (default: 0.125).
 
 <!-- -->
 
-<div id="--retry-max-sleep-secs"></div>
-
-**--retry-max-sleep-secs** *FLOAT* <a class="man-option-permalink" href="#--retry-max-sleep-secs" aria-label="Permalink to --retry-max-sleep-secs" title="Permalink to --retry-max-sleep-secs">&#x1F517;</a>
+<span id="--retry-max-sleep-secs" class="man-option-title">**--retry-max-sleep-secs** *FLOAT*</span> <a href="#--retry-max-sleep-secs" title="Permalink to --retry-max-sleep-secs" aria-label="Permalink to --retry-max-sleep-secs" class="man-option-permalink">&#x1F517;</a>
 
 - The maximum duration to sleep between retries initially starts with
   --retry-initial-max-sleep-secs (see above), and doubles on each retry, up to the final maximum
@@ -1320,9 +1252,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--retry-max-elapsed-secs"></div>
-
-**--retry-max-elapsed-secs** *FLOAT* <a class="man-option-permalink" href="#--retry-max-elapsed-secs" aria-label="Permalink to --retry-max-elapsed-secs" title="Permalink to --retry-max-elapsed-secs">&#x1F517;</a>
+<span id="--retry-max-elapsed-secs" class="man-option-title">**--retry-max-elapsed-secs** *FLOAT*</span> <a href="#--retry-max-elapsed-secs" title="Permalink to --retry-max-elapsed-secs" aria-label="Permalink to --retry-max-elapsed-secs" class="man-option-permalink">&#x1F517;</a>
 
 - A single operation (e.g. 'zfs send/receive' of the current dataset, or deletion of a list of
   snapshots within the current dataset) will not be retried (or not retried anymore) once this
@@ -1332,9 +1262,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--skip-on-error"></div>
-
-**--skip-on-error** *{fail,tree,dataset}* <a class="man-option-permalink" href="#--skip-on-error" aria-label="Permalink to --skip-on-error" title="Permalink to --skip-on-error">&#x1F517;</a>
+<span id="--skip-on-error" class="man-option-title">**--skip-on-error** *{fail,tree,dataset}*</span> <a href="#--skip-on-error" title="Permalink to --skip-on-error" aria-label="Permalink to --skip-on-error" class="man-option-permalink">&#x1F517;</a>
 
 - During replication and deletion, if an error is not retryable, or --retries has been exhausted,
   or --skip-missing-snapshots raises an error, proceed as follows:
@@ -1361,18 +1289,14 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--skip-replication"></div>
-
-**--skip-replication** <a class="man-option-permalink" href="#--skip-replication" aria-label="Permalink to --skip-replication" title="Permalink to --skip-replication">&#x1F517;</a>
+<span id="--skip-replication" class="man-option-title">**--skip-replication**</span> <a href="#--skip-replication" title="Permalink to --skip-replication" aria-label="Permalink to --skip-replication" class="man-option-permalink">&#x1F517;</a>
 
 - Skip replication step (see above) and proceed to the optional --delete-dst-datasets step
   immediately (see below).
 
 <!-- -->
 
-<div id="--delete-dst-datasets"></div>
-
-**--delete-dst-datasets** <a class="man-option-permalink" href="#--delete-dst-datasets" aria-label="Permalink to --delete-dst-datasets" title="Permalink to --delete-dst-datasets">&#x1F517;</a>
+<span id="--delete-dst-datasets" class="man-option-title">**--delete-dst-datasets**</span> <a href="#--delete-dst-datasets" title="Permalink to --delete-dst-datasets" aria-label="Permalink to --delete-dst-datasets" class="man-option-permalink">&#x1F517;</a>
 
 - Do nothing if the --delete-dst-datasets option is missing. Otherwise, after successful
   replication step, if any, delete existing destination datasets that are selected via
@@ -1391,9 +1315,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--delete-dst-snapshots"></div>
-
-**--delete-dst-snapshots** *[{snapshots,bookmarks}]* <a class="man-option-permalink" href="#--delete-dst-snapshots" aria-label="Permalink to --delete-dst-snapshots" title="Permalink to --delete-dst-snapshots">&#x1F517;</a>
+<span id="--delete-dst-snapshots" class="man-option-title">**--delete-dst-snapshots** *[{snapshots,bookmarks}]*</span> <a href="#--delete-dst-snapshots" title="Permalink to --delete-dst-snapshots" aria-label="Permalink to --delete-dst-snapshots" class="man-option-permalink">&#x1F517;</a>
 
 - Do nothing if the --delete-dst-snapshots option is missing. Otherwise, after successful
   replication, and successful --delete-dst-datasets step, if any, delete existing destination
@@ -1426,9 +1348,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--delete-dst-snapshots-no-crosscheck"></div>
-
-**--delete-dst-snapshots-no-crosscheck** <a class="man-option-permalink" href="#--delete-dst-snapshots-no-crosscheck" aria-label="Permalink to --delete-dst-snapshots-no-crosscheck" title="Permalink to --delete-dst-snapshots-no-crosscheck">&#x1F517;</a>
+<span id="--delete-dst-snapshots-no-crosscheck" class="man-option-title">**--delete-dst-snapshots-no-crosscheck**</span> <a href="#--delete-dst-snapshots-no-crosscheck" title="Permalink to --delete-dst-snapshots-no-crosscheck" aria-label="Permalink to --delete-dst-snapshots-no-crosscheck" class="man-option-permalink">&#x1F517;</a>
 
 - This flag indicates that --delete-dst-snapshots=snapshots shall check the source dataset only
   for a snapshot with the same GUID, and ignore whether a bookmark with the same GUID is present
@@ -1438,9 +1358,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--delete-dst-snapshots-except"></div>
-
-**--delete-dst-snapshots-except** <a class="man-option-permalink" href="#--delete-dst-snapshots-except" aria-label="Permalink to --delete-dst-snapshots-except" title="Permalink to --delete-dst-snapshots-except">&#x1F517;</a>
+<span id="--delete-dst-snapshots-except" class="man-option-title">**--delete-dst-snapshots-except**</span> <a href="#--delete-dst-snapshots-except" title="Permalink to --delete-dst-snapshots-except" aria-label="Permalink to --delete-dst-snapshots-except" class="man-option-permalink">&#x1F517;</a>
 
 - This flag indicates that the --include/exclude-snapshot-* options shall have inverted semantics
   for the --delete-dst-snapshots option, thus deleting all snapshots except for the selected
@@ -1458,9 +1376,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--delete-dst-snapshots-except-plan"></div>
-
-**--delete-dst-snapshots-except-plan** *DICT_STRING* <a class="man-option-permalink" href="#--delete-dst-snapshots-except-plan" aria-label="Permalink to --delete-dst-snapshots-except-plan" title="Permalink to --delete-dst-snapshots-except-plan">&#x1F517;</a>
+<span id="--delete-dst-snapshots-except-plan" class="man-option-title">**--delete-dst-snapshots-except-plan** *DICT_STRING*</span> <a href="#--delete-dst-snapshots-except-plan" title="Permalink to --delete-dst-snapshots-except-plan" aria-label="Permalink to --delete-dst-snapshots-except-plan" class="man-option-permalink">&#x1F517;</a>
 
 - Retention periods to be used if pruning snapshots or bookmarks within the selected destination
   datasets via --delete-dst-snapshots. Has the same format as --create-src-snapshots-plan.
@@ -1500,9 +1416,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--delete-empty-dst-datasets"></div>
-
-**--delete-empty-dst-datasets** *[{snapshots,snapshots+bookmarks}]* <a class="man-option-permalink" href="#--delete-empty-dst-datasets" aria-label="Permalink to --delete-empty-dst-datasets" title="Permalink to --delete-empty-dst-datasets">&#x1F517;</a>
+<span id="--delete-empty-dst-datasets" class="man-option-title">**--delete-empty-dst-datasets** *[{snapshots,snapshots+bookmarks}]*</span> <a href="#--delete-empty-dst-datasets" title="Permalink to --delete-empty-dst-datasets" aria-label="Permalink to --delete-empty-dst-datasets" class="man-option-permalink">&#x1F517;</a>
 
 - Do nothing if the --delete-empty-dst-datasets option is missing or --recursive is missing.
   Otherwise, after successful replication step and successful --delete-dst-datasets and successful
@@ -1521,9 +1435,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--monitor-snapshots"></div>
-
-**--monitor-snapshots** *DICT_STRING* <a class="man-option-permalink" href="#--monitor-snapshots" aria-label="Permalink to --monitor-snapshots" title="Permalink to --monitor-snapshots">&#x1F517;</a>
+<span id="--monitor-snapshots" class="man-option-title">**--monitor-snapshots** *DICT_STRING*</span> <a href="#--monitor-snapshots" title="Permalink to --monitor-snapshots" aria-label="Permalink to --monitor-snapshots" class="man-option-permalink">&#x1F517;</a>
 
 - Do nothing if the --monitor-snapshots flag is missing. Otherwise, after all other steps, alert
   the user if the ZFS 'creation' time property of the latest snapshot for any specified snapshot
@@ -1566,25 +1478,19 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--monitor-snapshots-dont-warn"></div>
-
-**--monitor-snapshots-dont-warn** <a class="man-option-permalink" href="#--monitor-snapshots-dont-warn" aria-label="Permalink to --monitor-snapshots-dont-warn" title="Permalink to --monitor-snapshots-dont-warn">&#x1F517;</a>
+<span id="--monitor-snapshots-dont-warn" class="man-option-title">**--monitor-snapshots-dont-warn**</span> <a href="#--monitor-snapshots-dont-warn" title="Permalink to --monitor-snapshots-dont-warn" aria-label="Permalink to --monitor-snapshots-dont-warn" class="man-option-permalink">&#x1F517;</a>
 
 - Log a message for monitoring warnings but nonetheless exit with zero exit code.
 
 <!-- -->
 
-<div id="--monitor-snapshots-dont-crit"></div>
-
-**--monitor-snapshots-dont-crit** <a class="man-option-permalink" href="#--monitor-snapshots-dont-crit" aria-label="Permalink to --monitor-snapshots-dont-crit" title="Permalink to --monitor-snapshots-dont-crit">&#x1F517;</a>
+<span id="--monitor-snapshots-dont-crit" class="man-option-title">**--monitor-snapshots-dont-crit**</span> <a href="#--monitor-snapshots-dont-crit" title="Permalink to --monitor-snapshots-dont-crit" aria-label="Permalink to --monitor-snapshots-dont-crit" class="man-option-permalink">&#x1F517;</a>
 
 - Log a message for monitoring criticals but nonetheless exit with zero exit code.
 
 <!-- -->
 
-<div id="--compare-snapshot-lists"></div>
-
-**--compare-snapshot-lists** *[{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]* <a class="man-option-permalink" href="#--compare-snapshot-lists" aria-label="Permalink to --compare-snapshot-lists" title="Permalink to --compare-snapshot-lists">&#x1F517;</a>
+<span id="--compare-snapshot-lists" class="man-option-title">**--compare-snapshot-lists** *[{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]*</span> <a href="#--compare-snapshot-lists" title="Permalink to --compare-snapshot-lists" aria-label="Permalink to --compare-snapshot-lists" class="man-option-permalink">&#x1F517;</a>
 
 - Do nothing if the --compare-snapshot-lists option is missing. Otherwise, after successful
   replication step and successful --delete-dst-datasets, --delete-dst-snapshots steps and
@@ -1636,9 +1542,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--cache-snapshots"></div>
-
-**--cache-snapshots** <a class="man-option-permalink" href="#--cache-snapshots" aria-label="Permalink to --cache-snapshots" title="Permalink to --cache-snapshots">&#x1F517;</a>
+<span id="--cache-snapshots" class="man-option-title">**--cache-snapshots**</span> <a href="#--cache-snapshots" title="Permalink to --cache-snapshots" aria-label="Permalink to --cache-snapshots" class="man-option-permalink">&#x1F517;</a>
 
 - If --cache-snapshots is specified, maintain a persistent local cache of recent snapshot creation
   times, recent successful replication times, and recent monitoring times, and compare them to a
@@ -1657,9 +1561,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--dryrun"></div>
-
-**--dryrun** *[{recv,send}]*, **-n** *[{recv,send}]* <a class="man-option-permalink" href="#--dryrun" aria-label="Permalink to --dryrun" title="Permalink to --dryrun">&#x1F517;</a>
+<span id="--dryrun" class="man-option-title">**--dryrun** *[{recv,send}]*, **-n** *[{recv,send}]*</span> <a href="#--dryrun" title="Permalink to --dryrun" aria-label="Permalink to --dryrun" class="man-option-permalink">&#x1F517;</a>
 
 - Do a dry run (aka 'no-op') to print what operations would happen if the command were to be
   executed for real (optional). This option treats both the ZFS source and destination as
@@ -1677,9 +1579,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--verbose"></div>
-
-**--verbose**, **-v** <a class="man-option-permalink" href="#--verbose" aria-label="Permalink to --verbose" title="Permalink to --verbose">&#x1F517;</a>
+<span id="--verbose" class="man-option-title">**--verbose**, **-v**</span> <a href="#--verbose" title="Permalink to --verbose" aria-label="Permalink to --verbose" class="man-option-permalink">&#x1F517;</a>
 
 - Print verbose information. This option can be specified multiple times to increase the level of
   verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v
@@ -1690,17 +1590,13 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--quiet"></div>
-
-**--quiet**, **-q** <a class="man-option-permalink" href="#--quiet" aria-label="Permalink to --quiet" title="Permalink to --quiet">&#x1F517;</a>
+<span id="--quiet" class="man-option-title">**--quiet**, **-q**</span> <a href="#--quiet" title="Permalink to --quiet" aria-label="Permalink to --quiet" class="man-option-permalink">&#x1F517;</a>
 
 - Suppress non-error, info, debug, and trace output.
 
 <!-- -->
 
-<div id="--no-privilege-elevation"></div>
-
-**--no-privilege-elevation**, **-p** <a class="man-option-permalink" href="#--no-privilege-elevation" aria-label="Permalink to --no-privilege-elevation" title="Permalink to --no-privilege-elevation">&#x1F517;</a>
+<span id="--no-privilege-elevation" class="man-option-title">**--no-privilege-elevation**, **-p**</span> <a href="#--no-privilege-elevation" title="Permalink to --no-privilege-elevation" aria-label="Permalink to --no-privilege-elevation" class="man-option-permalink">&#x1F517;</a>
 
 - Do not attempt to run state changing ZFS operations 'zfs
   create/rollback/destroy/send/receive/snapshot' as root (via 'sudo -u root' elevation granted by
@@ -1726,9 +1622,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--no-stream"></div>
-
-**--no-stream** <a class="man-option-permalink" href="#--no-stream" aria-label="Permalink to --no-stream" title="Permalink to --no-stream">&#x1F517;</a>
+<span id="--no-stream" class="man-option-title">**--no-stream**</span> <a href="#--no-stream" title="Permalink to --no-stream" aria-label="Permalink to --no-stream" class="man-option-permalink">&#x1F517;</a>
 
 - During replication, only replicate the most recent selected source snapshot of a dataset (using
   -i incrementals instead of -I incrementals), hence skip all intermediate source snapshots that
@@ -1740,9 +1634,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--no-resume-recv"></div>
-
-**--no-resume-recv** <a class="man-option-permalink" href="#--no-resume-recv" aria-label="Permalink to --no-resume-recv" title="Permalink to --no-resume-recv">&#x1F517;</a>
+<span id="--no-resume-recv" class="man-option-title">**--no-resume-recv**</span> <a href="#--no-resume-recv" title="Permalink to --no-resume-recv" aria-label="Permalink to --no-resume-recv" class="man-option-permalink">&#x1F517;</a>
 
 - Replication of snapshots via 'zfs send/receive' can be interrupted by intermittent network
   hiccups, reboots, hardware issues, etc. Interrupted 'zfs send/receive' operations are retried if
@@ -1768,9 +1660,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--create-bookmarks"></div>
-
-**--create-bookmarks** *{all,hourly,minutely,secondly,none}* <a class="man-option-permalink" href="#--create-bookmarks" aria-label="Permalink to --create-bookmarks" title="Permalink to --create-bookmarks">&#x1F517;</a>
+<span id="--create-bookmarks" class="man-option-title">**--create-bookmarks** *{all,hourly,minutely,secondly,none}*</span> <a href="#--create-bookmarks" title="Permalink to --create-bookmarks" aria-label="Permalink to --create-bookmarks" class="man-option-permalink">&#x1F517;</a>
 
 - For increased safety, bzfs replication behaves as follows wrt. ZFS bookmark creation, if it is
   autodetected that the source ZFS pool supports bookmarks:
@@ -1830,9 +1720,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--no-use-bookmark"></div>
-
-**--no-use-bookmark** <a class="man-option-permalink" href="#--no-use-bookmark" aria-label="Permalink to --no-use-bookmark" title="Permalink to --no-use-bookmark">&#x1F517;</a>
+<span id="--no-use-bookmark" class="man-option-title">**--no-use-bookmark**</span> <a href="#--no-use-bookmark" title="Permalink to --no-use-bookmark" aria-label="Permalink to --no-use-bookmark" class="man-option-permalink">&#x1F517;</a>
 
 - For increased safety, in normal replication operation bzfs replication also looks for bookmarks
   (in addition to snapshots) on the source dataset in order to find the most recent common
@@ -1850,9 +1738,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--ssh-cipher"></div>
-
-**--ssh-cipher** *STRING* <a class="man-option-permalink" href="#--ssh-cipher" aria-label="Permalink to --ssh-cipher" title="Permalink to --ssh-cipher">&#x1F517;</a>
+<span id="--ssh-cipher" class="man-option-title">**--ssh-cipher** *STRING*</span> <a href="#--ssh-cipher" title="Permalink to --ssh-cipher" aria-label="Permalink to --ssh-cipher" class="man-option-permalink">&#x1F517;</a>
 
 - SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI.
   --ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the
@@ -1862,88 +1748,68 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--ssh-src-user"></div>
-
-**--ssh-src-user** *STRING* <a class="man-option-permalink" href="#--ssh-src-user" aria-label="Permalink to --ssh-src-user" title="Permalink to --ssh-src-user">&#x1F517;</a>
+<span id="--ssh-src-user" class="man-option-title">**--ssh-src-user** *STRING*</span> <a href="#--ssh-src-user" title="Permalink to --ssh-src-user" aria-label="Permalink to --ssh-src-user" class="man-option-permalink">&#x1F517;</a>
 
 - Remote SSH username on src host to connect to (optional). Overrides username given in
   SRC_DATASET.
 
 <!-- -->
 
-<div id="--ssh-dst-user"></div>
-
-**--ssh-dst-user** *STRING* <a class="man-option-permalink" href="#--ssh-dst-user" aria-label="Permalink to --ssh-dst-user" title="Permalink to --ssh-dst-user">&#x1F517;</a>
+<span id="--ssh-dst-user" class="man-option-title">**--ssh-dst-user** *STRING*</span> <a href="#--ssh-dst-user" title="Permalink to --ssh-dst-user" aria-label="Permalink to --ssh-dst-user" class="man-option-permalink">&#x1F517;</a>
 
 - Remote SSH username on dst host to connect to (optional). Overrides username given in
   DST_DATASET.
 
 <!-- -->
 
-<div id="--ssh-src-host"></div>
-
-**--ssh-src-host** *STRING* <a class="man-option-permalink" href="#--ssh-src-host" aria-label="Permalink to --ssh-src-host" title="Permalink to --ssh-src-host">&#x1F517;</a>
+<span id="--ssh-src-host" class="man-option-title">**--ssh-src-host** *STRING*</span> <a href="#--ssh-src-host" title="Permalink to --ssh-src-host" aria-label="Permalink to --ssh-src-host" class="man-option-permalink">&#x1F517;</a>
 
 - Remote SSH hostname of src host to connect to (optional). Can also be an IPv4 or IPv6 address.
   Overrides hostname given in SRC_DATASET.
 
 <!-- -->
 
-<div id="--ssh-dst-host"></div>
-
-**--ssh-dst-host** *STRING* <a class="man-option-permalink" href="#--ssh-dst-host" aria-label="Permalink to --ssh-dst-host" title="Permalink to --ssh-dst-host">&#x1F517;</a>
+<span id="--ssh-dst-host" class="man-option-title">**--ssh-dst-host** *STRING*</span> <a href="#--ssh-dst-host" title="Permalink to --ssh-dst-host" aria-label="Permalink to --ssh-dst-host" class="man-option-permalink">&#x1F517;</a>
 
 - Remote SSH hostname of dst host to connect to (optional). Can also be an IPv4 or IPv6 address.
   Overrides hostname given in DST_DATASET.
 
 <!-- -->
 
-<div id="--ssh-src-port"></div>
-
-**--ssh-src-port** *INT* <a class="man-option-permalink" href="#--ssh-src-port" aria-label="Permalink to --ssh-src-port" title="Permalink to --ssh-src-port">&#x1F517;</a>
+<span id="--ssh-src-port" class="man-option-title">**--ssh-src-port** *INT*</span> <a href="#--ssh-src-port" title="Permalink to --ssh-src-port" aria-label="Permalink to --ssh-src-port" class="man-option-permalink">&#x1F517;</a>
 
 - Remote SSH port on src host to connect to (optional).
 
 <!-- -->
 
-<div id="--ssh-dst-port"></div>
-
-**--ssh-dst-port** *INT* <a class="man-option-permalink" href="#--ssh-dst-port" aria-label="Permalink to --ssh-dst-port" title="Permalink to --ssh-dst-port">&#x1F517;</a>
+<span id="--ssh-dst-port" class="man-option-title">**--ssh-dst-port** *INT*</span> <a href="#--ssh-dst-port" title="Permalink to --ssh-dst-port" aria-label="Permalink to --ssh-dst-port" class="man-option-permalink">&#x1F517;</a>
 
 - Remote SSH port on dst host to connect to (optional).
 
 <!-- -->
 
-<div id="--ssh-src-config-file"></div>
-
-**--ssh-src-config-file** *FILE* <a class="man-option-permalink" href="#--ssh-src-config-file" aria-label="Permalink to --ssh-src-config-file" title="Permalink to --ssh-src-config-file">&#x1F517;</a>
+<span id="--ssh-src-config-file" class="man-option-title">**--ssh-src-config-file** *FILE*</span> <a href="#--ssh-src-config-file" title="Permalink to --ssh-src-config-file" aria-label="Permalink to --ssh-src-config-file" class="man-option-permalink">&#x1F517;</a>
 
 - Path to SSH ssh_config(5) file to connect to src (optional); will be passed into ssh -F CLI. The
   basename must contain the substring 'bzfs_ssh_config'.
 
 <!-- -->
 
-<div id="--ssh-dst-config-file"></div>
-
-**--ssh-dst-config-file** *FILE* <a class="man-option-permalink" href="#--ssh-dst-config-file" aria-label="Permalink to --ssh-dst-config-file" title="Permalink to --ssh-dst-config-file">&#x1F517;</a>
+<span id="--ssh-dst-config-file" class="man-option-title">**--ssh-dst-config-file** *FILE*</span> <a href="#--ssh-dst-config-file" title="Permalink to --ssh-dst-config-file" aria-label="Permalink to --ssh-dst-config-file" class="man-option-permalink">&#x1F517;</a>
 
 - Path to SSH ssh_config(5) file to connect to dst (optional); will be passed into ssh -F CLI. The
   basename must contain the substring 'bzfs_ssh_config'.
 
 <!-- -->
 
-<div id="--ssh-control-persist-secs"></div>
-
-**--ssh-control-persist-secs** *INT* <a class="man-option-permalink" href="#--ssh-control-persist-secs" aria-label="Permalink to --ssh-control-persist-secs" title="Permalink to --ssh-control-persist-secs">&#x1F517;</a>
+<span id="--ssh-control-persist-secs" class="man-option-title">**--ssh-control-persist-secs** *INT*</span> <a href="#--ssh-control-persist-secs" title="Permalink to --ssh-control-persist-secs" aria-label="Permalink to --ssh-control-persist-secs" class="man-option-permalink">&#x1F517;</a>
 
 - The number of seconds an idle SSH connection will stay alive to improve latency on subsequent
   reuse (default: 600, min: 1).
 
 <!-- -->
 
-<div id="--threads"></div>
-
-**--threads** *INT[%]* <a class="man-option-permalink" href="#--threads" aria-label="Permalink to --threads" title="Permalink to --threads">&#x1F517;</a>
+<span id="--threads" class="man-option-title">**--threads** *INT[%]*</span> <a href="#--threads" title="Permalink to --threads" aria-label="Permalink to --threads" class="man-option-permalink">&#x1F517;</a>
 
 - The maximum number of threads to use for parallel operations; can be given as a positive
   integer, optionally followed by the % percent character (min: 1, default: 100%). Percentages are
@@ -1959,9 +1825,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--max-concurrent-ssh-sessions-per-tcp-connection"></div>
-
-**--max-concurrent-ssh-sessions-per-tcp-connection** *INT* <a class="man-option-permalink" href="#--max-concurrent-ssh-sessions-per-tcp-connection" aria-label="Permalink to --max-concurrent-ssh-sessions-per-tcp-connection" title="Permalink to --max-concurrent-ssh-sessions-per-tcp-connection">&#x1F517;</a>
+<span id="--max-concurrent-ssh-sessions-per-tcp-connection" class="man-option-title">**--max-concurrent-ssh-sessions-per-tcp-connection** *INT*</span> <a href="#--max-concurrent-ssh-sessions-per-tcp-connection" title="Permalink to --max-concurrent-ssh-sessions-per-tcp-connection" aria-label="Permalink to --max-concurrent-ssh-sessions-per-tcp-connection" class="man-option-permalink">&#x1F517;</a>
 
 - For best throughput, bzfs uses multiple SSH TCP connections in parallel, as indicated by
   --threads (see above). For best startup latency, each such parallel TCP connection can carry a
@@ -1978,9 +1842,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--r2r"></div>
-
-**--r2r** *{off,pull,push}* <a class="man-option-permalink" href="#--r2r" aria-label="Permalink to --r2r" title="Permalink to --r2r">&#x1F517;</a>
+<span id="--r2r" class="man-option-title">**--r2r** *{off,pull,push}*</span> <a href="#--r2r" title="Permalink to --r2r" aria-label="Permalink to --r2r" class="man-option-permalink">&#x1F517;</a>
 
 - For remote-to-remote replication, controls whether the `zfs send` stream is relayed by the
   initiator or transferred directly between source and destination in order to improve the
@@ -2019,9 +1881,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--bwlimit"></div>
-
-**--bwlimit** *STRING* <a class="man-option-permalink" href="#--bwlimit" aria-label="Permalink to --bwlimit" title="Permalink to --bwlimit">&#x1F517;</a>
+<span id="--bwlimit" class="man-option-title">**--bwlimit** *STRING*</span> <a href="#--bwlimit" title="Permalink to --bwlimit" aria-label="Permalink to --bwlimit" class="man-option-permalink">&#x1F517;</a>
 
 - Sets `pv` and `mbuffer` bandwidth rate limit for zfs send/receive data transfer (optional).
   Example: `100m` to cap throughput at 100 MB/sec. Default is unlimited. Also see
@@ -2029,18 +1889,14 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--no-estimate-send-size"></div>
-
-**--no-estimate-send-size** <a class="man-option-permalink" href="#--no-estimate-send-size" aria-label="Permalink to --no-estimate-send-size" title="Permalink to --no-estimate-send-size">&#x1F517;</a>
+<span id="--no-estimate-send-size" class="man-option-title">**--no-estimate-send-size**</span> <a href="#--no-estimate-send-size" title="Permalink to --no-estimate-send-size" aria-label="Permalink to --no-estimate-send-size" class="man-option-permalink">&#x1F517;</a>
 
 - Skip 'zfs send -n -v'. This can improve performance if replicating small snapshots at high
   frequency.
 
 <!-- -->
 
-<div id="--compression-program"></div>
-
-**--compression-program** *{zstd,lz4,pzstd,pigz,gzip,-}* <a class="man-option-permalink" href="#--compression-program" aria-label="Permalink to --compression-program" title="Permalink to --compression-program">&#x1F517;</a>
+<span id="--compression-program" class="man-option-title">**--compression-program** *{zstd,lz4,pzstd,pigz,gzip,-}*</span> <a href="#--compression-program" title="Permalink to --compression-program" aria-label="Permalink to --compression-program" class="man-option-permalink">&#x1F517;</a>
 
 - The name of the 'zstd' executable (optional). Default is 'zstd'. Use '-' to disable the use of
   this program. The use is auto-disabled if data is transferred locally instead of via the
@@ -2049,18 +1905,14 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--compression-program-opts"></div>
-
-**--compression-program-opts** *STRING* <a class="man-option-permalink" href="#--compression-program-opts" aria-label="Permalink to --compression-program-opts" title="Permalink to --compression-program-opts">&#x1F517;</a>
+<span id="--compression-program-opts" class="man-option-title">**--compression-program-opts** *STRING*</span> <a href="#--compression-program-opts" title="Permalink to --compression-program-opts" aria-label="Permalink to --compression-program-opts" class="man-option-permalink">&#x1F517;</a>
 
 - The options to be passed to the compression program on the compression step (optional). Default
   is '-1' (fastest).
 
 <!-- -->
 
-<div id="--mbuffer-program"></div>
-
-**--mbuffer-program** *{mbuffer,-}* <a class="man-option-permalink" href="#--mbuffer-program" aria-label="Permalink to --mbuffer-program" title="Permalink to --mbuffer-program">&#x1F517;</a>
+<span id="--mbuffer-program" class="man-option-title">**--mbuffer-program** *{mbuffer,-}*</span> <a href="#--mbuffer-program" title="Permalink to --mbuffer-program" aria-label="Permalink to --mbuffer-program" class="man-option-permalink">&#x1F517;</a>
 
 - The name of the 'mbuffer' executable (optional). Default is 'mbuffer'. Use '-' to disable the
   use of this program. The use is auto-disabled if data is transferred locally instead of via the
@@ -2069,80 +1921,62 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--mbuffer-program-opts"></div>
-
-**--mbuffer-program-opts** *STRING* <a class="man-option-permalink" href="#--mbuffer-program-opts" aria-label="Permalink to --mbuffer-program-opts" title="Permalink to --mbuffer-program-opts">&#x1F517;</a>
+<span id="--mbuffer-program-opts" class="man-option-title">**--mbuffer-program-opts** *STRING*</span> <a href="#--mbuffer-program-opts" title="Permalink to --mbuffer-program-opts" aria-label="Permalink to --mbuffer-program-opts" class="man-option-permalink">&#x1F517;</a>
 
 - Options to be passed to 'mbuffer' program (optional). Default: '-q -m 128M'.
 
 <!-- -->
 
-<div id="--ps-program"></div>
-
-**--ps-program** *{ps,-}* <a class="man-option-permalink" href="#--ps-program" aria-label="Permalink to --ps-program" title="Permalink to --ps-program">&#x1F517;</a>
+<span id="--ps-program" class="man-option-title">**--ps-program** *{ps,-}*</span> <a href="#--ps-program" title="Permalink to --ps-program" aria-label="Permalink to --ps-program" class="man-option-permalink">&#x1F517;</a>
 
 - The name of the 'ps' executable (optional). Default is 'ps'. Use '-' to disable the use of this
   program.
 
 <!-- -->
 
-<div id="--pv-program"></div>
-
-**--pv-program** *{pv,-}* <a class="man-option-permalink" href="#--pv-program" aria-label="Permalink to --pv-program" title="Permalink to --pv-program">&#x1F517;</a>
+<span id="--pv-program" class="man-option-title">**--pv-program** *{pv,-}*</span> <a href="#--pv-program" title="Permalink to --pv-program" aria-label="Permalink to --pv-program" class="man-option-permalink">&#x1F517;</a>
 
 - The name of the 'pv' executable (optional). Default is 'pv'. Use '-' to disable the use of this
   program. This is used for bandwidth rate-limiting and progress monitoring.
 
 <!-- -->
 
-<div id="--pv-program-opts"></div>
-
-**--pv-program-opts** *STRING* <a class="man-option-permalink" href="#--pv-program-opts" aria-label="Permalink to --pv-program-opts" title="Permalink to --pv-program-opts">&#x1F517;</a>
+<span id="--pv-program-opts" class="man-option-title">**--pv-program-opts** *STRING*</span> <a href="#--pv-program-opts" title="Permalink to --pv-program-opts" aria-label="Permalink to --pv-program-opts" class="man-option-permalink">&#x1F517;</a>
 
 - The options to be passed to the 'pv' program (optional). Default: '--progress --timer --eta
   --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M'.
 
 <!-- -->
 
-<div id="--shell-program"></div>
-
-**--shell-program** *{sh,-}* <a class="man-option-permalink" href="#--shell-program" aria-label="Permalink to --shell-program" title="Permalink to --shell-program">&#x1F517;</a>
+<span id="--shell-program" class="man-option-title">**--shell-program** *{sh,-}*</span> <a href="#--shell-program" title="Permalink to --shell-program" aria-label="Permalink to --shell-program" class="man-option-permalink">&#x1F517;</a>
 
 - The name of the 'sh' executable (optional). Default is 'sh'. Use '-' to disable the use of this
   program.
 
 <!-- -->
 
-<div id="--ssh-program"></div>
-
-**--ssh-program** *{ssh,hpnssh,-}* <a class="man-option-permalink" href="#--ssh-program" aria-label="Permalink to --ssh-program" title="Permalink to --ssh-program">&#x1F517;</a>
+<span id="--ssh-program" class="man-option-title">**--ssh-program** *{ssh,hpnssh,-}*</span> <a href="#--ssh-program" title="Permalink to --ssh-program" aria-label="Permalink to --ssh-program" class="man-option-permalink">&#x1F517;</a>
 
 - The name of the 'ssh' executable (optional). Default is 'ssh'. Use '-' to disable the use of
   this program.
 
 <!-- -->
 
-<div id="--sudo-program"></div>
-
-**--sudo-program** *{sudo,doas,-}* <a class="man-option-permalink" href="#--sudo-program" aria-label="Permalink to --sudo-program" title="Permalink to --sudo-program">&#x1F517;</a>
+<span id="--sudo-program" class="man-option-title">**--sudo-program** *{sudo,doas,-}*</span> <a href="#--sudo-program" title="Permalink to --sudo-program" aria-label="Permalink to --sudo-program" class="man-option-permalink">&#x1F517;</a>
 
 - The name of the 'sudo' executable (optional). Default is 'sudo'. Use '-' to disable the use of
   this program.
 
 <!-- -->
 
-<div id="--zpool-program"></div>
-
-**--zpool-program** *{zpool,-}* <a class="man-option-permalink" href="#--zpool-program" aria-label="Permalink to --zpool-program" title="Permalink to --zpool-program">&#x1F517;</a>
+<span id="--zpool-program" class="man-option-title">**--zpool-program** *{zpool,-}*</span> <a href="#--zpool-program" title="Permalink to --zpool-program" aria-label="Permalink to --zpool-program" class="man-option-permalink">&#x1F517;</a>
 
 - The name of the 'zpool' executable (optional). Default is 'zpool'. Use '-' to disable the use of
   this program.
 
 <!-- -->
 
-<div id="--log-dir"></div>
-
-**--log-dir** *DIR* <a class="man-option-permalink" href="#--log-dir" aria-label="Permalink to --log-dir" title="Permalink to --log-dir">&#x1F517;</a>
+<span id="--log-dir" class="man-option-title">**--log-dir** *DIR*</span> <a href="#--log-dir" title="Permalink to --log-dir" aria-label="Permalink to --log-dir" class="man-option-permalink">&#x1F517;</a>
 
 - Path to the log output directory on local host (optional). Default: $HOME/bzfs-logs. The logger
   that is used by default writes log files there, in addition to the console. The basename of
@@ -2157,9 +1991,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--log-file-prefix"></div>
-
-**--log-file-prefix** *STRING* <a class="man-option-permalink" href="#--log-file-prefix" aria-label="Permalink to --log-file-prefix" title="Permalink to --log-file-prefix">&#x1F517;</a>
+<span id="--log-file-prefix" class="man-option-title">**--log-file-prefix** *STRING*</span> <a href="#--log-file-prefix" title="Permalink to --log-file-prefix" aria-label="Permalink to --log-file-prefix" class="man-option-permalink">&#x1F517;</a>
 
 - Default is zrun_. The path name of the log file on local host is
   `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`.
@@ -2168,9 +2000,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--log-file-infix"></div>
-
-**--log-file-infix** *STRING* <a class="man-option-permalink" href="#--log-file-infix" aria-label="Permalink to --log-file-infix" title="Permalink to --log-file-infix">&#x1F517;</a>
+<span id="--log-file-infix" class="man-option-title">**--log-file-infix** *STRING*</span> <a href="#--log-file-infix" title="Permalink to --log-file-infix" aria-label="Permalink to --log-file-infix" class="man-option-permalink">&#x1F517;</a>
 
 - Default is the empty string. The path name of the log file on local host is
   `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`.
@@ -2179,9 +2009,7 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--log-file-suffix"></div>
-
-**--log-file-suffix** *STRING* <a class="man-option-permalink" href="#--log-file-suffix" aria-label="Permalink to --log-file-suffix" title="Permalink to --log-file-suffix">&#x1F517;</a>
+<span id="--log-file-suffix" class="man-option-title">**--log-file-suffix** *STRING*</span> <a href="#--log-file-suffix" title="Permalink to --log-file-suffix" aria-label="Permalink to --log-file-suffix" class="man-option-permalink">&#x1F517;</a>
 
 - Default is the empty string. The path name of the log file on local host is
   `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`.
@@ -2190,18 +2018,14 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--log-subdir"></div>
-
-**--log-subdir** *{daily,hourly,minutely}* <a class="man-option-permalink" href="#--log-subdir" aria-label="Permalink to --log-subdir" title="Permalink to --log-subdir">&#x1F517;</a>
+<span id="--log-subdir" class="man-option-title">**--log-subdir** *{daily,hourly,minutely}*</span> <a href="#--log-subdir" title="Permalink to --log-subdir" aria-label="Permalink to --log-subdir" class="man-option-permalink">&#x1F517;</a>
 
 - Make a new subdirectory in --log-dir every day, hour or minute; write log files there. Default
   is 'daily'.
 
 <!-- -->
 
-<div id="--log-syslog-address"></div>
-
-**--log-syslog-address** *STRING* <a class="man-option-permalink" href="#--log-syslog-address" aria-label="Permalink to --log-syslog-address" title="Permalink to --log-syslog-address">&#x1F517;</a>
+<span id="--log-syslog-address" class="man-option-title">**--log-syslog-address** *STRING*</span> <a href="#--log-syslog-address" title="Permalink to --log-syslog-address" aria-label="Permalink to --log-syslog-address" class="man-option-permalink">&#x1F517;</a>
 
 - Host:port of the syslog machine to send messages to (e.g. 'foo.example.com:514' or
   '127.0.0.1:514'), or the file system path to the syslog socket file on localhost (e.g.
@@ -2210,44 +2034,34 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--log-syslog-socktype"></div>
-
-**--log-syslog-socktype** *{UDP,TCP}* <a class="man-option-permalink" href="#--log-syslog-socktype" aria-label="Permalink to --log-syslog-socktype" title="Permalink to --log-syslog-socktype">&#x1F517;</a>
+<span id="--log-syslog-socktype" class="man-option-title">**--log-syslog-socktype** *{UDP,TCP}*</span> <a href="#--log-syslog-socktype" title="Permalink to --log-syslog-socktype" aria-label="Permalink to --log-syslog-socktype" class="man-option-permalink">&#x1F517;</a>
 
 - The socket type to use to connect if no local socket file system path is used. Default is 'UDP'.
 
 <!-- -->
 
-<div id="--log-syslog-facility"></div>
-
-**--log-syslog-facility** *INT* <a class="man-option-permalink" href="#--log-syslog-facility" aria-label="Permalink to --log-syslog-facility" title="Permalink to --log-syslog-facility">&#x1F517;</a>
+<span id="--log-syslog-facility" class="man-option-title">**--log-syslog-facility** *INT*</span> <a href="#--log-syslog-facility" title="Permalink to --log-syslog-facility" aria-label="Permalink to --log-syslog-facility" class="man-option-permalink">&#x1F517;</a>
 
 - The local facility aka category that identifies msg sources in syslog (default: 1, min=0,
   max=7).
 
 <!-- -->
 
-<div id="--log-syslog-prefix"></div>
-
-**--log-syslog-prefix** *STRING* <a class="man-option-permalink" href="#--log-syslog-prefix" aria-label="Permalink to --log-syslog-prefix" title="Permalink to --log-syslog-prefix">&#x1F517;</a>
+<span id="--log-syslog-prefix" class="man-option-title">**--log-syslog-prefix** *STRING*</span> <a href="#--log-syslog-prefix" title="Permalink to --log-syslog-prefix" aria-label="Permalink to --log-syslog-prefix" class="man-option-permalink">&#x1F517;</a>
 
 - The name to prepend to each message that is sent to syslog; identifies bzfs messages as opposed
   to messages from other sources. Default is 'bzfs'.
 
 <!-- -->
 
-<div id="--log-syslog-level"></div>
-
-**--log-syslog-level** *{CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}* <a class="man-option-permalink" href="#--log-syslog-level" aria-label="Permalink to --log-syslog-level" title="Permalink to --log-syslog-level">&#x1F517;</a>
+<span id="--log-syslog-level" class="man-option-title">**--log-syslog-level** *{CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}*</span> <a href="#--log-syslog-level" title="Permalink to --log-syslog-level" aria-label="Permalink to --log-syslog-level" class="man-option-permalink">&#x1F517;</a>
 
 - Only send messages with equal or higher priority than this log level to syslog. Default is
   'ERROR'.
 
 <!-- -->
 
-<div id="--include-envvar-regex"></div>
-
-**--include-envvar-regex** *REGEX [REGEX ...]* <a class="man-option-permalink" href="#--include-envvar-regex" aria-label="Permalink to --include-envvar-regex" title="Permalink to --include-envvar-regex">&#x1F517;</a>
+<span id="--include-envvar-regex" class="man-option-title">**--include-envvar-regex** *REGEX [REGEX ...]*</span> <a href="#--include-envvar-regex" title="Permalink to --include-envvar-regex" aria-label="Permalink to --include-envvar-regex" class="man-option-permalink">&#x1F517;</a>
 
 - On program startup, unset all Unix environment variables for which the full environment variable
   name matches at least one of the excludes but none of the includes. If an environment variable
@@ -2264,239 +2078,187 @@ usage: bzfs [-h]
 
 <!-- -->
 
-<div id="--exclude-envvar-regex"></div>
-
-**--exclude-envvar-regex** *REGEX [REGEX ...]* <a class="man-option-permalink" href="#--exclude-envvar-regex" aria-label="Permalink to --exclude-envvar-regex" title="Permalink to --exclude-envvar-regex">&#x1F517;</a>
+<span id="--exclude-envvar-regex" class="man-option-title">**--exclude-envvar-regex** *REGEX [REGEX ...]*</span> <a href="#--exclude-envvar-regex" title="Permalink to --exclude-envvar-regex" aria-label="Permalink to --exclude-envvar-regex" class="man-option-permalink">&#x1F517;</a>
 
 - Same syntax as --include-envvar-regex (see above) except that the default is to exclude no
   environment variables. Example: `bzfs_.*`
 
 <!-- -->
 
-<div id="--version"></div>
-
-**--version** <a class="man-option-permalink" href="#--version" aria-label="Permalink to --version" title="Permalink to --version">&#x1F517;</a>
+<span id="--version" class="man-option-title">**--version**</span> <a href="#--version" title="Permalink to --version" aria-label="Permalink to --version" class="man-option-permalink">&#x1F517;</a>
 
 - Display version information and exit.
 
-# Yearly Period Anchors
+# <span class="man-group-heading">Yearly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N years are scheduled to be
 created on the source by the --create-src-snapshots option.
 
-<div id="--yearly_year"></div>
-
-**--yearly_year** *INT* <a class="man-option-permalink" href="#--yearly_year" aria-label="Permalink to --yearly_year" title="Permalink to --yearly_year">&#x1F517;</a>
+<span id="--yearly_year" class="man-option-title">**--yearly_year** *INT*</span> <a href="#--yearly_year" title="Permalink to --yearly_year" aria-label="Permalink to --yearly_year" class="man-option-permalink">&#x1F517;</a>
 
 - The anchor year of multi-year periods (1 ≤ x ≤ 9999, default: 2025).
 
 <!-- -->
 
-<div id="--yearly_month"></div>
-
-**--yearly_month** *INT* <a class="man-option-permalink" href="#--yearly_month" aria-label="Permalink to --yearly_month" title="Permalink to --yearly_month">&#x1F517;</a>
+<span id="--yearly_month" class="man-option-title">**--yearly_month** *INT*</span> <a href="#--yearly_month" title="Permalink to --yearly_month" aria-label="Permalink to --yearly_month" class="man-option-permalink">&#x1F517;</a>
 
 - The month within a year (1 ≤ x ≤ 12, default: 1).
 
 <!-- -->
 
-<div id="--yearly_monthday"></div>
-
-**--yearly_monthday** *INT* <a class="man-option-permalink" href="#--yearly_monthday" aria-label="Permalink to --yearly_monthday" title="Permalink to --yearly_monthday">&#x1F517;</a>
+<span id="--yearly_monthday" class="man-option-title">**--yearly_monthday** *INT*</span> <a href="#--yearly_monthday" title="Permalink to --yearly_monthday" aria-label="Permalink to --yearly_monthday" class="man-option-permalink">&#x1F517;</a>
 
 - The day within a month (1 ≤ x ≤ 31, default: 1).
 
 <!-- -->
 
-<div id="--yearly_hour"></div>
-
-**--yearly_hour** *INT* <a class="man-option-permalink" href="#--yearly_hour" aria-label="Permalink to --yearly_hour" title="Permalink to --yearly_hour">&#x1F517;</a>
+<span id="--yearly_hour" class="man-option-title">**--yearly_hour** *INT*</span> <a href="#--yearly_hour" title="Permalink to --yearly_hour" aria-label="Permalink to --yearly_hour" class="man-option-permalink">&#x1F517;</a>
 
 - The hour within a day (0 ≤ x ≤ 23, default: 0).
 
 <!-- -->
 
-<div id="--yearly_minute"></div>
-
-**--yearly_minute** *INT* <a class="man-option-permalink" href="#--yearly_minute" aria-label="Permalink to --yearly_minute" title="Permalink to --yearly_minute">&#x1F517;</a>
+<span id="--yearly_minute" class="man-option-title">**--yearly_minute** *INT*</span> <a href="#--yearly_minute" title="Permalink to --yearly_minute" aria-label="Permalink to --yearly_minute" class="man-option-permalink">&#x1F517;</a>
 
 - The minute within an hour (0 ≤ x ≤ 59, default: 0).
 
 <!-- -->
 
-<div id="--yearly_second"></div>
-
-**--yearly_second** *INT* <a class="man-option-permalink" href="#--yearly_second" aria-label="Permalink to --yearly_second" title="Permalink to --yearly_second">&#x1F517;</a>
+<span id="--yearly_second" class="man-option-title">**--yearly_second** *INT*</span> <a href="#--yearly_second" title="Permalink to --yearly_second" aria-label="Permalink to --yearly_second" class="man-option-permalink">&#x1F517;</a>
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
-# Monthly Period Anchors
+# <span class="man-group-heading">Monthly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N months are scheduled to be
 created on the source by the --create-src-snapshots option.
 
-<div id="--monthly_month"></div>
-
-**--monthly_month** *INT* <a class="man-option-permalink" href="#--monthly_month" aria-label="Permalink to --monthly_month" title="Permalink to --monthly_month">&#x1F517;</a>
+<span id="--monthly_month" class="man-option-title">**--monthly_month** *INT*</span> <a href="#--monthly_month" title="Permalink to --monthly_month" aria-label="Permalink to --monthly_month" class="man-option-permalink">&#x1F517;</a>
 
 - The anchor month of multi-month periods (1 ≤ x ≤ 12, default: 1).
 
 <!-- -->
 
-<div id="--monthly_monthday"></div>
-
-**--monthly_monthday** *INT* <a class="man-option-permalink" href="#--monthly_monthday" aria-label="Permalink to --monthly_monthday" title="Permalink to --monthly_monthday">&#x1F517;</a>
+<span id="--monthly_monthday" class="man-option-title">**--monthly_monthday** *INT*</span> <a href="#--monthly_monthday" title="Permalink to --monthly_monthday" aria-label="Permalink to --monthly_monthday" class="man-option-permalink">&#x1F517;</a>
 
 - The day within a month (1 ≤ x ≤ 31, default: 1).
 
 <!-- -->
 
-<div id="--monthly_hour"></div>
-
-**--monthly_hour** *INT* <a class="man-option-permalink" href="#--monthly_hour" aria-label="Permalink to --monthly_hour" title="Permalink to --monthly_hour">&#x1F517;</a>
+<span id="--monthly_hour" class="man-option-title">**--monthly_hour** *INT*</span> <a href="#--monthly_hour" title="Permalink to --monthly_hour" aria-label="Permalink to --monthly_hour" class="man-option-permalink">&#x1F517;</a>
 
 - The hour within a day (0 ≤ x ≤ 23, default: 0).
 
 <!-- -->
 
-<div id="--monthly_minute"></div>
-
-**--monthly_minute** *INT* <a class="man-option-permalink" href="#--monthly_minute" aria-label="Permalink to --monthly_minute" title="Permalink to --monthly_minute">&#x1F517;</a>
+<span id="--monthly_minute" class="man-option-title">**--monthly_minute** *INT*</span> <a href="#--monthly_minute" title="Permalink to --monthly_minute" aria-label="Permalink to --monthly_minute" class="man-option-permalink">&#x1F517;</a>
 
 - The minute within an hour (0 ≤ x ≤ 59, default: 0).
 
 <!-- -->
 
-<div id="--monthly_second"></div>
-
-**--monthly_second** *INT* <a class="man-option-permalink" href="#--monthly_second" aria-label="Permalink to --monthly_second" title="Permalink to --monthly_second">&#x1F517;</a>
+<span id="--monthly_second" class="man-option-title">**--monthly_second** *INT*</span> <a href="#--monthly_second" title="Permalink to --monthly_second" aria-label="Permalink to --monthly_second" class="man-option-permalink">&#x1F517;</a>
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
-# Weekly Period Anchors
+# <span class="man-group-heading">Weekly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N weeks are scheduled to be
 created on the source by the --create-src-snapshots option.
 
-<div id="--weekly_weekday"></div>
-
-**--weekly_weekday** *INT* <a class="man-option-permalink" href="#--weekly_weekday" aria-label="Permalink to --weekly_weekday" title="Permalink to --weekly_weekday">&#x1F517;</a>
+<span id="--weekly_weekday" class="man-option-title">**--weekly_weekday** *INT*</span> <a href="#--weekly_weekday" title="Permalink to --weekly_weekday" aria-label="Permalink to --weekly_weekday" class="man-option-permalink">&#x1F517;</a>
 
 - The weekday within a week: 0=Sunday, 1=Monday, ..., 6=Saturday (0 ≤ x ≤ 6, default: 0).
 
 <!-- -->
 
-<div id="--weekly_hour"></div>
-
-**--weekly_hour** *INT* <a class="man-option-permalink" href="#--weekly_hour" aria-label="Permalink to --weekly_hour" title="Permalink to --weekly_hour">&#x1F517;</a>
+<span id="--weekly_hour" class="man-option-title">**--weekly_hour** *INT*</span> <a href="#--weekly_hour" title="Permalink to --weekly_hour" aria-label="Permalink to --weekly_hour" class="man-option-permalink">&#x1F517;</a>
 
 - The hour within a day (0 ≤ x ≤ 23, default: 0).
 
 <!-- -->
 
-<div id="--weekly_minute"></div>
-
-**--weekly_minute** *INT* <a class="man-option-permalink" href="#--weekly_minute" aria-label="Permalink to --weekly_minute" title="Permalink to --weekly_minute">&#x1F517;</a>
+<span id="--weekly_minute" class="man-option-title">**--weekly_minute** *INT*</span> <a href="#--weekly_minute" title="Permalink to --weekly_minute" aria-label="Permalink to --weekly_minute" class="man-option-permalink">&#x1F517;</a>
 
 - The minute within an hour (0 ≤ x ≤ 59, default: 0).
 
 <!-- -->
 
-<div id="--weekly_second"></div>
-
-**--weekly_second** *INT* <a class="man-option-permalink" href="#--weekly_second" aria-label="Permalink to --weekly_second" title="Permalink to --weekly_second">&#x1F517;</a>
+<span id="--weekly_second" class="man-option-title">**--weekly_second** *INT*</span> <a href="#--weekly_second" title="Permalink to --weekly_second" aria-label="Permalink to --weekly_second" class="man-option-permalink">&#x1F517;</a>
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
-# Daily Period Anchors
+# <span class="man-group-heading">Daily Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N days are scheduled to be created
 on the source by the --create-src-snapshots option.
 
-<div id="--daily_hour"></div>
-
-**--daily_hour** *INT* <a class="man-option-permalink" href="#--daily_hour" aria-label="Permalink to --daily_hour" title="Permalink to --daily_hour">&#x1F517;</a>
+<span id="--daily_hour" class="man-option-title">**--daily_hour** *INT*</span> <a href="#--daily_hour" title="Permalink to --daily_hour" aria-label="Permalink to --daily_hour" class="man-option-permalink">&#x1F517;</a>
 
 - The hour within a day (0 ≤ x ≤ 23, default: 0).
 
 <!-- -->
 
-<div id="--daily_minute"></div>
-
-**--daily_minute** *INT* <a class="man-option-permalink" href="#--daily_minute" aria-label="Permalink to --daily_minute" title="Permalink to --daily_minute">&#x1F517;</a>
+<span id="--daily_minute" class="man-option-title">**--daily_minute** *INT*</span> <a href="#--daily_minute" title="Permalink to --daily_minute" aria-label="Permalink to --daily_minute" class="man-option-permalink">&#x1F517;</a>
 
 - The minute within an hour (0 ≤ x ≤ 59, default: 0).
 
 <!-- -->
 
-<div id="--daily_second"></div>
-
-**--daily_second** *INT* <a class="man-option-permalink" href="#--daily_second" aria-label="Permalink to --daily_second" title="Permalink to --daily_second">&#x1F517;</a>
+<span id="--daily_second" class="man-option-title">**--daily_second** *INT*</span> <a href="#--daily_second" title="Permalink to --daily_second" aria-label="Permalink to --daily_second" class="man-option-permalink">&#x1F517;</a>
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
-# Hourly Period Anchors
+# <span class="man-group-heading">Hourly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N hours are scheduled to be
 created on the source by the --create-src-snapshots option.
 
-<div id="--hourly_minute"></div>
-
-**--hourly_minute** *INT* <a class="man-option-permalink" href="#--hourly_minute" aria-label="Permalink to --hourly_minute" title="Permalink to --hourly_minute">&#x1F517;</a>
+<span id="--hourly_minute" class="man-option-title">**--hourly_minute** *INT*</span> <a href="#--hourly_minute" title="Permalink to --hourly_minute" aria-label="Permalink to --hourly_minute" class="man-option-permalink">&#x1F517;</a>
 
 - The minute within an hour (0 ≤ x ≤ 59, default: 0).
 
 <!-- -->
 
-<div id="--hourly_second"></div>
-
-**--hourly_second** *INT* <a class="man-option-permalink" href="#--hourly_second" aria-label="Permalink to --hourly_second" title="Permalink to --hourly_second">&#x1F517;</a>
+<span id="--hourly_second" class="man-option-title">**--hourly_second** *INT*</span> <a href="#--hourly_second" title="Permalink to --hourly_second" aria-label="Permalink to --hourly_second" class="man-option-permalink">&#x1F517;</a>
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
-# Minutely Period Anchors
+# <span class="man-group-heading">Minutely Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N minutes are scheduled to be
 created on the source by the --create-src-snapshots option.
 
-<div id="--minutely_second"></div>
-
-**--minutely_second** *INT* <a class="man-option-permalink" href="#--minutely_second" aria-label="Permalink to --minutely_second" title="Permalink to --minutely_second">&#x1F517;</a>
+<span id="--minutely_second" class="man-option-title">**--minutely_second** *INT*</span> <a href="#--minutely_second" title="Permalink to --minutely_second" aria-label="Permalink to --minutely_second" class="man-option-permalink">&#x1F517;</a>
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
-# Secondly Period Anchors
+# <span class="man-group-heading">Secondly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N seconds are scheduled to be
 created on the source by the --create-src-snapshots option.
 
-<div id="--secondly_millisecond"></div>
-
-**--secondly_millisecond** *INT* <a class="man-option-permalink" href="#--secondly_millisecond" aria-label="Permalink to --secondly_millisecond" title="Permalink to --secondly_millisecond">&#x1F517;</a>
+<span id="--secondly_millisecond" class="man-option-title">**--secondly_millisecond** *INT*</span> <a href="#--secondly_millisecond" title="Permalink to --secondly_millisecond" aria-label="Permalink to --secondly_millisecond" class="man-option-permalink">&#x1F517;</a>
 
 - The millisecond within a second (0 ≤ x ≤ 999, default: 0).
 
-# Millisecondly Period Anchors
+# <span class="man-group-heading">Millisecondly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N milliseconds are scheduled to be
 created on the source by the --create-src-snapshots option.
 
-<div id="--millisecondly_microsecond"></div>
-
-**--millisecondly_microsecond** *INT* <a class="man-option-permalink" href="#--millisecondly_microsecond" aria-label="Permalink to --millisecondly_microsecond" title="Permalink to --millisecondly_microsecond">&#x1F517;</a>
+<span id="--millisecondly_microsecond" class="man-option-title">**--millisecondly_microsecond** *INT*</span> <a href="#--millisecondly_microsecond" title="Permalink to --millisecondly_microsecond" aria-label="Permalink to --millisecondly_microsecond" class="man-option-permalink">&#x1F517;</a>
 
 - The microsecond within a millisecond (0 ≤ x ≤ 999, default: 0).
 
-# zfs-recv-o
+# <span class="man-group-heading">zfs-recv-o</span>
 
 The following group of parameters specifies additional zfs receive '-o' options that can be used
 to configure copying of ZFS dataset properties from the source dataset to its corresponding
 destination dataset. The 'zfs-recv-o' group of parameters is applied before the 'zfs-recv-x'
 group.
 
-<div id="--zfs-recv-o-targets"></div>
-
-**--zfs-recv-o-targets** *{full,incremental,full+incremental}* <a class="man-option-permalink" href="#--zfs-recv-o-targets" aria-label="Permalink to --zfs-recv-o-targets" title="Permalink to --zfs-recv-o-targets">&#x1F517;</a>
+<span id="--zfs-recv-o-targets" class="man-option-title">**--zfs-recv-o-targets** *{full,incremental,full+incremental}*</span> <a href="#--zfs-recv-o-targets" title="Permalink to --zfs-recv-o-targets" aria-label="Permalink to --zfs-recv-o-targets" class="man-option-permalink">&#x1F517;</a>
 
 - The zfs send phase or phases during which the extra '-o' options are passed to 'zfs receive'.
   This can be one of the following choices: 'full', 'incremental', 'full+incremental'. Default is
@@ -2504,9 +2266,7 @@ group.
 
 <!-- -->
 
-<div id="--zfs-recv-o-sources"></div>
-
-**--zfs-recv-o-sources** *STRING* <a class="man-option-permalink" href="#--zfs-recv-o-sources" aria-label="Permalink to --zfs-recv-o-sources" title="Permalink to --zfs-recv-o-sources">&#x1F517;</a>
+<span id="--zfs-recv-o-sources" class="man-option-title">**--zfs-recv-o-sources** *STRING*</span> <a href="#--zfs-recv-o-sources" title="Permalink to --zfs-recv-o-sources" aria-label="Permalink to --zfs-recv-o-sources" class="man-option-permalink">&#x1F517;</a>
 
 - The ZFS sources to provide to the 'zfs get -s' CLI in order to fetch the ZFS dataset properties
   that will be fed into the --zfs-recv-o-include/exclude-regex filter (see below). The sources are
@@ -2519,9 +2279,7 @@ group.
 
 <!-- -->
 
-<div id="--zfs-recv-o-include-regex"></div>
-
-**--zfs-recv-o-include-regex** *[REGEX ...]* <a class="man-option-permalink" href="#--zfs-recv-o-include-regex" aria-label="Permalink to --zfs-recv-o-include-regex" title="Permalink to --zfs-recv-o-include-regex">&#x1F517;</a>
+<span id="--zfs-recv-o-include-regex" class="man-option-title">**--zfs-recv-o-include-regex** *[REGEX ...]*</span> <a href="#--zfs-recv-o-include-regex" title="Permalink to --zfs-recv-o-include-regex" aria-label="Permalink to --zfs-recv-o-include-regex" class="man-option-permalink">&#x1F517;</a>
 
 - Take the output properties of --zfs-recv-o-sources (see above) and filter them such that we only
   retain the properties whose name matches at least one of the --include regexes but none of the
@@ -2548,24 +2306,20 @@ group.
 
 <!-- -->
 
-<div id="--zfs-recv-o-exclude-regex"></div>
-
-**--zfs-recv-o-exclude-regex** *REGEX [REGEX ...]* <a class="man-option-permalink" href="#--zfs-recv-o-exclude-regex" aria-label="Permalink to --zfs-recv-o-exclude-regex" title="Permalink to --zfs-recv-o-exclude-regex">&#x1F517;</a>
+<span id="--zfs-recv-o-exclude-regex" class="man-option-title">**--zfs-recv-o-exclude-regex** *REGEX [REGEX ...]*</span> <a href="#--zfs-recv-o-exclude-regex" title="Permalink to --zfs-recv-o-exclude-regex" aria-label="Permalink to --zfs-recv-o-exclude-regex" class="man-option-permalink">&#x1F517;</a>
 
 - Same syntax as --zfs-recv-o-include-regex (see above), and the default is to exclude no
   properties. Example: --zfs-recv-o-exclude-regex encryptionroot keystatus origin volblocksize
   volsize
 
-# zfs-recv-x
+# <span class="man-group-heading">zfs-recv-x</span>
 
 The following group of parameters specifies additional zfs receive '-x' options that can be used
 to configure copying of ZFS dataset properties from the source dataset to its corresponding
 destination dataset. The 'zfs-recv-o' group of parameters is applied before the 'zfs-recv-x'
 group.
 
-<div id="--zfs-recv-x-targets"></div>
-
-**--zfs-recv-x-targets** *{full,incremental,full+incremental}* <a class="man-option-permalink" href="#--zfs-recv-x-targets" aria-label="Permalink to --zfs-recv-x-targets" title="Permalink to --zfs-recv-x-targets">&#x1F517;</a>
+<span id="--zfs-recv-x-targets" class="man-option-title">**--zfs-recv-x-targets** *{full,incremental,full+incremental}*</span> <a href="#--zfs-recv-x-targets" title="Permalink to --zfs-recv-x-targets" aria-label="Permalink to --zfs-recv-x-targets" class="man-option-permalink">&#x1F517;</a>
 
 - The zfs send phase or phases during which the extra '-x' options are passed to 'zfs receive'.
   This can be one of the following choices: 'full', 'incremental', 'full+incremental'. Default is
@@ -2573,9 +2327,7 @@ group.
 
 <!-- -->
 
-<div id="--zfs-recv-x-sources"></div>
-
-**--zfs-recv-x-sources** *STRING* <a class="man-option-permalink" href="#--zfs-recv-x-sources" aria-label="Permalink to --zfs-recv-x-sources" title="Permalink to --zfs-recv-x-sources">&#x1F517;</a>
+<span id="--zfs-recv-x-sources" class="man-option-title">**--zfs-recv-x-sources** *STRING*</span> <a href="#--zfs-recv-x-sources" title="Permalink to --zfs-recv-x-sources" aria-label="Permalink to --zfs-recv-x-sources" class="man-option-permalink">&#x1F517;</a>
 
 - The ZFS sources to provide to the 'zfs get -s' CLI in order to fetch the ZFS dataset properties
   that will be fed into the --zfs-recv-x-include/exclude-regex filter (see below). The sources are
@@ -2589,9 +2341,7 @@ group.
 
 <!-- -->
 
-<div id="--zfs-recv-x-include-regex"></div>
-
-**--zfs-recv-x-include-regex** *[REGEX ...]* <a class="man-option-permalink" href="#--zfs-recv-x-include-regex" aria-label="Permalink to --zfs-recv-x-include-regex" title="Permalink to --zfs-recv-x-include-regex">&#x1F517;</a>
+<span id="--zfs-recv-x-include-regex" class="man-option-title">**--zfs-recv-x-include-regex** *[REGEX ...]*</span> <a href="#--zfs-recv-x-include-regex" title="Permalink to --zfs-recv-x-include-regex" aria-label="Permalink to --zfs-recv-x-include-regex" class="man-option-permalink">&#x1F517;</a>
 
 - Take the output properties of --zfs-recv-x-sources (see above) and filter them such that we only
   retain the properties whose name matches at least one of the --include regexes but none of the
@@ -2617,9 +2367,7 @@ group.
 
 <!-- -->
 
-<div id="--zfs-recv-x-exclude-regex"></div>
-
-**--zfs-recv-x-exclude-regex** *REGEX [REGEX ...]* <a class="man-option-permalink" href="#--zfs-recv-x-exclude-regex" aria-label="Permalink to --zfs-recv-x-exclude-regex" title="Permalink to --zfs-recv-x-exclude-regex">&#x1F517;</a>
+<span id="--zfs-recv-x-exclude-regex" class="man-option-title">**--zfs-recv-x-exclude-regex** *REGEX [REGEX ...]*</span> <a href="#--zfs-recv-x-exclude-regex" title="Permalink to --zfs-recv-x-exclude-regex" aria-label="Permalink to --zfs-recv-x-exclude-regex" class="man-option-permalink">&#x1F517;</a>
 
 - Same syntax as --zfs-recv-x-include-regex (see above), and the default is to exclude no
   properties. Example: --zfs-recv-x-exclude-regex encryptionroot keystatus origin volblocksize

@@ -146,12 +146,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn('<div id="src"></div>', details)
         self.assertIn("**SRC**", details)
-        self.assertIn('<div id="-h"></div>', details)
         self.assertIn("**-h**, **--help**", details)
         self.assertIn("show this help message and exit", details)
-        self.assertIn("# Transfer Options", details)
+        self.assertIn("Transfer Options", details)
         self.assertIn("Controls transfer behavior.", details)
         self.assertIn("**--mode** *{fast,safe}*", details)
         self.assertIn("Choose mode. Default: safe.", details)
@@ -176,8 +174,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertNotIn("**SRC** _(required)_", details)
         self.assertNotIn("**--optional** *VALUE* _(required)_", details)
 
-    def test_action_titles_include_copyable_permalinks(self) -> None:
-        """Covers self-links that docs renderers can expose on hover."""
+    def test_styling_hooks_and_copyable_permalinks_are_rendered(self) -> None:
+        """Covers styling hooks and self-links that docs renderers can expose on hover."""
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument("--root", metavar="VALUE", help="Root option.")
         commands = parser.add_subparsers(dest="command", title="Commands")
@@ -186,14 +184,12 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
+        self.assertIn('# <span class="man-group-heading">Commands</span>', details)
+        self.assertIn('# <span id="sync~" class="man-subparser-heading">sync</span>', details)
+        self.assertIn('<span id="--root" class="man-option-title">**--root** *VALUE*</span>', details)
         self.assertIn(
-            '**--root** *VALUE* <a class="man-option-permalink" href="#--root" '
-            'aria-label="Permalink to --root" title="Permalink to --root">&#x1F517;</a>',
-            details,
-        )
-        self.assertIn(
-            '**--speed** *{fast,safe}* <a class="man-option-permalink" href="#sync~--speed" '
-            'aria-label="Permalink to sync~--speed" title="Permalink to sync~--speed">&#x1F517;</a>',
+            '<a href="#--root" title="Permalink to --root" aria-label="Permalink to --root" '
+            'class="man-option-permalink">',
             details,
         )
 
@@ -208,17 +204,11 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn('<div id="optional_item"></div>', details)
         self.assertIn("**[OPTIONAL_ITEM]**", details)
-        self.assertIn('<div id="many_items"></div>', details)
         self.assertIn("**[MANY_ITEM ...]**", details)
-        self.assertIn('<div id="required_items"></div>', details)
         self.assertIn("**REQUIRED_ITEM [REQUIRED_ITEM ...]**", details)
-        self.assertIn('<div id="remainder"></div>', details)
         self.assertIn("**ARG**", details)
-        self.assertIn('<div id="--passthrough"></div>', details)
         self.assertIn("**--passthrough** *...*", details)
-        self.assertIn('<div id="pair"></div>', details)
         self.assertIn("**SRC DST**", details)
 
     def test_metavar_type_formatter_is_used_for_detail_titles(self) -> None:
@@ -228,7 +218,6 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn('<div id="count"></div>', details)
         self.assertIn("**int**", details)
         self.assertIn("**--limit** *int*", details)
         self.assertNotIn("**COUNT**", details)
@@ -260,9 +249,18 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn("Mutually exclusive group: choose exactly one of **--json**, **--text**.", details)
         self.assertIn("Mutually exclusive group: choose at most one of **--table**, **--csv**.", details)
         self.assertIn("Mutually exclusive group: choose exactly one of **--full**, **--incremental**.", details)
-        self.assertLess(details.index("choose exactly one of **--json**"), details.index('<div id="--json"></div>'))
-        self.assertLess(details.index("choose at most one of **--table**"), details.index('<div id="--table"></div>'))
-        self.assertLess(details.index("choose exactly one of **--full**"), details.index('<div id="sync~--full"></div>'))
+        self.assertLess(
+            details.index("choose exactly one of **--json**"),
+            details.index("Emit JSON."),
+        )
+        self.assertLess(
+            details.index("choose at most one of **--table**"),
+            details.index("Emit table."),
+        )
+        self.assertLess(
+            details.index("choose exactly one of **--full**"),
+            details.index("Full replication."),
+        )
         self.assertEqual(3, details.count("Mutually exclusive group:"))
         self.assertNotIn("--hidden", details)
 
@@ -275,7 +273,11 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         details = self._render_help_details(parser)
 
         self.assertIn("Mutually exclusive group: choose at most one of **int**, **--all**.", details)
-        self.assertLess(details.index("choose at most one of **int**"), details.index('<div id="count"></div>'))
+        self.assertIn("**[int]**", details)
+        self.assertLess(
+            details.index("choose at most one of **int**"),
+            details.index("Number of items."),
+        )
         self.assertNotIn("choose at most one of **count**", details)
 
     def test_mutually_exclusive_group_positional_uses_tuple_metavar(self) -> None:
@@ -288,7 +290,11 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         details = self._render_help_details(parser)
 
         self.assertIn("Mutually exclusive group: choose at most one of **SRC DST**, **--all**.", details)
-        self.assertLess(details.index("choose at most one of **SRC DST**"), details.index('<div id="pair"></div>'))
+        self.assertIn("**[SRC [DST ...]]**", details)
+        self.assertLess(
+            details.index("choose at most one of **SRC DST**"),
+            details.index("Dataset pairs."),
+        )
         self.assertNotIn("choose at most one of **SRC**, **--all**", details)
 
     def test_recursive_subparsers_are_rendered_with_configurable_headings(self) -> None:
@@ -313,30 +319,26 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser, heading_level=3)
 
-        self.assertIn('<div id="--root"></div>', details)
-        self.assertIn("### Commands", details)
+        self.assertIn("Commands", details)
+        self.assertIn("Sync Modes", details)
+
+        self.assertIn("**--root**", details)
         self.assertIn("Available commands.", details)
         self.assertIn("- [**sync**](#sync~): Sync snapshots.", details)
         self.assertIn("- [**prune (trim)**](#prune~): Prune snapshots.", details)
         self.assertLess(details.index("Available commands."), details.index("- [**sync**](#sync~): Sync snapshots."))
-        self.assertLess(details.index("- [**sync**](#sync~): Sync snapshots."), details.index("### sync"))
-        self.assertIn("### sync", details)
+        self.assertLess(
+            details.index("- [**sync**](#sync~): Sync snapshots."), details.index("Synchronize selected snapshots.")
+        )
         self.assertIn("Synchronize selected snapshots.", details)
-        self.assertIn('<div id="sync~--speed"></div>', details)
         self.assertIn("**--speed** *{fast,safe}*", details)
-        self.assertIn("#### Sync Modes", details)
         self.assertIn("Sync variants.", details)
         self.assertIn("- [**full**](#sync~full~): Full replication.", details)
         self.assertLess(details.index("Sync variants."), details.index("- [**full**](#sync~full~): Full replication."))
-        self.assertLess(details.index("- [**full**](#sync~full~): Full replication."), details.index("#### full"))
-        self.assertIn("#### full", details)
-        self.assertIn('<div id="sync~full~--force"></div>', details)
-        self.assertIn("### prune (trim)", details)
-        self.assertIn('<div id="prune~--dry-run"></div>', details)
-        self.assertNotIn('<div id="--speed"></div>', details)
-        self.assertNotIn('<div id="--force"></div>', details)
-        self.assertNotIn('<div id="--dry-run"></div>', details)
-        self.assertEqual(1, details.count("### prune (trim)"))
+        self.assertLess(details.index("- [**full**](#sync~full~): Full replication."), details.index("Force full mode."))
+        self.assertIn("**--force**", details)
+        self.assertIn("**--dry-run**", details)
+        self.assertEqual(1, details.count("- [**prune (trim)**](#prune~): Prune snapshots."))
         self.assertNotIn("hidden", details)
 
     def test_subparser_details_are_deferred_until_after_parent_options(self) -> None:
@@ -352,12 +354,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser, heading_level=3)
 
-        self.assertLess(details.index("- [**sync**](#sync~): Sync snapshots."), details.index('<div id="--root"></div>'))
-        self.assertLess(details.index('<div id="--root"></div>'), details.index("### sync"))
-        self.assertLess(
-            details.index("- [**full**](#sync~full~): Full replication."), details.index('<div id="sync~--speed"></div>')
-        )
-        self.assertLess(details.index('<div id="sync~--speed"></div>'), details.index("#### full"))
+        self.assertLess(details.index("- [**sync**](#sync~): Sync snapshots."), details.index("Root option."))
+        self.assertLess(details.index("Root option."), details.index("usage: demo sync"))
+        self.assertLess(details.index("- [**full**](#sync~full~): Full replication."), details.index("Sync speed."))
+        self.assertLess(details.index("Sync speed."), details.index("usage: demo sync full"))
 
     def test_subparser_overview_preserves_multiblock_help(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -372,7 +372,6 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         self.assertIn("- [**sync**](#sync~): Sync snapshots.\n\n\n  ```shell\n  demo sync --dry-run\n  ```", details)
         self.assertNotIn("- [**sync**](#sync~): Sync snapshots. ```shell demo sync --dry-run ```", details)
-        self.assertLess(details.index("- [**sync**](#sync~): Sync snapshots."), details.index("### sync"))
 
     def test_subparser_overview_escapes_markdown_link_label_brackets(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -382,8 +381,6 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         details = self._render_help_details(parser)
 
         self.assertIn("- [**bad\\]name\\[ok**](#bad%5Dname%5Bok~): Bad link label.", details)
-        self.assertIn('<div id="bad]name[ok~"></div>', details)
-        self.assertLess(details.index("- [**bad\\]name\\[ok**]"), details.index("# bad]name[ok"))
 
     def test_subparser_usage_blocks_are_rendered_under_subparser_headings(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -401,24 +398,27 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser, heading_level=3)
 
-        self.assertIn("### sync\n\nSynchronize selected snapshots.\n\n```\nusage: demo sync", details)
+        sync_usage_marker = "Synchronize selected snapshots.\n\n```\nusage: demo sync"
+        self.assertIn(sync_usage_marker, details)
         self.assertTrue(  # Python <= 3.12 splits the option and metavar; newer argparse keeps them on one line.
             "       --job-id STRING" in details or "       --job-id\n       STRING" in details,
             details,
         )
         self.assertLess(details.index("--job-id"), details.index("{full}"))
         full_usage_markers = (
-            "#### full\n\nFull replication.\n\n```\nusage: demo sync full",
+            "Full replication.\n\n```\nusage: demo sync full",
             # Python 3.15-dev includes the parent's required option in the nested subparser usage.
-            "#### full\n\nFull replication.\n\n```\nusage: demo sync --job-id STRING full",
+            "Full replication.\n\n```\nusage: demo sync --job-id STRING full",
         )
         self.assertTrue(any(marker in details for marker in full_usage_markers), details)
         self.assertIn("       DATASET", details)
-        self.assertLess(details.index("usage: demo sync"), details.index('<div id="sync~--job-id"></div>'))
-        full_usage_index = next(
-            details.index(marker.rsplit("\n", maxsplit=1)[-1]) for marker in full_usage_markers if marker in details
+        self.assertIn("**--job-id** *STRING* _(required)_", details)
+        self.assertLess(
+            details.index("usage: demo sync"),
+            details.index("**--job-id** *STRING* _(required)_"),
         )
-        self.assertLess(full_usage_index, details.index('<div id="sync~full~dataset"></div>'))
+        full_usage_index = next(details.index(marker) for marker in full_usage_markers if marker in details)
+        self.assertLess(full_usage_index, details.index("**DATASET**"))
 
     def test_epilogs_are_rendered_after_parser_details(self) -> None:
         parser = argparse.ArgumentParser(
@@ -461,7 +461,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn("```\ndemo root\n```", details)
         self.assertNotIn("==SUPPRESS==", details)
         self.assertLess(details.index("Root option."), details.index("Root epilog."))
-        self.assertLess(details.index("Root epilog."), details.index("### sync"))
+        self.assertLess(details.index("Root epilog."), details.index("usage: demo sync"))
         self.assertLess(details.index("Sync speed."), details.index("Sync epilog."))
         self.assertLess(details.index("Force full mode."), details.index("Full epilog."))
         self.assertLess(details.index("Root epilog."), details.index("Visible option."))
@@ -475,7 +475,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn('<div id="--visible"></div>', details)
+        self.assertIn("**--visible**", details)
         self.assertIn("Visible option.", details)
         self.assertNotIn("SUBCOMMANDS", details)
         self.assertNotIn("hidden", details)
@@ -489,8 +489,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn("# status (st)", details)
-        self.assertIn('<div id="status~--json"></div>', details)
+        self.assertIn("status (st)", details)
+        self.assertIn("**--json**", details)
         self.assertIn("Emit JSON.", details)
         self.assertNotIn("SUBCOMMANDS", details)
 
@@ -508,11 +508,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn('<div id="a_b~--flag"></div>', details)
-        self.assertIn('<div id="a~b~--flag"></div>', details)
-        self.assertEqual(1, details.count('<div id="a_b~--flag"></div>'))
-        self.assertEqual(1, details.count('<div id="a~b~--flag"></div>'))
-        self.assertIn('<div id="a_b~"></div>', details)
+        self.assertIn("**--flag**", details)
+        self.assertEqual(1, details.count('id="a_b~--flag"'))
+        self.assertEqual(1, details.count('id="a~b~--flag"'))
+        self.assertIn('id="a_b~"', details)
 
     def test_generated_metadata_escapes_common_markdown_and_html_chars(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -528,26 +527,25 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn('<div id="src"></div>', details)
         self.assertIn("**SRC_&lt;DATA&gt;**", details)
-        self.assertIn("# Danger &amp; \\*Group\\* [A]", details)
-        self.assertIn('<div id="--path&lt;tag&gt;"></div>', details)
+        self.assertIn("Danger &amp; \\*Group\\* [A]", details)
         self.assertIn("**--path&lt;tag&gt;** *NAME_[X]*", details)
         self.assertIn(
             "Mutually exclusive group: choose at most one of **--json&lt;tag&gt;**, **--text\\*plain**.",
             details,
         )
-        self.assertIn("# Commands &amp; \\*Modes\\*", details)
         self.assertIn("- [**sync\\*&lt;fast&gt;**](#sync%2A%3Cfast%3E~): Sync.", details)
-        self.assertIn("# sync\\*&lt;fast&gt;", details)
-        self.assertIn('<div id="sync*&lt;fast&gt;~--mode&quot;fast"></div>', details)
-        self.assertIn('**--mode"fast** *VAL&amp;&lt;X&gt;*', details)
         self.assertIn(
-            '<a class="man-option-permalink" href="#sync%2A%3Cfast%3E~--mode%22fast" '
-            'aria-label="Permalink to sync*&lt;fast&gt;~--mode&quot;fast" '
-            'title="Permalink to sync*&lt;fast&gt;~--mode&quot;fast">&#x1F517;</a>',
+            '# <span id="sync*&lt;fast&gt;~" class="man-subparser-heading">sync\\*&lt;fast&gt;</span>',
             details,
         )
+        self.assertIn(
+            '<span id="sync*&lt;fast&gt;~--mode&quot;fast" class="man-option-title">'
+            '**--mode"fast** *VAL&amp;&lt;X&gt;*</span>',
+            details,
+        )
+        self.assertIn('href="#sync%2A%3Cfast%3E~--mode%22fast"', details)
+        self.assertIn('title="Permalink to sync*&lt;fast&gt;~--mode&quot;fast"', details)
 
     def test_default_and_custom_help_actions_are_rendered(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
@@ -555,18 +553,16 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn('<div id="-h"></div>', details)
         self.assertIn("**-h**, **--help**", details)
-        self.assertIn('<div id="--help,_-h"></div>', details)
         self.assertIn("**--help, -h**", details)
 
     def test_default_help_action_is_rendered_for_alternate_prefix_chars(self) -> None:
         cases = (
-            ("+/", "+visible", '<div id="+h"></div>', "**+h**, **++help**"),
-            ("+-", "+visible", '<div id="-h"></div>', "**-h**, **--help**"),
-            ("/-", "/visible", '<div id="-h"></div>', "**-h**, **--help**"),
+            ("+/", "+visible", "**+h**, **++help**"),
+            ("+-", "+visible", "**-h**, **--help**"),
+            ("/-", "/visible", "**-h**, **--help**"),
         )
-        for prefix_chars, visible_option, help_anchor, help_title in cases:
+        for prefix_chars, visible_option, help_title in cases:
             with self.subTest(prefix_chars=prefix_chars):
                 parser = argparse.ArgumentParser(
                     prog="demo", prefix_chars=prefix_chars, formatter_class=argparse.RawTextHelpFormatter
@@ -575,10 +571,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
                 details = self._render_help_details(parser)
 
-                self.assertIn(help_anchor, details)
                 self.assertIn(help_title, details)
                 self.assertIn("show this help message and exit", details)
-                self.assertIn(f'<div id="{visible_option}"></div>', details)
                 self.assertIn(f"**{visible_option}** *VALUE*", details)
 
     def test_bzfs_custom_actions_are_rendered_from_parser_model(self) -> None:
@@ -655,7 +649,6 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn('<div id="root_dataset_pairs"></div>', details)
         self.assertIn("**SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]**", details)
         self.assertIn("**--include-snapshot-regex** *REGEX [REGEX ...]*", details)
         self.assertIn("**--compare-include-regex** *[REGEX ...]*", details)
@@ -1252,7 +1245,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
 
         details = self._render_help_details(parser)
 
-        self.assertIn("# Advanced Options", details)
+        self.assertIn("Advanced Options", details)
         self.assertIn("**--bare**", details)
         self.assertNotIn("- None", details)
 
@@ -1265,8 +1258,9 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn("<!-- BEGIN-MANPAGE-DESCRIPTION -->\nDemo description.\n<!-- END-MANPAGE-DESCRIPTION -->", rendered)
         self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
         self.assertNotIn("\x1b[", rendered)
-        self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="-h"></div>', rendered)
-        self.assertIn('<div id="--flag"></div>', rendered)
+        self.assertIn("<!-- BEGIN-MANPAGE-DETAILS -->", rendered)
+        self.assertIn("**-h**, **--help**", rendered)
+        self.assertIn("**--flag**", rendered)
         self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
         self.assertNotIn("old description", rendered)
         self.assertNotIn("old overview", rendered)
@@ -1293,8 +1287,9 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertNotIn("BEGIN-MANPAGE-DESCRIPTION", rendered)
         self.assertNotIn("Demo description.", rendered)
         self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
-        self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="-h"></div>', rendered)
-        self.assertIn('<div id="--flag"></div>', rendered)
+        self.assertIn("<!-- BEGIN-MANPAGE-DETAILS -->", rendered)
+        self.assertIn("**-h**, **--help**", rendered)
+        self.assertIn("**--flag**", rendered)
         self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
         self.assertNotIn("old overview", rendered)
         self.assertNotIn("old details", rendered)
@@ -1328,8 +1323,9 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             rendered = readme_path.read_text(encoding="utf-8")
             self.assertIn("<!-- BEGIN-MANPAGE-DESCRIPTION -->\nDemo description.", rendered)
             self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
-            self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="-h"></div>', rendered)
-            self.assertIn('<div id="--flag"></div>', rendered)
+            self.assertIn("<!-- BEGIN-MANPAGE-DETAILS -->", rendered)
+            self.assertIn("**-h**, **--help**", rendered)
+            self.assertIn("**--flag**", rendered)
             self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
             mock_import.assert_called_once_with("bzfs_main.bzfs")
             mock_import.return_value.argument_parser.assert_called_once_with()
@@ -1355,8 +1351,9 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             self.assertIn("# GENERATED", rendered)
             self.assertIn("<!-- BEGIN-MANPAGE-DESCRIPTION -->\nDemo description.", rendered)
             self.assertIn("<!-- BEGIN-MANPAGE-USAGE -->\n```\nusage: demo", rendered)
-            self.assertIn('<!-- BEGIN-MANPAGE-DETAILS -->\n<div id="-h"></div>', rendered)
-            self.assertIn('<div id="--flag"></div>', rendered)
+            self.assertIn("<!-- BEGIN-MANPAGE-DETAILS -->", rendered)
+            self.assertIn("**-h**, **--help**", rendered)
+            self.assertIn("**--flag**", rendered)
             mock_import.assert_called_once_with("bzfs_main.bzfs")
             mock_import.return_value.argument_parser.assert_called_once_with()
             self.assertEqual("", stdout.getvalue())
@@ -1368,17 +1365,19 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             (
                 "bzfs_main.bzfs",
                 "README.md",
-                ("usage: bzfs [-h]", '<div id="root_dataset_pairs"></div>', '<div id="--recursive"></div>'),
+                "usage: bzfs [-h]",
+                "**--recursive**, **-r**",
             ),
             (
                 "bzfs_main.bzfs_jobrunner",
                 "README_bzfs_jobrunner.md",
-                ("usage: bzfs_jobrunner", '<div id="--create-src-snapshots"></div>', '<div id="--job-id"></div>'),
+                "usage: bzfs_jobrunner",
+                "**--create-src-snapshots**",
             ),
         )
 
         with TemporaryDirectory() as tmpdir:
-            for module_name, filename, expected_fragments in cases:
+            for module_name, filename, usage_fragment, expected_detail in cases:
                 with self.subTest(module_name=module_name):
                     readme_path = Path(tmpdir) / filename
                     readme_path.write_text(self.readme_template(), encoding="utf-8")
@@ -1391,8 +1390,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                         markdown_from_argparse.main()
 
                     rendered = readme_path.read_text(encoding="utf-8")
-                    for fragment in expected_fragments:
-                        self.assertIn(fragment, rendered)
+                    self.assertIn(usage_fragment, rendered)
+                    self.assertIn(expected_detail, rendered)
                     self.assertIn("<!-- END-MANPAGE-DETAILS -->\nafter generated details\n", rendered)
                     self.assertNotIn("old description", rendered)
                     self.assertNotIn("old overview", rendered)
