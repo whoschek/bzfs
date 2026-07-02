@@ -361,14 +361,14 @@ class MarkdownFromArgparse:
     def _render_help_details_recursive(self, parser: ArgumentParser, heading_level: int, *, anchor_prefix: str) -> list[str]:
         """Includes recursive descent into nested subparsers."""
         all_results: list[str] = []
-        sub_results: list[str] = []
+        sub_results: list[str] = []  # subparser command details
         formatter: argparse.HelpFormatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
         mutually_exclusive_notes: dict[int, str] = self._mutually_exclusive_group_notes(parser, formatter)
         for group in parser._action_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
             group_results: list[str] = []
             actions: list[argparse.Action] = self._visible_group_actions(group)
             for i, action in enumerate(actions):
-                gists: list[str] = []
+                gists: list[str] = []  # subparser command overview list
                 if note := mutually_exclusive_notes.get(id(action)):
                     group_results += self._render_blocks(note) + [""]
                 if not isinstance(action, argparse._SubParsersAction):  # noqa: SLF001  # pylint: disable=protected-access
@@ -380,16 +380,13 @@ class MarkdownFromArgparse:
                     visible_subparser_actions: list[tuple] = self._visible_subparser_actions(action)
                     if len(visible_subparser_actions) == 0:
                         continue
-                    for name, title, _subparser, subaction in visible_subparser_actions:  # generate command overview list
+                    for name, title, subparser, subaction in visible_subparser_actions:  # generate cmd overview + details
                         sub_anchor_prefix = f"{anchor_prefix}{name}~"
                         prefix = _link(_bold(_escape_md(title)), sub_anchor_prefix)
                         gist: list[str] = []
                         if subaction is not None and subaction.help:
                             gist = self._render_blocks(f"{prefix}: {self._expand_help(subaction, formatter)}", is_list=True)
                         gists += gist if len(gist) > 0 else [f"- {prefix}"]
-                    gists += [""]
-                    for name, title, subparser, subaction in visible_subparser_actions:  # generate command details
-                        sub_anchor_prefix = f"{anchor_prefix}{name}~"
                         sub_results += [_html_anchor(sub_anchor_prefix), "", _heading(heading_level, _escape_md(title)), ""]
                         if subparser.description and subparser.description != argparse.SUPPRESS:
                             sub_results += self._render_blocks(subparser.description) + [""]
@@ -399,6 +396,7 @@ class MarkdownFromArgparse:
                         sub_results += self._render_help_details_recursive(  # recurse into nested subparser
                             subparser, heading_level + 1, anchor_prefix=sub_anchor_prefix
                         )
+                    gists += [""]
 
                 if action.help:
                     group_results += self._render_blocks(self._expand_help(action, formatter), is_list=is_list) + [""]
@@ -440,11 +438,8 @@ class MarkdownFromArgparse:
         self, group: argparse._ArgumentGroup  # pylint: disable=protected-access
     ) -> list[argparse.Action]:
         """Returns documented actions from one argparse action group."""
-        results: list[argparse.Action] = []
-        for action in group._group_actions:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
-            if action.help != argparse.SUPPRESS:
-                results.append(action)
-        return results
+        group_actions: list[argparse.Action] = group._group_actions  # noqa: SLF001  # pylint: disable=protected-access
+        return [action for action in group_actions if action.help != argparse.SUPPRESS]
 
     def _visible_subparser_actions(
         self, action: argparse._SubParsersAction  # pylint: disable=protected-access
@@ -549,7 +544,7 @@ def _heading(heading_level: int, text: str) -> str:
 def _link(text: str, fragment: str) -> str:
     """Returns an inline Markdown link that points to a URL-encoded fragment."""
     text = text.replace("[", "\\[").replace("]", "\\]")  # escape Markdown link-label delimiters
-    fragment = urllib.parse.quote(fragment, safe="-._~")  # encode chars unsafe in URL fragments
+    fragment = urllib.parse.quote(fragment, safe="-._~")  # quote chars that are unsafe in a URL fragment
     return f"[{text}](#{fragment})"
 
 
@@ -558,7 +553,7 @@ def _html_anchor(anchor: str) -> str:
 
 
 def _html_permalink(anchor: str) -> str:
-    """Returns an inline self-link that the user can copy and paste."""
+    """Returns an inline self-link that the user can copy and paste to refer to the section identified by the anchor."""
     label = html.escape(f"Permalink to {anchor}", quote=True)
     fragment = urllib.parse.quote(anchor, safe="-._~")
     return f'<a class="man-option-permalink" href="#{fragment}" aria-label="{label}" title="{label}">&#x1F517;</a>'
