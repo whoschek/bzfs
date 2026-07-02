@@ -373,7 +373,7 @@ class MarkdownFromArgparse:
                     group_results += self._render_blocks(note) + [""]
                 if not isinstance(action, argparse._SubParsersAction):  # noqa: SLF001  # pylint: disable=protected-access
                     anchor, title_line = self._action_anchor_and_title_line(parser, action, anchor_prefix=anchor_prefix)
-                    group_results += [_html_anchor(anchor), "", f"{title_line} {_html_permalink(anchor)}", ""]
+                    group_results += [f"{_html_option_title(anchor, title_line)} {_html_permalink(anchor)}", ""]
                     is_list = True
                 else:
                     is_list = False
@@ -387,7 +387,7 @@ class MarkdownFromArgparse:
                         if subaction is not None and subaction.help:
                             gist = self._render_blocks(f"{prefix}: {self._expand_help(subaction, formatter)}", is_list=True)
                         gists += gist if len(gist) > 0 else [f"- {prefix}"]
-                        sub_results += [_html_anchor(sub_anchor_prefix), "", _heading(heading_level, _escape_md(title)), ""]
+                        sub_results += [_heading(heading_level, _escape_md(title), anchor=sub_anchor_prefix), ""]
                         if subparser.description and subparser.description != argparse.SUPPRESS:
                             sub_results += self._render_blocks(subparser.description) + [""]
                         elif subaction is not None and subaction.help:
@@ -536,9 +536,10 @@ def _bold(text: str) -> str:
     return f"**{text}**"
 
 
-def _heading(heading_level: int, text: str) -> str:
-    """Returns a Markdown heading."""
-    return f"{'#' * heading_level} {text}"
+def _heading(heading_level: int, text: str, *, anchor: str = "") -> str:
+    """Returns a Markdown heading whose title text can be styled by CSS."""
+    id_attr = f' id="{html.escape(anchor, quote=True)}"' if anchor else ""
+    return f'{"#" * heading_level} <span{id_attr} class="man-heading-title">{text}</span>'
 
 
 def _link(text: str, fragment: str) -> str:
@@ -548,8 +549,9 @@ def _link(text: str, fragment: str) -> str:
     return f"[{text}](#{fragment})"
 
 
-def _html_anchor(anchor: str) -> str:
-    return f'<div id="{html.escape(anchor, quote=True)}"></div>'
+def _html_option_title(anchor: str, title_line: str) -> str:
+    """Returns an inline wrapper for a rendered argparse action title; can be styled by CSS."""
+    return f'<span id="{html.escape(anchor, quote=True)}" class="man-option-title">{title_line}</span>'
 
 
 def _html_permalink(anchor: str) -> str:
