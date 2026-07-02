@@ -102,8 +102,8 @@ The [BEGIN|END]-MANPAGE-DESCRIPTION marker pair is optional.
 
 Subparser sections are rendered recursively. Subparsers can be nested arbitrarily.
 
-Generated option entries and subparser headings include explicit HTML `id` anchors, so user-written HTML or Markdown
-links can link to them with URL fragments.
+Generated CLI option entries include explicit HTML `id` anchors and inline permalinks so users can refer to them via copy
+and paste. Subparser headings also include explicit HTML `id` anchors.
 
 The renderer expects argparse parser `description`, `epilog`, and `help=` text in the form of blank-line-separated blocks,
 where the first block of each `help=` text is prose.
@@ -373,7 +373,7 @@ class MarkdownFromArgparse:
                     group_results += self._render_blocks(note) + [""]
                 if not isinstance(action, argparse._SubParsersAction):  # noqa: SLF001  # pylint: disable=protected-access
                     anchor, title_line = self._action_anchor_and_title_line(parser, action, anchor_prefix=anchor_prefix)
-                    group_results += [_html_anchor(anchor), "", title_line, ""]
+                    group_results += [_html_anchor(anchor), "", f"{title_line} {_html_permalink(anchor)}", ""]
                     is_list = True
                 else:
                     is_list = False
@@ -555,6 +555,13 @@ def _link(text: str, fragment: str) -> str:
 
 def _html_anchor(anchor: str) -> str:
     return f'<div id="{html.escape(anchor, quote=True)}"></div>'
+
+
+def _html_permalink(anchor: str) -> str:
+    """Returns an inline self-link that the user can copy and paste."""
+    label = html.escape(f"Permalink to {anchor}", quote=True)
+    fragment = urllib.parse.quote(anchor, safe="-._~")
+    return f'<a class="man-option-permalink" href="#{fragment}" aria-label="{label}" title="{label}">&#x1F517;</a>'
 
 
 def _escape_md(text: str) -> str:

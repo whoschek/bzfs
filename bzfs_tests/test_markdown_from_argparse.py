@@ -176,6 +176,27 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertNotIn("**SRC** _(required)_", details)
         self.assertNotIn("**--optional** *VALUE* _(required)_", details)
 
+    def test_action_titles_include_copyable_permalinks(self) -> None:
+        """Covers self-links that docs renderers can expose on hover."""
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        parser.add_argument("--root", metavar="VALUE", help="Root option.")
+        commands = parser.add_subparsers(dest="command", title="Commands")
+        sync = commands.add_parser("sync", help="Sync snapshots.", formatter_class=argparse.RawTextHelpFormatter)
+        sync.add_argument("--speed", choices=["fast", "safe"], help="Sync speed.")
+
+        details = self._render_help_details(parser)
+
+        self.assertIn(
+            '**--root** *VALUE* <a class="man-option-permalink" href="#--root" '
+            'aria-label="Permalink to --root" title="Permalink to --root">&#x1F517;</a>',
+            details,
+        )
+        self.assertIn(
+            '**--speed** *{fast,safe}* <a class="man-option-permalink" href="#sync~--speed" '
+            'aria-label="Permalink to sync~--speed" title="Permalink to sync~--speed">&#x1F517;</a>',
+            details,
+        )
+
     def test_positional_nargs_are_rendered_in_detail_titles(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument("optional_item", nargs="?", metavar="OPTIONAL_ITEM", help="Optional item.")
@@ -521,6 +542,12 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn("# sync\\*&lt;fast&gt;", details)
         self.assertIn('<div id="sync*&lt;fast&gt;~--mode&quot;fast"></div>', details)
         self.assertIn('**--mode"fast** *VAL&amp;&lt;X&gt;*', details)
+        self.assertIn(
+            '<a class="man-option-permalink" href="#sync%2A%3Cfast%3E~--mode%22fast" '
+            'aria-label="Permalink to sync*&lt;fast&gt;~--mode&quot;fast" '
+            'title="Permalink to sync*&lt;fast&gt;~--mode&quot;fast">&#x1F517;</a>',
+            details,
+        )
 
     def test_default_and_custom_help_actions_are_rendered(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)

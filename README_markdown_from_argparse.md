@@ -59,8 +59,8 @@ The [BEGIN|END]-MANPAGE-DESCRIPTION marker pair is optional.
 
 Subparser sections are rendered recursively. Subparsers can be nested arbitrarily.
 
-Generated option entries and subparser headings include explicit HTML `id` anchors, so
-user-written HTML or Markdown links can link to them with URL fragments.
+Generated CLI option entries include explicit HTML `id` anchors and inline permalinks so users can
+refer to them via copy and paste. Subparser headings also include explicit HTML `id` anchors.
 
 The renderer expects argparse parser `description`, `epilog`, and `help=` text in the form of
 blank-line-separated blocks, where the first block of each `help=` text is prose.
@@ -90,7 +90,7 @@ survive unchanged.
 <!-- BEGIN-MANPAGE-DETAILS -->
 <div id="-h"></div>
 
-**-h**, **--help**
+**-h**, **--help** <a class="man-option-permalink" href="#-h" aria-label="Permalink to -h" title="Permalink to -h">&#x1F517;</a>
 
 - show this help message and exit
 
@@ -98,7 +98,7 @@ survive unchanged.
 
 <div id="--readme"></div>
 
-**--readme** *PATH* _(required)_
+**--readme** *PATH* _(required)_ <a class="man-option-permalink" href="#--readme" aria-label="Permalink to --readme" title="Permalink to --readme">&#x1F517;</a>
 
 - Path of README markdown file to update. If the file does not exist a template will be generated.
   Example: path/to/README.md
@@ -107,7 +107,7 @@ survive unchanged.
 
 <div id="--module"></div>
 
-**--module** *STRING* _(required)_
+**--module** *STRING* _(required)_ <a class="man-option-permalink" href="#--module" aria-label="Permalink to --module" title="Permalink to --module">&#x1F517;</a>
 
 - Python module containing the parser factory. Example: 'bzfs_main.bzfs'
 
@@ -115,7 +115,7 @@ survive unchanged.
 
 <div id="--function"></div>
 
-**--function** *STRING*
+**--function** *STRING* <a class="man-option-permalink" href="#--function" aria-label="Permalink to --function" title="Permalink to --function">&#x1F517;</a>
 
 - Name of the no-argument parser factory function within the Python module. The function must
   return an instance of argparse.ArgumentParser. Default is 'argument_parser'.
@@ -124,7 +124,7 @@ survive unchanged.
 
 <div id="--heading-level"></div>
 
-**--heading-level** *INT*
+**--heading-level** *INT* <a class="man-option-permalink" href="#--heading-level" aria-label="Permalink to --heading-level" title="Permalink to --heading-level">&#x1F517;</a>
 
 - Markdown heading level for generated group/subparser sections. Must be >= 1. Default is '1'.
 
