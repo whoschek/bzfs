@@ -46,7 +46,6 @@ from typing import (
 
 # constants:
 _WRAP_TEXT_WIDTH: Final[int] = 98
-_DEFAULT_GROUPS: Final[frozenset] = frozenset(["positional arguments", "optional arguments", "options"])
 TRIPLE_BACKTICK: Final[str] = "```"
 
 
@@ -403,7 +402,8 @@ class MarkdownFromArgparse:
                     group_results += list_separator if len(gists) > 0 else []
                 group_results += gists + list_separator
 
-            if len(group_results) > 0 and group.title and group.title not in _DEFAULT_GROUPS:
+            skip_builtin_group_titles: set[str] = {"positional arguments", "optional arguments", "options"}
+            if len(group_results) > 0 and group.title and group.title not in skip_builtin_group_titles:
                 all_results += [_heading(heading_level, _escape_md(group.title), css_class="man-group-heading"), ""]
                 if group.description and group.description != argparse.SUPPRESS:
                     all_results += self._render_blocks(group.description) + [""] + list_separator
@@ -477,10 +477,10 @@ class MarkdownFromArgparse:
                 positional_args = str(action.metavar or dflt)
             return anchor_prefix + action.dest.replace(" ", "_"), _bold(_escape_md(positional_args))
         elif action.nargs == 0:
-            title_line = ", ".join(_bold(_escape_md(opt)) for opt in action.option_strings)
+            title_line: str = ", ".join(_bold(_escape_md(opt)) for opt in action.option_strings)
         else:
             dflt = formatter._get_default_metavar_for_optional(action)  # noqa: SLF001  # pylint: disable=protected-access
-            option_args = formatter._format_args(action, dflt)  # noqa: SLF001  # pylint: disable=protected-access
+            option_args: str = formatter._format_args(action, dflt)  # noqa: SLF001  # pylint: disable=protected-access
             title_line = ", ".join(f"{_bold(_escape_md(opt))} *{_escape_md(option_args)}*" for opt in action.option_strings)
         if action.required:
             title_line += " _(required)_"
