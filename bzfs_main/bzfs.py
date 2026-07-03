@@ -832,6 +832,9 @@ class Job(MiniJob):
             ),  # retry_on_generic_ssh_error=False means only retry on SSH connect errors b/c `zfs snapshot` isn't idempotent
             max_batch_items=2**29,
         )
+        for label, datasets in basis_datasets_to_snapshot.items():
+            for dataset in datasets:
+                log.debug(p.dry("--create-src-snapshots: %s%s%s%s"), "Created snapshot ", dataset, "@", label)
         if is_caching_snapshots(p, src):
             # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
             self.cache.update_last_modified_cache(basis_datasets_to_snapshot)
