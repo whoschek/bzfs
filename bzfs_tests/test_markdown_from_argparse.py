@@ -359,6 +359,55 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertLess(details.index("- [**full**](#sync~full~): Full replication."), details.index("Sync speed."))
         self.assertLess(details.index("Sync speed."), details.index("usage: demo sync full"))
 
+    def test_untitled_subparser_overview_is_separated_from_preceding_positional_list(self) -> None:
+        """Covers CommonMark list merging between a positional action and an untitled subparser action."""
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        parser.add_argument("src", help="Source dataset.")
+        commands = parser.add_subparsers(dest="command")
+        commands.add_parser("sync", help="Sync snapshots.", formatter_class=argparse.RawTextHelpFormatter)
+
+        details = self._render_help_details(parser, heading_level=3)
+
+        self.assertIn("- Source dataset.\n\n<!-- -->\n\n- [**sync**](#sync~): Sync snapshots.", details)
+        self.assertLess(details.index("**src**"), details.index("- [**sync**](#sync~): Sync snapshots."))
+
+    def test_subparser_overview_is_separated_from_action_help_list(self) -> None:
+        """Covers CommonMark list merging between subparser action help and command overview entries."""
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        commands = parser.add_subparsers(dest="command", help="- Pick one command group.\n- Then configure it.")
+        commands.add_parser("sync", help="Sync snapshots.", formatter_class=argparse.RawTextHelpFormatter)
+
+        details = self._render_help_details(parser, heading_level=3)
+
+        self.assertIn("- Then configure it.\n\n<!-- -->\n\n- [**sync**](#sync~): Sync snapshots.", details)
+
+    def test_subparser_overview_is_separated_from_group_description_list(self) -> None:
+        """Covers CommonMark list merging between group descriptions and command overview entries."""
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        commands = parser.add_subparsers(
+            dest="command",
+            title="Commands",
+            description="- Group description item one.\n- Group description item two.",
+        )
+        commands.add_parser("sync", help="Sync snapshots.", formatter_class=argparse.RawTextHelpFormatter)
+
+        details = self._render_help_details(parser, heading_level=3)
+
+        self.assertIn("- Group description item two.\n\n<!-- -->\n\n- [**sync**](#sync~): Sync snapshots.", details)
+
+    def test_list_epilog_is_separated_from_final_action_list(self) -> None:
+        """Covers CommonMark list merging between the final action help and parser epilog."""
+        parser = argparse.ArgumentParser(
+            prog="demo",
+            epilog="- Epilog item one.\n- Epilog item two.",
+            formatter_class=argparse.RawTextHelpFormatter,
+        )
+        parser.add_argument("--flag", action="store_true", help="Flag help.")
+
+        details = self._render_help_details(parser, heading_level=3)
+
+        self.assertIn("- Flag help.\n\n<!-- -->\n\n- Epilog item one.", details)
+
     def test_subparser_overview_preserves_multiblock_help(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
         commands = parser.add_subparsers(dest="command", title="Commands")

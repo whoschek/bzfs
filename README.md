@@ -675,6 +675,8 @@ usage: bzfs [-h]
   selected dataset subtrees are available for start of processing. The degree of parallelism is
   configurable with the --threads option (see below).
 
+<!-- -->
+
 <span id="-h" class="man-option-title">**-h**, **--help**</span> <a href="#-h" title="Permalink to -h" aria-label="Permalink to -h" class="man-option-permalink">&#x1F517;</a>
 
 - show this help message and exit
@@ -2089,10 +2091,14 @@ usage: bzfs [-h]
 
 - Display version information and exit.
 
+<!-- -->
+
 # <span class="man-group-heading">Yearly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N years are scheduled to be
 created on the source by the --create-src-snapshots option.
+
+<!-- -->
 
 <span id="--yearly_year" class="man-option-title">**--yearly_year** *INT*</span> <a href="#--yearly_year" title="Permalink to --yearly_year" aria-label="Permalink to --yearly_year" class="man-option-permalink">&#x1F517;</a>
 
@@ -2128,10 +2134,14 @@ created on the source by the --create-src-snapshots option.
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
+<!-- -->
+
 # <span class="man-group-heading">Monthly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N months are scheduled to be
 created on the source by the --create-src-snapshots option.
+
+<!-- -->
 
 <span id="--monthly_month" class="man-option-title">**--monthly_month** *INT*</span> <a href="#--monthly_month" title="Permalink to --monthly_month" aria-label="Permalink to --monthly_month" class="man-option-permalink">&#x1F517;</a>
 
@@ -2161,10 +2171,14 @@ created on the source by the --create-src-snapshots option.
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
+<!-- -->
+
 # <span class="man-group-heading">Weekly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N weeks are scheduled to be
 created on the source by the --create-src-snapshots option.
+
+<!-- -->
 
 <span id="--weekly_weekday" class="man-option-title">**--weekly_weekday** *INT*</span> <a href="#--weekly_weekday" title="Permalink to --weekly_weekday" aria-label="Permalink to --weekly_weekday" class="man-option-permalink">&#x1F517;</a>
 
@@ -2188,10 +2202,14 @@ created on the source by the --create-src-snapshots option.
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
+<!-- -->
+
 # <span class="man-group-heading">Daily Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N days are scheduled to be created
 on the source by the --create-src-snapshots option.
+
+<!-- -->
 
 <span id="--daily_hour" class="man-option-title">**--daily_hour** *INT*</span> <a href="#--daily_hour" title="Permalink to --daily_hour" aria-label="Permalink to --daily_hour" class="man-option-permalink">&#x1F517;</a>
 
@@ -2209,10 +2227,14 @@ on the source by the --create-src-snapshots option.
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
+<!-- -->
+
 # <span class="man-group-heading">Hourly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N hours are scheduled to be
 created on the source by the --create-src-snapshots option.
+
+<!-- -->
 
 <span id="--hourly_minute" class="man-option-title">**--hourly_minute** *INT*</span> <a href="#--hourly_minute" title="Permalink to --hourly_minute" aria-label="Permalink to --hourly_minute" class="man-option-permalink">&#x1F517;</a>
 
@@ -2224,32 +2246,46 @@ created on the source by the --create-src-snapshots option.
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
 
+<!-- -->
+
 # <span class="man-group-heading">Minutely Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N minutes are scheduled to be
 created on the source by the --create-src-snapshots option.
 
+<!-- -->
+
 <span id="--minutely_second" class="man-option-title">**--minutely_second** *INT*</span> <a href="#--minutely_second" title="Permalink to --minutely_second" aria-label="Permalink to --minutely_second" class="man-option-permalink">&#x1F517;</a>
 
 - The second within a minute (0 ≤ x ≤ 59, default: 0).
+
+<!-- -->
 
 # <span class="man-group-heading">Secondly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N seconds are scheduled to be
 created on the source by the --create-src-snapshots option.
 
+<!-- -->
+
 <span id="--secondly_millisecond" class="man-option-title">**--secondly_millisecond** *INT*</span> <a href="#--secondly_millisecond" title="Permalink to --secondly_millisecond" aria-label="Permalink to --secondly_millisecond" class="man-option-permalink">&#x1F517;</a>
 
 - The millisecond within a second (0 ≤ x ≤ 999, default: 0).
+
+<!-- -->
 
 # <span class="man-group-heading">Millisecondly Period Anchors</span>
 
 Use these options to customize when snapshots that happen every N milliseconds are scheduled to be
 created on the source by the --create-src-snapshots option.
 
+<!-- -->
+
 <span id="--millisecondly_microsecond" class="man-option-title">**--millisecondly_microsecond** *INT*</span> <a href="#--millisecondly_microsecond" title="Permalink to --millisecondly_microsecond" aria-label="Permalink to --millisecondly_microsecond" class="man-option-permalink">&#x1F517;</a>
 
 - The microsecond within a millisecond (0 ≤ x ≤ 999, default: 0).
+
+<!-- -->
 
 # <span class="man-group-heading">zfs-recv-o</span>
 
@@ -2257,6 +2293,8 @@ The following group of parameters specifies additional zfs receive '-o' options 
 to configure copying of ZFS dataset properties from the source dataset to its corresponding
 destination dataset. The 'zfs-recv-o' group of parameters is applied before the 'zfs-recv-x'
 group.
+
+<!-- -->
 
 <span id="--zfs-recv-o-targets" class="man-option-title">**--zfs-recv-o-targets** *{full,incremental,full+incremental}*</span> <a href="#--zfs-recv-o-targets" title="Permalink to --zfs-recv-o-targets" aria-label="Permalink to --zfs-recv-o-targets" class="man-option-permalink">&#x1F517;</a>
 
@@ -2312,12 +2350,16 @@ group.
   properties. Example: --zfs-recv-o-exclude-regex encryptionroot keystatus origin volblocksize
   volsize
 
+<!-- -->
+
 # <span class="man-group-heading">zfs-recv-x</span>
 
 The following group of parameters specifies additional zfs receive '-x' options that can be used
 to configure copying of ZFS dataset properties from the source dataset to its corresponding
 destination dataset. The 'zfs-recv-o' group of parameters is applied before the 'zfs-recv-x'
 group.
+
+<!-- -->
 
 <span id="--zfs-recv-x-targets" class="man-option-title">**--zfs-recv-x-targets** *{full,incremental,full+incremental}*</span> <a href="#--zfs-recv-x-targets" title="Permalink to --zfs-recv-x-targets" aria-label="Permalink to --zfs-recv-x-targets" class="man-option-permalink">&#x1F517;</a>
 
@@ -2372,4 +2414,6 @@ group.
 - Same syntax as --zfs-recv-x-include-regex (see above), and the default is to exclude no
   properties. Example: --zfs-recv-x-exclude-regex encryptionroot keystatus origin volblocksize
   volsize
+
+<!-- -->
 <!-- END-MANPAGE-DETAILS -->

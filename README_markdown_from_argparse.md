@@ -118,6 +118,8 @@ survive unchanged.
 
 - Markdown heading level for generated group/subparser sections. Must be >= 1. Default is '1'.
 
+<!-- -->
+
 # Examples
 
 

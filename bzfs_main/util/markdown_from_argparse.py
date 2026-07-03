@@ -360,14 +360,14 @@ class MarkdownFromArgparse:
 
     def _render_help_details_recursive(self, parser: ArgumentParser, heading_level: int, *, anchor_prefix: str) -> list[str]:
         """Includes recursive descent into nested subparsers."""
+        list_separator: list[str] = ["<!-- -->", ""]  # prevent adjacent Markdown lists from merging
         all_results: list[str] = []
         sub_results: list[str] = []  # subparser command details
         formatter: argparse.HelpFormatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
         mutually_exclusive_notes: dict[int, str] = self._mutually_exclusive_group_notes(parser, formatter)
         for group in parser._action_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
             group_results: list[str] = []
-            actions: list[argparse.Action] = self._visible_group_actions(group)
-            for i, action in enumerate(actions):
+            for action in self._visible_group_actions(group):
                 gists: list[str] = []  # subparser command overview list
                 if note := mutually_exclusive_notes.get(id(action)):
                     group_results += self._render_blocks(note) + [""]
@@ -382,7 +382,7 @@ class MarkdownFromArgparse:
                         continue
                     for name, title, subparser, subaction in visible_subparser_actions:  # generate cmd overview + details
                         sub_anchor_prefix = f"{anchor_prefix}{name}~"
-                        prefix = _link(_bold(_escape_md(title)), sub_anchor_prefix)
+                        prefix: str = _link(_bold(_escape_md(title)), sub_anchor_prefix)
                         gist: list[str] = []
                         if subaction is not None and subaction.help:
                             gist = self._render_blocks(f"{prefix}: {self._expand_help(subaction, formatter)}", is_list=True)
@@ -400,14 +400,13 @@ class MarkdownFromArgparse:
 
                 if action.help:
                     group_results += self._render_blocks(self._expand_help(action, formatter), is_list=is_list) + [""]
-                group_results += gists
-                if i != len(actions) - 1:
-                    group_results += ["<!-- -->", ""]  # Prevent adjacent lists from merging
+                    group_results += list_separator if len(gists) > 0 else []
+                group_results += gists + list_separator
 
             if len(group_results) > 0 and group.title and group.title not in _DEFAULT_GROUPS:
                 all_results += [_heading(heading_level, _escape_md(group.title), css_class="man-group-heading"), ""]
                 if group.description and group.description != argparse.SUPPRESS:
-                    all_results += self._render_blocks(group.description) + [""]
+                    all_results += self._render_blocks(group.description) + [""] + list_separator
             all_results += group_results
         if parser.epilog and parser.epilog != argparse.SUPPRESS:
             all_results += self._render_blocks(parser.epilog) + [""]
