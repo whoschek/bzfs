@@ -418,6 +418,7 @@ pre-commit run --all-files                                       # Manually run 
 * Prevents overlapping periodic runs by skipping a new run while the previous one is still active.
 * Optionally caches snapshot metadata via ZFS `snapshots_changed` to reduce latency by avoiding unnecessary
   `zfs list -t snapshot` calls.
+* Can be configured to use `zfs send -R -s` aka sending a recursive ZFS stream package.
 * Implemented with efficient, reliable low latency mechanisms throughout.
 * Implemented in straightforward Python to make maintenance easy.
 * Unit and integration tests are about 2x runtime code size, with >99% coverage.
