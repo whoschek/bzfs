@@ -371,8 +371,7 @@ class MarkdownFromArgparse:
                 if note := mutually_exclusive_notes.get(id(action)):
                     group_results += self._render_blocks(note) + [""]
                 if not isinstance(action, argparse._SubParsersAction):  # noqa: SLF001  # pylint: disable=protected-access
-                    anchor, title_line = self._action_anchor_and_title_line(parser, action, anchor_prefix=anchor_prefix)
-                    group_results += [f"{_html_option_title(anchor, title_line)} {_html_permalink(anchor)}", ""]
+                    group_results += [self._render_option_title(parser, action, anchor_prefix=anchor_prefix), ""]
                     is_list = True
                 else:
                     is_list = False
@@ -380,19 +379,19 @@ class MarkdownFromArgparse:
                     if len(visible_subparser_actions) == 0:
                         continue
                     for name, title, subparser, subaction in visible_subparser_actions:  # generate cmd overview + details
-                        sub_anchor_prefix = f"{anchor_prefix}{name}~"
-                        prefix: str = _link(_bold(_escape_md(title)), sub_anchor_prefix)
-                        gist: list[str] = []
+                        sub_anchor_prefix: str = f"{anchor_prefix}{name}~"
+                        link: str = _link(_bold(_escape_md(title)), sub_anchor_prefix)
                         if subaction is not None and subaction.help:
-                            gist = self._render_blocks(f"{prefix}: {self._expand_help(subaction, formatter)}", is_list=True)
-                        gists += gist if len(gist) > 0 else [f"- {prefix}"]
-                        sub_results += [_heading(heading_level, _escape_md(title), anchor=sub_anchor_prefix), ""]
+                            gists += self._render_blocks(f"{link}: {self._expand_help(subaction, formatter)}", is_list=True)
+                        else:
+                            gists += [f"- {link}"]
+                        sub_details: list[str] = [_heading(heading_level, _escape_md(title), anchor=sub_anchor_prefix), ""]
                         if subparser.description and subparser.description != argparse.SUPPRESS:
-                            sub_results += self._render_blocks(subparser.description) + [""]
+                            sub_details += self._render_blocks(subparser.description) + [""]
                         elif subaction is not None and subaction.help:
-                            sub_results += self._render_blocks(self._expand_help(subaction, formatter)) + [""]
-                        sub_results += [TRIPLE_BACKTICK] + self._format_usage(subparser).splitlines() + [TRIPLE_BACKTICK, ""]
-                        sub_results += self._render_help_details_recursive(  # recurse into nested subparser
+                            sub_details += self._render_blocks(self._expand_help(subaction, formatter)) + [""]
+                        sub_details += [TRIPLE_BACKTICK] + self._format_usage(subparser).splitlines() + [TRIPLE_BACKTICK, ""]
+                        sub_results += sub_details + self._render_help_details_recursive(  # recurse into nested subparser
                             subparser, heading_level + 1, anchor_prefix=sub_anchor_prefix
                         )
                     gists += [""]
@@ -465,17 +464,21 @@ class MarkdownFromArgparse:
                     results.append((name, title, subparser, subaction))
         return results
 
-    def _action_anchor_and_title_line(
-        self, parser: ArgumentParser, action: argparse.Action, *, anchor_prefix: str = ""
-    ) -> tuple[str, str]:
-        """Returns the README anchor and Markdown rendered title line for one argparse action."""
+    def _render_option_title(self, parser: ArgumentParser, action: argparse.Action, *, anchor_prefix: str = "") -> str:
+        """Returns the rendered anchor and title line for one argparse action."""
+
+        def _render_anchor_and_title(anchor: str, title: str) -> str:
+            anchor = anchor_prefix + anchor.replace(" ", "_")
+            result: str = f"{_html_option_title(anchor, title)} {_html_permalink(anchor)}"
+            return result
+
         formatter: argparse.HelpFormatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
         if not action.option_strings:
             dflt = formatter._get_default_metavar_for_positional(action)  # noqa: SLF001  # pylint: disable=protected-access
             positional_args: str = formatter._format_args(action, dflt)  # noqa: SLF001  # pylint: disable=protected-access
             if action.nargs == argparse.REMAINDER and positional_args == "...":
                 positional_args = str(action.metavar or dflt)
-            return anchor_prefix + action.dest.replace(" ", "_"), _bold(_escape_md(positional_args))
+            return _render_anchor_and_title(action.dest, _bold(_escape_md(positional_args)))
         elif action.nargs == 0:
             title_line: str = ", ".join(_bold(_escape_md(opt)) for opt in action.option_strings)
         else:
@@ -484,7 +487,7 @@ class MarkdownFromArgparse:
             title_line = ", ".join(f"{_bold(_escape_md(opt))} *{_escape_md(option_args)}*" for opt in action.option_strings)
         if action.required:
             title_line += " _(required)_"
-        return anchor_prefix + action.option_strings[0].replace(" ", "_"), title_line
+        return _render_anchor_and_title(action.option_strings[0], title_line)
 
     def _wrap_text(self, text: str, *, first_indent: str = "", later_indent: str = "") -> list[str]:
         """Wraps prose without splitting words, option names, or paths."""
