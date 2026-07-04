@@ -7,7 +7,7 @@ uv-install-script-sha256 = "053045e1e69ec77358fd44f2ef2cacb768a22d50f433e213624f
 
 [project]
 name = "bzfs"
-version = "1.23.0.dev0"
+version = "1.23.0"
 
 description = """
 bzfs is a CLI built for highly reliable and scalable near real-time ZFS snapshot replication with minimal operational \
