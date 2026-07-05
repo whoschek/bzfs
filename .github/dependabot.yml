@@ -16,6 +16,10 @@ updates:
       - "requirements*.txt"
     allow:
       - dependency-type: direct
+    ignore:
+      - dependency-name: pydocstringformatter
+        versions:
+          - ">= 1.0" # 1.x would require python >= 3.11
     commit-message:
       prefix: chore
       prefix-development: chore
