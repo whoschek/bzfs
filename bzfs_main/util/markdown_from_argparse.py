@@ -45,7 +45,7 @@ from typing import (
 )
 
 # constants:
-_WRAP_TEXT_WIDTH: Final[int] = 98
+_WRAP_TEXT_WIDTH: Final[int] = 125
 TRIPLE_BACKTICK: Final[str] = "```"
 
 

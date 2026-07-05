@@ -933,8 +933,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                     "structure that needs physical line preservation.",
                 ),
                 [
-                    "This paragraph was manually wrapped in source but it has no columns, examples, or Markdown",
-                    "structure that needs physical line preservation.",
+                    "This paragraph was manually wrapped in source but it has no columns, examples, or Markdown structure that needs physical line",
+                    "preservation.",
                 ],
             ),
         )
@@ -951,8 +951,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "Use `pipx install black` when you want the command available on PATH without adding the package to "
                 "the application runtime dependencies.",
                 [
-                    "Use `pipx install black` when you want the command available on PATH without adding the package to",
-                    "the application runtime dependencies.",
+                    "Use `pipx install black` when you want the command available on PATH without adding the package to the application runtime",
+                    "dependencies.",
                 ],
             ),
             (
@@ -960,8 +960,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "Set PIPX_HOME only when you need a different virtual environment root; most users should keep the "
                 "default directory so upgrades remain predictable.",
                 [
-                    "Set PIPX_HOME only when you need a different virtual environment root; most users should keep the",
-                    "default directory so upgrades remain predictable.",
+                    "Set PIPX_HOME only when you need a different virtual environment root; most users should keep the default directory so",
+                    "upgrades remain predictable.",
                 ],
             ),
             (
@@ -969,8 +969,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "The --quiet and --verbose options adjust logging verbosity for troubleshooting but do not change package "
                 "installation behavior or dependency resolution.",
                 [
-                    "The --quiet and --verbose options adjust logging verbosity for troubleshooting but do not change",
-                    "package installation behavior or dependency resolution.",
+                    "The --quiet and --verbose options adjust logging verbosity for troubleshooting but do not change package installation",
+                    "behavior or dependency resolution.",
                 ],
             ),
             (
@@ -978,8 +978,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "Applications are linked into /usr/local/bin or another configured bin directory so shells can find them "
                 "without activating the virtual environment first.",
                 [
-                    "Applications are linked into /usr/local/bin or another configured bin directory so shells can find",
-                    "them without activating the virtual environment first.",
+                    "Applications are linked into /usr/local/bin or another configured bin directory so shells can find them without activating",
+                    "the virtual environment first.",
                 ],
             ),
             (
@@ -987,8 +987,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "See https://pipx.pypa.io/latest/how-to/troubleshoot/ for troubleshooting guidance before deleting "
                 "environments or changing global configuration.",
                 [
-                    "See https://pipx.pypa.io/latest/how-to/troubleshoot/ for troubleshooting guidance before deleting",
-                    "environments or changing global configuration.",
+                    "See https://pipx.pypa.io/latest/how-to/troubleshoot/ for troubleshooting guidance before deleting environments or changing",
+                    "global configuration.",
                 ],
             ),
             (
@@ -996,17 +996,17 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "The JSON output is intended for automation; callers should treat unknown fields as forward-compatible "
                 "extensions instead of hard failures.",
                 [
-                    "The JSON output is intended for automation; callers should treat unknown fields as",
-                    "forward-compatible extensions instead of hard failures.",
+                    "The JSON output is intended for automation; callers should treat unknown fields as forward-compatible extensions instead of",
+                    "hard failures.",
                 ],
             ),
             (
                 "inline_key_value_reference",
                 "Use backend=uv in examples as shorthand for selecting the uv backend; the actual command-line flag "
-                "remains --backend uv.",
+                "remains --backend uv in generated troubleshooting documentation.",
                 [
-                    "Use backend=uv in examples as shorthand for selecting the uv backend; the actual command-line flag",
-                    "remains --backend uv.",
+                    "Use backend=uv in examples as shorthand for selecting the uv backend; the actual command-line flag remains --backend uv in",
+                    "generated troubleshooting documentation.",
                 ],
             ),
             (
@@ -1014,8 +1014,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "Note: global installation changes where environments and manual pages are stored, but it does not imply "
                 "that package installation itself runs with elevated privileges.",
                 [
-                    "Note: global installation changes where environments and manual pages are stored, but it does not",
-                    "imply that package installation itself runs with elevated privileges.",
+                    "Note: global installation changes where environments and manual pages are stored, but it does not imply that package",
+                    "installation itself runs with elevated privileges.",
                 ],
             ),
             (
@@ -1023,8 +1023,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "The cache speeds up repeated runs; it is safe to remove because pipx can rebuild temporary environments "
                 "when the same app is invoked again.",
                 [
-                    "The cache speeds up repeated runs; it is safe to remove because pipx can rebuild temporary",
-                    "environments when the same app is invoked again.",
+                    "The cache speeds up repeated runs; it is safe to remove because pipx can rebuild temporary environments when the same app is",
+                    "invoked again.",
                 ],
             ),
             (
@@ -1032,8 +1032,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "The selected interpreter must satisfy the project requirement (Python 3.10 or newer) before the package "
                 "manager starts resolving dependencies.",
                 [
-                    "The selected interpreter must satisfy the project requirement (Python 3.10 or newer) before the",
-                    "package manager starts resolving dependencies.",
+                    "The selected interpreter must satisfy the project requirement (Python 3.10 or newer) before the package manager starts",
+                    "resolving dependencies.",
                 ],
             ),
             (
@@ -1041,8 +1041,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "The package manager uses best-effort clean-up after failures so partially-created environments do not "
                 "hide later successful installation attempts.",
                 [
-                    "The package manager uses best-effort clean-up after failures so partially-created environments do",
-                    "not hide later successful installation attempts.",
+                    "The package manager uses best-effort clean-up after failures so partially-created environments do not hide later successful",
+                    "installation attempts.",
                 ],
             ),
             (
@@ -1050,8 +1050,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 'When the documentation says "app", it means a console script exposed by the installed package rather '
                 "than an arbitrary importable module.",
                 [
-                    'When the documentation says "app", it means a console script exposed by the installed package',
-                    "rather than an arbitrary importable module.",
+                    'When the documentation says "app", it means a console script exposed by the installed package rather than an arbitrary',
+                    "importable module.",
                 ],
             ),
             (
@@ -1059,8 +1059,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "The command accepts package names, local directories, wheel files, source archives, and version control "
                 "URLs through the same package specification argument.",
                 [
-                    "The command accepts package names, local directories, wheel files, source archives, and version",
-                    "control URLs through the same package specification argument.",
+                    "The command accepts package names, local directories, wheel files, source archives, and version control URLs through the same",
+                    "package specification argument.",
                 ],
             ),
             (
@@ -1068,22 +1068,24 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 self.block(
                     "This source paragraph is wrapped by hand",
                     "because it was written in a narrow editor,",
-                    "but it still represents ordinary prose.",
+                    "but it still represents ordinary prose",
+                    "that should be reflowed before rendering.",
                 ),
                 [
-                    "This source paragraph is wrapped by hand because it was written in a narrow editor, but it still",
-                    "represents ordinary prose.",
+                    "This source paragraph is wrapped by hand because it was written in a narrow editor, but it still represents ordinary prose",
+                    "that should be reflowed before rendering.",
                 ],
             ),
             (
                 "sentence_spacing_prose",
                 self.block(
                     "This prose uses sentence spacing.  It is still ordinary text.",
-                    "Another sentence follows here.  It should not become fenced code.",
+                    "Another sentence follows here.  It should not become fenced code",
+                    "while prose reflow keeps normal paragraph semantics.",
                 ),
                 [
-                    "This prose uses sentence spacing. It is still ordinary text. Another sentence follows here. It",
-                    "should not become fenced code.",
+                    "This prose uses sentence spacing. It is still ordinary text. Another sentence follows here. It should not become fenced code",
+                    "while prose reflow keeps normal paragraph semantics.",
                 ],
             ),
             (
@@ -1100,8 +1102,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "Pass --python PYTHON when the package must be installed with a specific interpreter, such as python3.12 "
                 "or an absolute executable path.",
                 [
-                    "Pass --python PYTHON when the package must be installed with a specific interpreter, such as",
-                    "python3.12 or an absolute executable path.",
+                    "Pass --python PYTHON when the package must be installed with a specific interpreter, such as python3.12 or an absolute",
+                    "executable path.",
                 ],
             ),
             (
@@ -1109,8 +1111,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "PEP 582 support is experimental, and projects should not assume that local __pypackages__ discovery "
                 "will stay unchanged across future releases.",
                 [
-                    "PEP 582 support is experimental, and projects should not assume that local __pypackages__",
-                    "discovery will stay unchanged across future releases.",
+                    "PEP 582 support is experimental, and projects should not assume that local __pypackages__ discovery will stay unchanged",
+                    "across future releases.",
                 ],
             ),
             (
@@ -1118,8 +1120,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "Do not use --force as a routine upgrade mechanism because it can replace files that would otherwise warn "
                 "about conflicting application names.",
                 [
-                    "Do not use --force as a routine upgrade mechanism because it can replace files that would",
-                    "otherwise warn about conflicting application names.",
+                    "Do not use --force as a routine upgrade mechanism because it can replace files that would otherwise warn about conflicting",
+                    "application names.",
                 ],
             ),
             (
@@ -1127,8 +1129,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "If installation fails after dependencies are downloaded, rerun the same command first; changing several "
                 "options at once makes diagnosis harder.",
                 [
-                    "If installation fails after dependencies are downloaded, rerun the same command first; changing",
-                    "several options at once makes diagnosis harder.",
+                    "If installation fails after dependencies are downloaded, rerun the same command first; changing several options at once makes",
+                    "diagnosis harder.",
                 ],
             ),
             (
@@ -1136,8 +1138,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 "Read the [installation guide](https://pipx.pypa.io/latest/installation/) when choosing between "
                 "package-manager installation and zipapp installation.",
                 [
-                    "Read the [installation guide](https://pipx.pypa.io/latest/installation/) when choosing between",
-                    "package-manager installation and zipapp installation.",
+                    "Read the [installation guide](https://pipx.pypa.io/latest/installation/) when choosing between package-manager installation",
+                    "and zipapp installation.",
                 ],
             ),
         )
@@ -1175,7 +1177,8 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         """Covers wrapped action prose that would otherwise become a nested Markdown list."""
         unordered_marker_text = (
             "This example alerts the user if the *oldest* src or dst snapshot named "
-            "`prod_onsite_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning] or more than 300 + 60x36 "
+            "`prod_onsite_primary_source_datacenters_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning] or "
+            "more than 300 + 60x36 "
             "minutes old [critical], where 36 is the number of period cycles specified in `src_snapshot_plan` or "
             "`dst_snapshot_plan`, respectively. Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on."
         )
@@ -1183,63 +1186,66 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertListEqual(
             [
                 "- This example alerts the user if the *oldest* src or dst snapshot named",
-                "  `prod_onsite_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning] or more than 300",
-                "  \\+ 60x36 minutes old [critical], where 36 is the number of period cycles specified in",
-                "  `src_snapshot_plan` or `dst_snapshot_plan`, respectively. Analog for the latest snapshot named",
-                "  `prod_<timestamp>_daily`, and so on.",
+                "  `prod_onsite_primary_source_datacenters_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning]"
+                " or more than 300",
+                "  \\+ 60x36 minutes old [critical], where 36 is the number of period cycles specified in `src_snapshot_plan` or",
+                "  `dst_snapshot_plan`, respectively. Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.",
             ],
             self._render_blocks(unordered_marker_text, is_list=True),
         )
 
-        ordered_marker_text = f"{'word ' * 19}42. ordered-looking text that must remain prose after wrapping."
+        ordered_marker_prefix = "x" * 121
+        ordered_marker_text = f"{ordered_marker_prefix} 42. ordered-looking text that must remain prose after wrapping."
         self.assertListEqual(
             [
-                "- word word word word word word word word word word word word word word word word word word word",
+                f"- {ordered_marker_prefix}",
                 "  42\\. ordered-looking text that must remain prose after wrapping.",
             ],
             self._render_blocks(ordered_marker_text, is_list=True),
         )
 
-        paren_ordered_marker_text = f"{'word ' * 19}1) ordered-looking text that must remain prose after wrapping."
+        paren_ordered_marker_text = f"{ordered_marker_prefix} 1) ordered-looking text that must remain prose after wrapping."
         self.assertListEqual(
             [
-                "- word word word word word word word word word word word word word word word word word word word",
+                f"- {ordered_marker_prefix}",
                 "  1\\) ordered-looking text that must remain prose after wrapping.",
             ],
             self._render_blocks(paren_ordered_marker_text, is_list=True),
         )
 
-        non_list_prefix = "prefix " * 14
+        non_list_prefix = "prefix " * 18
         self.assertListEqual(
             [
-                "prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix",
+                "prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix",
                 "\\+ marker-looking text that must remain prose after wrapping.",
             ],
             self._render_blocks(f"{non_list_prefix}+ marker-looking text that must remain prose after wrapping."),
         )
         self.assertListEqual(
             [
-                "prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix",
+                "prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix",
                 "42\\. ordered-looking text that must remain prose after wrapping.",
             ],
             self._render_blocks(f"{non_list_prefix}42. ordered-looking text that must remain prose after wrapping."),
         )
         self.assertListEqual(
             [
-                "prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix",
+                "prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix prefix",
                 "1\\) ordered-looking text that must remain prose after wrapping.",
             ],
             self._render_blocks(f"{non_list_prefix}1) ordered-looking text that must remain prose after wrapping."),
         )
-        for marker in ("-", "*"):
+        marker_prefix = "abc " * 31
+        marker_first_line = "- " + " ".join(["abc"] * 31)
+        for marker in ("+", "-", "*"):
             with self.subTest(marker=marker):
                 self.assertListEqual(
                     [
-                        "- abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc abc",
+                        marker_first_line,
                         f"  \\{marker} marker-looking text that must remain prose after wrapping.",
                     ],
                     self._render_blocks(
-                        f"{'abc ' * 24}{marker} marker-looking text that must remain prose after wrapping.",
+                        f"{marker_prefix}{marker} marker-looking text that must remain prose after wrapping.",
                         is_list=True,
                     ),
                 )

@@ -12,10 +12,9 @@ usage: python3 -m bzfs_main.util.markdown_from_argparse
 <!-- END-MANPAGE-USAGE -->
 
 <!-- BEGIN-MANPAGE-DESCRIPTION -->
-Automatically generate or regenerate a markdown README.md manpage from argparse parser
-definitions. This avoids manually editing the same doc in two places, namely in the
-argparse.ArgumentParser help configuration (help=, description=, etc), and also in a manually
-edited manpage within README.md.
+Automatically generate or regenerate a markdown README.md manpage from argparse parser definitions. This avoids manually
+editing the same doc in two places, namely in the argparse.ArgumentParser help configuration (help=, description=, etc), and
+also in a manually edited manpage within README.md.
 
 Has zero dependencies beyond the Python standard library.
 
@@ -38,9 +37,9 @@ Example README.md file:
 ```
 
 
-Manually replace all occurrences of '.MANPAGE.' with '-MANPAGE-' in the example file above. Then
-run this to generate the manpage blurbs and replace the sections between the BEGIN-MANPAGE-* and
-END-MANPAGE-* marker pairs within the given markdown file with those blurbs:
+Manually replace all occurrences of '.MANPAGE.' with '-MANPAGE-' in the example file above. Then run this to generate the
+manpage blurbs and replace the sections between the BEGIN-MANPAGE-* and END-MANPAGE-* marker pairs within the given markdown
+file with those blurbs:
 
 
 ```
@@ -51,19 +50,18 @@ python3 -m bzfs_main.util.markdown_from_argparse \
 ```
 
 
-Existing file content outside of the marker pair sections is retained as-is. This enables
-reordering of sections, adding custom document headers/footers/notes, and other forms of
-customization.
+Existing file content outside of the marker pair sections is retained as-is. This enables reordering of sections, adding
+custom document headers/footers/notes, and other forms of customization.
 
 The [BEGIN|END]-MANPAGE-DESCRIPTION marker pair is optional.
 
 Subparser sections are rendered recursively. Subparsers can be nested arbitrarily.
 
-Generated CLI option entries include explicit HTML `id` anchors and inline permalinks so users can
-refer to them via copy and paste. Subparser headings also include explicit HTML `id` anchors.
+Generated CLI option entries include explicit HTML `id` anchors and inline permalinks so users can refer to them via copy and
+paste. Subparser headings also include explicit HTML `id` anchors.
 
-The renderer expects argparse parser `description`, `epilog`, and `help=` text in the form of
-blank-line-separated blocks, where the first block of each `help=` text is prose.
+The renderer expects argparse parser `description`, `epilog`, and `help=` text in the form of blank-line-separated blocks,
+where the first block of each `help=` text is prose.
 
 Supported Markdown input contract:
 
@@ -80,9 +78,8 @@ Supported Markdown input contract:
 - Blocks indented with four spaces or one tab are fenced as code.
 - Blocks with repeated aligned columns are fenced as code.
 
-Ambiguous layouts are treated as prose and may be rewrapped. Use explicit triple-backtick fences
-for shell sessions, configuration, YAML, JSON, mixed prose and examples, or any layout that must
-survive unchanged.
+Ambiguous layouts are treated as prose and may be rewrapped. Use explicit triple-backtick fences for shell sessions,
+configuration, YAML, JSON, mixed prose and examples, or any layout that must survive unchanged.
 <!-- END-MANPAGE-DESCRIPTION -->
 
 # Options
@@ -96,8 +93,7 @@ survive unchanged.
 
 <span id="--readme" class="man-option-title">**--readme** *PATH* _(required)_</span> <a href="#--readme" title="Permalink to --readme" aria-label="Permalink to --readme" class="man-option-permalink">&#x1F517;</a>
 
-- Path of README markdown file to update. If the file does not exist a template will be generated.
-  Example: path/to/README.md
+- Path of README markdown file to update. If the file does not exist a template will be generated. Example: path/to/README.md
 
 <!-- -->
 
@@ -109,8 +105,8 @@ survive unchanged.
 
 <span id="--function" class="man-option-title">**--function** *STRING*</span> <a href="#--function" title="Permalink to --function" aria-label="Permalink to --function" class="man-option-permalink">&#x1F517;</a>
 
-- Name of the no-argument parser factory function within the Python module. The function must
-  return an instance of argparse.ArgumentParser. Default is 'argument_parser'.
+- Name of the no-argument parser factory function within the Python module. The function must return an instance of
+  argparse.ArgumentParser. Default is 'argument_parser'.
 
 <!-- -->
 
