@@ -1,9 +1,9 @@
 [build-system]
-requires = ["uv_build==0.11.21"]
+requires = ["uv_build==0.11.26"]
 build-backend = "uv_build"
 
 [tool.bzfs]
-uv-install-script-sha256 = "053045e1e69ec77358fd44f2ef2cacb768a22d50f433e213624f0157ffbbc883"  # for uv_build above
+uv-install-script-sha256 = "92fa9085d24c214bb4445cc1da8c15ca9cca8cffb34726240fa08c5302e94ccc"  # for uv_build above
 
 [project]
 name = "bzfs"
