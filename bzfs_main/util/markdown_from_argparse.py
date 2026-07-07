@@ -187,8 +187,11 @@ def main() -> None:
         readme = _markdown_file_template(_markdown_template_name(readme_path))
         msg = "created"
     renderer: MarkdownFromArgparse = MarkdownFromArgparse(parser=parser, readme=readme, args=args)
-    readme = renderer.render_readme()
-    readme_path.write_text(readme, encoding="utf-8")
+    new_readme: str = renderer.render_readme()
+    if new_readme != readme or not readme_path.exists():
+        readme_path.write_text(new_readme, encoding="utf-8")
+    else:
+        msg = "left unchanged"
     print(f"Successfully {msg} {readme_path}", file=sys.stderr)
 
 

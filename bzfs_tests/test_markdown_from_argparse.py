@@ -1387,6 +1387,30 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             self.assertEqual("", stdout.getvalue())
             self.assertIn("Successfully updated", stderr.getvalue())
 
+    def test_main_leaves_identical_readme_unchanged(self) -> None:
+        """Covers the command-line path that avoids rewriting byte-identical README content."""
+        with TemporaryDirectory() as tmpdir:
+            readme_path = Path(tmpdir) / "README.md"
+            parser = self.make_demo_parser(description="Demo description.")
+            rendered = self._render_readme(parser, self.readme_template())
+            readme_path.write_text(rendered, encoding="utf-8")
+
+            with (
+                patch.object(sys, "argv", ["update_readme", "--module", "bzfs_main.bzfs", "--readme", str(readme_path)]),
+                patch.object(importlib, "import_module") as mock_import,
+                patch.object(Path, "write_text", side_effect=AssertionError("README should not be rewritten")),
+                capture_stdout() as stdout,
+                capture_stderr() as stderr,
+            ):
+                mock_import.return_value.argument_parser.return_value = parser
+                markdown_from_argparse.main()
+
+            self.assertEqual(rendered, readme_path.read_text(encoding="utf-8"))
+            mock_import.assert_called_once_with("bzfs_main.bzfs")
+            mock_import.return_value.argument_parser.assert_called_once_with()
+            self.assertEqual("", stdout.getvalue())
+            self.assertIn("Successfully left unchanged", stderr.getvalue())
+
     def test_main_creates_missing_readme_from_template(self) -> None:
         """Covers the command-line path that bootstraps a README skeleton."""
         with TemporaryDirectory() as tmpdir:
