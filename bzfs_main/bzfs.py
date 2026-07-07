@@ -874,11 +874,10 @@ class Job(MiniJob):
                 return False
             held_dst_snapshots: set[str] = set()
             dst_snaps_with_guids: list[str] = []
-            no_userrefs: tuple[str, ...] = ("", "-", "0")  # ZFS snapshot property userrefs > 0 indicates a zfs hold
             for line in dst_snaps_with_guids_str.splitlines():
                 dst_snaps_with_guids.append(line[: line.rindex("\t")])  # strip off trailing userrefs column
                 _, name, userrefs = line.rsplit("\t", 2)
-                if userrefs not in no_userrefs:
+                if userrefs not in ("", "-", "0"):  # ZFS snapshot property userrefs > 0 indicates a zfs hold
                     tag: str = name[name.index("@") + 1 :]
                     held_dst_snapshots.add(tag)  # don't attempt to delete snapshots that carry a `zfs hold`
             num_dst_snaps_with_guids = len(dst_snaps_with_guids)
@@ -1600,7 +1599,6 @@ class Job(MiniJob):
         if fn_oldest is not None:
             assert len(labels) == len(fn_oldest_skip_holds)
         assert (not self.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
-        no_userrefs: tuple[str, ...] = ("", "-", "0")  # ZFS snapshot property userrefs > 0 indicates a zfs hold
 
         def extract_fields(line: str) -> tuple[int, int, str, bool]:
             fields: list[str] = line.split("\t")
@@ -1613,7 +1611,7 @@ class Job(MiniJob):
                 int(createtxg),
                 int(creation_unixtime_secs),
                 name.split("@", 1)[1],
-                userrefs in no_userrefs,
+                userrefs in ("", "-", "0"),  # ZFS snapshot property userrefs > 0 indicates a zfs hold
             )
 
         p = self.params
