@@ -321,12 +321,13 @@ class MarkdownFromArgparse:
         #    * unordered item
         #    + unordered item
         #    1. ordered item
+        #    1) ordered item
         #
         # Leading indentation is allowed, so nested lists work:
         #
         #    - Parent
         #      - Child
-        list_line = r"\s*([-*+]|\d+\.)\s+\S.*"
+        list_line = r"\s*([-*+]|[0-9]{1,9}[.)])\s+\S.*"
         continuation_line = r"\s+\S.*"
         if re.fullmatch(list_line, lines[0]):
             return all(re.fullmatch(list_line, line) or re.fullmatch(continuation_line, line) for line in lines[1:])

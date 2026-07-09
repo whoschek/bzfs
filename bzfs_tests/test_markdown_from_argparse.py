@@ -926,6 +926,19 @@ class TestMarkdownFromArgparse(AbstractTestCase):
                 ],
             ),
             (
+                "markdown_parenthesized_steps",
+                self.block(
+                    "1) Create a virtual environment.",
+                    "2) Install the requested package.",
+                    "3) Link exposed applications.",
+                ),
+                [
+                    "1) Create a virtual environment.",
+                    "2) Install the requested package.",
+                    "3) Link exposed applications.",
+                ],
+            ),
+            (
                 "ordinary_hard_wrapped_prose",
                 self.block(
                     "This paragraph was manually wrapped in source",
@@ -1147,6 +1160,22 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         for name, text, expected in cases:
             with self.subTest(name=name):
                 self.assertListEqual(expected, self._render_blocks(text))
+
+    def test_render_blocks_preserves_only_commonmark_ordered_list_markers(self) -> None:
+        """Covers ordered marker ASCII and digit-count constraints for both delimiters."""
+        for delimiter in (".", ")"):
+            with self.subTest(delimiter=delimiter, marker="nine_ascii_digits"):
+                lines = [f"123456789{delimiter} First item.", f"123456790{delimiter} Second item."]
+                self.assertListEqual(lines, self._render_blocks(self.block(*lines)))
+
+            with self.subTest(delimiter=delimiter, marker="ten_ascii_digits"):
+                lines = [f"1234567890{delimiter} First line.", f"1234567891{delimiter} Second line."]
+                self.assertListEqual([" ".join(lines)], self._render_blocks(self.block(*lines)))
+
+            with self.subTest(delimiter=delimiter, marker="non_ascii_digits"):
+                digits = ("\N{ARABIC-INDIC DIGIT ONE}", "\N{ARABIC-INDIC DIGIT TWO}")
+                lines = [f"{digits[0]}{delimiter} First line.", f"{digits[1]}{delimiter} Second line."]
+                self.assertListEqual([" ".join(lines)], self._render_blocks(self.block(*lines)))
 
     def test_render_blocks_preserves_line_oriented_blocks_after_is_list_intro(self) -> None:
         """Covers structured continuation blocks inside generated option bullets."""
