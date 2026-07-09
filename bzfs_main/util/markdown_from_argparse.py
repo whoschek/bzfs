@@ -421,8 +421,7 @@ class MarkdownFromArgparse:
         notes: dict[int, str] = {}
         for group in parser._mutually_exclusive_groups:  # noqa: SLF001  # pylint: disable=protected-access
             actions: list[argparse.Action] = self._visible_group_actions(group)
-            if len(actions) >= 2:
-                quantifier: str = "exactly one" if group.required else "at most one"
+            if len(actions) >= 2 or (group.required and len(actions) == 1):
                 choice_labels: list[str] = []
                 for action in actions:
                     if action.option_strings:
@@ -433,7 +432,11 @@ class MarkdownFromArgparse:
                         metavars = fmt._metavar_formatter(action, met)(1)  # noqa: SLF001  # pylint: disable=protected-access
                         label = " ".join(metavars)
                         choice_labels.append(_bold(_escape_md(label)))
-                notes[id(actions[0])] = f"Mutually exclusive group: choose {quantifier} of {', '.join(choice_labels)}."
+                if len(actions) == 1:
+                    notes[id(actions[0])] = f"Required mutually exclusive group member: {choice_labels[0]}."
+                else:
+                    quantifier: str = "exactly one" if group.required else "at most one"
+                    notes[id(actions[0])] = f"Mutually exclusive group: choose {quantifier} of {', '.join(choice_labels)}."
         return notes
 
     def _visible_group_actions(

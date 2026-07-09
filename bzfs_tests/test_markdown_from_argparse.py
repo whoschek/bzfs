@@ -264,6 +264,40 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertEqual(3, details.count("Mutually exclusive group:"))
         self.assertNotIn("--hidden", details)
 
+    def test_required_mutually_exclusive_group_with_one_visible_action_is_rendered(self) -> None:
+        """Covers required groups whose other choices are absent or intentionally undocumented."""
+        parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.RawTextHelpFormatter)
+        sole = parser.add_mutually_exclusive_group(required=True)
+        sole.add_argument("--only", action="store_true", help="Only documented choice.")
+
+        partially_hidden = parser.add_mutually_exclusive_group(required=True)
+        partially_hidden.add_argument("--public", action="store_true", help="Public choice.")
+        partially_hidden.add_argument("--legacy", action="store_true", help=argparse.SUPPRESS)
+
+        optional = parser.add_mutually_exclusive_group()
+        optional.add_argument("--optional", action="store_true", help="Optional choice.")
+
+        fully_hidden = parser.add_mutually_exclusive_group(required=True)
+        fully_hidden.add_argument("--internal", action="store_true", help=argparse.SUPPRESS)
+
+        commands = parser.add_subparsers(dest="command")
+        sync = commands.add_parser("sync", formatter_class=argparse.RawTextHelpFormatter)
+        nested = sync.add_mutually_exclusive_group(required=True)
+        nested.add_argument("--nested-only", action="store_true", help="Nested documented choice.")
+
+        details = self._render_help_details(parser)
+
+        note = "Required mutually exclusive group member:"
+        self.assertIn(f"{note} **--only**.", details)
+        self.assertIn(f"{note} **--public**.", details)
+        self.assertIn(f"{note} **--nested-only**.", details)
+        self.assertEqual(3, details.count(note))
+        self.assertLess(details.index(f"{note} **--only**."), details.index("Only documented choice."))
+        self.assertLess(details.index(f"{note} **--nested-only**."), details.index("Nested documented choice."))
+        self.assertNotIn(f"{note} **--optional**.", details)
+        self.assertNotIn("--legacy", details)
+        self.assertNotIn("--internal", details)
+
     def test_mutually_exclusive_group_positional_uses_formatter_metavar(self) -> None:
         parser = argparse.ArgumentParser(prog="demo", formatter_class=argparse.MetavarTypeHelpFormatter)
         group = parser.add_mutually_exclusive_group()
