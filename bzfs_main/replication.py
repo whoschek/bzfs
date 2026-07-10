@@ -922,7 +922,11 @@ def _recv_resume_token(job: Job, dst_dataset: str) -> tuple[str | None, list[str
     send_resume_opts: list[str] = []
     if job.dst_dataset_exists[dst_dataset]:
         cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset)
-        recv_resume_token = job.run_ssh_command(p.dst, LOG_TRACE, cmd=cmd).rstrip()
+        job.maybe_inject_delete(p.dst, dataset=dst_dataset, delete_trigger="zfs_get_recv_resume_token")
+        try:
+            recv_resume_token = job.run_ssh_command(p.dst, LOG_TRACE, cmd=cmd).rstrip()
+        except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
+            raise RetryableError(display_msg="zfs get receive_resume_token") from e
         if recv_resume_token == "-" or not recv_resume_token:  # noqa: S105
             recv_resume_token = None
         else:

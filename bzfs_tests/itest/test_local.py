@@ -2184,6 +2184,32 @@ class LocalTestCase(IntegrationTestCase):
         self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET))
         self.assertEqual(0, counter["zfs_list_snapshot_dst"])
 
+    def test_recv_resume_token_lookup_retries_after_destination_deleted(self) -> None:
+        """Verify a real destination-delete race at token lookup replans the complete dataset safely."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s1"))
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            no_create_bookmark=True,
+        )
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s2"))
+        counter = Counter(zfs_get_recv_resume_token=1)
+
+        job = self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            retries=1,
+            no_create_bookmark=True,
+            delete_injection_triggers={"before": counter},
+        )
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+
+        self.assertEqual(0, counter["zfs_get_recv_resume_token"])
+        self.assertIn("Retrying zfs get receive_resume_token [1/1]", log_text)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2"])
+
     def test_basic_replication_flat_simple_with_sufficiently_many_retries_on_error_injection(self) -> None:
         self.basic_replication_flat_simple_with_retries_on_error_injection(retries=6, expected_status=0)
 
