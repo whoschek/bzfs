@@ -2210,6 +2210,26 @@ class LocalTestCase(IntegrationTestCase):
         self.assertIn("Retrying zfs get receive_resume_token [1/1]", log_text)
         self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2"])
 
+    def test_create_parent_filesystem_retries_after_error_injection(self) -> None:
+        """Verify a one-shot `zfs create` error safely retries parent creation and replication."""
+        take_snapshot(ibase.SRC_ROOT_DATASET, fix("s1"))
+        dst_parent = os.path.dirname(ibase.DST_ROOT_DATASET)
+        destroy(dst_parent, recursive=True)
+        counter = Counter(zfs_create_filesystem=1)
+
+        job = self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            retries=1,
+            error_injection_triggers={"before": counter},
+        )
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+
+        self.assertEqual(0, counter["zfs_create_filesystem"])
+        self.assertIn("Retrying zfs create [1/1]", log_text)
+        self.assertTrue(dataset_exists(dst_parent))
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1"])
+
     def test_basic_replication_flat_simple_with_sufficiently_many_retries_on_error_injection(self) -> None:
         self.basic_replication_flat_simple_with_retries_on_error_injection(retries=6, expected_status=0)
 

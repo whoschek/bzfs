@@ -1169,17 +1169,19 @@ def _create_zfs_filesystem(job: Job, filesystem: str) -> None:
         if not job.dst_dataset_exists[parent]:
             cmd: list[str] = p.split_args(f"{p.dst.sudo} {p.zfs_program} create -p", no_mount, parent)
             try:
+                job.maybe_inject_error(cmd=cmd, error_trigger="zfs_create_filesystem")
                 job.run_ssh_command(p.dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
-            except subprocess.CalledProcessError as e:
+            except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
                 # ignore harmless error caused by 'zfs create' without the -u flag, or by dataset already existing
-                stderr: str = stderr_to_str(e.stderr)
-                if not (
+                stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+                is_harmless: bool = isinstance(e, subprocess.CalledProcessError) and (
                     "filesystem successfully created, but it may only be mounted by root" in stderr
                     or "filesystem successfully created, but not mounted" in stderr  # SolarisZFS
                     or "dataset already exists" in stderr
                     or "filesystem already exists" in stderr  # SolarisZFS?
-                ):
-                    raise
+                )
+                if not is_harmless:
+                    raise RetryableError(display_msg="zfs create") from e
             if not p.dry_run:
                 job.dst_dataset_exists[parent] = True
         parent += "/"
