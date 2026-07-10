@@ -936,7 +936,7 @@ def _recv_resume_token(job: Job, dst_dataset: str) -> tuple[str | None, list[str
 def _decode_resume_token(
     job: Job, recv_resume_token: str, src_dataset: str, dst_dataset: str, included_src_guids: set[str]
 ) -> str:
-    """Returns the source snapshot and GUID encoded in a ZFS receive resume token."""
+    """Return the token's source snapshot after validating identity and effective raw mode."""
     p, log = job.params, job.params.log
     decode_cmd: list[str] = p.split_args(f"{p.src.sudo} {p.zfs_program} send -n -v -t", recv_resume_token)
     try:
@@ -968,8 +968,19 @@ def _decode_resume_token(
     def _is_raw_zfs_send(send_opts: Iterable[str]) -> bool:
         return any(opt == "--raw" or ("w" in opt and opt.startswith("-") and not opt.startswith("--")) for opt in send_opts)
 
-    if rawok_match and not _is_raw_zfs_send(p.curr_zfs_send_program_opts):
+    is_raw_token: bool = bool(rawok_match)
+    is_raw_send: bool = _is_raw_zfs_send(p.curr_zfs_send_program_opts)
+    is_raw_mode_conflict: bool = is_raw_token != is_raw_send
+    if is_raw_mode_conflict and not is_raw_token:
+        # `--raw` does not produce a raw stream for an unencrypted source, so a token without `rawok` remains compatible.
+        cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o value -s none encryptionroot", src_dataset)
+        encryptionroot: str = (job.try_ssh_command(p.src, LOG_TRACE, cmd=cmd, exists=False) or "").rstrip("\n")
+        assert encryptionroot
+        is_raw_mode_conflict = encryptionroot != "-"  # encryptionroot != "-" indicates an encrypted dataset
+    if is_raw_mode_conflict:
         _clear_resumable_recv_state(job, dst_dataset)
+        if p.dry_run:
+            die("Cannot clear the ZFS receive resume token because --dryrun never modifies state.")
         msg = f"as zfs receive resume token raw mode conflicts with --zfs-send-program-opts: {p.curr_zfs_send_program_opts}"
         raise RetryableError(display_msg=msg, retry_immediately_once=True) from RuntimeError(msg)
     assert decoded_src_tag

@@ -3309,21 +3309,30 @@ class LocalTestCase(IntegrationTestCase):
                 self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
                 self.assert_snapshots(ibase.DST_ROOT_DATASET, 1, "s")
 
-    def test_send_full_resume_recv_raw_token_requires_raw_send_options(self) -> None:
-        """Verify raw receive tokens are discarded before a non-raw retry.
+    def test_send_full_resume_recv_raw_token_replans_non_raw(self) -> None:
+        """Verify a raw full token is aborted before replanning in requested non-raw mode.
 
         Purpose: prevent bzfs from silently raw-resuming a token when the current send options no longer request raw.
         Assumptions: OpenZFS encodes raw receive-resume state as `rawok` in `zfs send -n -v -t`.
         """
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
-        if not self.is_encryption_mode():
-            self.skipTest("Requires encrypted dataset test mode")
+        if self.is_encryption_mode():
+            self.skipTest("Requires an unencrypted destination parent")
 
         src_dataset = create_filesystem(
             ibase.SRC_ROOT_DATASET,
             "rawtoken",
-            props=self.encryption_dataset_props(),
+            props=[
+                "-o",
+                f"encryption={ENCRYPTION_ALGO}",
+                "-o",
+                "keyformat=passphrase",
+                "-o",
+                f"keylocation={ibase.KEYLOCATION}",
+                "-o",
+                "compression=on",
+            ],
         )
         dst_dataset = ibase.DST_ROOT_DATASET + "/rawtoken"
         self.create_resumable_snapshots(1, 2, dataset=src_dataset)
@@ -3336,13 +3345,283 @@ class LocalTestCase(IntegrationTestCase):
             text=True,
             check=True,
         )
-        self.assertIn("rawok = 1", decode_result.stdout + decode_result.stderr)
+        decoded_token = decode_result.stdout + decode_result.stderr
+        self.assertIn("rawok = 1", decoded_token)
 
-        self.run_bzfs(src_dataset, dst_dataset, "--zfs-send-program-opts=", retries=1)
+        job = self.run_bzfs(src_dataset, dst_dataset, "--zfs-send-program-opts=", retries=1)
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
 
+        self.assertEqual(1, log_text.count("Aborting an interrupted zfs receive -s, deleting partially received state"))
         self.assert_receive_resume_token(dst_dataset, exists=False)
         self.assert_snapshot_names(dst_dataset, ["s1"])
         self.assertEqual("off", dataset_property(dst_dataset, "encryption"))
+
+    def test_send_full_resume_recv_non_raw_token_replans_raw(self) -> None:
+        """Verify a non-raw full token is aborted before replanning in requested raw mode.
+
+        Purpose: prevent bzfs from silently non-raw-resuming a token when the current send options request raw mode.
+        Assumptions: OpenZFS omits `rawok` from non-raw receive-resume tokens.
+        """
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if self.is_encryption_mode():
+            self.skipTest("Requires an unencrypted destination parent")
+
+        src_dataset = create_filesystem(
+            ibase.SRC_ROOT_DATASET,
+            "nonrawtoken",
+            props=[
+                "-o",
+                f"encryption={ENCRYPTION_ALGO}",
+                "-o",
+                "keyformat=passphrase",
+                "-o",
+                f"keylocation={ibase.KEYLOCATION}",
+            ],
+        )
+        dst_dataset = ibase.DST_ROOT_DATASET + "/nonrawtoken"
+        self.assertEqual(ENCRYPTION_ALGO, dataset_property(src_dataset, "encryption"))
+        self.create_resumable_snapshots(1, 2, dataset=src_dataset)
+        self.generate_recv_resume_token(None, src_dataset + "@" + fix("s1"), dst_dataset, send_program_opts="--compressed")
+        token = self.assert_receive_resume_token(dst_dataset, exists=True)
+        decode_result = subprocess.run(
+            SUDO_CMD + ["zfs", "send", "-n", "-v", "-t", token],
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+            check=True,
+        )
+        decoded_token = decode_result.stdout + decode_result.stderr
+        self.assertNotIn("rawok =", decoded_token)
+
+        job = self.run_bzfs(src_dataset, dst_dataset, "--zfs-send-program-opts=--raw --compressed", retries=1)
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+
+        self.assertEqual(1, log_text.count("Aborting an interrupted zfs receive -s, deleting partially received state"))
+        self.assert_receive_resume_token(dst_dataset, exists=False)
+        self.assert_snapshot_names(dst_dataset, ["s1"])
+        self.assertEqual(ENCRYPTION_ALGO, dataset_property(dst_dataset, "encryption"))
+
+    def test_send_full_resume_recv_mode_conflict_on_existing_dataset_aborts_then_fails(self) -> None:
+        """Verify replanning can fail after aborting full receive state over an existing dataset.
+
+        Purpose: document that mode changes discard `%recv` progress before OpenZFS validates the replacement stream.
+        Assumptions: OpenZFS keeps the existing dataset consistent and stores the partial receive in `%recv`.
+        """
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if self.is_encryption_mode():
+            self.skipTest("Requires an unencrypted destination parent")
+
+        src_dataset = create_filesystem(
+            ibase.SRC_ROOT_DATASET,
+            "existingfulltoken",
+            props=[
+                "-o",
+                f"encryption={ENCRYPTION_ALGO}",
+                "-o",
+                "keyformat=passphrase",
+                "-o",
+                f"keylocation={ibase.KEYLOCATION}",
+            ],
+        )
+        dst_dataset = create_filesystem(ibase.DST_ROOT_DATASET, "existingfulltoken")
+        self.create_resumable_snapshots(1, 2, dataset=src_dataset)
+        self.generate_recv_resume_token(None, src_dataset + "@" + fix("s1"), dst_dataset, send_program_opts="--compressed")
+        token = self.assert_receive_resume_token(dst_dataset, exists=True)
+        decode_result = subprocess.run(
+            SUDO_CMD + ["zfs", "send", "-n", "-v", "-t", token],
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+            check=True,
+        )
+        decoded_token = decode_result.stdout + decode_result.stderr
+        self.assertNotIn("rawok =", decoded_token)
+        self.assertTrue(dataset_exists(dst_dataset + "/%recv"))
+
+        job = self.run_bzfs(
+            src_dataset,
+            dst_dataset,
+            "--zfs-send-program-opts=--raw --compressed",
+            retries=1,
+            expected_status=1,
+        )
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+
+        self.assertEqual(1, log_text.count("Aborting an interrupted zfs receive -s, deleting partially received state"))
+        self.assertIn("zfs receive -F cannot be used", log_text)
+        self.assert_receive_resume_token(dst_dataset, exists=False)
+        self.assertFalse(dataset_exists(dst_dataset + "/%recv"))
+        self.assert_snapshot_names(dst_dataset, [])
+        self.assertEqual("off", dataset_property(dst_dataset, "encryption"))
+
+        self.run_bzfs(src_dataset, dst_dataset, "--zfs-send-program-opts=--compressed", retries=0)
+        self.assert_receive_resume_token(dst_dataset, exists=False)
+        self.assert_snapshot_names(dst_dataset, ["s1"])
+        self.assertEqual("off", dataset_property(dst_dataset, "encryption"))
+
+    def _assert_send_incr_resume_recv_raw_mode_conflict_replans(self, *, token_is_raw: bool) -> None:
+        """Verify incremental mode conflicts abort partial state before replanning."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if self.is_encryption_mode():
+            self.skipTest("Requires an unencrypted destination parent")
+
+        name = "rawincrtoken" if token_is_raw else "nonrawincrtoken"
+        src_dataset = create_filesystem(
+            ibase.SRC_ROOT_DATASET,
+            name,
+            props=[
+                "-o",
+                f"encryption={ENCRYPTION_ALGO}",
+                "-o",
+                "keyformat=passphrase",
+                "-o",
+                f"keylocation={ibase.KEYLOCATION}",
+            ],
+        )
+        dst_dataset = ibase.DST_ROOT_DATASET + "/" + name
+        token_send_opts = "--raw --compressed" if token_is_raw else "--compressed"
+        conflicting_send_opts = "--compressed" if token_is_raw else "--raw --compressed"
+        expected_encryption = ENCRYPTION_ALGO if token_is_raw else "off"
+
+        self.create_resumable_snapshots(1, 2, dataset=src_dataset)
+        self.run_bzfs(src_dataset, dst_dataset, f"--zfs-send-program-opts={token_send_opts}")
+        self.assert_snapshot_names(dst_dataset, ["s1"])
+        self.assertEqual(expected_encryption, dataset_property(dst_dataset, "encryption"))
+
+        self.create_resumable_snapshots(2, 3, dataset=src_dataset)
+        self.generate_recv_resume_token(
+            src_dataset + "@" + fix("s1"),
+            src_dataset + "@" + fix("s2"),
+            dst_dataset,
+            send_program_opts=token_send_opts,
+        )
+        token = self.assert_receive_resume_token(dst_dataset, exists=True)
+        decode_result = subprocess.run(
+            SUDO_CMD + ["zfs", "send", "-n", "-v", "-t", token],
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+            check=True,
+        )
+        decoded_token = decode_result.stdout + decode_result.stderr
+        if token_is_raw:
+            self.assertIn("rawok = 1", decoded_token)
+        else:
+            self.assertNotIn("rawok =", decoded_token)
+
+        if token_is_raw:
+            self.assertEqual("unavailable", dataset_property(dst_dataset, "keystatus"))
+            subprocess.run(
+                SUDO_CMD + ["zfs", "load-key", "-L", ibase.KEYLOCATION, dst_dataset],
+                stdout=PIPE,
+                stderr=PIPE,
+                text=True,
+                check=True,
+            )
+            self.assertEqual("available", dataset_property(dst_dataset, "keystatus"))
+            job = self.run_bzfs(src_dataset, dst_dataset, f"--zfs-send-program-opts={conflicting_send_opts}", retries=1)
+        else:
+            job = self.run_bzfs(
+                src_dataset,
+                dst_dataset,
+                f"--zfs-send-program-opts={conflicting_send_opts}",
+                retries=1,
+                expected_status=1,
+            )
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+
+        self.assertEqual(1, log_text.count("Aborting an interrupted zfs receive -s, deleting partially received state"))
+        self.assert_receive_resume_token(dst_dataset, exists=False)
+        self.assert_snapshot_names(dst_dataset, ["s1", "s2"] if token_is_raw else ["s1"])
+        self.assertEqual(expected_encryption, dataset_property(dst_dataset, "encryption"))
+
+        if not token_is_raw:
+            self.assertIn("cannot perform raw receive on top of existing unencrypted dataset", log_text)
+            self.run_bzfs(src_dataset, dst_dataset, f"--zfs-send-program-opts={token_send_opts}", retries=0)
+        self.assert_receive_resume_token(dst_dataset, exists=False)
+        self.assert_snapshot_names(dst_dataset, ["s1", "s2"])
+        self.assertEqual(expected_encryption, dataset_property(dst_dataset, "encryption"))
+
+    def test_send_incr_resume_recv_raw_token_replans_non_raw(self) -> None:
+        """Verify a raw incremental token is aborted before a successful non-raw replan."""
+        self._assert_send_incr_resume_recv_raw_mode_conflict_replans(token_is_raw=True)
+
+    def test_send_incr_resume_recv_non_raw_token_replans_raw_then_fails(self) -> None:
+        """Verify a non-raw incremental token is aborted before an incompatible raw replan."""
+        self._assert_send_incr_resume_recv_raw_mode_conflict_replans(token_is_raw=False)
+
+    def test_send_full_resume_recv_raw_requested_for_unencrypted_source_resumes_token(self) -> None:
+        """Verify `--raw` remains compatible with a non-raw token for an unencrypted source."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if self.is_encryption_mode():
+            self.skipTest("Requires an unencrypted destination parent")
+
+        src_dataset = create_filesystem(ibase.SRC_ROOT_DATASET, "unencrawtoken")
+        dst_dataset = ibase.DST_ROOT_DATASET + "/unencrawtoken"
+        self.assertEqual("-", dataset_property(src_dataset, "encryptionroot"))
+        self.create_resumable_snapshots(1, 2, dataset=src_dataset)
+        self.generate_recv_resume_token(None, src_dataset + "@" + fix("s1"), dst_dataset, send_program_opts="--compressed")
+        token = self.assert_receive_resume_token(dst_dataset, exists=True)
+        decode_result = subprocess.run(
+            SUDO_CMD + ["zfs", "send", "-n", "-v", "-t", token],
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+            check=True,
+        )
+        self.assertNotIn("rawok =", decode_result.stdout + decode_result.stderr)
+
+        job = self.run_bzfs(src_dataset, dst_dataset, "--zfs-send-program-opts=--raw --compressed", retries=0)
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+
+        self.assertNotIn("Aborting an interrupted zfs receive -s", log_text)
+        self.assert_receive_resume_token(dst_dataset, exists=False)
+        self.assert_snapshot_names(dst_dataset, ["s1"])
+        self.assertEqual("off", dataset_property(dst_dataset, "encryption"))
+
+    def test_send_full_resume_recv_raw_mode_conflict_dryrun_preserves_token(self) -> None:
+        """Verify dry-run reports the mode conflict without mutating receive state."""
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if self.is_encryption_mode():
+            self.skipTest("Requires an unencrypted destination parent")
+
+        src_dataset = create_filesystem(
+            ibase.SRC_ROOT_DATASET,
+            "dryrawmode",
+            props=[
+                "-o",
+                f"encryption={ENCRYPTION_ALGO}",
+                "-o",
+                "keyformat=passphrase",
+                "-o",
+                f"keylocation={ibase.KEYLOCATION}",
+            ],
+        )
+        dst_dataset = ibase.DST_ROOT_DATASET + "/dryrawmode"
+        self.create_resumable_snapshots(1, 2, dataset=src_dataset)
+        self.generate_recv_resume_token(None, src_dataset + "@" + fix("s1"), dst_dataset, send_program_opts="--compressed")
+        token = self.assert_receive_resume_token(dst_dataset, exists=True)
+
+        job = self.run_bzfs(
+            src_dataset,
+            dst_dataset,
+            "--dryrun",
+            "--zfs-send-program-opts=--raw --compressed",
+            retries=0,
+            expected_status=DIE_STATUS,
+        )
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+
+        self.assertEqual(1, log_text.count("Dry Aborting an interrupted zfs receive -s"))
+        self.assertIn("Cannot clear the ZFS receive resume token because --dryrun never modifies state", log_text)
+        self.assertNotIn("Retrying as zfs receive resume token raw mode conflicts", log_text)
+        self.assertEqual(token, self.assert_receive_resume_token(dst_dataset, exists=True))
+        self.assert_snapshot_names(dst_dataset, [])
 
     def test_send_full_resume_recv_dryrun_recv(self) -> None:
         """Verify --dryrun=recv sends resumable streams into zfs receive -n without changing dst."""

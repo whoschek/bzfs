@@ -566,9 +566,11 @@ class IntegrationTestCase(ParametrizedTestCase):
             "bzfs:prop9": "/tmp/foo\\`bar",  # backslash + backtick sequence exercises dquote edge case
         }
 
-    def generate_recv_resume_token(self, from_snapshot: str | None, to_snapshot: str, dst_dataset: str) -> None:
+    def generate_recv_resume_token(
+        self, from_snapshot: str | None, to_snapshot: str, dst_dataset: str, *, send_program_opts: str = "--raw --compressed"
+    ) -> None:
         snapshot_opts = to_snapshot if not from_snapshot else f"-i {from_snapshot} {to_snapshot}"
-        send = f"sudo -n zfs send --raw --compressed -v {snapshot_opts}"
+        send = f"sudo -n zfs send -v {send_program_opts} {snapshot_opts}"
         c = INJECT_DST_PIPE_FAIL_KBYTES
         cmd = ["sh", "-c", f"{send} | dd bs=1024 count={c} 2>/dev/null | sudo -n zfs receive -v -F -u -s {dst_dataset}"]
         try:

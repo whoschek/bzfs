@@ -709,7 +709,11 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
              "Default is '%(default)s'. To run `zfs send` without options, specify the empty "
              "string: `--zfs-send-program-opts=''`. "
              "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html "
-             "and https://github.com/openzfs/zfs/issues/13024\n\n")
+             "and https://github.com/openzfs/zfs/issues/13024\n\n"
+             "If these options request a different effective raw or non-raw mode from the one recorded in an existing ZFS "
+             f"receive resume token, {PROG_NAME} aborts the token (clears the incomplete receive state) and then proceeds "
+             "as usual. ZFS may be unable to change the mode for an existing destination dataset. In that case, restore the "
+             "previous send options.\n\n")
     parser.add_argument(
         "--zfs-recv-program-opts", type=str, default="-u", metavar="STRING",
         help="Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
