@@ -128,7 +128,7 @@ On subsequent runs, it sends only changes since the previous run by incrementall
 created on the source after that run. Source snapshots older than the most recent common snapshot
 on the destination are skipped automatically.
 
-Unless {PROG_NAME} is told to create snapshots on the source, it treats the source as read-only. With
+Unless {PROG_NAME} is told to create snapshots or bookmarks on the source, it treats the source as read-only. With
 `--dryrun`, it also treats the destination as read-only. In normal operation, the destination is
 append-only. Optional flags can delete destination snapshots and datasets if you want to manage storage
 space consumption, reconcile divergence, restore production from backup, or resync backup from production.

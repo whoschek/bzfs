@@ -55,10 +55,10 @@ On the first run, bzfs replicates the source dataset and all its snapshots to th
 only changes since the previous run by incrementally replicating snapshots created on the source after that run. Source
 snapshots older than the most recent common snapshot on the destination are skipped automatically.
 
-Unless bzfs is told to create snapshots on the source, it treats the source as read-only. With `--dryrun`, it also treats the
-destination as read-only. In normal operation, the destination is append-only. Optional flags can delete destination
-snapshots and datasets if you want to manage storage space consumption, reconcile divergence, restore production from backup,
-or resync backup from production.
+Unless bzfs is told to create snapshots or bookmarks on the source, it treats the source as read-only. With `--dryrun`, it
+also treats the destination as read-only. In normal operation, the destination is append-only. Optional flags can delete
+destination snapshots and datasets if you want to manage storage space consumption, reconcile divergence, restore production
+from backup, or resync backup from production.
 
 bzfs supports include/exclude filters that can be combined to choose which datasets, snapshots, and properties to create,
 replicate, delete, or compare.
