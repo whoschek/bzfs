@@ -222,7 +222,7 @@ def dataset_property(dataset: str, prop: str) -> str:
 
 
 def snapshot_property(snapshot: str, prop: str) -> str:
-    return cast(str, zfs_list([snapshot], props=[prop], types=["snapshot"], max_depth=0, splitlines=False))
+    return cast(str, zfs_list([snapshot], props=[prop], types=["snapshot"], max_depth=-1, splitlines=False))
 
 
 def zfs_list(
@@ -245,7 +245,7 @@ def zfs_list(
         sort_props = []
     if max_depth is None:
         cmd.append("-r")
-    else:
+    elif max_depth != -1:
         cmd.append("-d")
         cmd.append(str(max_depth))
 
@@ -377,7 +377,7 @@ def build(name: str, check: bool = True) -> str:
         else:
             types = ["filesystem", "volume"]
 
-        if len(zfs_list([name], types=types, max_depth=0)) == 0:
+        if len(zfs_list([name], types=types, max_depth=-1)) == 0:
             raise ValueError("Cannot zfs_list: " + name)
 
     return name
