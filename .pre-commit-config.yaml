@@ -141,23 +141,6 @@ repos:
   #       args: [--fix=all]
   - repo: local
     hooks:
-      - id: pydocstringformatter        # Reformat Python docstrings and wrap them to a specific line length
-        name: pydocstringformatter      # See https://github.com/DanielNoord/pydocstringformatter
-        language: unsupported
-        entry: .venv/bin/python -m pydocstringformatter
-        types: [python]
-        require_serial: true
-        args: [                         # see https://pydocstringformatter.readthedocs.io/en/latest/usage.html
-          --write,                      # Let pre-commit make changes to files instead of printing diffs
-          --max-line-length=126,        # Summary / long-description length
-          --linewrap-full-docstring,    # Wrap full docstrings, matching the prior prose wrapping intent
-          --no-split-summary-body,      # Avoid inferring prose structure from punctuation
-          --no-capitalize-first-letter, # Preserve author-written capitalization
-          --no-final-period,            # Preserve author-written wording and punctuation
-          --no-closing-quotes,          # Don't fix the position of the closing quotes
-        ]
-  - repo: local
-    hooks:
       - id: isort                       # Reformat Python imports more precisely than ruff (via force_grid_wrap)
         name: isort                     # See https://github.com/pycqa/isort
         language: unsupported

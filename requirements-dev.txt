@@ -452,10 +452,6 @@ pre-commit-hooks==6.0.0 ; python_full_version >= '3.10' \
     --hash=sha256:76161b76d321d2f8ee2a8e0b84c30ee8443e01376121fd1c90851e33e3bd7ee2 \
     --hash=sha256:76d8370c006f5026cdd638a397a678d26dda735a3c88137e05885a020f824034
     # via bzfs (pyproject.toml)
-pydocstringformatter==0.7.5 \
-    --hash=sha256:7daed355f11244f64571d119e49e7328365ea9b545f88256a47b550f213d23eb \
-    --hash=sha256:e9cbd134d6279360fd2bcaad94680cec02aa20a22560375c5ffd495fcfbcf92d
-    # via bzfs (pyproject.toml)
 pylint==4.0.6 ; python_full_version >= '3.10' \
     --hash=sha256:52f19191bee08bf103f9705ad1a0ece4aa5a0a4ef2bdcbd969375a1e6f6579d5 \
     --hash=sha256:d11a0e1fdb7b1cd46ec5d6fc78fee8b95f28695b2d6140e5809925f61e32ea54
@@ -607,7 +603,7 @@ ruff==0.15.20 \
     --hash=sha256:ed65ef510e43a137207e0f01cfcf998aeddb1aeeda5c9d35023e910284d7cf21 \
     --hash=sha256:f701305e66b38ea6c91882490eb73459796808e4c6362a1b765255e0cdcd4053
     # via bzfs (pyproject.toml)
-tomli==2.4.1 ; python_full_version < '3.11' \
+tomli==2.4.1 ; python_full_version == '3.10.*' \
     --hash=sha256:01f520d4f53ef97964a240a035ec2a869fe1a37dde002b57ebc4417a27ccd853 \
     --hash=sha256:0d85819802132122da43cb86656f8d1f8c6587d54ae7dcaf30e90533028b49fe \
     --hash=sha256:136443dbd7e1dee43c68ac2694fde36b2849865fa258d39bf822c10e8068eac5 \
@@ -659,7 +655,6 @@ tomli==2.4.1 ; python_full_version < '3.11' \
     #   black
     #   mypy
     #   pre-commit-hooks
-    #   pydocstringformatter
     #   pylint
 tomlkit==0.15.0 ; python_full_version >= '3.10' \
     --hash=sha256:4dbc8f0fc024412b57ced8757ac7461305126a648ff8c2c807fcb8e133a78738 \
