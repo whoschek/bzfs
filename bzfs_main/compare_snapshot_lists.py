@@ -50,6 +50,9 @@ from bzfs_main.filter import (
 from bzfs_main.parallel_batch_cmd import (
     zfs_list_snapshots_in_parallel,
 )
+from bzfs_main.replication import (
+    is_tmp_bookmark,
+)
 from bzfs_main.util.parallel_iterator import (
     run_in_parallel,
 )
@@ -113,7 +116,8 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         # Also see https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
         props: str = job.creation_prefix + "creation,guid,createtxg,written,name"
         types: str = "snapshot"
-        if p.use_bookmark and r.location == "src" and are_bookmarks_enabled(p, r):
+        list_bookmarks: bool = p.use_bookmark and r.location == "src" and are_bookmarks_enabled(p, r)
+        if list_bookmarks:
             types = "snapshot,bookmark"  # output list ordering: intentionally makes bookmarks appear *after* snapshots
         cmd: list[str] = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
         for lines in zfs_list_snapshots_in_parallel(job, r, cmd, sorted_datasets):
@@ -128,7 +132,13 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
             sorted_itr, key=lambda line: line.rsplit("\t", 1)[1].replace("#", "@", 1).split("@", 1)[0]
         ):
             snapshots: list[str] = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
+            tmp_bookmarks: list[str] = [snapshot for snapshot in snapshots if is_tmp_bookmark(snapshot)]
+            snapshots = [snapshot for snapshot in snapshots if not is_tmp_bookmark(snapshot)]
+            non_tmp_guids: set[str] = {snapshot.split("\t", 2)[1] for snapshot in snapshots}  # for subsequent dedupe
+            tmp_bookmarks = [bookmark for bookmark in tmp_bookmarks if bookmark.split("\t", 2)[1] not in non_tmp_guids]
+            del non_tmp_guids  # help gc
             snapshots = filter_snapshots(job, snapshots, filter_bookmarks=True)  # apply include/exclude policy
+            snapshots += tmp_bookmarks  # temporary bookmarks bypass include/exclude filters, e.g. name and rank filters
             snapshots.sort(key=lambda line: line.split("\t", 2)[1])  # stable sort by GUID (2nd remains createtxg)
             rel_dataset: str = relativize_dataset(dataset, root_dataset)  # rel_dataset=/foo, root_dataset=tank1/src
             last_guid: str = ""
@@ -331,7 +341,12 @@ def _merge_sorted_iterators(
                 yield choices[n], dst_next
             dst_next = next(dst_itr, None)
         else:
+            assert src_next is not None
             n = 0
-            if (flags & (1 << n)) != 0:
+            if (flags & (1 << n)) != 0 and not _is_comparable_tmp_bookmark(src_next):  # suppress tmp bookmarks
                 yield choices[n], src_next
             src_next = next(src_itr, None)
+
+
+def _is_comparable_tmp_bookmark(src_next: object) -> bool:
+    return isinstance(src_next, _ComparableSnapshot) and is_tmp_bookmark(src_next.cols[-1])

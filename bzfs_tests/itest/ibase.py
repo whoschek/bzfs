@@ -63,6 +63,7 @@ from bzfs_main.detect import (
 )
 from bzfs_main.replication import (
     INJECT_DST_PIPE_FAIL_KBYTES,
+    is_tmp_bookmark,
 )
 from bzfs_main.util.utils import (
     ENV_VAR_PREFIX,
@@ -91,6 +92,7 @@ from bzfs_tests.zfs_util import (
     snapshot_name,
     snapshots,
     take_snapshot,
+    zfs_list,
     zfs_version,
 )
 
@@ -341,7 +343,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         if self.is_no_privilege_elevation():
             # test ZFS delegation in combination with --no-privilege-elevation flag
             args = args + ["--no-privilege-elevation"]
-            src_permissions = "send,snapshot,hold,bookmark"
+            src_permissions = "send,snapshot,hold,bookmark,destroy"
             if delete_injection_triggers is not None:
                 src_permissions += ",destroy,mount"
             # optional_dst_permissions = ",canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize"
@@ -539,10 +541,30 @@ class IntegrationTestCase(ParametrizedTestCase):
             self.assertRegex(snap_name, expected_name, f"{expected_names} vs. {snap_names}")
 
     def assert_bookmark_names(self, dataset: str, expected_names: list[str]) -> None:
+        """Assert logical bookmark tags, normalizing valid finalized GUID components.
+
+        Finalized bzfs bookmarks append their ZFS GUID to suffixless tags or insert it before the last suffix. Reading the
+        GUID and name together ensures normalization only accepts the GUID actually stored by ZFS. Aliases for the same logical
+        tag and GUID count once, while same-tag bookmarks with different GUIDs remain distinct.
+        """
         dataset = build(dataset)
-        snap_names = natsorted([bookmark_name(bookmark) for bookmark in bookmarks(dataset)])
+        logical_bookmarks: set[tuple[str, str]] = set()
+        lines = cast(list[str], zfs_list([dataset], props=["guid", "name"], types=["bookmark"], max_depth=1))
+        for line in lines:
+            guid, bookmark = line.split("\t", 1)
+            if is_tmp_bookmark(bookmark):
+                continue
+            name = bookmark_name(bookmark)
+            prefix_and_guid, separator, suffix = name.rpartition("_")
+            prefix, guid_separator, embedded_guid = prefix_and_guid.rpartition("_")
+            if separator and suffix == guid:
+                name = prefix_and_guid
+            elif separator and guid_separator and embedded_guid == guid:
+                name = f"{prefix}_{suffix}"
+            logical_bookmarks.add((name, guid))
+        bookmark_names = natsorted(name for name, _guid in logical_bookmarks)
         expected_names = [fix(name) for name in expected_names]
-        self.assertListEqual(expected_names, snap_names)
+        self.assertListEqual(expected_names, bookmark_names)
 
     def is_no_privilege_elevation(self) -> bool:
         return bool(self.param and self.param.get("no_privilege_elevation", False))
@@ -720,6 +742,11 @@ def recreate_filesystem(dataset: str, props: list[str] | None = None) -> str:
 def create_volumes(path: str, props: list[str] | None = None) -> str:
     create_volume(SRC_ROOT_DATASET, path, size="1M", props=props)
     return create_volume(DST_ROOT_DATASET, path, size="1M", props=props)
+
+
+def destroy_tmp_bookmarks(dataset: str, max_depth: int = 1) -> None:
+    for bookmark in bookmarks(dataset, max_depth=max_depth, find_tmp=True):
+        destroy(bookmark)
 
 
 def detect_zpool_features(location: str, pool: str) -> None:

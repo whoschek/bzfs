@@ -72,6 +72,9 @@ from bzfs_main.util import (
 from bzfs_main.util.connection import (
     dquote,
 )
+from bzfs_main.util.retry import (
+    RetryableError,
+)
 from bzfs_main.util.utils import (
     DIE_STATUS,
     ENV_VAR_PREFIX,
@@ -96,6 +99,7 @@ from bzfs_tests.itest.ibase import (
     are_bookmarks_enabled,
     create_filesystems,
     create_volumes,
+    destroy_tmp_bookmarks,
     fix,
     is_cache_snapshots_enabled,
     is_zfs_at_least_2_1_0,
@@ -109,6 +113,7 @@ from bzfs_tests.tools import (
     stop_on_failure_subtest,
 )
 from bzfs_tests.zfs_util import (
+    bookmark_name,
     bookmarks,
     build,
     create_bookmark,
@@ -2937,6 +2942,7 @@ class LocalTestCase(IntegrationTestCase):
         # in common anymore with the most recent dst snapshot:
         destroy(natsorted(snapshots(src_foo), key=lambda s: s)[-1])  # destroy t11
         destroy(natsorted(bookmarks(src_foo), key=lambda b: b)[-1])  # destroy t11
+        destroy_tmp_bookmarks(src_foo)
         self.assert_snapshot_names(ibase.SRC_ROOT_DATASET + "/foo", ["t9", "t10"])
         self.assert_bookmark_names(ibase.SRC_ROOT_DATASET + "/foo", ["t1", "t3", "t5", "t6", "t7"])
         for i in range(2):
@@ -2982,25 +2988,295 @@ class LocalTestCase(IntegrationTestCase):
                     self.assert_bookmark_names(ibase.SRC_ROOT_DATASET + "/foo", ["t1", "t3", "t5", "t6", "t7", "t12"])
 
     def test_create_zfs_bookmarks_raises_unexpected_error(self) -> None:
-        if not are_bookmarks_enabled("src"):
-            self.skipTest("ZFS has no bookmark feature")
-        self.setup_basic()
-        non_existing_snapshot = snapshots(ibase.SRC_ROOT_DATASET)[0] + "$"
-        job = self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--create-bookmarks=all")
-        with self.assertRaises(subprocess.CalledProcessError):
-            bzfs_main.replication._create_zfs_bookmarks(job, job.params.src, ibase.SRC_ROOT_DATASET, [non_existing_snapshot])
+        """Verify that a real unexpected `zfs bookmark` failure is retryable.
 
-    def test_create_zfs_bookmarks_existing_bookmark(self) -> None:
+        Normal replication supplies an initialized job and a valid source dataset. Passing a valid but nonexistent
+        snapshot name then makes the real ZFS CLI reject bookmark creation. The helper must retain that command failure
+        as the cause of a `RetryableError` whose display message identifies the failed operation. Direct invocation
+        isolates the error boundary without replacing command execution, permissions, or ZFS semantics.
+        """
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         self.setup_basic()
-        first_snapshot = snapshots(ibase.SRC_ROOT_DATASET)[0]
-        first_tag = snapshot_name(first_snapshot)
-        create_bookmark(ibase.SRC_ROOT_DATASET, first_tag, first_tag)
-        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1"])
-        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--create-bookmarks=all")
-        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2", "s3"])
-        self.assert_bookmark_names(ibase.SRC_ROOT_DATASET, ["s1", "s2", "s3"])
+        non_existing_snapshot = f"{ibase.SRC_ROOT_DATASET}@{fix('missing_bookmark_source')}"
+        self.assertNotIn(non_existing_snapshot, snapshots(ibase.SRC_ROOT_DATASET))
+        job = self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--create-bookmarks=all")
+        with self.assertRaises(RetryableError) as context:
+            bzfs_main.replication._create_zfs_bookmarks(
+                job,
+                job.params.src,
+                [non_existing_snapshot],
+                [non_existing_snapshot.replace("@", "#")],
+                expected_guids=[""],
+            )
+        self.assertEqual("zfs bookmark", context.exception.display_msg_str())
+        self.assertIsInstance(context.exception.__cause__, subprocess.CalledProcessError)
+
+    def test_continuity_recovers_from_temporary_bookmarks(self) -> None:
+        """Verify dry-run and per-destination temporary-bookmark recovery.
+
+        A wrong-GUID finalized bookmark lets two full receives commit but blocks finalization. After destroying the
+        replicated source snapshot, each destination's temporary bookmark is its only common base for a newer incremental
+        send.
+        Dry-run must preserve both bookmarks and destination state. Separate recovery across different pools, with the first
+        finalized bookmark removed before the second run, verifies bookmark-based continuation and destination-specific
+        cleanup through matching GUIDs and two-to-one-to-zero temporary-bookmark counts.
+        """
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        if self.is_no_privilege_elevation():
+            self.skipTest("Receiving into the source pool needs extra permissions")
+        older_tag = fix("continuityold")
+        target_tag = fix("continuitynew")
+        next_tag = fix("continuitynext")
+        older_snapshot = take_snapshot(ibase.SRC_ROOT_DATASET, older_tag)
+        target_snapshot = take_snapshot(ibase.SRC_ROOT_DATASET, target_tag)
+        older_guid = snapshot_property(older_snapshot, "guid")
+        target_guid = snapshot_property(target_snapshot, "guid")
+        self.assertNotEqual(older_guid, target_guid)
+
+        dst_in_src_pool = f"{ibase.SRC_POOL}/tmp/{fix('continuitydst')}"
+        destroy(ibase.DST_ROOT_DATASET, recursive=True)
+        self.assertFalse(dataset_exists(dst_in_src_pool))
+        self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET))
+
+        finalized_tag = f"{target_tag}_{target_guid}"
+        finalized_bookmark = create_bookmark(ibase.SRC_ROOT_DATASET, older_tag, finalized_tag)
+        self.assertEqual(
+            [older_guid],
+            zfs_list([finalized_bookmark], props=["guid"], types=["bookmark"], max_depth=-1),
+        )
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            dst_in_src_pool,
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--no-stream",
+            "--create-bookmarks=all",
+            skip_on_error="dataset",
+            expected_status=DIE_STATUS,
+        )
+
+        self.assertEqual(target_guid, snapshot_property(f"{dst_in_src_pool}@{target_tag}", "guid"))
+        self.assertEqual(target_guid, snapshot_property(f"{ibase.DST_ROOT_DATASET}@{target_tag}", "guid"))
+        self.assertEqual(
+            [older_guid],
+            zfs_list([finalized_bookmark], props=["guid"], types=["bookmark"], max_depth=-1),
+        )
+        tmp_bookmarks = bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True)
+        self.assertEqual(2, len(tmp_bookmarks))
+        self.assertEqual(
+            [target_guid, target_guid],
+            zfs_list(tmp_bookmarks, props=["guid"], types=["bookmark"], max_depth=-1),
+        )
+
+        destroy(finalized_bookmark)
+        destroy(target_snapshot)
+        next_snapshot = take_snapshot(ibase.SRC_ROOT_DATASET, next_tag)
+        next_guid = snapshot_property(next_snapshot, "guid")
+
+        tmp_bookmarks_before_dry_run = set(bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True))
+        finalized_bookmarks_before_dry_run = bookmarks(ibase.SRC_ROOT_DATASET)
+        dst_snapshots_before_dry_run = snapshots(ibase.DST_ROOT_DATASET)
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--no-stream",
+            "--create-bookmarks=all",
+            dry_run=True,
+        )
+        self.assertSetEqual(tmp_bookmarks_before_dry_run, set(bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True)))
+        self.assertListEqual(finalized_bookmarks_before_dry_run, bookmarks(ibase.SRC_ROOT_DATASET))
+        self.assertListEqual(dst_snapshots_before_dry_run, snapshots(ibase.DST_ROOT_DATASET))
+
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--no-stream", "--create-bookmarks=all")
+        self.assertEqual(target_guid, snapshot_property(f"{ibase.DST_ROOT_DATASET}@{target_tag}", "guid"))
+        self.assertEqual(next_guid, snapshot_property(f"{ibase.DST_ROOT_DATASET}@{next_tag}", "guid"))
+        self.assertEqual(1, len(bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True)))
+        self.assertEqual(
+            [target_guid],
+            zfs_list([finalized_bookmark], props=["guid"], types=["bookmark"], max_depth=-1),
+        )
+        destroy(finalized_bookmark)
+
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, dst_in_src_pool, "--no-stream", "--create-bookmarks=all")
+        self.assertEqual(target_guid, snapshot_property(f"{dst_in_src_pool}@{target_tag}", "guid"))
+        self.assertEqual(next_guid, snapshot_property(f"{dst_in_src_pool}@{next_tag}", "guid"))
+        self.assertListEqual([], bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True))
+        self.assertSetEqual(
+            {target_guid, next_guid},
+            set(zfs_list(bookmarks(ibase.SRC_ROOT_DATASET), props=["guid"], types=["bookmark"], max_depth=-1)),
+        )
+
+    def test_continuity_deletes_temporary_bookmark_for_unreplicated_snapshot(self) -> None:
+        """Verify failed replication never finalizes its temporary bookmark.
+
+        With receive resumption disabled, a truncated real ZFS stream keeps the temporary bookmark but creates no destination
+        snapshot or receive token. The failed source snapshot is destroyed and a newer snapshot is replicated. The old GUID
+        must appear in neither destination snapshots nor finalized bookmarks, while its temporary bookmark is deleted; the
+        newer GUID must be present in both. This distinguishes cleanup for an unreplicated snapshot from normal post-receive
+        finalization.
+        """
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        destroy(ibase.DST_ROOT_DATASET, recursive=True)
+        self.create_resumable_snapshots(1, 2)
+        failed_snapshot = snapshots(ibase.SRC_ROOT_DATASET)[0]
+        failed_guid = snapshot_property(failed_snapshot, "guid")
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--no-resume-recv",
+            "--create-bookmarks=all",
+            expected_status=1,
+            inject_params={"inject_dst_pipe_fail": True},
+        )
+
+        self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET))
+        failed_tmp_bookmarks = bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True)
+        self.assertEqual(1, len(failed_tmp_bookmarks))
+        failed_tmp_tag = bookmark_name(failed_tmp_bookmarks[0])
+        prefix_and_snapshot, compact_snapshot_guid, compact_pool_guid, dst_dataset_hash = failed_tmp_tag.rsplit(".", 3)
+        self.assertEqual(f".TMPBZFS.{snapshot_name(failed_snapshot)}", prefix_and_snapshot)
+        self.assertEqual(failed_guid, bzfs_main.replication._Continuity._decimal_guid(compact_snapshot_guid))
+        self.assertEqual(11, len(compact_pool_guid))
+        self.assertNotIn("_", compact_snapshot_guid)
+        self.assertNotIn("_", compact_pool_guid)
+        self.assertEqual(10, len(dst_dataset_hash))
+        self.assertEqual(
+            [failed_guid],
+            zfs_list(failed_tmp_bookmarks, props=["guid"], types=["bookmark"], max_depth=-1),
+        )
+        self.assertListEqual([], bookmarks(ibase.SRC_ROOT_DATASET))
+
+        destroy(failed_snapshot)
+        replacement_tag = fix("s2")
+        replacement_snapshot = take_snapshot(ibase.SRC_ROOT_DATASET, replacement_tag)
+        replacement_guid = snapshot_property(replacement_snapshot, "guid")
+        self.assertNotEqual(failed_guid, replacement_guid)
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--no-resume-recv",
+            "--create-bookmarks=all",
+        )
+
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s2"])
+        self.assertEqual(replacement_guid, snapshot_property(f"{ibase.DST_ROOT_DATASET}@{replacement_tag}", "guid"))
+        self.assertListEqual([], bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True))
+        finalized_bookmarks = bookmarks(ibase.SRC_ROOT_DATASET)
+        self.assertEqual(1, len(finalized_bookmarks))
+        self.assertEqual(
+            [replacement_guid],
+            zfs_list(finalized_bookmarks, props=["guid"], types=["bookmark"], max_depth=-1),
+        )
+
+    def test_create_zfs_bookmarks_retries_guid_query_error(self) -> None:
+        """Verify recovery when an existing temporary bookmark's GUID query fails.
+
+        An interrupted non-resumable receive leaves a real temporary bookmark but no destination dataset. The next run
+        encounters that bookmark and injects one failure into the collision-path GUID query. Dataset retry must then
+        accept the bookmark by GUID, replicate the snapshot, finalize the bookmark, and remove the temporary bookmark.
+        The counter, retry log, and final GUIDs prove both error translation and eventual convergence.
+        """
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        destroy(ibase.DST_ROOT_DATASET, recursive=True)
+        self.create_resumable_snapshots(1, 2)
+        source_snapshot = snapshots(ibase.SRC_ROOT_DATASET)[0]
+        source_guid = snapshot_property(source_snapshot, "guid")
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--no-resume-recv",
+            "--create-bookmarks=all",
+            expected_status=1,
+            inject_params={"inject_dst_pipe_fail": True},
+        )
+
+        self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET))
+        tmp_bookmarks = bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True)
+        self.assertEqual(1, len(tmp_bookmarks))
+        self.assertEqual(
+            [source_guid],
+            zfs_list(tmp_bookmarks, props=["guid"], types=["bookmark"], max_depth=-1),
+        )
+        self.assertListEqual([], bookmarks(ibase.SRC_ROOT_DATASET))
+
+        counter = Counter(zfs_list_bookmark_guid=1)
+        job = self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--no-resume-recv",
+            "--create-bookmarks=all",
+            retries=1,
+            error_injection_triggers={"before": counter},
+        )
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+
+        self.assertEqual(0, counter["zfs_list_bookmark_guid"])
+        self.assertIn("Retrying zfs list -t bookmark [1/1]", log_text)
+        self.assertEqual(
+            source_guid,
+            snapshot_property(f"{ibase.DST_ROOT_DATASET}@{snapshot_name(source_snapshot)}", "guid"),
+        )
+        self.assertListEqual([], bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True))
+        finalized_bookmarks = bookmarks(ibase.SRC_ROOT_DATASET)
+        self.assertEqual(1, len(finalized_bookmarks))
+        self.assertEqual(
+            [source_guid],
+            zfs_list(finalized_bookmarks, props=["guid"], types=["bookmark"], max_depth=-1),
+        )
+
+    def test_continuity_survives_resumable_full_send(self) -> None:
+        """Verify bookmark state across interruption of a resumable full receive.
+
+        An injected pipe failure after temporary-bookmark creation leaves a real receive token but no committed destination
+        snapshot. Retry must complete the receive, commit a snapshot with the source GUID, create one finalized bookmark with
+        that GUID, consume the token, and remove all temporary bookmarks. The failure-state assertions require the temporary
+        bookmark to precede snapshot commit; the success-state assertions require finalization and cleanup to follow it.
+        """
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        destroy(ibase.DST_ROOT_DATASET, recursive=True)
+        self.create_resumable_snapshots(1, 2)
+        source_snapshot = snapshots(ibase.SRC_ROOT_DATASET)[0]
+        source_guid = snapshot_property(source_snapshot, "guid")
+
+        self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            expected_status=1,
+            inject_params={"inject_dst_pipe_fail": True},
+        )
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=True)
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [])
+        tmp_bookmarks = bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True)
+        self.assertEqual(1, len(tmp_bookmarks))
+        self.assertEqual(
+            [source_guid],
+            zfs_list(tmp_bookmarks, props=["guid"], types=["bookmark"], max_depth=-1),
+        )
+
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET)
+
+        self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
+        self.assertEqual(
+            source_guid, snapshot_property(f"{ibase.DST_ROOT_DATASET}@{snapshot_name(source_snapshot)}", "guid")
+        )
+        self.assertListEqual([], bookmarks(ibase.SRC_ROOT_DATASET, find_tmp=True))
+        finalized_bookmarks = bookmarks(ibase.SRC_ROOT_DATASET)
+        self.assertEqual(1, len(finalized_bookmarks))
+        self.assertEqual(
+            [source_guid],
+            zfs_list(finalized_bookmarks, props=["guid"], types=["bookmark"], max_depth=-1),
+        )
 
     @staticmethod
     def create_resumable_snapshots(
@@ -4035,6 +4311,14 @@ class LocalTestCase(IntegrationTestCase):
         )
 
     def test_compare_snapshot_lists(self) -> None:
+        """Verify comparison hides unmatched temporary bookmarks while retaining their GUID matches.
+
+        The test adds one `.TMPBZFS.` bookmark to a source dataset containing three snapshots. It then checks TSV row counts
+        across comparison selections, recursion, batching, snapshot filters, bookmark-use modes, and worker counts, plus
+        representative field values. A final interrupted-state scenario verifies a matching destination snapshot is shared,
+        with its common row represented by the source bookmark as for other source-side bookmarks.
+        """
+
         def snapshot_list(_job: bzfs.Job, location: str = "") -> list[str]:
             log_file = _job.params.log_params.log_file
             tsv_file = glob.glob(glob.escape(log_file[0 : log_file.rindex(".log")] + ".cmp/") + "*.tsv")[0]
@@ -4090,6 +4374,9 @@ class LocalTestCase(IntegrationTestCase):
                         self.assertEqual(0, n_all)
 
                         self.setup_basic()
+                        tmp_snapshot = take_snapshot(ibase.SRC_ROOT_DATASET, fix("compare_tmp"))
+                        create_bookmark(ibase.SRC_ROOT_DATASET, snapshot_name(tmp_snapshot), ".TMPBZFS.compare")
+                        destroy(tmp_snapshot)
                         cmp_choices: list[str] = []
                         for w in range(len(argparse_cli.CMP_CHOICES_ITEMS)):
                             cmp_choices += [
@@ -4357,6 +4644,35 @@ class LocalTestCase(IntegrationTestCase):
                             os.environ.pop(param_name, None)
                         else:
                             os.environ[param_name] = old_value
+
+        # Model interrupted cleanup where only the temporary source bookmark and replicated destination snapshot remain.
+        if not are_bookmarks_enabled("src"):
+            return
+        self.tearDownAndSetup()
+        self.setup_basic()
+        self.run_bzfs(ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--create-bookmarks=all")
+        target_tag = fix("s3")
+        target_snapshot = f"{ibase.SRC_ROOT_DATASET}@{target_tag}"
+        tmp_tag = ".TMPBZFS.compare-match"
+        create_bookmark(ibase.SRC_ROOT_DATASET, target_tag, tmp_tag)
+        destroy(target_snapshot)
+        for bookmark in bookmarks(ibase.SRC_ROOT_DATASET):
+            destroy(bookmark)
+
+        job = self.run_bzfs(
+            ibase.SRC_ROOT_DATASET,
+            ibase.DST_ROOT_DATASET,
+            "--skip-replication",
+            "--compare-snapshot-lists=src+dst+all",
+            f"--include-snapshot-regex={target_tag}",
+        )
+        n_src, n_dst, n_all = stats(job)
+        self.assertEqual(0, n_src)
+        self.assertEqual(0, n_dst)
+        self.assertEqual(1, n_all)
+        lines = snapshot_list(job, "all")
+        self.assertEqual(1, len(lines))
+        self.assertEqual(ibase.SRC_ROOT_DATASET + "#" + tmp_tag, lines[0].split("\t")[7])
 
     def test_delete_dst_datasets_with_missing_src_root(self) -> None:
         destroy(ibase.SRC_ROOT_DATASET, recursive=True)
@@ -4712,6 +5028,7 @@ class LocalTestCase(IntegrationTestCase):
                         for bookmark in bookmarks(ibase.SRC_ROOT_DATASET):
                             destroy(bookmark)
                     crosscheck = [] if j == 0 else ["--delete-dst-snapshots-no-crosscheck"]
+                    destroy_tmp_bookmarks(ibase.SRC_ROOT_DATASET)
                     self.run_bzfs(
                         ibase.SRC_ROOT_DATASET,
                         ibase.DST_ROOT_DATASET,
@@ -4856,6 +5173,7 @@ class LocalTestCase(IntegrationTestCase):
 
                 for bookmark in bookmarks(ibase.SRC_ROOT_DATASET):
                     destroy(bookmark)
+                destroy_tmp_bookmarks(ibase.SRC_ROOT_DATASET)
                 self.run_bzfs(
                     ibase.SRC_ROOT_DATASET,
                     ibase.DST_ROOT_DATASET,
@@ -4876,6 +5194,56 @@ class LocalTestCase(IntegrationTestCase):
                     *xtra,
                 )
                 self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET))
+
+    def test_delete_dst_tmp_bookmarks_flat(self) -> None:
+        """Verify ordinary and forced deletion select disjoint bookmark sets.
+
+        One regular bookmark and two `.TMPBZFS.` bookmarks share a snapshot, hence a GUID and creation time. Ordinary bookmark
+        pruning must delete only the regular bookmark. Forced temporary-bookmark deletion is constrained by a regex: dry-run
+        must preserve every bookmark, and execution must delete only the matching temporary bookmark. Equal GUID and creation
+        time eliminate metadata selection as a confounder, so surviving names directly identify namespace or regex errors.
+        """
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        self.setup_basic()
+        dataset = ibase.SRC_ROOT_DATASET
+        snapshot_tag = snapshot_name(snapshots(dataset)[0])
+        regular_tag = "regular_bookmark"
+        keep_tmp_tag = ".TMPBZFS.keep"
+        delete_tmp_tag = ".TMPBZFS.delete"
+        regular_bookmark = create_bookmark(dataset, snapshot_tag, regular_tag)
+        keep_tmp_bookmark = create_bookmark(dataset, snapshot_tag, keep_tmp_tag)
+        delete_tmp_bookmark = create_bookmark(dataset, snapshot_tag, delete_tmp_tag)
+        self.assertListEqual([regular_bookmark], bookmarks(dataset))
+        self.assertSetEqual({keep_tmp_bookmark, delete_tmp_bookmark}, set(bookmarks(dataset, find_tmp=True)))
+
+        self.run_bzfs(
+            DUMMY_DATASET,
+            dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots=bookmarks",
+        )
+        self.assertListEqual([], bookmarks(dataset))
+        self.assertSetEqual({keep_tmp_bookmark, delete_tmp_bookmark}, set(bookmarks(dataset, find_tmp=True)))
+
+        regular_bookmark = create_bookmark(dataset, snapshot_tag, regular_tag)
+        cleanup_args = [
+            "--skip-replication",
+            "--force-delete-dst-tmp-bookmarks",
+            "--include-snapshot-regex=.*delete.*",
+        ]
+        self.run_bzfs(
+            DUMMY_DATASET,
+            dataset,
+            *cleanup_args,
+            dry_run=True,
+        )
+        self.assertListEqual([regular_bookmark], bookmarks(dataset))
+        self.assertSetEqual({keep_tmp_bookmark, delete_tmp_bookmark}, set(bookmarks(dataset, find_tmp=True)))
+
+        self.run_bzfs(DUMMY_DATASET, dataset, *cleanup_args)
+        self.assertListEqual([regular_bookmark], bookmarks(dataset))
+        self.assertListEqual([keep_tmp_bookmark], bookmarks(dataset, find_tmp=True))
 
     def test_delete_dst_snapshots_despite_same_name(self) -> None:
         self.setup_basic_with_recursive_replication_done()

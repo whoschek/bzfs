@@ -175,6 +175,7 @@ class TestCompareSnapshotLists(AbstractTestCase):
         src_datasets: list[str],
         dst_datasets: list[str],
         compare_choice: str = "src+dst+all",
+        options: tuple[str, ...] = (),
     ) -> tuple[list[list[str]], list[list[str]]]:
         """Runs run_compare_snapshot_lists() with stubbed ZFS output and returns TSV rows.
 
@@ -186,7 +187,7 @@ class TestCompareSnapshotLists(AbstractTestCase):
         job.is_test_mode = True
         with tempfile.TemporaryDirectory() as tmpdir:
             log_file = os.path.join(tmpdir, "job.log")
-            args = self.argparser_parse_args(["tank/src", "tank/dst", "--compare-snapshot-lists"])
+            args = self.argparser_parse_args(["tank/src", "tank/dst", "--compare-snapshot-lists", *options])
             log_params = MagicMock(spec=configuration.LogParams)
             log_params.log_file = log_file
             p = self.make_params(args, log_params=log_params)
@@ -194,6 +195,7 @@ class TestCompareSnapshotLists(AbstractTestCase):
             p.dst.root_dataset = "tank/dst"
             p.compare_snapshot_lists = compare_choice  # type: ignore[misc]  # cannot assign to final attribute
             job.params = p
+            job.validate_once()
 
             def fake_zfs_list(
                 _job: Job, r: Any, _cmd: list[str], datasets: list[str], ordered: bool = True
@@ -311,3 +313,70 @@ class TestCompareSnapshotLists(AbstractTestCase):
         self.assertEqual("all", rows[0][0])
         self.assertEqual("tank/src/foo@snap1", rows[0][7])
         self.assertEqual([["all", "/foo", "tank/src/foo", "tank/dst/foo"]], rel_rows)
+
+    def test_run_compare_snapshot_lists_matches_temporary_bookmark_as_common(self) -> None:
+        """A temporary source bookmark establishes a shared GUID and represents the common row."""
+
+        tmp_bookmark = "tank/src/foo#.TMPBZFS.snapA.AAAAAAAAAAA.AAAAAAAAAAA.abcdefghij"
+        src_lines = {"tank/src/foo": [f"100\tg1\t1\t-\t{tmp_bookmark}"]}
+        dst_lines = {"tank/dst/foo": ["100\tg1\t2\t1500\ttank/dst/foo@snapA"]}
+
+        rows, rel_rows = self._run_compare(src_lines, dst_lines, ["tank/src/foo"], ["tank/dst/foo"])
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual("all", rows[0][0])
+        self.assertEqual("/foo#.TMPBZFS.snapA.AAAAAAAAAAA.AAAAAAAAAAA.abcdefghij", rows[0][3])
+        self.assertEqual("tank/src", rows[0][5])
+        self.assertEqual(tmp_bookmark, rows[0][7])
+        self.assertEqual([["all", "/foo", "tank/src/foo", "tank/dst/foo"]], rel_rows)
+
+    def test_run_compare_snapshot_lists_filters_temporary_match_by_destination_name(self) -> None:
+        """An exact-name filter evaluates the visible destination snapshot rather than the temporary bookmark tag."""
+
+        src_lines = {"tank/src/foo": ["100\tg1\t1\t-\ttank/src/foo#.TMPBZFS.snapA.AAAAAAAAAAA.AAAAAAAAAAA.abcdefghij"]}
+        dst_lines = {"tank/dst/foo": ["100\tg1\t2\t1500\ttank/dst/foo@snapA"]}
+
+        rows, _rel_rows = self._run_compare(
+            src_lines,
+            dst_lines,
+            ["tank/src/foo"],
+            ["tank/dst/foo"],
+            options=("--include-snapshot-regex=^snapA$",),
+        )
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual("all", rows[0][0])
+        self.assertIn("tank/src/foo#.TMPBZFS.snapA.", rows[0][7])
+
+    def test_run_compare_snapshot_lists_hides_unmatched_temporary_bookmark(self) -> None:
+        """A temporary source bookmark without a destination GUID match produces no comparison row."""
+
+        src_lines = {"tank/src/foo": ["100\tg1\t1\t-\ttank/src/foo#.TMPBZFS.snapA.AAAAAAAAAAA.AAAAAAAAAAA.abcdefghij"]}
+
+        rows, rel_rows = self._run_compare(src_lines, {}, ["tank/src/foo"], [])
+
+        self.assertEqual([], rows)
+        self.assertEqual([["src", "/foo", "tank/src/foo", ""]], rel_rows)
+
+    def test_run_compare_snapshot_lists_does_not_override_filtered_source_with_temporary_duplicate(self) -> None:
+        """A temporary duplicate cannot reintroduce an ordinary source representation excluded by its name."""
+
+        src_lines = {
+            "tank/src/foo": [
+                "100\tg1\t1\t1000\ttank/src/foo@sourceName",
+                "100\tg1\t1\t-\ttank/src/foo#.TMPBZFS.sourceName.AAAAAAAAAAA.AAAAAAAAAAA.abcdefghij",
+            ]
+        }
+        dst_lines = {"tank/dst/foo": ["100\tg1\t2\t1500\ttank/dst/foo@destinationName"]}
+
+        rows, _rel_rows = self._run_compare(
+            src_lines,
+            dst_lines,
+            ["tank/src/foo"],
+            ["tank/dst/foo"],
+            options=("--include-snapshot-regex=^destinationName$",),
+        )
+
+        self.assertEqual(1, len(rows))
+        self.assertEqual("dst", rows[0][0])
+        self.assertEqual("tank/dst/foo@destinationName", rows[0][7])

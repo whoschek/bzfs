@@ -39,6 +39,9 @@ from unittest.mock import (
 from bzfs_main.argparse_actions import (
     SnapshotFilter,
 )
+from bzfs_main.detect import (
+    POOL_GUID,
+)
 from bzfs_main.filter import (
     SNAPSHOT_REGEX_FILTER_NAME,
 )
@@ -47,6 +50,7 @@ from bzfs_main.replication import (
     _check_zfs_dataset_busy,
     _clear_resumable_recv_state_if_necessary,
     _compress_cmd,
+    _Continuity,
     _create_zfs_filesystem,
     _decode_resume_token,
     _decompress_cmd,
@@ -74,6 +78,7 @@ from bzfs_main.util.utils import (
     LOG_DEBUG,
     SynchronizedBool,
     compile_regexes,
+    sha256_urlsafe_base64,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
@@ -356,6 +361,77 @@ class TestResumeErrorParsing(AbstractTestCase):
 ###############################################################################
 class TestReplication(AbstractTestCase):
     """Covers command builders and safety helpers in replication."""
+
+    def test_continuity_tmp_bookmark_uses_dst_pool_guid_and_dataset_name(self) -> None:
+        """Verifies the destination identity combines its pool GUID with its full dataset name."""
+        src_dataset = "srcpool/src"
+        dst_dataset = "dstpool/backups/src"
+        snapshot = f"{src_dataset}@snap"
+        snapshot_guid = "15813919022682057"
+        dst_pool_guid = "34534654564564"
+        p = MagicMock()
+        p.dst.location = "dst"
+        p.dst.pool = "dstpool"
+        p.zpool_features = {
+            "dst": {
+                "dstpool": {
+                    POOL_GUID: dst_pool_guid,
+                }
+            }
+        }
+
+        continuity = _Continuity(
+            p,
+            src_dataset,
+            dst_dataset,
+            [f"{snapshot_guid}\t{snapshot}"],
+            [],
+        )
+        tmp_bookmark, actual_guid = continuity._tmp_bookmark_name_and_guid(snapshot)
+        prefix_and_snapshot, compact_snapshot_guid, compact_pool_guid, dst_dataset_hash = tmp_bookmark.rsplit(".", 3)
+
+        self.assertEqual(f"{src_dataset}#.TMPBZFS.snap", prefix_and_snapshot)
+        self.assertEqual(_Continuity._compact_guid(snapshot_guid), compact_snapshot_guid)
+        self.assertEqual(_Continuity._compact_guid(dst_pool_guid), compact_pool_guid)
+        self.assertEqual(sha256_urlsafe_base64(dst_dataset)[:10].replace("_", ":"), dst_dataset_hash)
+        self.assertEqual(snapshot_guid, actual_guid)
+
+    def test_continuity_requires_dst_pool_guid(self) -> None:
+        """Verifies continuity creation fails when zpool detection supplied no destination pool GUID."""
+        p = MagicMock()
+        p.dst.location = "dst"
+        p.dst.pool = "dstpool"
+        p.zpool_features = {"dst": {"dstpool": {}}}
+
+        with self.assertRaises(SystemExit) as context:
+            _Continuity(p, "srcpool/src", "dstpool/backups/src", [], [])
+
+        self.assertIn(
+            "Cannot create bookmarks to guarantee continuity because the destination zpool GUID could not be detected",
+            str(context.exception),
+        )
+
+    def test_compact_guid_is_reversible(self) -> None:
+        """Verifies compact ZFS GUIDs are lossless and recover their decimal representation across the 64-bit range."""
+        expected_compact_guids: dict[str, str] = {
+            "0": "AAAAAAAAAAA",
+            "1": "AAAAAAAAAAE",
+            "2": "AAAAAAAAAAI",
+            "992": "AAAAAAAAA-A",
+            "1008": "AAAAAAAAA:A",
+            "4294967295": "AAAAAP::::8",
+            "34534654564564": "AAAfaLnRWNQ",
+            "15813919022682057": "ADgurPHaj8k",
+            "15832610720354249": "ADg:rPHaj8k",
+            str(2**63): "gAAAAAAAAAA",
+            str(2**64 - 1): "::::::::::8",
+        }
+        for decimal_guid, expected_compact_guid in expected_compact_guids.items():
+            with self.subTest(decimal_guid=decimal_guid):
+                compact_guid: str = _Continuity._compact_guid(decimal_guid)
+                self.assertEqual(expected_compact_guid, compact_guid)
+                self.assertEqual(11, len(compact_guid))
+                self.assertEqual(decimal_guid, _Continuity._decimal_guid(compact_guid))
 
     def _assert_prepare_r2r_pipeline(
         self,
@@ -1281,7 +1357,7 @@ class TestReplication(AbstractTestCase):
         """
         src_dataset = "pool/src"
         dst_dataset = "pool/dst"
-        p = self.make_params(args=self.argparser_parse_args([src_dataset, dst_dataset]))
+        p = self.make_params(args=self.argparser_parse_args([src_dataset, dst_dataset, "--dryrun=send"]))
 
         exclude_regexes = compile_regexes(["h.*"])  # exclude hourlies
         include_regexes = compile_regexes([".*"])  # include everything else

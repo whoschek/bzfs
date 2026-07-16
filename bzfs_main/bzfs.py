@@ -140,6 +140,7 @@ from bzfs_main.replication import (
     delete_bookmarks,
     delete_datasets,
     delete_snapshots,
+    is_tmp_bookmark,
     replicate_dataset,
 )
 from bzfs_main.snapshot_cache import (
@@ -568,6 +569,25 @@ class Job(MiniJob):
             validate_host_name(r.basis_ssh_host, f"--ssh-{loc}-host")
             validate_port(r.ssh_port, f"--ssh-{loc}-port ")
 
+        args, log = p.args, p.log
+        if args.force_delete_dst_tmp_bookmarks:
+            if not args.skip_replication:
+                die("--force-delete-dst-tmp-bookmarks requires --skip-replication")
+            incompatible_option: str = ""
+            if args.delete_dst_snapshots is not None:
+                incompatible_option = "--delete-dst-snapshots"
+            elif args.delete_dst_snapshots_except_plan is not None:
+                incompatible_option = "--delete-dst-snapshots-except-plan"
+            elif args.include_snapshot_plan is not None:
+                incompatible_option = "--include-snapshot-plan"
+            if incompatible_option:
+                die(f"--force-delete-dst-tmp-bookmarks cannot be combined with {incompatible_option}")
+            log.warning(
+                "DANGER: --force-delete-dst-tmp-bookmarks can delete the only temporary bookmark preserving incremental "
+                "replication continuity after an interrupted replication. This option is intended only for rare "
+                "administrative cleanup in pathologic situations, not normal periodic operation."
+            )
+
     def validate_task(self) -> None:
         """Validates a single replication task before execution."""
         p, log = self.params, self.params.log
@@ -880,6 +900,10 @@ class Job(MiniJob):
                 if userrefs not in ("", "-", "0"):  # ZFS snapshot property userrefs > 0 indicates a zfs hold
                     tag: str = name[name.index("@") + 1 :]
                     held_dst_snapshots.add(tag)  # don't attempt to delete snapshots that carry a `zfs hold`
+            if p.delete_dst_bookmarks:
+                dst_snaps_with_guids = [
+                    line for line in dst_snaps_with_guids if is_tmp_bookmark(line) == p.force_delete_dst_tmp_bookmarks
+                ]
             num_dst_snaps_with_guids = len(dst_snaps_with_guids)
             basis_dst_snaps_with_guids: list[str] = dst_snaps_with_guids.copy()
             if p.delete_dst_bookmarks:
@@ -1738,6 +1762,7 @@ class Job(MiniJob):
                     or ": filesystem does not exist" in stderr  # solaris 11.4.0
                     or ": no such pool" in stderr
                     or "does not have any resumable receive state to abort" in stderr  # harmless `zfs receive -A` race
+                    or re.search(r"bookmark '.*' does not exist", stderr)
                 ):
                     return None
                 log.warning("%s", stderr.rstrip())

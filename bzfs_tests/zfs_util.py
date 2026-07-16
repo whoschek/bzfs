@@ -27,6 +27,9 @@ from typing import (
     cast,
 )
 
+from bzfs_main.replication import (
+    is_tmp_bookmark,
+)
 from bzfs_main.util.utils import (
     stderr_to_str,
 )
@@ -202,8 +205,13 @@ def create_bookmark(dataset: str, snapshot_tag: str, bookmark_tag: str) -> str:
     return bookmark
 
 
-def bookmarks(dataset: str, max_depth: int = 1) -> list[str]:
-    return cast(list[str], zfs_list([dataset], types=["bookmark"], max_depth=max_depth))
+def bookmarks(dataset: str, max_depth: int = 1, find_tmp: bool = False) -> list[str]:
+    results: list[str] = cast(list[str], zfs_list([dataset], types=["bookmark"], max_depth=max_depth))
+    if find_tmp:
+        results = [result for result in results if is_tmp_bookmark(result)]
+    else:
+        results = [result for result in results if not is_tmp_bookmark(result)]
+    return results
 
 
 def snapshot_name(snapshot: str) -> str:

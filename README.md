@@ -1228,8 +1228,8 @@ usage: bzfs [-h]
   dataset, such as the hardcoded virtual dataset named 'dummy', like so: `bzfs dummy tank2/boo/bar --dryrun
   --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_daily' --recursive`
 
-  *Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in which case no snapshots are
-  selected and the --{include|exclude}-snapshot-* filter options treat bookmarks as snapshots wrt. selecting.
+  *Note:* Use --delete-dst-snapshots=bookmarks to delete non-temporary bookmarks instead of snapshots, in which case no
+  snapshots are selected and the --{include|exclude}-snapshot-* filter options treat bookmarks as snapshots wrt. selecting.
 
   *Note:* Does not attempt to delete snapshots that carry a `zfs hold`; instead auto-skips them without failing.
 
@@ -1519,25 +1519,29 @@ usage: bzfs [-h]
 - For increased safety, bzfs replication behaves as follows wrt. ZFS bookmark creation, if it is autodetected that the source
   ZFS pool supports bookmarks:
 
-  * `all` (default): Whenever it has successfully completed a 'zfs send' operation, bzfs creates a ZFS bookmark of each
-  source snapshot that was sent during that 'zfs send' operation, and attaches it to the source dataset. This increases
-  safety at the expense of a little performance.
+  * `all` (default): Selects every source snapshot that will be sent during each 'zfs send' operation. This increases safety
+  at the expense of a little performance.
 
-  * `hourly`: Whenever it has successfully completed replication of the most recent source snapshot, bzfs creates a ZFS
-  bookmark of that snapshot, and attaches it to the source dataset. In addition, whenever it has successfully completed a
-  'zfs send' operation, bzfs creates a ZFS bookmark of each hourly, daily, weekly, monthly and yearly source snapshot that
-  was sent during that 'zfs send' operation, and attaches it to the source dataset.
+  * `hourly`: Selects each hourly, daily, weekly, monthly and yearly source snapshot that will be sent.
 
-  * `minutely` and `secondly`: Same as `hourly` except that it also creates ZFS bookmarks for minutely and secondly
-  snapshots, respectively.
+  * `minutely` and `secondly`: Same as `hourly` except that it also selects minutely and secondly snapshots, respectively.
 
   * `none`: No bookmark is created.
 
+  For every mode except `none`, the snapshot of a full send and the final snapshot of incremental replication are always
+  selected as they establish the initial and latest common bases, respectively.
+
+  For each selected source snapshot, bzfs creates a destination-specific temporary bookmark before starting its 'zfs
+  send/receive' operation. After the operation succeeds, it renames the temporary bookmark to a finalized bookmark and
+  deletes any obsolete temporary bookmarks for that destination. Both temporary and finalized bookmarks can serve as sources
+  for future incremental replication once the corresponding snapshot exists on the destination. This guarantees continuity
+  even if the bzfs process is killed after 'zfs send/receive' succeeds but before bookmark finalization.
+
   Bookmarks exist so an incremental stream can continue to be sent from the source dataset without having to keep the already
   replicated snapshot around on the source dataset until the next upcoming snapshot has been successfully replicated. This
-  way you can send the snapshot from the source dataset to another host, then bookmark the snapshot on the source dataset,
-  then delete the snapshot from the source dataset to save disk space, and then still incrementally send the next upcoming
-  snapshot from the source dataset to the other host by referring to the bookmark.
+  way you can bookmark a snapshot on the source dataset, send the snapshot to another host, then delete the snapshot from the
+  source dataset to save disk space, and then still incrementally send the next upcoming snapshot from the source dataset to
+  the other host by referring to the bookmark.
 
   The --create-bookmarks=none option disables this safety feature but is discouraged, because bookmarks are tiny and
   relatively cheap and help to ensure that ZFS replication can continue even if source and destination dataset somehow have
@@ -1553,17 +1557,21 @@ usage: bzfs [-h]
   corresponding to the source bookmark and (potentially already deleted) source snapshot. A bookmark can be fed into 'zfs
   send' as the source of an incremental send. Note that while a bookmark allows for its snapshot to be deleted on the source
   after successful replication, it still requires that its snapshot is not somehow deleted prematurely on the destination
-  dataset, so be mindful of that. By convention, a bookmark created by bzfs has the same name as its corresponding snapshot,
-  the only difference being the leading '#' separator instead of the leading '@' separator. Also see
-  https://www.youtube.com/watch?v=LaNgoAZeTww&t=316s.
+  dataset, so be mindful of that. Also see https://www.youtube.com/watch?v=LaNgoAZeTww&t=316s.
+
+  By convention, a finalized bookmark created by bzfs has the same name as its corresponding snapshot, except the name also
+  contains the snapshot GUID for uniqueness. Destination-specific temporary bookmarks use names that begin with `.TMPBZFS.`;
+  this namespace is reserved for internal use. Do not create or delete such temporary bookmarks because bzfs automatically
+  manages and garbage collects them.
 
   You can list bookmarks, like so: `zfs list -t bookmark -o name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and
   should) periodically prune obsolete bookmarks just like snapshots, like so: `zfs destroy $SRC_DATASET#$BOOKMARK`.
   Typically, bookmarks should be pruned less aggressively than snapshots, and destination snapshots should be pruned less
-  aggressively than source snapshots. As an example starting point, here is a command that deletes all bookmarks older than
-  90 days, but retains the latest 200 bookmarks (per dataset) regardless of creation time: `bzfs dummy tank2/boo/bar --dryrun
-  --recursive --skip-replication --delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks notime 'all except
-  latest 200' --include-snapshot-times-and-ranks 'anytime..90 days ago'`
+  aggressively than source snapshots. As an example starting point, here is a command that deletes all non-temporary
+  bookmarks older than 90 days, but retains the latest 200 non-temporary bookmarks (per dataset) regardless of creation time:
+  `bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks
+  --include-snapshot-times-and-ranks notime 'all except latest 200' --include-snapshot-times-and-ranks 'anytime..90 days
+  ago'`
 
 <!-- -->
 
@@ -1571,15 +1579,15 @@ usage: bzfs [-h]
 
 - For increased safety, in normal replication operation bzfs replication also looks for bookmarks (in addition to snapshots)
   on the source dataset in order to find the most recent common snapshot wrt. the destination dataset, if it is auto-detected
-  that the source ZFS pool support bookmarks. The --no-use-bookmark option disables this safety feature but is discouraged,
+  that the source ZFS pool supports bookmarks. The --no-use-bookmark option disables this safety feature but is discouraged,
   because bookmarks help to ensure that ZFS replication can continue even if source and destination dataset somehow have no
   common snapshot anymore.
 
   Note that it does not matter whether a bookmark was created by bzfs or a third party script, as only the GUID of the
   bookmark and the GUID of the snapshot is considered for comparison, and ZFS guarantees that any bookmark of a given
-  snapshot automatically has the same GUID, transaction group number and creation time as the snapshot. Also note that you
-  can create, delete and prune bookmarks any way you like, as bzfs (without --no-use-bookmark) will happily work with
-  whatever bookmarks currently exist, if any.
+  snapshot automatically has the same GUID, transaction group number and creation time as the snapshot. Apart from the
+  internal `.TMPBZFS.` namespace described above, you can create, delete and prune bookmarks any way you like, as bzfs
+  (without --no-use-bookmark) will happily work with whatever bookmarks currently exist, if any.
 
 <!-- -->
 

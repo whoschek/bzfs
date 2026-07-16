@@ -64,6 +64,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 # constants:
 DISABLE_PRG: Final[str] = "-"
 DUMMY_DATASET: Final[str] = "dummy"
+POOL_GUID: Final[str] = "guid"
 ZFS_VERSION_IS_AT_LEAST_2_1_0: Final[str] = "zfs>=2.1.0"
 ZFS_VERSION_IS_AT_LEAST_2_2_0: Final[str] = "zfs>=2.2.0"
 
@@ -308,14 +309,16 @@ def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict) -
     if params.zpool_program != DISABLE_PRG and (params.shell_program == DISABLE_PRG or "zpool" in available_programs):
         cmd: list[str] = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
         try:
-            lines = job.run_ssh_command_with_retries(remote, LOG_TRACE, check=False, cmd=cmd).splitlines()
+            lines = job.run_ssh_command_with_retries(remote, LOG_TRACE, cmd=cmd).splitlines()
         except (FileNotFoundError, PermissionError) as e:
             if e.filename != params.zpool_program:
                 raise
             log.warning("%s", f"Failed to detect zpool features on {loc}: {r.pool}. Continuing with minimal assumptions ...")
+        except (subprocess.CalledProcessError, UnicodeDecodeError):
+            log.warning("%s", f"Failed to detect zpool features on {loc}: {r.pool}. Continuing with minimal assumptions ...")
         else:
             props: dict[str, str] = dict(line.split("\t", 1) for line in lines)
-            features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
+            features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation" or k == POOL_GUID}
     if len(lines) == 0:
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
         if job.try_ssh_command_with_retries(remote, LOG_TRACE, cmd=cmd) is None:

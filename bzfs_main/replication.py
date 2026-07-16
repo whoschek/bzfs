@@ -21,6 +21,8 @@ For replication of multiple datasets, including recursive replication, see bzfs.
 from __future__ import (
     annotations,
 )
+import base64
+import logging
 import os
 import re
 import shlex
@@ -44,6 +46,7 @@ from subprocess import (
 from typing import (
     TYPE_CHECKING,
     Final,
+    final,
 )
 
 from bzfs_main.argparse_actions import (
@@ -53,6 +56,7 @@ from bzfs_main.configuration import (
     is_same_remote,
 )
 from bzfs_main.detect import (
+    POOL_GUID,
     ZFS_VERSION_IS_AT_LEAST_2_1_0,
     ZFS_VERSION_IS_AT_LEAST_2_2_0,
     are_bookmarks_enabled,
@@ -103,6 +107,7 @@ from bzfs_main.util.utils import (
     list_formatter,
     open_nofollow,
     replace_prefix,
+    sha256_urlsafe_base64,
     stderr_to_str,
     xprint,
 )
@@ -130,8 +135,8 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     dst_dataset: str = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
     log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
-    list_result: bool | tuple[list[str], list[str], list[str], set[str], str, str] = _list_and_filter_src_and_dst_snapshots(
-        job, src_dataset, dst_dataset, tid
+    list_result: bool | tuple[list[str], list[str], list[str], set[str], str, str, _Continuity | None] = (
+        _list_and_filter_src_and_dst_snapshots(job, src_dataset, dst_dataset, tid)
     )
     if isinstance(list_result, bool):
         return list_result
@@ -142,6 +147,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
         included_src_guids,
         latest_src_snapshot,
         oldest_src_snapshot,
+        continuity,
     ) = list_result
     assert latest_src_snapshot
     assert oldest_src_snapshot
@@ -179,6 +185,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
             latest_dst_snapshot,
             included_src_guids,
             dst_snapshots_with_guids,
+            continuity,
             props_cache,
             dry_run_no_send,
             done_checking,
@@ -200,6 +207,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
                 basis_src_snapshots_with_guids,
                 included_src_guids,
                 recv_resume_token_result,
+                continuity,
                 props_cache,
                 dry_run_no_send,
                 done_checking,
@@ -218,6 +226,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
             basis_src_snapshots_with_guids,
             included_src_guids,
             recv_resume_token_result,
+            continuity,
             props_cache,
             dry_run_no_send,
             done_checking,
@@ -228,7 +237,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
 
 def _list_and_filter_src_and_dst_snapshots(
     job: Job, src_dataset: str, dst_dataset: str, tid: str
-) -> bool | tuple[list[str], list[str], list[str], set[str], str, str]:
+) -> bool | tuple[list[str], list[str], list[str], set[str], str, str, _Continuity | None]:
     """On replication, list and filter src and dst snapshots."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
@@ -246,7 +255,8 @@ def _list_and_filter_src_and_dst_snapshots(
     # char, bookmark names must not contain a '@' char, and dataset names must not contain a '#' or '@' char.
     # GUID and creation time also do not contain a '#' or '@' char.
     filter_needs_creation_time: bool = has_timerange_filter(p.snapshot_filters)
-    types: str = "snapshot,bookmark" if p.use_bookmark and are_bookmarks_enabled(p, src) else "snapshot"
+    types: str = "snapshot"
+    types += ",bookmark" if (p.use_bookmark or p.create_bookmarks != "none") and are_bookmarks_enabled(p, src) else ""
     props: str = job.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
     src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
     job.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
@@ -259,7 +269,10 @@ def _list_and_filter_src_and_dst_snapshots(
     if src_snapshots_and_bookmarks is None:
         log.warning("Third party deleted source: %s", src_dataset)
         return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
-    src_snapshots_with_guids: list[str] = src_snapshots_and_bookmarks.splitlines()
+    raw_src_snapshots_with_guids: list[str] = src_snapshots_and_bookmarks.splitlines()
+    src_snapshots_with_guids: list[str] = raw_src_snapshots_with_guids.copy()
+    if not p.use_bookmark:
+        src_snapshots_with_guids = [snapshot for snapshot in src_snapshots_with_guids if "@" in snapshot]
     src_snapshots_and_bookmarks = None
     if len(dst_snapshots_with_guids) == 0 and "bookmark" in types:
         # src bookmarks serve no purpose if the destination dataset has no snapshot; ignore them
@@ -271,6 +284,7 @@ def _list_and_filter_src_and_dst_snapshots(
     basis_src_snapshots_with_guids: list[str] = src_snapshots_with_guids
     src_snapshots_with_guids = filter_snapshots(job, src_snapshots_with_guids)
     if filter_needs_creation_time:
+        raw_src_snapshots_with_guids = cut(field=2, lines=raw_src_snapshots_with_guids)
         src_snapshots_with_guids = cut(field=2, lines=src_snapshots_with_guids)
         basis_src_snapshots_with_guids = cut(field=2, lines=basis_src_snapshots_with_guids)
 
@@ -300,6 +314,16 @@ def _list_and_filter_src_and_dst_snapshots(
     if latest_src_snapshot == "":
         log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
         return True
+    if p.create_bookmarks != "none" and are_bookmarks_enabled(p, src) and not p.dry_run:
+        continuity: _Continuity | None = _Continuity(
+            p,
+            src_dataset,
+            dst_dataset,
+            raw_src_snapshots_with_guids,
+            dst_snapshots_with_guids,
+        )
+    else:
+        continuity = None
     return (
         basis_src_snapshots_with_guids,
         src_snapshots_with_guids,
@@ -307,6 +331,7 @@ def _list_and_filter_src_and_dst_snapshots(
         included_src_guids,
         latest_src_snapshot,
         oldest_src_snapshot,
+        continuity,
     )
 
 
@@ -390,6 +415,7 @@ def _replicate_dataset_fully(
     latest_dst_snapshot: str,
     included_src_guids: set[str],
     dst_snapshots_with_guids: list[str],
+    continuity: _Continuity | None,
     props_cache: dict[tuple[str, ...], dict[str, str | None]],
     dry_run_no_send: bool,
     done_checking: bool,
@@ -452,6 +478,8 @@ def _replicate_dataset_fully(
         dry_run_no_send = dry_run_no_send or p.dry_run_no_send
         job.maybe_inject_params(error_trigger="full_zfs_send_params")
         humansize = humansize.rjust(_RIGHT_JUST * 3 + 2)
+        if continuity is not None:
+            continuity.create_tmp_bookmarks(job, src, [oldest_src_snapshot])
         _run_zfs_send_receive(  # do the real work
             job, src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "full_zfs_send"
         )
@@ -460,7 +488,9 @@ def _replicate_dataset_fully(
             job.dst_dataset_exists[dst_dataset] = True
         with job.stats_lock:
             job.num_snapshots_replicated += 1
-        _create_zfs_bookmarks(job, src, src_dataset, [oldest_src_snapshot])
+        if continuity is not None:
+            continuity.mark_snapshots_as_replicated([oldest_src_snapshot])
+            continuity.promote_and_gc_bookmarks(job, src)
         _zfs_set(job, set_opts, dst, dst_dataset)
         dry_run_no_send = dry_run_no_send or p.dry_run
 
@@ -476,6 +506,7 @@ def _replicate_dataset_incrementally(
     basis_src_snapshots_with_guids: list[str],
     included_src_guids: set[str],
     recv_resume_token_result: tuple[str | None, list[str], list[str]],
+    continuity: _Continuity | None,
     props_cache: dict[tuple[str, ...], dict[str, str | None]],
     dry_run_no_send: bool,
     done_checking: bool,
@@ -574,6 +605,19 @@ def _replicate_dataset_incrementally(
         if p.dry_run and not job.dst_dataset_exists[dst_dataset]:
             dry_run_no_send = True
         dry_run_no_send = dry_run_no_send or p.dry_run_no_send
+
+        assert p.create_bookmarks
+        snaps_to_bookmark: list[str] = []
+        if p.create_bookmarks == "all":
+            snaps_to_bookmark = to_snapshots
+        elif p.create_bookmarks != "none":
+            threshold_millis: int = p.xperiods.label_milliseconds("_" + p.create_bookmarks)
+            snaps_to_bookmark = [snap for snap in to_snapshots if p.xperiods.label_milliseconds(snap) >= threshold_millis]
+            if i == len(steps_todo) - 1 and (len(snaps_to_bookmark) == 0 or snaps_to_bookmark[-1] != to_snap):
+                snaps_to_bookmark.append(to_snap)  # ensure latest common snapshot is bookmarked
+        if continuity is not None:
+            continuity.create_tmp_bookmarks(job, src, snaps_to_bookmark)
+
         job.maybe_inject_params(error_trigger="incr_zfs_send_params")
         _run_zfs_send_receive(  # do the real work
             job, src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "incr_zfs_send"
@@ -583,15 +627,10 @@ def _replicate_dataset_incrementally(
         latest_common_src_snapshot = to_snap
         with job.stats_lock:
             job.num_snapshots_replicated += curr_num_snapshots
-        assert p.create_bookmarks
-        if p.create_bookmarks == "all":
-            _create_zfs_bookmarks(job, src, src_dataset, to_snapshots)
-        elif p.create_bookmarks != "none":
-            threshold_millis: int = p.xperiods.label_milliseconds("_" + p.create_bookmarks)
-            to_snapshots = [snap for snap in to_snapshots if p.xperiods.label_milliseconds(snap) >= threshold_millis]
-            if i == len(steps_todo) - 1 and (len(to_snapshots) == 0 or to_snapshots[-1] != to_snap):
-                to_snapshots.append(to_snap)  # ensure latest common snapshot is bookmarked
-            _create_zfs_bookmarks(job, src, src_dataset, to_snapshots)
+        if continuity is not None:
+            continuity.mark_snapshots_as_replicated(to_snapshots)
+    if continuity is not None:
+        continuity.promote_and_gc_bookmarks(job, src)
     _zfs_set(job, set_opts, dst, dst_dataset)
     return latest_common_src_snapshot
 
@@ -1114,23 +1153,24 @@ def _delete_snapshot_cmd(p: Params, r: Remote, snapshots_to_delete: str) -> list
     )
 
 
-def delete_bookmarks(job: Job, remote: Remote, dataset: str, snapshot_tags: list[str]) -> None:
+def delete_bookmarks(job: Job, remote: Remote, dataset: str, snapshot_tags: list[str], loglevel: int = logging.INFO) -> None:
     """Removes bookmarks individually since zfs lacks batch deletion."""
     if len(snapshot_tags) == 0:
         return
     # Unfortunately ZFS has no syntax yet to delete multiple bookmarks in a single CLI invocation
     p, log = job.params, job.params.log
-    log.info(
-        p.dry(f"Deleting {len(snapshot_tags)} bookmarks within %s: %s"), dataset, dataset + "#" + ",".join(snapshot_tags)
+    log.log(
+        loglevel,
+        p.dry(f"Deleting {len(snapshot_tags)} bookmarks within %s: %s"),
+        dataset,
+        dataset + "#" + ",".join(snapshot_tags),
     )
     cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} destroy")
     run_ssh_cmd_parallel(
         job,
         remote,
         [(cmd, (f"{dataset}#{snapshot_tag}" for snapshot_tag in snapshot_tags))],
-        lambda _cmd, batch: job.try_ssh_command(
-            remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch, exists=False
-        ),
+        lambda _cmd, batch: job.try_ssh_command(remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch),
         max_batch_items=1,
     )
 
@@ -1187,29 +1227,48 @@ def _create_zfs_filesystem(job: Job, filesystem: str) -> None:
         parent += "/"
 
 
-def _create_zfs_bookmarks(job: Job, remote: Remote, dataset: str, snapshots: list[str]) -> None:
-    """Creates bookmarks for the given snapshots, using the 'zfs bookmark' CLI."""
+def _create_zfs_bookmarks(
+    job: Job, remote: Remote, snapshots: list[str], bookmarks: list[str], *, expected_guids: list[str]
+) -> None:
+    """Creates bookmarks with the given names for the given snapshots (or bookmarks), using the 'zfs bookmark' CLI;
+    accepts an existing target bookmark only when its GUID matches the expected GUID."""
     # Unfortunately ZFS has no syntax yet to create multiple bookmarks in a single CLI invocation
     p = job.params
+    assert len(snapshots) == len(bookmarks)
+    assert len(snapshots) == len(expected_guids)
+    bookmark_dict: dict[str, tuple[str, str]] = {}
+    for i, snapshot in enumerate(snapshots):
+        bookmark_dict[snapshot] = (bookmarks[i], expected_guids[i])
+    assert len(snapshots) == len(bookmark_dict)
 
     def create_zfs_bookmark(cmd: list[str]) -> None:
         snapshot = cmd[-1]
-        assert "@" in snapshot
-        bookmark_cmd: list[str] = cmd + [replace_prefix(snapshot, old_prefix=f"{dataset}@", new_prefix=f"{dataset}#")]
+        bookmark, expected_guid = bookmark_dict[snapshot]
         try:
-            job.run_ssh_command(remote, LOG_DEBUG, is_dry=p.dry_run, print_stderr=False, cmd=bookmark_cmd)
-        except subprocess.CalledProcessError as e:
-            # ignore harmless zfs error caused by bookmark with the same name already existing
-            stderr: str = stderr_to_str(e.stderr)
-            if ": bookmark exists" not in stderr:
-                xprint(p.log, stderr, file=sys.stderr, end="")
-                raise
+            job.run_ssh_command(remote, LOG_DEBUG, is_dry=p.dry_run, print_stderr=False, cmd=cmd + [bookmark])
+        except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
+            stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+            if ": bookmark exists" in stderr:
+                # verify value of actual bookmark GUID is as expected
+                query_cmd: list[str] = p.split_args(f"{p.zfs_program} list -t bookmark -Hp -o guid", bookmark)
+                try:
+                    job.maybe_inject_error(cmd=query_cmd, error_trigger="zfs_list_bookmark_guid")
+                    actual_guid: str = job.run_ssh_command(remote, LOG_DEBUG, cmd=query_cmd).rstrip()
+                except (subprocess.CalledProcessError, UnicodeDecodeError) as query_error:
+                    raise RetryableError(display_msg="zfs list -t bookmark") from query_error
+                if actual_guid == expected_guid:
+                    return  # harmless
+                die(
+                    f"Conflict: Cannot create bookmark {bookmark!r} with expected GUID {expected_guid!r} from {snapshot!r}, "
+                    f"because the bookmark already exists with a different GUID {actual_guid!r}"
+                )
+            xprint(p.log, stderr, file=sys.stderr, end="")
+            raise RetryableError(display_msg="zfs bookmark") from e
 
-    if p.create_bookmarks != "none" and are_bookmarks_enabled(p, remote):
-        cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark")
-        run_ssh_cmd_parallel(
-            job, remote, [(cmd, snapshots)], lambda _cmd, batch: create_zfs_bookmark(_cmd + batch), max_batch_items=1
-        )
+    cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark")
+    run_ssh_cmd_parallel(
+        job, remote, [(cmd, snapshots)], lambda _cmd, batch: create_zfs_bookmark(_cmd + batch), max_batch_items=1
+    )
 
 
 def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_token: str | None, *items: str) -> int:
@@ -1508,3 +1567,192 @@ def _is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> 
     suffix: str = " " + dataset
     infix: str = " " + dataset + "@"
     return any((proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc) for proc in procs)
+
+
+#############################################################################
+_TMP_BOOKMARK_PREFIX: Final[str] = ".TMPBZFS."
+
+
+def is_tmp_bookmark(bookmark: str) -> bool:
+    """Returns whether the given name is a temporary bookmark (from the reserved namespace)."""
+    i = bookmark.rfind("#")
+    if i < 0:
+        return False
+    else:
+        return bookmark[i + 1 :].startswith(_TMP_BOOKMARK_PREFIX)
+
+
+@final
+class _Continuity:
+    """Guarantees that a ZFS snapshot can be safely deleted after it has been successfully replicated because we can use a ZFS
+    bookmark as a common base to continue incremental ZFS replication. This continuity guarantee exists even if the bzfs
+    process is killed after `zfs send/receive` succeeds but before the post-replication bookmark creation step runs.
+
+    The mechanism works as follows: Before replication starts it creates a temporary bookmark for each snapshot that is about
+    to be replicated. After replication succeeds it promotes (renames) the tmp bookmark to a finalized bookmark. Both the
+    temporary bookmark as well as the finalized bookmark will be used as a source for incremental ZFS replication. The
+    mechanism also garbage collects obsolete temporary bookmarks as necessary.
+
+    There is no need to eagerly promote/gc on the "already up-to-date" branch (e.g. on retry) as promote/gc is merely
+    slightly delayed until the next successful replication run.
+
+    Name of tmp bookmark = .TMPBZFS.<snapshot_name>.<compact_snapshot_guid>.<dst_dataset_id>
+    where <snapshot_name> is the part after the '@', and
+    where <dst_dataset_id> is the compact ZFS GUID of the destination pool followed by a dot followed by a 10-character base64
+    SHA-256 prefix of the full destination dataset name.
+    The compact form of a ZFS GUID uses a base64 representation instead of a decimal representation.
+    Example tmp bookmark for snapshot "bzfs_us-west_2024-11-06_08:30:05_hourly":
+    ".TMPBZFS.bzfs_us-west_2024-11-06_08:30:05_hourly.ADgurPHaj8k.AAAfaLnRWNQ.mjKQwJEMnj"
+
+    Name of finalized bookmark = same name as its corresponding snapshot except also contains <snapshot_guid> for uniqueness;
+    it appends the <snapshot_guid> to a suffixless <snapshot_name> or inserts <snapshot_guid> before the last suffix.
+    Example finalized bookmark for snapshot "bzfs_us-west_2024-11-06_08:30:05_hourly":
+    "bzfs_us-west_2024-11-06_08:30:05_15813919022682057_hourly"
+
+    Note that ZFS guarantees that a ZFS snapshot and its ZFS bookmarks always have the same GUID.
+
+    The bookmark namespace starting with ".TMPBZFS." is reserved for internal use. Tmp bookmarks are auto-hidden from other
+    bzfs operations, e.g. hidden from --delete-dst-snapshots=bookmarks and --compare-snapshot-lists.
+    """
+
+    def __init__(
+        self,
+        p: Params,
+        src_dataset: str,
+        dst_dataset: str,
+        raw_src_snapshots_with_guids: list[str],
+        dst_snapshots_with_guids: list[str],
+    ) -> None:
+        self._src_dataset: Final[str] = src_dataset
+        dst_pool_guid: str = p.zpool_features.get(p.dst.location, {}).get(p.dst.pool, {}).get(POOL_GUID, "")
+        if not dst_pool_guid:
+            die(
+                "Cannot create bookmarks to guarantee continuity because the destination zpool GUID could not be detected "
+                f"for {p.dst.pool!r}. Ensure --zpool-program is enabled and 'zpool' CLI is available on the destination "
+                "host. Alternatively, consider using --create-bookmarks=none."
+            )
+        self._dst_dataset_id: Final[str] = (
+            self._compact_guid(dst_pool_guid) + "." + self._b64escape(sha256_urlsafe_base64(dst_dataset)[:10])
+        )
+        tmp_suffix: str = f".{self._dst_dataset_id}"
+        self._dst_snapshot_guids: Final[set[str]] = {
+            guid for guid, name in (line.split("\t", 1) for line in dst_snapshots_with_guids) if "@" in name
+        }
+        raw_src_snapshots_components: list[tuple[str, str, bool, bool, bool]] = [
+            (name, guid, "@" in name, "#" in name, is_tmp_bookmark(name))
+            for guid, name in (line.split("\t", 1) for line in raw_src_snapshots_with_guids)
+        ]
+        self._src_snapshots: Final[Mapping[str, str]] = {
+            name: guid
+            for name, guid, is_snapshot, is_bookmark, is_tmp_bookmark_ in raw_src_snapshots_components
+            if is_snapshot
+        }
+        self._tmp_src_bookmarks: Final[dict[str, str]] = {
+            name: guid
+            for name, guid, is_snapshot, is_bookmark, is_tmp_bookmark_ in raw_src_snapshots_components
+            if is_bookmark and is_tmp_bookmark_ and name.endswith(tmp_suffix)
+        }
+        self._finalized_src_bookmarks: Final[dict[str, str]] = {
+            name: guid
+            for name, guid, is_snapshot, is_bookmark, is_tmp_bookmark_ in raw_src_snapshots_components
+            if is_bookmark and not is_tmp_bookmark_
+        }
+
+    def _tmp_bookmark_name_and_guid(self, snapshot: str) -> tuple[str, str]:
+        """Returns the name and GUID of the tmp bookmark for the given src snapshot."""
+        assert "@" in snapshot
+        dataset, snapshot_name = snapshot.split("@", 1)
+        assert dataset == self._src_dataset
+        snapshot_guid: str = self._src_snapshots[snapshot]
+        tbm = f"{dataset}#{_TMP_BOOKMARK_PREFIX}{snapshot_name}.{self._compact_guid(snapshot_guid)}.{self._dst_dataset_id}"
+        return tbm, snapshot_guid
+
+    def _finalized_bookmark_name(self, tmp_bookmark: str) -> str:
+        """Returns the name of the final bookmark corresponding to the given tmp bookmark."""
+        assert is_tmp_bookmark(tmp_bookmark), tmp_bookmark
+        dataset, tag = tmp_bookmark.split("#", 1)
+        assert dataset == self._src_dataset
+        prefix_and_snapshot_name, compact_snapshot_guid, _, _ = tag.rsplit(".", 3)
+        assert prefix_and_snapshot_name.startswith(_TMP_BOOKMARK_PREFIX), (prefix_and_snapshot_name, tmp_bookmark)
+        snapshot_name = prefix_and_snapshot_name.removeprefix(_TMP_BOOKMARK_PREFIX)  # bzfs_us-west_2024-11-06_08:30:05_daily
+        snapshot_guid: str = self._decimal_guid(compact_snapshot_guid)
+        if "_" in snapshot_name:  # standard name
+            prefix, suffix = snapshot_name.rsplit("_", 1)
+            fbm = f"{dataset}#{prefix}_{snapshot_guid}_{suffix}"  # bzfs_us-west_2024-11-06_08:30:05_15832610720350849_hourly
+        else:  # non-standard name; e.g. "foo" -> "foo_15832610720350849"
+            fbm = f"{dataset}#{snapshot_name}_{snapshot_guid}"
+        return fbm
+
+    def create_tmp_bookmarks(self, job: Job, src: Remote, snapshots: list[str]) -> None:
+        """Adds tmp bookmarks corresponding to the given src snapshots."""
+        bookmarks: dict[str, str] = dict(self._tmp_bookmark_name_and_guid(snapshot) for snapshot in snapshots)
+        _create_zfs_bookmarks(job, src, snapshots, list(bookmarks.keys()), expected_guids=list(bookmarks.values()))
+        for name, guid in bookmarks.items():
+            self._tmp_src_bookmarks[name] = guid
+
+    def mark_snapshots_as_replicated(self, snapshots: list[str]) -> None:
+        """Records that the given src snapshots have been successfully replicated to the destination dataset."""
+        for snapshot in snapshots:
+            snapshot_guid: str = self._src_snapshots[snapshot]
+            self._dst_snapshot_guids.add(snapshot_guid)
+
+    def promote_and_gc_bookmarks(self, job: Job, src: Remote) -> None:
+        """
+        For each tmp bookmark that targets the given destination dataset:
+            Promote aka copy it into a finalized bookmark if a snapshot with the tmp bookmark GUID exists in the dst dataset,
+            and a corresponding finalized bookmark with the same GUID does not yet exist.
+        For each tmp bookmark that targets the given destination dataset:
+            Delete it if a snapshot with the tmp bookmark GUID does not exist in the destination dataset,
+            or if a corresponding finalized bookmark with the same GUID already exists.
+        """
+        tmp_bookmarks_to_delete: list[str] = []
+        promote_bookmarks: list[tuple[str, str, str]] = []
+        for tmp_bookmark_name, tmp_bookmark_guid in self._tmp_src_bookmarks.items():
+            assert tmp_bookmark_name
+            assert tmp_bookmark_guid
+            if tmp_bookmark_guid in self._dst_snapshot_guids:
+                finalized_bookmark_name: str = self._finalized_bookmark_name(tmp_bookmark_name)
+                finalized_guid: str | None = self._finalized_src_bookmarks.get(finalized_bookmark_name, None)
+                if finalized_guid is None or tmp_bookmark_guid != finalized_guid:
+                    promote_bookmarks.append((tmp_bookmark_name, tmp_bookmark_guid, finalized_bookmark_name))
+                tmp_bookmarks_to_delete.append(tmp_bookmark_name)
+            else:
+                tmp_bookmarks_to_delete.append(tmp_bookmark_name)
+
+        # promote in parallel
+        _create_zfs_bookmarks(
+            job,
+            src,
+            [tmp_bookmark_name for tmp_bookmark_name, _, _ in promote_bookmarks],
+            [finalized_bookmark_name for _, _, finalized_bookmark_name in promote_bookmarks],
+            expected_guids=[tmp_bookmark_guid for _, tmp_bookmark_guid, _ in promote_bookmarks],
+        )
+        for _tmp_bookmark_name, tmp_bookmark_guid, finalized_bookmark_name in promote_bookmarks:
+            self._finalized_src_bookmarks[finalized_bookmark_name] = tmp_bookmark_guid
+
+        # gc in parallel
+        bookmark_tags_to_delete = [bookmark.split("#", 1)[1] for bookmark in tmp_bookmarks_to_delete]
+        delete_bookmarks(job, src, self._src_dataset, bookmark_tags_to_delete, loglevel=LOG_DEBUG)
+        for bookmark in tmp_bookmarks_to_delete:
+            self._tmp_src_bookmarks.pop(bookmark)
+
+    @staticmethod
+    def _compact_guid(decimal_guid: str) -> str:
+        """Converts a 64-bit ZFS GUID from canonical decimal format (20 bytes) to base64 (11 bytes); to shorten it."""
+        guid_bytes: bytes = base64.urlsafe_b64encode(int(decimal_guid).to_bytes(8, "big"))
+        return _Continuity._b64escape(guid_bytes.decode().rstrip("="))
+
+    @staticmethod
+    def _decimal_guid(compact_guid: str) -> str:
+        """Converts an 11-character base64 ZFS GUID back to its canonical decimal representation such that
+        _decimal_guid(_compact_guid(x)) == x"""
+        guid_bytes: bytes = base64.urlsafe_b64decode(_Continuity._b64unescape(compact_guid) + "=")
+        return str(int.from_bytes(guid_bytes, "big"))
+
+    @staticmethod
+    def _b64escape(name: str) -> str:
+        return name.replace("_", ":")
+
+    @staticmethod
+    def _b64unescape(name: str) -> str:
+        return name.replace(":", "_")

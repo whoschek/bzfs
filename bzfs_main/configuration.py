@@ -277,8 +277,11 @@ class Params(MiniParams):
         self.skip_on_error: Final[str] = args.skip_on_error
         self.retry_policy: Final[RetryPolicy] = RetryPolicy.from_namespace(args).copy(reraise=True)
         self.skip_replication: Final[bool] = args.skip_replication
-        self.delete_dst_snapshots: Final[bool] = args.delete_dst_snapshots is not None
-        self.delete_dst_bookmarks: Final[bool] = args.delete_dst_snapshots == "bookmarks"
+        self.force_delete_dst_tmp_bookmarks: Final[bool] = args.force_delete_dst_tmp_bookmarks
+        self.delete_dst_snapshots: Final[bool] = args.delete_dst_snapshots is not None or self.force_delete_dst_tmp_bookmarks
+        self.delete_dst_bookmarks: Final[bool] = (
+            args.delete_dst_snapshots == "bookmarks" or self.force_delete_dst_tmp_bookmarks
+        )
         self.delete_dst_snapshots_no_crosscheck: Final[bool] = args.delete_dst_snapshots_no_crosscheck
         self.delete_dst_snapshots_except: Final[bool] = args.delete_dst_snapshots_except
         self.delete_dst_datasets: Final[bool] = args.delete_dst_datasets
@@ -482,6 +485,7 @@ class Params(MiniParams):
                self.args.create_src_snapshots_plan, self.args.create_src_snapshots_timeformat,
                self.create_src_snapshots_config.anchors,
                self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_dst_snapshots_except,
+               self.args.force_delete_dst_tmp_bookmarks,
                self.args.delete_empty_dst_datasets,
                self.args.compare_snapshot_lists, self.args.monitor_snapshots,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,

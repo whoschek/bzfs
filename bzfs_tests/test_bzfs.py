@@ -858,6 +858,62 @@ class TestArgumentParser(AbstractTestCase):
             parser.parse_args(["src_dataset", "src_dataset", "--zfs-program="])
         self.assertEqual(2, e.exception.code)
 
+    def test_force_delete_dst_tmp_bookmarks_requires_skip_replication(self) -> None:
+        """Requires cleanup to be isolated from replication within the same invocation."""
+        args = self.argparser_parse_args(["src", "dst", "--force-delete-dst-tmp-bookmarks"])
+        job = bzfs.Job()
+        job.params = self.make_params(args=args)
+        with self.assertRaises(SystemExit) as context:
+            job.validate_once()
+        self.assertEqual(DIE_STATUS, context.exception.code)
+        self.assertIn("requires --skip-replication", str(context.exception))
+
+    def test_force_delete_dst_tmp_bookmarks_rejects_incompatible_options(self) -> None:
+        """Rejects snapshot deletion and generated snapshot plans regardless of option order."""
+        plan = str({"prod": {"onsite": {"hourly": 1}}})
+        force = "--force-delete-dst-tmp-bookmarks"
+        skip = "--skip-replication"
+        incompatible_options = (
+            ["--delete-dst-snapshots"],
+            ["--delete-dst-snapshots=bookmarks"],
+            ["--delete-dst-snapshots-except-plan", plan],
+            ["--include-snapshot-plan", plan],
+        )
+        for options in incompatible_options:
+            for args in ([force, skip, *options], [*options, skip, force]):
+                job = bzfs.Job()
+                job.params = self.make_params(args=self.argparser_parse_args(["src", "dst", *args]))
+                with self.subTest(args=args), self.assertRaises(SystemExit) as context:
+                    job.validate_once()
+                self.assertEqual(DIE_STATUS, context.exception.code)
+                self.assertIn("cannot be combined", str(context.exception))
+
+    def test_force_delete_dst_tmp_bookmarks_allows_explicit_filters(self) -> None:
+        """Enables temporary-bookmark deletion with explicit regex and time/rank filters."""
+        for options in (
+            ["--include-snapshot-regex=.*"],
+            ["--include-snapshot-times-and-ranks", "anytime..1", "latest1"],
+            ["--delete-dst-snapshots-except", "--include-snapshot-regex=.*"],
+        ):
+            log = MagicMock(spec=logging.Logger)
+            with self.subTest(options=options):
+                args = self.argparser_parse_args(
+                    ["src", "dst", "--skip-replication", "--force-delete-dst-tmp-bookmarks", *options]
+                )
+                params = self.make_params(args=args, log=log)
+                log.warning.assert_not_called()
+                job = bzfs.Job()
+                job.params = params
+                job.validate_once()
+                self.assertTrue(params.delete_dst_snapshots)
+                self.assertTrue(params.delete_dst_bookmarks)
+                self.assertTrue(params.force_delete_dst_tmp_bookmarks)
+                log.warning.assert_called_once()
+                warning = " ".join(map(str, log.warning.call_args.args))
+                self.assertIn("DANGER", warning)
+                self.assertIn("rare administrative cleanup", warning)
+                log.reset_mock()
+
 
 ###############################################################################
 class TestAddRecvPropertyOptions(AbstractTestCase):
@@ -1339,10 +1395,9 @@ class TestJobMethods(AbstractTestCase):
                 error_trigger: str | None = None,
             ) -> str:
                 assert cmd is not None
-                cmd_str = " ".join(cmd)
-                if " list -t snapshot -d 1 -s createtxg -Hp -o guid,name " in cmd_str and cmd[-1] == dst_dataset:
+                if "list" in cmd and cmd[-1] == dst_dataset:
                     return "\n".join(dst_lines) + "\n"
-                if " list -t snapshot" in cmd_str and cmd[-1] == src_dataset:
+                if "list" in cmd and cmd[-1] == src_dataset:
                     return "\n".join(src_lines_all) + "\n"
                 return ""
 

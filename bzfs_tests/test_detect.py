@@ -182,6 +182,52 @@ class TestRemoteConfCache(AbstractTestCase):
         self.assertEqual(2, d1.call_count)
         self.assertEqual(2, d2.call_count)
 
+    def test_remote_conf_cache_keeps_pool_guids_scoped_by_pool(self) -> None:
+        """Verify zpool GUIDs remain pool-keyed within an endpoint cache.
+
+        The source entry is pre-cached so observed zpool queries belong only to the destination. Visiting pools A, B, then A
+        on one endpoint must query A and B once each, retain both GUIDs under their pool keys, and reuse A on the final visit.
+        Rejecting the GUID in endpoint-scoped `available_programs` guards against reusing one pool's validation result when
+        visiting another pool.
+        """
+        args = self.argparser_parse_args(["src", "dst", "--daemon-remote-conf-cache-ttl", "1 days"])
+        p = self.make_params(args=args)
+        job = bzfs.Job()
+        job.params = p
+        p.src.pool = "srcpool"
+        p.dst.pool = "pool-a"
+        p.available_programs["local"] = {"ssh": ""}
+        src_pools = ConnectionPools(remote=p.src, capacities={SHARED: 1, DEDICATED: 1})
+        job.remote_conf_cache[p.src.cache_key()] = RemoteConfCacheItem(src_pools, {}, {p.src.pool: {}}, time.monotonic_ns())
+        pool_guids: dict[str, str] = {"pool-a": "1229782938247303441", "pool-b": "2459565876494606882"}
+        queried_pools: list[str] = []
+
+        def detect_pool_guid(remote: Remote, *_args: object, **_kwargs: object) -> str:
+            queried_pools.append(remote.pool)
+            return f"{bzfs_main.detect.POOL_GUID}\t{pool_guids[remote.pool]}\n"
+
+        with (
+            patch.object(bzfs_main.detect, "_detect_available_programs_remote", return_value={"zpool": ""}),
+            patch.object(job, "run_ssh_command_with_retries", side_effect=detect_pool_guid),
+            patch.object(job, "try_ssh_command_with_retries") as fallback,
+        ):
+            detect_available_programs(job)
+            p.dst.pool = "pool-b"
+            detect_available_programs(job)
+            p.dst.pool = "pool-a"
+            detect_available_programs(job)
+
+        self.assertEqual(["pool-a", "pool-b"], queried_pools)
+        self.assertEqual(
+            {
+                "pool-a": {bzfs_main.detect.POOL_GUID: pool_guids["pool-a"]},
+                "pool-b": {bzfs_main.detect.POOL_GUID: pool_guids["pool-b"]},
+            },
+            p.zpool_features["dst"],
+        )
+        self.assertNotIn(bzfs_main.detect.POOL_GUID, p.available_programs["dst"])
+        fallback.assert_not_called()
+
 
 #############################################################################
 class TestDisableAndHelpers(AbstractTestCase):
@@ -621,8 +667,57 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         with patch.object(bzfs.Job, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit):
             bzfs_main.detect._detect_available_programs_remote(job, remote, "host")
 
+    def test_zpool_features_command_failure_warns_and_falls_back(self) -> None:
+        """Verify an ordinary zpool command failure retains the zfs fallback."""
+        job, remote = self._setup()
+        remote.pool = "tank"
+        error = subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["zpool", "get"],
+            stderr="cannot open 'tank': permission denied",
+        )
+
+        with (
+            patch.object(job, "run_ssh_command_with_retries", side_effect=error),
+            patch.object(job, "try_ssh_command_with_retries", return_value="tank\n") as mock_try,
+        ):
+            features = bzfs_main.detect._detect_zpool_features(job, remote, {"zpool": ""})
+
+        self.assertEqual({}, features)
+        mock_try.assert_called_once()
+        log = cast(MagicMock, job.params.log)
+        log.warning.assert_called_once()
+        self.assertIn("Failed to detect zpool features on", log.warning.call_args.args[1])
+
+    def test_zpool_features_exhausted_ssh_transport_failure_falls_back(self) -> None:
+        """Verify an exhausted SSH transport failure is swallowed after retries and uses the zfs fallback."""
+        job, remote = self._setup()
+        remote.pool = "tank"
+        error = subprocess.CalledProcessError(
+            returncode=255,
+            cmd=["ssh", "host", "zpool", "get"],
+            stderr="ssh: connect to host example.invalid port 22: Connection timed out",
+        )
+
+        with (
+            patch.object(job, "run_ssh_command_with_retries", side_effect=error),
+            patch.object(job, "try_ssh_command_with_retries", return_value="tank\n") as mock_try,
+        ):
+            features = bzfs_main.detect._detect_zpool_features(job, remote, {"zpool": ""})
+
+        self.assertEqual({}, features)
+        mock_try.assert_called_once()
+        log = cast(MagicMock, job.params.log)
+        log.warning.assert_called_once()
+        self.assertIn("Failed to detect zpool features on", log.warning.call_args.args[1])
+
     def test_zpool_features_file_not_found_warns_and_falls_back(self) -> None:
-        """Ensures _detect_zpool_features handles missing zpool CLI with a warning and fallback."""
+        """Verify a missing `zpool` executable warns and uses the ZFS fallback.
+
+        Feature discovery raises FileNotFoundError, but the independent `zfs list` probe must run once and detection must
+        return normally. The caller's available-program map remains unchanged because executable discovery and pool probing
+        have separate responsibilities.
+        """
         job, remote = self._setup()
         p = job.params
         # Use a program name that is virtually guaranteed to be missing.
@@ -641,8 +736,8 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
         with patch.object(bzfs.Job, "try_ssh_command_with_retries", return_value="tank\n") as mock_try:
             features = bzfs_main.detect._detect_zpool_features(job, remote, available_programs)
 
-        # No features detected, but detection must succeed and fall back cleanly.
         self.assertEqual({}, features)
+        self.assertEqual({"zpool": ""}, available_programs)
         mock_try.assert_called_once()
         # The missing zpool binary should have triggered a warning.
         log = cast(MagicMock, p.log)
