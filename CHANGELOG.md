@@ -14,8 +14,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Both the temporary bookmark as well as the finalized bookmark will be used as a source for incremental ZFS
   replication. The mechanism also garbage collects obsolete temporary bookmarks as necessary.
 
-- [bzfs] Also retry parent filesystem creation failures
-- [bzfs] Also retry receive resume-token lookup failures
+- [bzfs] Also retry parent filesystem creation failures.
+- [bzfs] Also retry receive resume-token lookup failures.
 - [bzfs] Clear zfs receive resume token when its raw mode flag conflicts with `--zfs-send-program-opts` (cont'd).
 
 ## [1.23.0] - July 4, 2026
