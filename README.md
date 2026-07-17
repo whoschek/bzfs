@@ -1398,6 +1398,11 @@ usage: bzfs [-h]
   snapshot and latest snapshot only in src (and only in dst), as well as how many src snapshots and how many GB of data are
   missing on dst, etc.
 
+  *Note*: By default, if the source ZFS pool supports bookmarks, source bookmarks also participate in the comparison. A
+  source bookmark and destination snapshot with the same GUID are considered to be contained in both locations, even if the
+  corresponding source snapshot has already been deleted. Unmatched temporary bookmarks managed by bzfs remain hidden.
+  Specify --no-use-bookmark to compare snapshots only.
+
   *Note*: Consider omitting the 'all' flag to reduce noise and instead focus on missing snapshots only, like so:
   --compare-snapshot-lists=src+dst
 
