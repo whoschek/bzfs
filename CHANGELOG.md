@@ -2,6 +2,22 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.0] - Not yet released
+
+- [bzfs] Improve reliability of replication from bookmarks: Guarantees that a ZFS snapshot can be safely deleted after
+  it has been successfully replicated because we can use a ZFS bookmark as a common base to continue incremental ZFS
+  replication. This continuity guarantee now holds even if the bzfs process is killed after `zfs send/receive` succeeds
+  but before the post-replication bookmark creation step runs.
+
+  The mechanism works as follows: Before replication starts it creates a temporary bookmark for each snapshot that is
+  about to be replicated. After replication succeeds it promotes (renames) the tmp bookmark to a finalized bookmark.
+  Both the temporary bookmark as well as the finalized bookmark will be used as a source for incremental ZFS
+  replication. The mechanism also garbage collects obsolete temporary bookmarks as necessary.
+
+- [bzfs] Also retry parent filesystem creation failures
+- [bzfs] Also retry receive resume-token lookup failures
+- [bzfs] Clear zfs receive resume token when its raw mode flag conflicts with `--zfs-send-program-opts` (cont'd).
+
 ## [1.23.0] - July 4, 2026
 
 - [bzfs] Make it possible to use `zfs send -R -s` aka sending a recursive stream package. Example usage:
