@@ -123,27 +123,30 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         for lines in zfs_list_snapshots_in_parallel(job, r, cmd, sorted_datasets):
             yield from lines
 
-    def snapshot_iterator(root_dataset: str, sorted_itr: Iterator[str]) -> Iterator[_ComparableSnapshot]:
+    def snapshot_iterator(r: Remote, root_dataset: str, sorted_itr: Iterator[str]) -> Iterator[_ComparableSnapshot]:
         """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that any two snapshots
         with the same GUID will lie adjacent to each other during the upcoming phase that merges src snapshots and dst
         snapshots."""
+        list_bookmarks: bool = p.use_bookmark and r.location == "src" and are_bookmarks_enabled(p, r)
         # streaming group by dataset name (consumes constant memory only)
         for dataset, group in itertools.groupby(
             sorted_itr, key=lambda line: line.rsplit("\t", 1)[1].replace("#", "@", 1).split("@", 1)[0]
         ):
             snapshots: list[str] = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
-            tmp_bookmarks: list[str] = [snapshot for snapshot in snapshots if is_tmp_bookmark(snapshot)]
-            snapshots = [snapshot for snapshot in snapshots if not is_tmp_bookmark(snapshot)]
-            non_tmp_guids: set[str] = {snapshot.split("\t", 2)[1] for snapshot in snapshots}  # for subsequent dedupe
-            tmp_bookmarks = [bookmark for bookmark in tmp_bookmarks if bookmark.split("\t", 2)[1] not in non_tmp_guids]
-            del non_tmp_guids  # help gc
+            tmp_bookmarks: list[str] = []
+            if list_bookmarks:  # temporary bookmarks bypass include/exclude filters, e.g. name and rank filters
+                tmp_bookmarks = [snapshot for snapshot in snapshots if is_tmp_bookmark(snapshot)]
+                snapshots = [snapshot for snapshot in snapshots if not is_tmp_bookmark(snapshot)]
+                non_tmp_guids: set[str] = {snapshot.split("\t", 2)[1] for snapshot in snapshots}  # for subsequent dedupe
+                tmp_bookmarks = [bookmark for bookmark in tmp_bookmarks if bookmark.split("\t", 2)[1] not in non_tmp_guids]
+                del non_tmp_guids  # help gc
             snapshots = filter_snapshots(job, snapshots, filter_bookmarks=True)  # apply include/exclude policy
-            snapshots += tmp_bookmarks  # temporary bookmarks bypass include/exclude filters, e.g. name and rank filters
+            snapshots += tmp_bookmarks
             snapshots.sort(key=lambda line: line.split("\t", 2)[1])  # stable sort by GUID (2nd remains createtxg)
             rel_dataset: str = relativize_dataset(dataset, root_dataset)  # rel_dataset=/foo, root_dataset=tank1/src
             last_guid: str = ""
             for line in snapshots:
-                cols = line.split("\t")
+                cols: list[str] = line.split("\t")
                 _creation, guid, _createtxg, _written, snapshot_name = cols
                 if guid == last_guid:
                     assert "#" in snapshot_name
@@ -258,8 +261,8 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         log.info("%s", "\n".join(msgs))
 
     # setup streaming pipeline
-    src_snapshot_itr: Iterator = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
-    dst_snapshot_itr: Iterator = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
+    src_snapshot_itr: Iterator = snapshot_iterator(src, src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
+    dst_snapshot_itr: Iterator = snapshot_iterator(dst, dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
     merge_itr = _merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snapshot_itr, dst_snapshot_itr)
 
     interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint

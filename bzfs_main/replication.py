@@ -1571,15 +1571,12 @@ def _is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> 
 
 #############################################################################
 _TMP_BOOKMARK_PREFIX: Final[str] = ".TMPBZFS."
+_TMP_BOOKMARK_HASH_PREFIX: Final[str] = "#" + _TMP_BOOKMARK_PREFIX
 
 
 def is_tmp_bookmark(bookmark: str) -> bool:
     """Returns whether the given name is a temporary bookmark (from the reserved namespace)."""
-    i = bookmark.rfind("#")
-    if i < 0:
-        return False
-    else:
-        return bookmark[i + 1 :].startswith(_TMP_BOOKMARK_PREFIX)
+    return _TMP_BOOKMARK_HASH_PREFIX in bookmark
 
 
 @final
@@ -1624,7 +1621,7 @@ class _Continuity:
         dst_snapshots_with_guids: list[str],
     ) -> None:
         self._src_dataset: Final[str] = src_dataset
-        dst_pool_guid: str = p.zpool_features.get(p.dst.location, {}).get(p.dst.pool, {}).get(POOL_GUID, "")
+        dst_pool_guid: str = p.zpool_features[p.dst.location][p.dst.pool].get(POOL_GUID, "")
         if not dst_pool_guid:
             die(
                 "Cannot create bookmarks to guarantee continuity because the destination zpool GUID could not be detected "
@@ -1644,18 +1641,18 @@ class _Continuity:
         ]
         self._src_snapshots: Final[Mapping[str, str]] = {
             name: guid
-            for name, guid, is_snapshot, is_bookmark, is_tmp_bookmark_ in raw_src_snapshots_components
+            for name, guid, is_snapshot, _is_bookmark, _is_tmp_bookmark in raw_src_snapshots_components
             if is_snapshot
         }
         self._tmp_src_bookmarks: Final[dict[str, str]] = {
             name: guid
-            for name, guid, is_snapshot, is_bookmark, is_tmp_bookmark_ in raw_src_snapshots_components
-            if is_bookmark and is_tmp_bookmark_ and name.endswith(tmp_suffix)
+            for name, guid, _is_snapshot, is_bookmark, is_tmp_bookmark in raw_src_snapshots_components
+            if is_bookmark and is_tmp_bookmark and name.endswith(tmp_suffix)
         }
         self._finalized_src_bookmarks: Final[dict[str, str]] = {
             name: guid
-            for name, guid, is_snapshot, is_bookmark, is_tmp_bookmark_ in raw_src_snapshots_components
-            if is_bookmark and not is_tmp_bookmark_
+            for name, guid, _is_snapshot, is_bookmark, is_tmp_bookmark in raw_src_snapshots_components
+            if is_bookmark and not is_tmp_bookmark
         }
 
     def _tmp_bookmark_name_and_guid(self, snapshot: str) -> tuple[str, str]:
