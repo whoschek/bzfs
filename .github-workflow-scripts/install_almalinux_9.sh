@@ -49,45 +49,47 @@ sudo dnf -y install pv --enablerepo=epel
 sudo dnf -y install mbuffer --enablerepo=epel
 
 # Install ZFS:
-sudo dnf install -y "https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval '%{dist}').noarch.rpm"
-sudo dnf repolist all | grep -i zfs
-sudo dnf config-manager --disable 'zfs*'
-sudo dnf install -y kernel-devel "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
-if ! sudo dnf install -y zfs --enablerepo="epel,$ZFS_VERSION"; then
-    arch="$(rpm --eval '%{_arch}')"
-    if [[ "$arch" != "aarch64" ]]; then
-        echo "ERROR: Failed to install zfs from repo '$ZFS_VERSION' on arch '$arch'." >&2
-        exit 1
+if [[ "$ZFS_VERSION" != "none" ]]; then
+    sudo dnf install -y "https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval '%{dist}').noarch.rpm"
+    sudo dnf repolist all | grep -i zfs
+    sudo dnf config-manager --disable 'zfs*'
+    sudo dnf install -y kernel-devel "kernel-devel-$(uname -r)" "kernel-headers-$(uname -r)"
+    if ! sudo dnf install -y zfs --enablerepo="epel,$ZFS_VERSION"; then
+        arch="$(rpm --eval '%{_arch}')"
+        if [[ "$arch" != "aarch64" ]]; then
+            echo "ERROR: Failed to install zfs from repo '$ZFS_VERSION' on arch '$arch'." >&2
+            exit 1
+        fi
+        # make it also work on aarch64, including guest VMs hosted by macOS on Apple Silicon
+        if [[ ! -f ~/.bzfs_zfs_done ]]; then
+            zfs_source_repo="${ZFS_VERSION}-source"
+            echo "Falling back to source build from repo '$zfs_source_repo' on '$arch' ..."
+            build_dir="$(mktemp -d)"
+            trap 'rm -rf "$build_dir"' EXIT
+            sudo dnf config-manager --set-enabled crb
+            sudo dnf install -y rpm-build
+            sudo dnf install -y dkms --enablerepo=epel
+            dnf -y download --source --disablerepo='*' --enablerepo="$zfs_source_repo" --destdir "$build_dir" zfs-dkms zfs
+            sudo dnf -y builddep "$build_dir"/zfs-dkms-[0-9]*.src.rpm "$build_dir"/zfs-[0-9]*.src.rpm
+            rpmbuild --rebuild "$build_dir"/zfs-dkms-[0-9]*.src.rpm "$build_dir"/zfs-[0-9]*.src.rpm
+            sudo dnf -y install "$HOME"/rpmbuild/RPMS/noarch/zfs-dkms-*.rpm
+            sudo dnf -y install \
+                "$HOME"/rpmbuild/RPMS/"$arch"/libnvpair[0-9]-[0-9]*.rpm \
+                "$HOME"/rpmbuild/RPMS/"$arch"/libuutil[0-9]-[0-9]*.rpm \
+                "$HOME"/rpmbuild/RPMS/"$arch"/libzpool[0-9]-[0-9]*.rpm \
+                "$HOME"/rpmbuild/RPMS/"$arch"/libzfs[0-9]-[0-9]*.rpm \
+                "$HOME"/rpmbuild/RPMS/"$arch"/zfs-[0-9]*.rpm \
+                "$HOME"/rpmbuild/RPMS/noarch/zfs-dracut-*.rpm
+            for kernel_release in $(rpm -q kernel-devel --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n'); do
+                sudo dkms autoinstall -k "$kernel_release"
+            done
+            printf 'zfs\n' | sudo tee /etc/modules-load.d/zfs.conf > /dev/null  # autoload zfs module on reboot
+            touch ~/.bzfs_zfs_done
+        fi
     fi
-    # make it also work on aarch64, including guest VMs hosted by macOS on Apple Silicon
-    if [[ ! -f ~/.bzfs_zfs_done ]]; then
-        zfs_source_repo="${ZFS_VERSION}-source"
-        echo "Falling back to source build from repo '$zfs_source_repo' on '$arch' ..."
-        build_dir="$(mktemp -d)"
-        trap 'rm -rf "$build_dir"' EXIT
-        sudo dnf config-manager --set-enabled crb
-        sudo dnf install -y rpm-build
-        sudo dnf install -y dkms --enablerepo=epel
-        dnf -y download --source --disablerepo='*' --enablerepo="$zfs_source_repo" --destdir "$build_dir" zfs-dkms zfs
-        sudo dnf -y builddep "$build_dir"/zfs-dkms-[0-9]*.src.rpm "$build_dir"/zfs-[0-9]*.src.rpm
-        rpmbuild --rebuild "$build_dir"/zfs-dkms-[0-9]*.src.rpm "$build_dir"/zfs-[0-9]*.src.rpm
-        sudo dnf -y install "$HOME"/rpmbuild/RPMS/noarch/zfs-dkms-*.rpm
-        sudo dnf -y install \
-            "$HOME"/rpmbuild/RPMS/"$arch"/libnvpair[0-9]-[0-9]*.rpm \
-            "$HOME"/rpmbuild/RPMS/"$arch"/libuutil[0-9]-[0-9]*.rpm \
-            "$HOME"/rpmbuild/RPMS/"$arch"/libzpool[0-9]-[0-9]*.rpm \
-            "$HOME"/rpmbuild/RPMS/"$arch"/libzfs[0-9]-[0-9]*.rpm \
-            "$HOME"/rpmbuild/RPMS/"$arch"/zfs-[0-9]*.rpm \
-            "$HOME"/rpmbuild/RPMS/noarch/zfs-dracut-*.rpm
-        for kernel_release in $(rpm -q kernel-devel --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n'); do
-            sudo dkms autoinstall -k "$kernel_release"
-        done
-        printf 'zfs\n' | sudo tee /etc/modules-load.d/zfs.conf > /dev/null  # autoload zfs module on reboot
-        touch ~/.bzfs_zfs_done
-    fi
+    sudo modprobe zfs
+    zfs --version
 fi
-sudo modprobe zfs
-zfs --version
 
 # shellcheck disable=SC2174
 mkdir -p --mode=u=rwx,go= "$HOME/.ssh"

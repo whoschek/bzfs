@@ -58,15 +58,17 @@ create_vm_group() {
             bash -s << 'EOF'
 # prepare VM
 set -eo pipefail
-if ! zpool list -H "$pool" >/dev/null 2>&1; then
-    truncate -s "${zpool_capacity_mb}M" ~/test_pool_"$pool"  # create sparse test file
-    sudo zpool create -o autotrim=on -O canmount=off -O atime=off "$pool" ~/test_pool_"$pool"  # create empty test pool
-fi
-if ! sudo zfs list -H "$pool/foo/bar" >/dev/null 2>&1; then
-    sudo zfs create -p "$pool/foo/bar"  # create example test datasets
-    if [[ "$pool" == "src" ]]; then
-        sudo chown -R "$USER" "/$pool/foo/bar"
-        echo "hello $(hostname) $(date)" > "/$pool/foo/bar/hello.txt"
+if command -v zfs > /dev/null 2>&1; then
+    if ! zpool list -H "$pool" >/dev/null 2>&1; then
+        truncate -s "${zpool_capacity_mb}M" ~/test_pool_"$pool"  # create sparse test file
+        sudo zpool create -o autotrim=on -O canmount=off -O atime=off "$pool" ~/test_pool_"$pool"  # create empty test pool
+    fi
+    if ! sudo zfs list -H "$pool/foo/bar" >/dev/null 2>&1; then
+        sudo zfs create -p "$pool/foo/bar"  # create example test datasets
+        if [[ "$pool" == "src" ]]; then
+            sudo chown -R "$USER" "/$pool/foo/bar"
+            echo "hello $(hostname) $(date)" > "/$pool/foo/bar/hello.txt"
+        fi
     fi
 fi
 EOF

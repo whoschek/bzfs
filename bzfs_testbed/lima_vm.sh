@@ -216,10 +216,12 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
             sudo apt-get -y install --fix-missing ../*.deb
             printf 'zfs\n' | sudo tee /etc/modules-load.d/zfs.conf > /dev/null  # autoload zfs module on reboot
         )
-    else
+    elif [[ "$LIMA_ZFS_VERSION" != "none" ]]; then
         sudo apt-get -y install zfsutils-linux
     fi
-    zfs --version
+    if [[ "$LIMA_ZFS_VERSION" != "none" ]]; then
+        zfs --version
+    fi
 
     # Run common preparation steps
     sudo apt-get -y install python3 zstd mbuffer pv cron rsync curl ripgrep python3-venv
@@ -290,7 +292,9 @@ fi
 # Display ZFS version and Python version
 id -u -n
 uname -a
-zfs --version
+if [[ "$LIMA_ZFS_VERSION" != "none" ]]; then
+    zfs --version
+fi
 python3 --version
 ssh -V
 zstd --version
