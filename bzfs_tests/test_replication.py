@@ -393,7 +393,7 @@ class TestReplication(AbstractTestCase):
         self.assertEqual(f"{src_dataset}#.TMPBZFS.snap", prefix_and_snapshot)
         self.assertEqual(_Continuity._compact_guid(snapshot_guid), compact_snapshot_guid)
         self.assertEqual(_Continuity._compact_guid(dst_pool_guid), compact_pool_guid)
-        self.assertEqual(sha256_urlsafe_base64(dst_dataset)[:10].replace("_", ":"), dst_dataset_hash)
+        self.assertEqual(sha256_urlsafe_base64(dst_dataset)[:11].replace("_", ":"), dst_dataset_hash)
         self.assertEqual(snapshot_guid, actual_guid)
 
     def test_continuity_requires_dst_pool_guid(self) -> None:

@@ -1595,11 +1595,11 @@ class _Continuity:
 
     Name of tmp bookmark = .TMPBZFS.<snapshot_name>.<compact_snapshot_guid>.<dst_dataset_id>
     where <snapshot_name> is the part after the '@', and
-    where <dst_dataset_id> is the compact ZFS GUID of the destination pool followed by a dot followed by a 10-character base64
+    where <dst_dataset_id> is the compact ZFS GUID of the destination pool followed by a dot followed by a 11-character base64
     SHA-256 prefix of the full destination dataset name.
     The compact form of a ZFS GUID uses a base64 representation instead of a decimal representation.
     Example tmp bookmark for snapshot "bzfs_us-west_2024-11-06_08:30:05_hourly":
-    ".TMPBZFS.bzfs_us-west_2024-11-06_08:30:05_hourly.ADgurPHaj8k.AAAfaLnRWNQ.mjKQwJEMnj"
+    ".TMPBZFS.bzfs_us-west_2024-11-06_08:30:05_hourly.ADgurPHaj8k.AAAfaLnRWNQ.mjKQwJEMnjk"
 
     Name of finalized bookmark = same name as its corresponding snapshot except also contains <snapshot_guid> for uniqueness;
     it appends the <snapshot_guid> to a suffixless <snapshot_name> or inserts <snapshot_guid> before the last suffix.
@@ -1629,7 +1629,7 @@ class _Continuity:
                 "host. Alternatively, consider using --create-bookmarks=none."
             )
         self._dst_dataset_id: Final[str] = (
-            self._compact_guid(dst_pool_guid) + "." + self._b64escape(sha256_urlsafe_base64(dst_dataset)[:10])
+            self._compact_guid(dst_pool_guid) + "." + self._b64escape(sha256_urlsafe_base64(dst_dataset)[:11])
         )
         tmp_suffix: str = f".{self._dst_dataset_id}"
         self._dst_snapshot_guids: Final[set[str]] = {

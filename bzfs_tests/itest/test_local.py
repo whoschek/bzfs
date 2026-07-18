@@ -3144,7 +3144,7 @@ class LocalTestCase(IntegrationTestCase):
         self.assertEqual(11, len(compact_pool_guid))
         self.assertNotIn("_", compact_snapshot_guid)
         self.assertNotIn("_", compact_pool_guid)
-        self.assertEqual(10, len(dst_dataset_hash))
+        self.assertEqual(11, len(dst_dataset_hash))
         self.assertEqual(
             [failed_guid],
             zfs_list(failed_tmp_bookmarks, props=["guid"], types=["bookmark"], max_depth=-1),
