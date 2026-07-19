@@ -125,7 +125,7 @@ jobs:
       fail-fast: false
     timeout-minutes: 200
     steps:
-      - uses: &actions_checkout actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # aka v6.0.2
+      - uses: &actions_checkout actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # aka v7.0.0
         with:
           persist-credentials: false
       - name: Set up Python ${{ matrix.python-version }}
@@ -671,7 +671,7 @@ jobs:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@4441bea20b31bfa77329a5af583199362489567e # aka v1.4.9; see https://github.com/vmactions/freebsd-vm
+        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@5a72679103d223925653750faa878a143340fbd0 # aka v1.4.9; see https://github.com/vmactions/freebsd-vm
         with:
           release: "15.1"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
