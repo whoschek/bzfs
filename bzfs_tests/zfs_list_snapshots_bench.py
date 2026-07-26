@@ -140,7 +140,7 @@ Every run creates a timestamped directory (below --results) containing:
     )
     parser.add_argument(
         "--snapshots-per-dataset",
-        default=10,
+        default=2000,
         type=int,
         metavar="INT",
         help=(
