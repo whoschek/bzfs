@@ -1018,6 +1018,52 @@ class TestReplication(AbstractTestCase):
             _src, loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
         self.assertEqual("| LBUF", loc)
 
+    def test_prepare_pipeline_preserves_complete_stage_order(self) -> None:
+        """Verifies all enabled stages retain byte-stream order across the three pipeline legs.
+
+        Assumptions: Symbolic helpers isolate assembly from program-option details. Design Rationale: Exact leg assertions
+        protect failure, transformation, monitoring, buffering, and endpoint ordering during declarative refactoring.
+        """
+        job = _prepare_job(src_host="src", dst_host="dst", is_program_available=lambda _prog, _loc: True)
+        job.inject_params.update(
+            {
+                "inject_src_pipe_fail_offset": 123,
+                "inject_src_pipe_garble": True,
+                "inject_src_send_error": True,
+                "inject_dst_pipe_fail": True,
+                "inject_dst_pipe_garble": True,
+                "inject_dst_receive_error": True,
+            }
+        )
+
+        with (
+            patch("bzfs_main.replication._pv_cmd", return_value="PV"),
+            patch(
+                "bzfs_main.replication._mbuffer_cmd",
+                side_effect=lambda _p, loc, _size, _recordsize: f"{loc.upper()}BUF",
+            ),
+            patch("bzfs_main.replication._compress_cmd", return_value="COMPRESS"),
+            patch("bzfs_main.replication._decompress_cmd", return_value="DECOMPRESS"),
+            patch("bzfs_main.replication.squote", side_effect=lambda _remote, command: command),
+            patch("bzfs_main.replication.dquote", side_effect=lambda command: command),
+        ):
+            src, local, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
+
+        self.assertEqual(
+            "sh -c zfs send --injectedGarbageParameter"
+            " | (dd bs=1 count=123 2>/dev/null && false)"
+            " | gzip -1 -c -n | COMPRESS | SRCBUF",
+            src,
+        )
+        self.assertEqual("| LOCALBUF | PV | LOCALBUF", local)
+        self.assertEqual(
+            "sh -c DSTBUF | DECOMPRESS"
+            f" | dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES} 2>/dev/null"
+            " | gzip -1 -c -n | zfs recv --injectedGarbageParameter",
+            dst,
+        )
+        self.assertNotIn("inject_src_pipe_fail_offset", job.inject_params)
+
     def test_prepare_src_pipe_inject_fail(self) -> None:
         def avail(prog: str, loc: str) -> bool:
             return prog == "sh"

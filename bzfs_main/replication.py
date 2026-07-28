@@ -693,73 +693,48 @@ def _prepare_zfs_send_receive(
             pv_loc_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human, disable_progress_bar=True)
 
     # assemble pipeline running on source leg
-    src_pipe: str = ""
+    src_stages: list[str] = []
     src_pipe_fail_offset = job.inject_params.pop("inject_src_pipe_fail_offset", None)
     if src_pipe_fail_offset is not None:
         assert isinstance(src_pipe_fail_offset, int)
-        src_pipe = f"{src_pipe} | (dd bs=1 count={src_pipe_fail_offset} 2>/dev/null && false)"
+        src_stages.append(f"(dd bs=1 count={src_pipe_fail_offset} 2>/dev/null && false)")
     elif job.inject_params.pop(f"inject_src_pipe_fail_{src_dataset}", False):
         # for testing; forward enough bytes that zfs receive can usually leave resumable state
-        src_pipe = f"{src_pipe} | (dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES} 2>/dev/null && false)"
+        src_stages.append(f"(dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES} 2>/dev/null && false)")
     elif job.inject_params.get("inject_src_pipe_fail", False):
         # for testing; initially forward some bytes and then fail
-        src_pipe = f"{src_pipe} | (dd bs=64 count=1 2>/dev/null && false)"
+        src_stages.append("(dd bs=64 count=1 2>/dev/null && false)")
     if job.inject_params.get("inject_src_pipe_garble", False):
-        src_pipe = f"{src_pipe} | gzip -1 -c -n"  # for testing; forward garbled bytes
-    if pv_src_cmd and pv_src_cmd != "cat":
-        src_pipe = f"{src_pipe} | {pv_src_cmd}"
-    if compress_cmd_ != "cat":
-        src_pipe = f"{src_pipe} | {compress_cmd_}"
-    if src_buffer != "cat":
-        src_pipe = f"{src_pipe} | {src_buffer}"
-    if src_pipe.startswith(" |"):
-        src_pipe = src_pipe[2:]  # strip leading ' |' part
+        src_stages.append("gzip -1 -c -n")  # for testing; forward garbled bytes
+    src_stages.extend(stage for stage in [pv_src_cmd, compress_cmd_, src_buffer] if stage not in ("", "cat"))
     if job.inject_params.get("inject_src_send_error", False):
         send_cmd_str = f"{send_cmd_str} --injectedGarbageParameter"  # for testing; induce CLI parse error
-    if src_pipe:
-        src_pipe = f"{send_cmd_str} | {src_pipe}"
-        if p.src.ssh_user_host:
-            src_pipe = p.shell_program + " -c " + dquote(src_pipe)
-    else:
-        src_pipe = send_cmd_str
+    src_pipe: str = " | ".join([send_cmd_str] + src_stages)
+    if src_stages and p.src.ssh_user_host:
+        src_pipe = p.shell_program + " -c " + dquote(src_pipe)
 
     # assemble pipeline running on middle leg between source and destination. only enabled for pull-push mode
-    local_pipe: str = ""
+    local_stages: list[str] = []
     if r2r_mode == "off":
-        if local_buffer != "cat":
-            local_pipe = f"{local_buffer}"
+        local_stages.append(local_buffer)
         if pv_loc_cmd and pv_loc_cmd != "cat":
-            local_pipe = f"{local_pipe} | {pv_loc_cmd}"
-            if local_buffer != "cat":
-                local_pipe = f"{local_pipe} | {local_buffer}"
-        if local_pipe.startswith(" |"):
-            local_pipe = local_pipe[2:]  # strip leading ' |' part
-        if local_pipe:
-            local_pipe = f"| {local_pipe}"
+            local_stages.extend([pv_loc_cmd, local_buffer])
+    local_pipe: str = " | ".join(stage for stage in local_stages if stage not in ("", "cat"))
+    if local_pipe:
+        local_pipe = f"| {local_pipe}"
 
     # assemble pipeline running on destination leg
-    dst_pipe: str = ""
-    if dst_buffer != "cat":
-        dst_pipe = f"{dst_buffer}"
-    if decompress_cmd_ != "cat":
-        dst_pipe = f"{dst_pipe} | {decompress_cmd_}"
-    if pv_dst_cmd and pv_dst_cmd != "cat":
-        dst_pipe = f"{dst_pipe} | {pv_dst_cmd}"
+    dst_stages: list[str] = [stage for stage in [dst_buffer, decompress_cmd_, pv_dst_cmd] if stage not in ("", "cat")]
     if job.inject_params.get("inject_dst_pipe_fail", False):
         # interrupt zfs receive for testing retry/resume; initially forward some bytes and then stop forwarding
-        dst_pipe = f"{dst_pipe} | dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES} 2>/dev/null"
+        dst_stages.append(f"dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES} 2>/dev/null")
     if job.inject_params.get("inject_dst_pipe_garble", False):
-        dst_pipe = f"{dst_pipe} | gzip -1 -c -n"  # for testing; forward garbled bytes
-    if dst_pipe.startswith(" |"):
-        dst_pipe = dst_pipe[2:]  # strip leading ' |' part
+        dst_stages.append("gzip -1 -c -n")  # for testing; forward garbled bytes
     if job.inject_params.get("inject_dst_receive_error", False):
         recv_cmd_str = f"{recv_cmd_str} --injectedGarbageParameter"  # for testing; induce CLI parse error
-    if dst_pipe:
-        dst_pipe = f"{dst_pipe} | {recv_cmd_str}"
-        if p.dst.ssh_user_host:
-            dst_pipe = p.shell_program + " -c " + dquote(dst_pipe)
-    else:
-        dst_pipe = recv_cmd_str
+    dst_pipe: str = " | ".join(dst_stages + [recv_cmd_str])
+    if dst_stages and p.dst.ssh_user_host:
+        dst_pipe = p.shell_program + " -c " + dquote(dst_pipe)
 
     if r2r_mode == "off":
         # If there's no support for shell pipelines, we can't do compression, mbuffering, monitoring and rate-limiting,
