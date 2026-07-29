@@ -52,6 +52,7 @@ import sys
 from collections.abc import (
     Iterable,
     Iterator,
+    Sequence,
 )
 from typing import (
     TYPE_CHECKING,
@@ -182,7 +183,7 @@ def zfs_list_snapshots_in_parallel(
     )
 
 
-def _max_batch_bytes(job: Job, r: MiniRemote, cmd: list[str], sep: str) -> int:
+def _max_batch_bytes(job: Job, r: MiniRemote, cmd: Sequence[str], sep: str) -> int:
     """Avoids creating a cmdline that's too big for the OS to handle.
 
     The calculation subtracts 'header_bytes', which accounts for the full SSH invocation (including control socket/options)
@@ -194,8 +195,8 @@ def _max_batch_bytes(job: Job, r: MiniRemote, cmd: list[str], sep: str) -> int:
     max_bytes = max_bytes if sep == " " else min(max_bytes, 128 * 1024 - 1)  # e.g. 'zfs destroy foo@s1,s2,...,sN'
     conn_pool: ConnectionPool = job.params.connection_pools[r.location].pool(SHARED)
     with conn_pool.connection() as conn:
-        cmd = conn.ssh_cmd + cmd
-    header_bytes: int = len(" ".join(cmd).encode(sys.getfilesystemencoding()))
+        ssh_cmd: tuple[str, ...] = conn.ssh_cmd
+    header_bytes: int = len(" ".join(ssh_cmd + tuple(cmd)).encode(sys.getfilesystemencoding()))
     return max_bytes - header_bytes
 
 

@@ -70,6 +70,7 @@ import threading
 import time
 from collections.abc import (
     Iterator,
+    Sequence,
 )
 from dataclasses import (
     dataclass,
@@ -147,7 +148,7 @@ class MiniRemote(Protocol):
     def is_ssh_available(self) -> bool:
         """Return True if the ssh client program required for this remote is available on the local host."""
 
-    def local_ssh_command(self, socket_file: str | None) -> tuple[list[str], str | None]:
+    def local_ssh_command(self, socket_file: str | None) -> tuple[tuple[str, ...], str | None]:
         """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
         command to run on the remote host, which will be appended later; also returns the effective ControlPath used by the
         ssh CLI command, or ``None`` when SSH multiplexing is not active."""
@@ -203,18 +204,18 @@ def create_simple_miniremote(
         def is_ssh_available(self) -> bool:
             return True
 
-        def local_ssh_command(self, socket_file: str | None) -> tuple[list[str], str | None]:
+        def local_ssh_command(self, socket_file: str | None) -> tuple[tuple[str, ...], str | None]:
             if not self.ssh_user_host:
-                return [], None  # local mode
+                return (), None  # local mode
             ssh_cmd: list[str] = [self.params.ssh_program]
-            ssh_cmd.extend(self.ssh_extra_opts)
+            ssh_cmd += self.ssh_extra_opts
             socket_path: str | None = None
             if self.reuse_ssh_connection and socket_file:
                 ssh_cmd.append("-S")
                 ssh_cmd.append(socket_file)
                 socket_path = socket_file
             ssh_cmd.append(self.ssh_user_host)
-            return ssh_cmd, socket_path
+            return tuple(ssh_cmd), socket_path
 
         def cache_namespace(self) -> str:
             if not self.ssh_user_host:
@@ -338,23 +339,15 @@ class Connection:
             None if self._connection_lease is None else self._connection_lease.socket_path
         )
         self._ssh_socket_path: Final[str | None] = ssh_socket_path
-        self._ssh_cmd: Final[list[str]] = ssh_cmd
-        self._ssh_cmd_quoted: Final[list[str]] = [shlex.quote(item) for item in self._ssh_cmd]
-
-    @property
-    def ssh_cmd(self) -> list[str]:
-        return self._ssh_cmd.copy()
-
-    @property
-    def ssh_cmd_quoted(self) -> list[str]:
-        return self._ssh_cmd_quoted.copy()
+        self.ssh_cmd: Final[tuple[str, ...]] = ssh_cmd
+        self.ssh_cmd_quoted: Final[tuple[str, ...]] = tuple(shlex.quote(item) for item in self.ssh_cmd)
 
     def __repr__(self) -> str:
         return str({"free": self._free})
 
     def run_ssh_command(
         self,
-        cmd: list[str],
+        cmd: Sequence[str],
         *,
         job: MiniJob,
         loglevel: int = logging.INFO,
@@ -370,21 +363,22 @@ class Connection:
         safely traverse the ssh "remote shell" boundary, as ssh concatenates argv into a single remote shell string. In local
         mode (no remote.ssh_user_host) argv is executed directly without an intermediate shell.
         """
+        cmd = tuple(cmd)
         if not cmd:
-            raise ValueError("run_ssh_command requires a non-empty cmd list")
+            raise ValueError("run_ssh_command requires a non-empty cmd sequence")
         log: logging.Logger = self._remote.params.log
-        quoted_cmd: list[str] = [shlex.quote(arg) for arg in cmd]
-        ssh_cmd: list[str] = self._ssh_cmd
+        quoted_cmd: tuple[str, ...] = tuple(shlex.quote(arg) for arg in cmd)
         if self._remote.ssh_user_host:
             self.refresh_ssh_connection_if_necessary(job)
             cmd = quoted_cmd
+        cmd = self.ssh_cmd + cmd
         msg: str = "Would execute: %s" if is_dry else "Executing: %s"
-        log.log(loglevel, msg, list_formatter(self._ssh_cmd_quoted + quoted_cmd, lstrip=True))
+        log.log(loglevel, msg, list_formatter(self.ssh_cmd_quoted + quoted_cmd, lstrip=True))
         if is_dry:
-            return subprocess.CompletedProcess(ssh_cmd + cmd, returncode=0, stdout=None, stderr=None)
+            return subprocess.CompletedProcess(cmd, returncode=0, stdout=None, stderr=None)
         else:
             sp: Subprocesses = job.subprocesses
-            return sp.subprocess_run(ssh_cmd + cmd, timeout=timeout(job), log=log, **kwargs)
+            return sp.subprocess_run(cmd, timeout=timeout(job), log=log, **kwargs)
 
     def refresh_ssh_connection_if_necessary(self, job: MiniJob) -> None:
         """Maintain or create an ssh master connection for low latency reuse."""
@@ -407,8 +401,7 @@ class Connection:
             if time.monotonic_ns() < self._last_refresh_time + control_limit_nanos:
                 if socket_path is None or self._is_ssh_control_socket_usable(socket_path):
                     return  # ssh master is alive, reuse its TCP connection (this is the common case and the ultra-fast path)
-            ssh_cmd: list[str] = self._ssh_cmd
-            ssh_sock_cmd: list[str] = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+            ssh_sock_cmd: list[str] = list(self.ssh_cmd[0:-1])  # omit trailing ssh_user_host
             ssh_sock_cmd += ["-O", "check", remote.ssh_user_host]
             # extend lifetime of ssh master by $ssh_control_persist_secs via `ssh -O check` if master is still running.
             # `ssh -S /path/to/socket -O check` doesn't talk over the network, hence is still a low latency fast path.
@@ -426,7 +419,7 @@ class Connection:
                     # Unfortunately, with `ssh -v` (debug mode), the ssh master won't background; instead it stays in the
                     # foreground and blocks until the ControlPersist timer expires (90 secs). To make progress earlier we ...
                     ssh_control_persist_secs = min(1, ssh_control_persist_secs)  # tell ssh block as briefly as possible (1s)
-                ssh_sock_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                ssh_sock_cmd = list(self.ssh_cmd[0:-1])  # omit trailing ssh_user_host
                 ssh_sock_cmd += ["-M", f"-oControlPersist={ssh_control_persist_secs}s", remote.ssh_user_host, "exit"]
                 log.log(LOG_TRACE, "Executing: %s", list_formatter(ssh_sock_cmd))
                 t = timeout(job)
@@ -477,10 +470,9 @@ class Connection:
 
     def shutdown(self, msg_prefix: str) -> None:
         """Closes the underlying SSH master connection and releases the corresponding connection lease."""
-        ssh_cmd: list[str] = self._ssh_cmd
-        if ssh_cmd and self._reuse_ssh_connection:
+        if self.ssh_cmd and self._reuse_ssh_connection:
             if self._connection_lease is None:
-                ssh_sock_cmd: list[str] = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
+                ssh_sock_cmd: tuple[str, ...] = self.ssh_cmd[0:-1] + ("-O", "exit", self.ssh_cmd[-1])
                 log = self._remote.params.log
                 log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_sock_cmd))
                 try:

@@ -153,7 +153,7 @@ class TestConnectionPool(AbstractTestCase):
         self.assertEqual(queuelen, len(cpool._priority_queue))
 
     def assert_equal_connections(self, conn: Connection, donn: Connection) -> None:
-        self.assertEqual(donn._ssh_cmd, conn._ssh_cmd)
+        self.assertEqual(donn.ssh_cmd, conn.ssh_cmd)
         self.assertEqual(donn._free, conn._free)
         self.assertEqual(donn._last_modified, conn._last_modified)
 
@@ -170,7 +170,7 @@ class TestConnectionPool(AbstractTestCase):
         dpool: SlowButCorrectConnectionPool,
         donn: Connection,
     ) -> None:
-        self.assertEqual(donn._ssh_cmd, conn._ssh_cmd)
+        self.assertEqual(donn.ssh_cmd, conn.ssh_cmd)
         cpool.return_connection(conn)
         dpool.return_connection(donn)
 
@@ -178,8 +178,8 @@ class TestConnectionPool(AbstractTestCase):
         counter1a = itertools.count()
         counter2a = itertools.count()
         counter1b = itertools.count()
-        self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: ([str(next(counter))], None)  # type: ignore
-        self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: ([str(next(counter))], None)  # type: ignore
+        self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: ((str(next(counter)),), None)  # type: ignore
+        self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: ((str(next(counter)),), None)  # type: ignore
 
         with self.assertRaises(AssertionError):
             ConnectionPool(self.src, SHARED, 0)
@@ -195,9 +195,9 @@ class TestConnectionPool(AbstractTestCase):
         conn1, donn1 = self.get_connection(cpool, dpool)
         self.assert_priority_queue(cpool, 1)
         self.assertEqual((capacity - 1) * 1, conn1._free)
-        i = [str(next(counter2a))]
-        self.assertEqual(i, conn1._ssh_cmd)
-        self.assertEqual(i, conn1._ssh_cmd_quoted)
+        i = (str(next(counter2a)),)
+        self.assertEqual(i, conn1.ssh_cmd)
+        self.assertEqual(i, conn1.ssh_cmd_quoted)
         self.assertIsNotNone(repr(conn1))
         self.assertIsNotNone(str(conn1))
 
@@ -361,8 +361,8 @@ class TestConnectionPool(AbstractTestCase):
             for items in range(64 + 1):
                 counter1a = itertools.count()
                 counter1b = itertools.count()
-                self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: ([str(next(counter))], None)  # type: ignore
-                self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: ([str(next(counter))], None)  # type: ignore
+                self.src.local_ssh_command = lambda _socket_path=None, counter=counter1a: ((str(next(counter)),), None)  # type: ignore
+                self.src2.local_ssh_command = lambda _socket_path=None, counter=counter1b: ((str(next(counter)),), None)  # type: ignore
                 cpool = ConnectionPool(self.src, SHARED, maxsessions)
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
                 # dpool = ConnectionPool(self.src2, SHARED, maxsessions)
@@ -428,7 +428,7 @@ class TestSimpleMiniRemote(AbstractTestCase):
         # SimpleMiniRemote always disables immediate master exit on shutdown
         self.assertFalse(r.ssh_exit_on_shutdown)
         self.assertEqual("-", r.cache_namespace())  # local mode
-        self.assertEqual(([], None), r.local_ssh_command(socket_file=None))
+        self.assertEqual(((), None), r.local_ssh_command(socket_file=None))
 
     def test_init_with_all_extras_and_port(self) -> None:
         with get_tmpdir() as tmpdir:
@@ -465,11 +465,11 @@ class TestSimpleMiniRemote(AbstractTestCase):
             self.assertEqual(f"user@host#2222#{expected_hash}", r.cache_namespace())
             # local_ssh_command includes -S only when socket provided
             cmd_no_sock, socket_path = r.local_ssh_command(socket_file=None)
-            self.assertEqual([r.params.ssh_program] + expected_prefix + ["user@host"], cmd_no_sock)
+            self.assertEqual(tuple([r.params.ssh_program] + expected_prefix + ["user@host"]), cmd_no_sock)
             self.assertIsNone(socket_path)
             cmd_with_sock, socket_path = r.local_ssh_command(socket_file="/tmp/sock")
             self.assertEqual(
-                [r.params.ssh_program] + expected_prefix + ["-S", "/tmp/sock", "user@host"],
+                tuple([r.params.ssh_program] + expected_prefix + ["-S", "/tmp/sock", "user@host"]),
                 cmd_with_sock,
             )
             self.assertEqual("/tmp/sock", socket_path)
@@ -524,7 +524,7 @@ class TestSimpleMiniRemote(AbstractTestCase):
         r = connection.create_simple_miniremote(log=self.log, ssh_user_host="user@h", reuse_ssh_connection=False)
         # No -S because reuse is False
         self.assertEqual(
-            ([r.params.ssh_program] + list(r.ssh_extra_opts) + ["user@h"], None),
+            (tuple([r.params.ssh_program] + list(r.ssh_extra_opts) + ["user@h"]), None),
             r.local_ssh_command("/tmp/s"),
         )
 
@@ -737,8 +737,8 @@ class _FakeRemote(SimpleNamespace):
         if not hasattr(self, "pool"):
             self.pool = SHARED
 
-    def local_ssh_command(self, socket_path: str | None = None) -> tuple[list[str], str | None]:
-        return ["ssh", self.ssh_user_host or "localhost"], socket_path
+    def local_ssh_command(self, socket_path: str | None = None) -> tuple[tuple[str, ...], str | None]:
+        return ("ssh", self.ssh_user_host or "localhost"), socket_path
 
     def is_ssh_available(self) -> bool:
         return True
@@ -778,7 +778,7 @@ class TestRunSshCommand(AbstractTestCase):
         job = connection.create_simple_minijob()
         conn = Connection(self.remote, 1)
         with self.assertRaises(ValueError):
-            conn.run_ssh_command(cmd=[], job=job)
+            conn.run_ssh_command(cmd=(), job=job)
 
     @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_dry_run_skips_execution(self, mock_run: MagicMock) -> None:
@@ -819,7 +819,7 @@ class TestRunSshCommand(AbstractTestCase):
         self.remote.ssh_user_host = ""
         # Ensure the underlying Connection uses a short timeout for the failing ssh call.
         with self.conn_pool.connection() as conn:
-            conn._ssh_cmd = ["ssh", "-T", "-x", "-oBatchMode=yes", "-oConnectTimeout=1"]  # type: ignore[misc]  # override test-only ssh_cmd
+            conn.ssh_cmd = ("ssh", "-T", "-x", "-oBatchMode=yes", "-oConnectTimeout=1")  # type: ignore[misc]  # override test-only ssh_cmd
         self.conn_pool_connection_mock.reset_mock()
 
         with self.assertRaises(RetryableError) as cm, suppress_output():

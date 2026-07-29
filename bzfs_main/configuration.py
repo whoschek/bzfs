@@ -573,18 +573,19 @@ class Remote(MiniRemote):
         self.ssh_user_host: str = ""
         self.is_nonlocal: bool = False
 
-    def local_ssh_command(self, socket_file: str | None) -> tuple[list[str], str | None]:
+    def local_ssh_command(self, socket_file: str | None) -> tuple[tuple[str, ...], str | None]:
         """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
         command to run on the remote host, which will be appended later; also returns the effective ControlPath used by the
         ssh CLI command, or ``None`` when SSH multiplexing is not active."""
         if not self.ssh_user_host:
-            return [], None  # dataset is on local host - don't use ssh
+            return (), None  # dataset is on local host - don't use ssh
 
         # dataset is on remote host
         p: Params = self.params
         if p.ssh_program == DISABLE_PRG:
             die("Cannot talk to remote host because ssh CLI is disabled.")
-        ssh_cmd: list[str] = [p.ssh_program] + list(self.ssh_extra_opts)
+        ssh_cmd: list[str] = [p.ssh_program]
+        ssh_cmd += self.ssh_extra_opts
         if self.ssh_config_file:
             ssh_cmd += ["-F", self.ssh_config_file]
         if self.ssh_cipher:
@@ -617,7 +618,7 @@ class Remote(MiniRemote):
                 # home directory path is too long, typically because the Unix user name is unreasonably long.
             ssh_cmd += ["-S", socket_path]
         ssh_cmd += [self.ssh_user_host]
-        return ssh_cmd, socket_path
+        return tuple(ssh_cmd), socket_path
 
     def cache_key(self) -> tuple[str, str, int | None, str | None]:
         """Returns tuple uniquely identifying this Remote for caching."""

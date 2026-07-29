@@ -227,8 +227,8 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
             ssh_cmd = conn.ssh_cmd
             ssh_sock_cmd = ssh_cmd[0:-1]
             ssh_user_host = remote.ssh_user_host
-            check_cmd = ssh_sock_cmd + ["-O", "check", ssh_user_host]
-            exit_cmd = ssh_sock_cmd + ["-O", "exit", ssh_user_host]
+            check_cmd = ssh_sock_cmd + ("-O", "check", ssh_user_host)
+            exit_cmd = ssh_sock_cmd + ("-O", "exit", ssh_user_host)
 
             # Confirm master is running.
             check_proc1 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
