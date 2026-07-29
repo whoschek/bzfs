@@ -200,6 +200,27 @@ def _prepare_r2r_job(
     return job
 
 
+def _prepare_pipeline(
+    job: Job,
+    *,
+    send_cmd: list[str] | None = None,
+    recv_cmd: list[str] | None = None,
+    src_ssh_cmd: str = "",
+    dst_ssh_cmd: str = "",
+) -> str:
+    """Builds a test pipeline while keeping outer SSH commands optional."""
+    return _prepare_zfs_send_receive(
+        job,
+        "pool/ds",
+        ["zfs", "send"] if send_cmd is None else send_cmd,
+        ["zfs", "recv"] if recv_cmd is None else recv_cmd,
+        1,
+        "1B",
+        src_ssh_cmd,
+        dst_ssh_cmd,
+    )
+
+
 ###############################################################################
 class TestQuoting(AbstractTestCase):
     """Covers command builders and safety helpers in replication."""
@@ -244,7 +265,7 @@ class TestQuoting(AbstractTestCase):
                 "bzfs_main.replication.dquote", side_effect=lambda s: (seen.__iadd__([s]), s)[1]
             ),
         ):
-            _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
+            _prepare_pipeline(job)
 
         self.assertTrue(seen)  # we should have seen src and dst
         self.assertTrue(all(not s.endswith("\\") for s in seen), f"_dquote saw trailing backslash: {seen!r}")
@@ -290,12 +311,11 @@ class TestQuoting(AbstractTestCase):
         job = _prepare_r2r_job(mode="push", min_pipe_transfer_size=0, zstd_available=True, use_ssh_options=True)
 
         with patch("bzfs_main.replication.is_same_remote", return_value=same_remote):
-            src_pipe, local_pipe, dst_pipe = _prepare_zfs_send_receive(
-                job, "pool/ds", ["zfs", "send", send_arg], ["zfs", "recv", recv_arg], 1024, "1KiB"
+            src_pipe = _prepare_pipeline(
+                job,
+                send_cmd=["zfs", "send", send_arg],
+                recv_cmd=["zfs", "recv", recv_arg],
             )
-
-        self.assertEqual("", local_pipe)
-        self.assertEqual("", dst_pipe)
 
         level1: list[str] = shlex.split(src_pipe)
         self.assertEqual(1, len(level1))
@@ -312,17 +332,12 @@ class TestQuoting(AbstractTestCase):
         job = _prepare_r2r_job(mode="push", min_pipe_transfer_size=1024**2, zstd_available=False, use_ssh_options=False)
 
         with patch("bzfs_main.replication.is_same_remote", return_value=True):
-            src_pipe, local_pipe, dst_pipe = _prepare_zfs_send_receive(
+            src_pipe = _prepare_pipeline(
                 job,
-                "pool/ds",
-                ["python3", "-c", send_py, payload],
-                ["python3", "-c", recv_py, payload],
-                1,
-                "1B",
+                send_cmd=["python3", "-c", send_py, payload],
+                recv_cmd=["python3", "-c", recv_py, payload],
             )
 
-        self.assertEqual("", local_pipe)
-        self.assertEqual("", dst_pipe)
         remote_cmd = shlex.split(src_pipe)[0]
         proc = subprocess.run(["sh", "-c", remote_cmd], capture_output=True, text=True, check=True)
         result = json.loads(proc.stdout.strip())
@@ -361,6 +376,23 @@ class TestResumeErrorParsing(AbstractTestCase):
 ###############################################################################
 class TestReplication(AbstractTestCase):
     """Covers command builders and safety helpers in replication."""
+
+    def test_prepare_adds_outer_ssh_commands(self) -> None:
+        """Verifies each transfer mode uses the expected outer SSH connection.
+
+        Assumptions: SRC and DST uniquely mark the outer commands. Design Rationale: A small table isolates the new
+        command-assembly responsibility from the existing pipeline-stage tests.
+        """
+        for mode, expected_prefix in [("off", "SRC "), ("push", "SRC "), ("pull", "DST ")]:
+            with self.subTest(mode=mode):
+                job = _prepare_r2r_job(mode, 1, zstd_available=False, use_ssh_options=False)
+                with (
+                    patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
+                    patch("bzfs_main.replication._pv_cmd", return_value="cat"),
+                ):
+                    cmd = _prepare_pipeline(job, src_ssh_cmd="SRC", dst_ssh_cmd="DST")
+                self.assertTrue(cmd.startswith(expected_prefix), cmd)
+                self.assertEqual(mode == "off", " | DST " in cmd)
 
     def test_continuity_tmp_bookmark_uses_dst_pool_guid_and_dataset_name(self) -> None:
         """Verifies the destination identity combines its pool GUID with its full dataset name."""
@@ -456,12 +488,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
             patch("bzfs_main.replication._pv_cmd") as pv_cmd,
         ):
-            src_pipe, local_pipe, dst_pipe = _prepare_zfs_send_receive(
-                job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1024, "1KiB"
-            )
+            src_pipe = _prepare_pipeline(job)
 
-        self.assertEqual("", local_pipe)
-        self.assertEqual("", dst_pipe)
         self.assertIn("sh -c", src_pipe)
         self.assertIn("zfs send", src_pipe)
         self.assertIn("zfs recv", src_pipe)
@@ -894,11 +922,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
             pv.return_value = "pv_src"
-            src, loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertTrue(src.startswith("zfs send"))
-        self.assertIn("pv_src", src)
-        self.assertEqual("", loc)
-        self.assertEqual("zfs recv", dst)
+            cmd = _prepare_pipeline(job)
+        self.assertEqual("zfs send | pv_src | zfs recv", cmd)
         self.assertFalse(pv.call_args.kwargs.get("disable_progress_bar", False))
 
     def test_prepare_dst_local_pv(self) -> None:
@@ -915,10 +940,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
             pv.return_value = "pv_dst"
-            src, loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("zfs send", src)
-        self.assertEqual("", loc)
-        self.assertEqual("pv_dst | zfs recv", dst.strip())
+            cmd = _prepare_pipeline(job)
+        self.assertEqual("zfs send | pv_dst | zfs recv", cmd)
 
     def test_prepare_local_pv_with_compress_disabled_progress(self) -> None:
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=lambda _p, _l: True)
@@ -931,13 +954,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
             pv.return_value = "pv_loc"
-            src, loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertTrue(src.startswith("sh -c"))
-        self.assertIn("comp", src)
-        self.assertIn("pv_loc", loc)
-        self.assertTrue(dst.startswith("sh -c"))
-        self.assertIn("decomp", dst)
-        self.assertTrue(dst.endswith("zfs recv"))
+            cmd = _prepare_pipeline(job)
+        self.assertEqual("sh -c zfs send | comp | pv_loc | sh -c decomp | zfs recv", cmd)
         self.assertTrue(pv.call_args.kwargs["disable_progress_bar"])
 
     def test_prepare_local_pv_without_compress_no_disable(self) -> None:
@@ -954,10 +972,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
             pv.return_value = "pv_loc"
-            src, loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("zfs send", src)
-        self.assertIn("pv_loc", loc)
-        self.assertEqual("zfs recv", dst)
+            cmd = _prepare_pipeline(job)
+        self.assertEqual("zfs send | pv_loc | zfs recv", cmd)
         self.assertFalse(pv.call_args.kwargs.get("disable_progress_bar", False))
 
     def test_prepare_local_buffer_constructs_pipe(self) -> None:
@@ -977,8 +993,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            _src, loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("| LBUF | PV | LBUF", loc)
+            cmd = _prepare_pipeline(job)
+        self.assertEqual("zfs send | LBUF | PV | LBUF | zfs recv", cmd)
 
     def test_prepare_local_buffer_cat_omits_pipe(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -993,10 +1009,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("zfs send", src)
-        self.assertEqual("", loc)
-        self.assertEqual("zfs recv", dst)
+            cmd = _prepare_pipeline(job)
+        self.assertEqual("zfs send | zfs recv", cmd)
 
     def test_prepare_local_buffer_without_pv_uses_single_buffer(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -1015,8 +1029,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            _src, loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("| LBUF", loc)
+            cmd = _prepare_pipeline(job)
+        self.assertEqual("zfs send | LBUF | zfs recv", cmd)
 
     def test_prepare_pipeline_preserves_complete_stage_order(self) -> None:
         """Verifies all enabled stages retain byte-stream order across the three pipeline legs.
@@ -1047,20 +1061,17 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _remote, command: command),
             patch("bzfs_main.replication.dquote", side_effect=lambda command: command),
         ):
-            src, local, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
+            cmd = _prepare_pipeline(job)
 
         self.assertEqual(
             "sh -c zfs send --injectedGarbageParameter"
             " | (dd bs=1 count=123 2>/dev/null && false)"
-            " | gzip -1 -c -n | COMPRESS | SRCBUF",
-            src,
-        )
-        self.assertEqual("| LOCALBUF | PV | LOCALBUF", local)
-        self.assertEqual(
-            "sh -c DSTBUF | DECOMPRESS"
+            " | gzip -1 -c -n | COMPRESS | SRCBUF"
+            " | LOCALBUF | PV | LOCALBUF"
+            " | sh -c DSTBUF | DECOMPRESS"
             f" | dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES} 2>/dev/null"
             " | gzip -1 -c -n | zfs recv --injectedGarbageParameter",
-            dst,
+            cmd,
         )
         self.assertNotIn("inject_src_pipe_fail_offset", job.inject_params)
 
@@ -1078,8 +1089,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertIn("dd bs=64", src)
+            cmd = _prepare_pipeline(job)
+        self.assertIn("dd bs=64", cmd)
 
     def test_prepare_src_pipe_inject_dataset_fail_uses_resumable_cutoff_once(self) -> None:
         """Purpose: Verify dataset-specific test injection reaches resumable receive state and is consumed once."""
@@ -1097,12 +1108,10 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-            retry_src, _retry_loc, _retry_dst = _prepare_zfs_send_receive(
-                job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B"
-            )
-        self.assertIn(f"dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES}", src)
-        self.assertNotIn(f"dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES}", retry_src)
+            cmd = _prepare_pipeline(job)
+            retry_cmd = _prepare_pipeline(job)
+        self.assertIn(f"dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES}", cmd)
+        self.assertNotIn(f"dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES}", retry_cmd)
 
     def test_prepare_src_pipe_inject_fail_offset_once(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -1118,13 +1127,11 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-            retry_src, _retry_loc, _retry_dst = _prepare_zfs_send_receive(
-                job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B"
-            )
-        self.assertIn("(dd bs=1 count=123 2>/dev/null && false)", src)
+            cmd = _prepare_pipeline(job)
+            retry_cmd = _prepare_pipeline(job)
+        self.assertIn("(dd bs=1 count=123 2>/dev/null && false)", cmd)
         self.assertNotIn("inject_src_pipe_fail_offset", job.inject_params)
-        self.assertNotIn("dd bs=1 count=123", retry_src)
+        self.assertNotIn("dd bs=1 count=123", retry_cmd)
 
     def test_prepare_src_pipe_inject_garble(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -1140,8 +1147,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertIn("gzip", src)
+            cmd = _prepare_pipeline(job)
+        self.assertIn("gzip", cmd)
 
     def test_prepare_src_send_error_injected(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -1157,8 +1164,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertTrue(src.startswith("zfs send --injectedGarbageParameter"))
+            cmd = _prepare_pipeline(job)
+        self.assertTrue(cmd.startswith("zfs send --injectedGarbageParameter"))
 
     def test_prepare_dst_pipe_inject_fail(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -1174,8 +1181,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertIn("dd bs=1024", dst)
+            cmd = _prepare_pipeline(job)
+        self.assertIn("dd bs=1024", cmd)
 
     def test_prepare_dst_pipe_inject_garble(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -1191,8 +1198,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertIn("gzip", dst)
+            cmd = _prepare_pipeline(job)
+        self.assertIn("gzip", cmd)
 
     def test_prepare_dst_receive_error_injected(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -1208,8 +1215,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertTrue(dst.endswith("--injectedGarbageParameter"))
+            cmd = _prepare_pipeline(job)
+        self.assertTrue(cmd.endswith("--injectedGarbageParameter"))
 
     def test_prepare_src_buffer_added(self) -> None:
         def mbuf(_p: MagicMock, loc: str, *_a: object) -> str:
@@ -1224,9 +1231,9 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertTrue(src.startswith("zfs send"))
-        self.assertIn("SRCBUF", src)
+            cmd = _prepare_pipeline(job)
+        self.assertTrue(cmd.startswith("zfs send"))
+        self.assertIn("SRCBUF", cmd)
 
     def test_prepare_dst_buffer_added(self) -> None:
         def mbuf(_p: MagicMock, loc: str, *_a: object) -> str:
@@ -1241,9 +1248,9 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertIn("DSTBUF", dst)
-        self.assertTrue(dst.endswith("zfs recv"))
+            cmd = _prepare_pipeline(job)
+        self.assertIn("DSTBUF", cmd)
+        self.assertTrue(cmd.endswith("zfs recv"))
 
     def test_prepare_compression_commands_included(self) -> None:
         job = _prepare_job(is_program_available=lambda prog, loc: True)
@@ -1255,11 +1262,11 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertTrue(src.startswith("zfs send"))
-        self.assertIn("COMP", src)
-        self.assertIn("DECOMP", dst)
-        self.assertTrue(dst.endswith("zfs recv"))
+            cmd = _prepare_pipeline(job)
+        self.assertTrue(cmd.startswith("zfs send"))
+        self.assertIn("COMP", cmd)
+        self.assertIn("DECOMP", cmd)
+        self.assertTrue(cmd.endswith("zfs recv"))
         comp.assert_called_once()
         decomp.assert_called_once()
 
@@ -1276,7 +1283,7 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            _src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
+            _prepare_pipeline(job)
         comp.assert_not_called()
         decomp.assert_not_called()
 
@@ -1298,9 +1305,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("zfs send", src)
-        self.assertEqual("zfs recv", dst)
+            cmd = _prepare_pipeline(job)
+        self.assertEqual("zfs send | zfs recv", cmd)
 
     def test_prepare_no_shell_src(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -1315,8 +1321,9 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("zfs send", src)
+            cmd = _prepare_pipeline(job)
+        self.assertTrue(cmd.startswith("zfs send |"))
+        self.assertNotIn("pv", cmd)
 
     def test_prepare_no_shell_dst(self) -> None:
         def avail(prog: str, loc: str) -> bool:
@@ -1331,8 +1338,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("zfs recv", dst)
+            cmd = _prepare_pipeline(job)
+        self.assertTrue(cmd.endswith("| zfs recv"))
 
     def test_prepare_src_remote_quoted(self) -> None:
         job = _prepare_job(src_host="host", is_program_available=lambda prog, loc: prog == "sh")
@@ -1343,8 +1350,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            src, _loc, _dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("'zfs send'", src)
+            cmd = _prepare_pipeline(job)
+        self.assertEqual("'zfs send' | zfs recv", cmd)
 
     def test_prepare_dst_remote_quoted(self) -> None:
         job = _prepare_job(dst_host="host", is_program_available=lambda prog, loc: prog == "sh")
@@ -1355,8 +1362,8 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
-            _src, _loc, dst = _prepare_zfs_send_receive(job, "pool/ds", ["zfs", "send"], ["zfs", "recv"], 1, "1B")
-        self.assertEqual("'zfs recv'", dst)
+            cmd = _prepare_pipeline(job)
+        self.assertEqual("zfs send | 'zfs recv'", cmd)
 
     def test_prepare_r2r_pipeline_components(self) -> None:
         """Covers pull and push pipelines across remote identity, zstd, and threshold variants."""
