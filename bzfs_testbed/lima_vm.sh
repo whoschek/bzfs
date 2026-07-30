@@ -27,6 +27,7 @@
 # shellcheck disable=SC2154
 set -eo pipefail
 LIMA_VM_TEMPLATE="${LIMA_VM_TEMPLATE:-template:ubuntu-24.04}"  # see `limactl create --list-templates` for available options
+LIMA_VM_IMAGE_VARIANT="${LIMA_VM_IMAGE_VARIANT:-}"  # empty (the default) lets `limactl` pick the standard image variant
 LIMA_VM_NAME="${LIMA_VM_NAME:-mylimavm}"  # see `limactl list` for the name of all existing VMs
 LIMA_VM_DISK="${LIMA_VM_DISK:-20}"  # GiB
 LIMA_VM_CPUS="${LIMA_VM_CPUS:-0}"  # 0 uses Lima default which currently is min(4, #cores)
@@ -81,6 +82,10 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
     if [[ "$LIMA_VM_MOUNT_TYPE" != "" ]]; then
         limactl_mount_type_arg=(--mount-type="$LIMA_VM_MOUNT_TYPE")
     fi
+    limactl_image_variant_arg=()
+    if [[ "$LIMA_VM_IMAGE_VARIANT" != "" ]]; then
+        limactl_image_variant_arg=(--image-variant="$LIMA_VM_IMAGE_VARIANT")
+    fi
     limactl create --tty=false \
         --name="$LIMA_VM_NAME" \
         --disk="$LIMA_VM_DISK" \
@@ -93,6 +98,7 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
         "${shadow_mount_args[@]}" \
         --containerd="${LIMA_VM_CONTAINERD:-none}" \
         "${limactl_mount_type_arg[@]}" \
+        "${limactl_image_variant_arg[@]}" \
         "$LIMA_VM_TEMPLATE"
         # Note: ".ssh.loadDotSSHPubKeys=true" imports ~/.ssh/*.pub from host into the guest VM ~/.ssh/authorized_keys
         # Note: To retain mounts defined in $LIMA_VM_TEMPLATE use export LIMA_VM_MOUNTS='.mounts'
@@ -162,6 +168,7 @@ if [[ -f /etc/redhat-release ]]; then  # RHEL/EL family
     sudo dnf -y install ripgrep --enablerepo=epel
     sudo dnf --setopt=install_weak_deps=False -y install nodejs  # for https://github.com/prettier/prettier via pre-commit
     # sudo dnf -y install git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
+    # sudo dnf -y install time perf strace bpftrace
     # sudo dnf -y install npm bubblewrap; sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     export DEBIAN_FRONTEND=noninteractive
@@ -218,15 +225,21 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
         )
     elif [[ "$LIMA_ZFS_VERSION" != "none" ]]; then
         sudo apt-get -y install zfsutils-linux
+        if [[ -c /dev/zfs && ! -w /dev/zfs ]]; then  # workaround for LIMA_VM_IMAGE_VARIANT=minimal on ubuntu-24.04
+            # Apply the packaged ZFS udev rule when the test user lacks device access.
+            sudo udevadm control --reload
+            sudo udevadm trigger --action=add --sysname-match=zfs --settle
+        fi
     fi
     if [[ "$LIMA_ZFS_VERSION" != "none" ]]; then
         zfs --version
     fi
 
     # Run common preparation steps
-    sudo apt-get -y install python3 zstd mbuffer pv cron rsync curl ripgrep python3-venv
+    sudo apt-get -y install python3 zstd mbuffer pv coreutils openssh-client openssh-server cron rsync curl ripgrep python3-venv
     sudo apt-get -y install --no-install-recommends nodejs  # for https://github.com/prettier/prettier via pre-commit
     # sudo apt-get -y install git gh nano mosh curl wget rclone jq tree bash-completion tmux fio net-tools traceroute sysstat ifstat iperf3 iotop iftop
+    # sudo apt-get -y install time linux-tools-generic strace bpftrace
     # sudo apt-get -y install npm bubblewrap; sudo npm install -g @openai/codex  # codex --yolo -c model_reasoning_effort=high
 
     mkdir -p --mode=u=rwx,go= "$HOME/.ssh"
