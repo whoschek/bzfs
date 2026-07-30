@@ -205,8 +205,8 @@ def _prepare_pipeline(
     *,
     send_cmd: list[str] | None = None,
     recv_cmd: list[str] | None = None,
-    src_ssh_cmd: str = "",
-    dst_ssh_cmd: str = "",
+    src_ssh_cmd: tuple[str, ...] = (),
+    dst_ssh_cmd: tuple[str, ...] = (),
 ) -> str:
     """Builds a test pipeline while keeping outer SSH commands optional."""
     return _prepare_zfs_send_receive(
@@ -383,16 +383,22 @@ class TestReplication(AbstractTestCase):
         Assumptions: SRC and DST uniquely mark the outer commands. Design Rationale: A small table isolates the new
         command-assembly responsibility from the existing pipeline-stage tests.
         """
-        for mode, expected_prefix in [("off", "SRC "), ("push", "SRC "), ("pull", "DST ")]:
+        src_ssh_cmd = ("SRC", "'src option'")
+        dst_ssh_cmd = ("DST", "'dst option'")
+        for mode, expected_prefix in [
+            ("off", "SRC 'src option' "),
+            ("push", "SRC 'src option' "),
+            ("pull", "DST 'dst option' "),
+        ]:
             with self.subTest(mode=mode):
                 job = _prepare_r2r_job(mode, 1, zstd_available=False, use_ssh_options=False)
                 with (
                     patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
                     patch("bzfs_main.replication._pv_cmd", return_value="cat"),
                 ):
-                    cmd = _prepare_pipeline(job, src_ssh_cmd="SRC", dst_ssh_cmd="DST")
+                    cmd = _prepare_pipeline(job, src_ssh_cmd=src_ssh_cmd, dst_ssh_cmd=dst_ssh_cmd)
                 self.assertTrue(cmd.startswith(expected_prefix), cmd)
-                self.assertEqual(mode == "off", " | DST " in cmd)
+                self.assertEqual(mode == "off", " | DST 'dst option' " in cmd)
 
     def test_continuity_tmp_bookmark_uses_dst_pool_guid_and_dataset_name(self) -> None:
         """Verifies the destination identity combines its pool GUID with its full dataset name."""

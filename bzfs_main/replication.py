@@ -647,8 +647,8 @@ def _prepare_zfs_send_receive(
     recv_cmd: list[str],
     size_estimate_bytes: int,
     size_estimate_human: str,
-    src_ssh_cmd: str,
-    dst_ssh_cmd: str,
+    src_ssh_cmd: tuple[str, ...],
+    dst_ssh_cmd: tuple[str, ...],
 ) -> str:
     """Constructs zfs send/recv pipelines with optional compression, mbuffer and pv."""
     p = job.params
@@ -741,17 +741,14 @@ def _prepare_zfs_send_receive(
         if not dst_has_shell:
             dst_pipe = recv_cmd_str
 
-        src_pipe = squote(src, src_pipe)
-        dst_pipe = squote(dst, dst_pipe)
-        src_leg: str = f"{src_ssh_cmd} {src_pipe}" if src_ssh_cmd else src_pipe
-        dst_leg: str = f"{dst_ssh_cmd} {dst_pipe}" if dst_ssh_cmd else dst_pipe
-
         # assemble pipeline running on middle leg between source and destination. only enabled for pull-push mode
         local_stages: list[str] = [local_buffer]
-        if pv_loc_cmd and pv_loc_cmd != "cat":
+        if pv_loc_cmd not in ("", "cat"):
             local_stages += [pv_loc_cmd, local_buffer]
         local_stages = [stage for stage in local_stages if stage not in ("", "cat")]
 
+        src_leg: str = " ".join(src_ssh_cmd + (squote(src, src_pipe),))
+        dst_leg: str = " ".join(dst_ssh_cmd + (squote(dst, dst_pipe),))
         return " | ".join([src_leg] + local_stages + [dst_leg])
 
     def nested_ssh_cmd(remote: Remote) -> str:
@@ -774,7 +771,7 @@ def _prepare_zfs_send_receive(
     if r2r_mode == "push":
         # Example: ssh alice@src.example.com "sh -c 'zfs send ... | ssh bob@dst.example.com zfs receive ...'"
         dst_pipe = dst_pipe if same_remote else shlex.quote(dst_pipe)
-        outer_ssh_cmd: str = src_ssh_cmd
+        outer_ssh_cmd: tuple[str, ...] = src_ssh_cmd
         r2r_cmd: str = f"{src_pipe} | {nested_ssh_cmd(dst)} {dst_pipe}"
     else:
         assert r2r_mode == "pull", r2r_mode
@@ -783,7 +780,7 @@ def _prepare_zfs_send_receive(
         outer_ssh_cmd = dst_ssh_cmd
         r2r_cmd = f"{nested_ssh_cmd(src)} {src_pipe} | {dst_pipe}"
     r2r_cmd = shlex.quote(p.shell_program + " -c " + shlex.quote(r2r_cmd))
-    return f"{outer_ssh_cmd} {r2r_cmd}"
+    return " ".join(outer_ssh_cmd + (r2r_cmd,))
 
 
 def _run_zfs_send_receive(
@@ -806,8 +803,8 @@ def _run_zfs_send_receive(
     src_conn_pool: ConnectionPool = p.connection_pools[p.src.location].pool(conn_pool_name)
     dst_conn_pool: ConnectionPool = p.connection_pools[p.dst.location].pool(conn_pool_name)
     with src_conn_pool.connection() as src_conn, dst_conn_pool.connection() as dst_conn:
-        src_ssh_cmd: str = " ".join(src_conn.ssh_cmd_quoted)
-        dst_ssh_cmd: str = " ".join(dst_conn.ssh_cmd_quoted)
+        src_ssh_cmd: tuple[str, ...] = src_conn.ssh_cmd_quoted
+        dst_ssh_cmd: tuple[str, ...] = dst_conn.ssh_cmd_quoted
         cmd_str: str = _prepare_zfs_send_receive(
             job, src_dataset, send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human, src_ssh_cmd, dst_ssh_cmd
         )
