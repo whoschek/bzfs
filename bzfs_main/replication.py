@@ -655,49 +655,32 @@ def _prepare_zfs_send_receive(
     src, dst = p.src, p.dst
     send_cmd_str: str = shlex.join(send_cmd)
     recv_cmd_str: str = shlex.join(recv_cmd)
-    src_has_shell: bool = p.is_program_available("sh", "src")
-    dst_has_shell: bool = p.is_program_available("sh", "dst")
+    recordsize: int = abs(job.src_properties[src_dataset].recordsize)
     same_remote: bool = is_same_remote(src, dst)
     r2r_mode: str = p.r2r_mode
     assert r2r_mode in ("off", "pull", "push"), r2r_mode
 
-    if (
-        p.is_program_available("zstd", "src")
-        and p.is_program_available("zstd", "dst")
-        and src_has_shell
-        and dst_has_shell
-        and (r2r_mode == "off" or not same_remote)
-    ):
-        compress_cmd_: str = _compress_cmd(p, "src", size_estimate_bytes)
-        decompress_cmd_: str = _decompress_cmd(p, "dst", size_estimate_bytes)
-    else:  # no compression is used if source and destination do not both support compression
-        compress_cmd_, decompress_cmd_ = "cat", "cat"
+    is_large_enough: bool = p.no_estimate_send_size or size_estimate_bytes >= p.min_pipe_transfer_size
+    is_networked: bool = src.is_nonlocal or dst.is_nonlocal
+    src_has_shell: bool = p.is_program_available("sh", "src")
+    dst_has_shell: bool = p.is_program_available("sh", "dst")
+    use_src_pipeline: bool = src_has_shell and (r2r_mode == "off" or not same_remote)
+    use_dst_pipeline: bool = dst_has_shell and (r2r_mode == "off" or not same_remote)
+    use_compression: bool = p.is_program_available("zstd", "src") and p.is_program_available("zstd", "dst")
+    use_compression = use_compression and is_large_enough and is_networked and use_src_pipeline and use_dst_pipeline
+    use_src_buffer: bool = is_large_enough and is_networked and use_src_pipeline and p.is_program_available("mbuffer", "src")
+    use_dst_buffer: bool = is_large_enough and is_networked and use_dst_pipeline and p.is_program_available("mbuffer", "dst")
+    use_local_buffer: bool = p.is_program_available("mbuffer", "local")
+    use_local_buffer = use_local_buffer and r2r_mode == "off" and is_large_enough and src.is_nonlocal and dst.is_nonlocal
 
-    recordsize: int = abs(job.src_properties[src_dataset].recordsize)
-    src_buffer: str = "cat"
-    if r2r_mode == "off" or (src_has_shell and not same_remote):
-        src_buffer = _mbuffer_cmd(p, "src", size_estimate_bytes, recordsize)
-    dst_buffer: str = "cat"
-    if r2r_mode == "off" or (dst_has_shell and not same_remote):
-        dst_buffer = _mbuffer_cmd(p, "dst", size_estimate_bytes, recordsize)
-    local_buffer: str = "cat"
-    if r2r_mode == "off":
-        local_buffer = _mbuffer_cmd(p, "local", size_estimate_bytes, recordsize)
-
-    pv_src_cmd: str = ""
-    pv_dst_cmd: str = ""
-    pv_loc_cmd: str = ""
-    if r2r_mode == "off":
+    pv_location: str | None = None
+    if r2r_mode == "off" and p.is_program_available("pv", "local"):
         if not src.ssh_user_host:
-            pv_src_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)
+            pv_location = "src"
         elif not dst.ssh_user_host:
-            pv_dst_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)
-        elif compress_cmd_ == "cat":
-            pv_loc_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)  # compression disabled
+            pv_location = "dst"
         else:
-            # pull-push mode with compression enabled: reporting "percent complete" isn't straightforward because
-            # localhost observes the compressed data instead of the uncompressed data, so we disable the progress bar.
-            pv_loc_cmd = _pv_cmd(job, "local", size_estimate_bytes, size_estimate_human, disable_progress_bar=True)
+            pv_location = "local"
 
     # assemble pipeline running on source leg
     src_stages: list[str] = []
@@ -713,15 +696,26 @@ def _prepare_zfs_send_receive(
         src_stages.append("(dd bs=64 count=1 2>/dev/null && false)")
     if job.inject_params.get("inject_src_pipe_garble", False):
         src_stages.append("gzip -1 -c -n")  # for testing; forward garbled bytes
-    src_stages += [stage for stage in [pv_src_cmd, compress_cmd_, src_buffer] if stage not in ("", "cat")]
+    if pv_location == "src":
+        src_stages.append(_pv_cmd(job, size_estimate_bytes, size_estimate_human))
+    if use_compression:
+        src_stages.append(_compress_cmd(p))
+    if use_src_buffer:
+        src_stages.append(_mbuffer_cmd(p, "src", recordsize))
     if job.inject_params.get("inject_src_send_error", False):
         send_cmd_str = f"{send_cmd_str} --injectedGarbageParameter"  # for testing; induce CLI parse error
     src_pipe: str = " | ".join([send_cmd_str] + src_stages)
-    if src_stages and p.src.ssh_user_host:
+    if len(src_stages) > 0 and src.ssh_user_host:
         src_pipe = p.shell_program + " -c " + dquote(src_pipe)
 
     # assemble pipeline running on destination leg
-    dst_stages: list[str] = [stage for stage in [dst_buffer, decompress_cmd_, pv_dst_cmd] if stage not in ("", "cat")]
+    dst_stages: list[str] = []
+    if use_dst_buffer:
+        dst_stages.append(_mbuffer_cmd(p, "dst", recordsize))
+    if use_compression:
+        dst_stages.append(_decompress_cmd(p))
+    if pv_location == "dst":
+        dst_stages.append(_pv_cmd(job, size_estimate_bytes, size_estimate_human))
     if job.inject_params.get("inject_dst_pipe_fail", False):
         # interrupt zfs receive for testing retry/resume; initially forward some bytes and then stop forwarding
         dst_stages.append(f"dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES} 2>/dev/null")
@@ -730,7 +724,7 @@ def _prepare_zfs_send_receive(
     if job.inject_params.get("inject_dst_receive_error", False):
         recv_cmd_str = f"{recv_cmd_str} --injectedGarbageParameter"  # for testing; induce CLI parse error
     dst_pipe: str = " | ".join(dst_stages + [recv_cmd_str])
-    if dst_stages and p.dst.ssh_user_host:
+    if len(dst_stages) > 0 and dst.ssh_user_host:
         dst_pipe = p.shell_program + " -c " + dquote(dst_pipe)
 
     if r2r_mode == "off":
@@ -742,10 +736,15 @@ def _prepare_zfs_send_receive(
             dst_pipe = recv_cmd_str
 
         # assemble pipeline running on middle leg between source and destination. only enabled for pull-push mode
-        local_stages: list[str] = [local_buffer]
-        if pv_loc_cmd not in ("", "cat"):
-            local_stages += [pv_loc_cmd, local_buffer]
-        local_stages = [stage for stage in local_stages if stage not in ("", "cat")]
+        local_stages: list[str] = []
+        if use_local_buffer:
+            local_stages.append(_mbuffer_cmd(p, "local", recordsize))
+        if pv_location == "local":
+            # pull-push mode with compression enabled: reporting "percent complete" isn't straightforward because
+            # localhost observes the compressed data instead of the uncompressed data, so we disable the progress bar.
+            local_stages.append(_pv_cmd(job, size_estimate_bytes, size_estimate_human, disable_progress_bar=use_compression))
+            if use_local_buffer:
+                local_stages.append(_mbuffer_cmd(p, "local", recordsize))
 
         src_leg: str = " ".join(src_ssh_cmd + (squote(src, src_pipe),))
         dst_leg: str = " ".join(dst_ssh_cmd + (squote(dst, dst_pipe),))
@@ -1001,87 +1000,56 @@ def _decode_resume_token(
     return decoded_src_snapshot
 
 
-def _mbuffer_cmd(p: Params, loc: str, size_estimate_bytes: int, recordsize: int) -> str:
-    """If mbuffer command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to smooth out
-    the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation."""
-    if (
-        (p.no_estimate_send_size or size_estimate_bytes >= p.min_pipe_transfer_size)
-        and (
-            (loc == "src" and (p.src.is_nonlocal or p.dst.is_nonlocal))
-            or (loc == "dst" and (p.src.is_nonlocal or p.dst.is_nonlocal))
-            or (loc == "local" and p.src.is_nonlocal and p.dst.is_nonlocal)
-        )
-        and p.is_program_available("mbuffer", loc)
-    ):
-        recordsize = max(recordsize, 2 * 1024 * 1024)
-        mbuffer_program_opts: list[str] = [p.mbuffer_program, "-s", str(recordsize)] + p.mbuffer_program_opts
-        if p.bwlimit:
-            mbuffer_program_opts += ["-R" if loc == "src" else "-r", p.bwlimit.upper()]
-        return shlex.join(mbuffer_program_opts)
-    else:
-        return "cat"
+def _mbuffer_cmd(p: Params, loc: str, recordsize: int) -> str:
+    """Use mbuffer in the network pipe between 'zfs send' and 'zfs receive' to smooth out the rate of data flow and prevent
+    bottlenecks caused by network latency or speed fluctuation."""
+    recordsize = max(recordsize, 2 * 1024 * 1024)
+    mbuffer_program_opts: list[str] = [p.mbuffer_program, "-s", str(recordsize)] + p.mbuffer_program_opts
+    if p.bwlimit:
+        mbuffer_program_opts += ["-R" if loc == "src" else "-r", p.bwlimit.upper()]
+    return shlex.join(mbuffer_program_opts)
 
 
-def _compress_cmd(p: Params, loc: str, size_estimate_bytes: int) -> str:
-    """If zstd command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to reduce network
-    bottlenecks by sending compressed data."""
-    if (
-        (p.no_estimate_send_size or size_estimate_bytes >= p.min_pipe_transfer_size)
-        and (p.src.is_nonlocal or p.dst.is_nonlocal)
-        and p.is_program_available("zstd", loc)
-    ):
-        return shlex.join([p.compression_program, "-c"] + p.compression_program_opts)
-    else:
-        return "cat"
+def _compress_cmd(p: Params) -> str:
+    """Use compression (e.g. zstd) in the network pipe between 'zfs send' and 'zfs receive' to reduce network bottlenecks."""
+    return shlex.join([p.compression_program, "-c"] + p.compression_program_opts)
 
 
-def _decompress_cmd(p: Params, loc: str, size_estimate_bytes: int) -> str:
-    """Returns decompression command for network pipe if remote supports it."""
-    if (
-        (p.no_estimate_send_size or size_estimate_bytes >= p.min_pipe_transfer_size)
-        and (p.src.is_nonlocal or p.dst.is_nonlocal)
-        and p.is_program_available("zstd", loc)
-    ):
-        return shlex.join([p.compression_program, "-dc"])
-    else:
-        return "cat"
+def _decompress_cmd(p: Params) -> str:
+    """Formats the decompression half of an enabled compression pair."""
+    return shlex.join([p.compression_program, "-dc"])
 
 
 _WORKER_THREAD_NUMBER_REGEX: Final[re.Pattern[str]] = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
 
 
-def _pv_cmd(
-    job: Job, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar: bool = False
-) -> str:
-    """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'; Progress can be
-    viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current/current.pv or similar."""
+def _pv_cmd(job: Job, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar: bool = False) -> str:
+    """`pv` monitors the progress of data transfer from 'zfs send' to 'zfs receive'; Progress can be viewed via
+    `tail -f $pv_log_file` aka `tail -f ~/bzfs-logs/current/current.pv` or similar."""
     p = job.params
-    if p.is_program_available("pv", loc):
-        size: str = f"--size={size_estimate_bytes}"
-        if disable_progress_bar or p.no_estimate_send_size:
-            size = ""
-        pv_log_file: str = p.log_params.pv_log_file
-        thread_name: str = threading.current_thread().name
-        if match := _WORKER_THREAD_NUMBER_REGEX.fullmatch(thread_name):
-            worker = int(match.group(1))
-            if worker > 0:
-                pv_log_file += PV_FILE_THREAD_SEPARATOR + f"{worker:04}"
-        if job.is_first_replication_task.get_and_set(False):
-            if not p.log_params.quiet:
-                job.progress_reporter.start()
-            job.replication_start_time_nanos = time.monotonic_ns()
+    size: str = f"--size={size_estimate_bytes}"
+    if disable_progress_bar or p.no_estimate_send_size:
+        size = ""
+    pv_log_file: str = p.log_params.pv_log_file
+    thread_name: str = threading.current_thread().name
+    if match := _WORKER_THREAD_NUMBER_REGEX.fullmatch(thread_name):
+        worker = int(match.group(1))
+        if worker > 0:
+            pv_log_file += PV_FILE_THREAD_SEPARATOR + f"{worker:04}"
+    if job.is_first_replication_task.get_and_set(False):
         if not p.log_params.quiet:
-            with open_nofollow(pv_log_file, mode="a", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
-                fd.write("\n")  # mark start of new stream so ProgressReporter can reliably reset bytes_in_flight
-            job.progress_reporter.enqueue_pv_log_file(pv_log_file)
-        pv_program_opts: list[str] = [p.pv_program] + p.pv_program_opts
-        if job.progress_update_intervals is not None:  # for testing
-            pv_program_opts += [f"--interval={job.progress_update_intervals[0]}"]
-        pv_program_opts += ["--force", f"--name={size_estimate_human}"]
-        pv_program_opts += [size] if size else []
-        return f"LC_ALL=C {shlex.join(pv_program_opts)} 2>> {shlex.quote(pv_log_file)}"
-    else:
-        return "cat"
+            job.progress_reporter.start()
+        job.replication_start_time_nanos = time.monotonic_ns()
+    if not p.log_params.quiet:
+        with open_nofollow(pv_log_file, mode="a", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
+            fd.write("\n")  # mark start of new stream so ProgressReporter can reliably reset bytes_in_flight
+        job.progress_reporter.enqueue_pv_log_file(pv_log_file)
+    pv_program_opts: list[str] = [p.pv_program] + p.pv_program_opts
+    if job.progress_update_intervals is not None:  # for testing
+        pv_program_opts += [f"--interval={job.progress_update_intervals[0]}"]
+    pv_program_opts += ["--force", f"--name={size_estimate_human}"]
+    pv_program_opts += [size] if size else []
+    return f"LC_ALL=C {shlex.join(pv_program_opts)} 2>> {shlex.quote(pv_log_file)}"
 
 
 def delete_snapshots(job: Job, remote: Remote, dataset: str, snapshot_tags: list[str]) -> None:

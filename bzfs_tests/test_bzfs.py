@@ -205,8 +205,7 @@ class TestHelperFunctions(AbstractTestCase):
         args = self.argparser_parse_args(args=["src", "dst", "--quiet"])
         job = bzfs.Job()
         job.params = self.make_params(args=args, log_params=LogParams(args))
-        job.params.available_programs = {"src": {"pv": "pv"}}
-        self.assertNotEqual("cat", _pv_cmd(job, "src", 1024 * 1024, "foo"))
+        self.assertIn("--name=foo", _pv_cmd(job, 1024 * 1024, "foo"))
 
     @staticmethod
     def root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(  # compare faster algos to this baseline impl

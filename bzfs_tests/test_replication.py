@@ -136,11 +136,13 @@ def _prepare_job(
             return True
 
     job = _make_job(
-        src=MagicMock(ssh_user_host=src_host, ssh_port=None, ssh_config_file=None),
-        dst=MagicMock(ssh_user_host=dst_host, ssh_port=None, ssh_config_file=None),
+        src=MagicMock(ssh_user_host=src_host, ssh_port=None, ssh_config_file=None, is_nonlocal=bool(src_host)),
+        dst=MagicMock(ssh_user_host=dst_host, ssh_port=None, ssh_config_file=None, is_nonlocal=bool(dst_host)),
         shell_program="sh",
         r2r_mode="off",
         r2r_mode_requested="off",
+        min_pipe_transfer_size=0,
+        no_estimate_send_size=False,
         is_program_available=MagicMock(side_effect=is_program_available),
     )
     job.src_properties = {"pool/ds": MagicMock(recordsize=1)}
@@ -236,7 +238,7 @@ class TestQuoting(AbstractTestCase):
         use a nested helper (with `+=`) instead of a lambda for mypy-friendly mutation and clarity.
         """
         # both legs remote so _dquote is exercised for src and dst
-        job = _prepare_job(src_host="src", dst_host="dst", is_program_available=lambda _p, _l: True)
+        job = _prepare_job(src_host="src", dst_host="dst", is_program_available=lambda program, _loc: program != "zstd")
         # make sure options end with a backslash
         job.params.pv_program = "pv"
         job.params.pv_program_opts = ["Y\\"]
@@ -248,15 +250,13 @@ class TestQuoting(AbstractTestCase):
 
         seen: list[str] = []
         with (
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch(  # force mbuffer to be present on all legs and include our trailing-backslash opt
                 "bzfs_main.replication._mbuffer_cmd",
-                side_effect=lambda p, loc, _sz, _rec: shlex.join([p.mbuffer_program, "-s", "1"] + p.mbuffer_program_opts),
+                side_effect=lambda p, loc, _rec: shlex.join([p.mbuffer_program, "-s", "1"] + p.mbuffer_program_opts),
             ),
             patch(  # force pv to be present and include our backslashy opts + backslashy log path
                 "bzfs_main.replication._pv_cmd",
-                side_effect=lambda j, loc, _sz, _human, disable_progress_bar=False: f"LC_ALL=C {shlex.join([j.params.pv_program] + j.params.pv_program_opts)} 2>> {shlex.quote(j.params.log_params.pv_log_file)}",
+                side_effect=lambda j, _sz, _human, disable_progress_bar=False: f"LC_ALL=C {shlex.join([j.params.pv_program] + j.params.pv_program_opts)} 2>> {shlex.quote(j.params.log_params.pv_log_file)}",
             ),
             patch(  # keep squote a no-op so we see the raw strings
                 "bzfs_main.replication.squote", side_effect=lambda _r, s: s
@@ -391,12 +391,9 @@ class TestReplication(AbstractTestCase):
             ("pull", "DST 'dst option' "),
         ]:
             with self.subTest(mode=mode):
-                job = _prepare_r2r_job(mode, 1, zstd_available=False, use_ssh_options=False)
-                with (
-                    patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-                    patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-                ):
-                    cmd = _prepare_pipeline(job, src_ssh_cmd=src_ssh_cmd, dst_ssh_cmd=dst_ssh_cmd)
+                job = _prepare_r2r_job(mode, 2, zstd_available=False, use_ssh_options=False)
+                job.params.is_program_available.side_effect = lambda program, _loc: program == "sh"
+                cmd = _prepare_pipeline(job, src_ssh_cmd=src_ssh_cmd, dst_ssh_cmd=dst_ssh_cmd)
                 self.assertTrue(cmd.startswith(expected_prefix), cmd)
                 self.assertEqual(mode == "off", " | DST 'dst option' " in cmd)
 
@@ -550,7 +547,8 @@ class TestReplication(AbstractTestCase):
         self.assertEqual("0B".rjust(7), _format_size(0))
         self.assertEqual("1MiB".rjust(7), _format_size(1048576))
 
-    def test_mbuffer_cmd_no_mbuffer(self) -> None:
+    def test_mbuffer_cmd_formats_command_even_if_unavailable(self) -> None:
+        """Verifies mbuffer command formatting is independent of feature-selection policy."""
         p = _make_params(
             min_pipe_transfer_size=1,
             src=MagicMock(is_nonlocal=True),
@@ -560,7 +558,7 @@ class TestReplication(AbstractTestCase):
             mbuffer_program_opts=["-O", "localhost:0"],
             no_estimate_send_size=False,
         )
-        self.assertEqual("cat", _mbuffer_cmd(p, "src", 2, 1024))
+        self.assertEqual("mbuffer -s 2097152 -O localhost:0", _mbuffer_cmd(p, "src", 1024))
 
     def test_mbuffer_cmd_uses_bwlimit_for_send_and_receive(self) -> None:
         """Verifies mbuffer uses the correct bwlimit flag for src and dst legs."""
@@ -581,9 +579,10 @@ class TestReplication(AbstractTestCase):
                     bwlimit="20m",
                     no_estimate_send_size=False,
                 )
-                self.assertEqual(f"mbuffer -s 2097152 -m 8M {rate_flag} 20M", _mbuffer_cmd(p, loc, 2, 4096))
+                self.assertEqual(f"mbuffer -s 2097152 -m 8M {rate_flag} 20M", _mbuffer_cmd(p, loc, 4096))
 
-    def test_compress_cmd_returns_cat(self) -> None:
+    def test_compress_cmd_formats_command_even_if_unavailable(self) -> None:
+        """Verifies compression command formatting is independent of feature-selection policy."""
         p = _make_params(
             min_pipe_transfer_size=10,
             src=MagicMock(is_nonlocal=False),
@@ -593,7 +592,7 @@ class TestReplication(AbstractTestCase):
             compression_program_opts=["-3"],
             no_estimate_send_size=False,
         )
-        self.assertEqual("cat", _compress_cmd(p, "src", 20))
+        self.assertEqual("zstd -c -3", _compress_cmd(p))
 
     def test_compress_cmd_uses_zstd(self) -> None:
         p = _make_params(
@@ -605,9 +604,10 @@ class TestReplication(AbstractTestCase):
             compression_program_opts=["-3"],
             no_estimate_send_size=False,
         )
-        self.assertEqual("zstd -c -3", _compress_cmd(p, "src", 20))
+        self.assertEqual("zstd -c -3", _compress_cmd(p))
 
-    def test_decompress_cmd_returns_cat(self) -> None:
+    def test_decompress_cmd_formats_command_even_if_unavailable(self) -> None:
+        """Verifies decompression formatting is independent of feature-selection policy."""
         p = _make_params(
             min_pipe_transfer_size=10,
             src=MagicMock(is_nonlocal=False),
@@ -616,7 +616,7 @@ class TestReplication(AbstractTestCase):
             compression_program="zstd",
             no_estimate_send_size=False,
         )
-        self.assertEqual("cat", _decompress_cmd(p, "src", 20))
+        self.assertEqual("zstd -dc", _decompress_cmd(p))
 
     def test_decompress_cmd_uses_zstd(self) -> None:
         p = _make_params(
@@ -627,7 +627,7 @@ class TestReplication(AbstractTestCase):
             compression_program="zstd",
             no_estimate_send_size=False,
         )
-        self.assertEqual("zstd -dc", _decompress_cmd(p, "src", 20))
+        self.assertEqual("zstd -dc", _decompress_cmd(p))
 
     def test_pv_cmd_builds_command(self) -> None:
         log_params = MagicMock(pv_log_file="/tmp/pv.log")
@@ -646,13 +646,24 @@ class TestReplication(AbstractTestCase):
             progress_reporter=MagicMock(),
             progress_update_intervals=None,
         )
-        result = _pv_cmd(job, "src", 1048576, "1MB")
+        result = _pv_cmd(job, 1048576, "1MB")
         self.assertEqual("LC_ALL=C pv -L1 --force --name=1MB --size=1048576 2>> /tmp/pv.log", result)
 
-    def test_pv_cmd_returns_cat_when_missing(self) -> None:
-        p = _make_params(is_program_available=MagicMock(return_value=False), no_estimate_send_size=False)
-        job = MagicMock(params=p)
-        self.assertEqual("cat", _pv_cmd(job, "src", 1, "1B"))
+    def test_pv_cmd_formats_command_even_if_unavailable(self) -> None:
+        """Verifies pv command formatting is independent of feature-selection policy."""
+        p = _make_params(
+            is_program_available=MagicMock(return_value=False),
+            pv_program="pv",
+            pv_program_opts=[],
+            log_params=MagicMock(pv_log_file="/tmp/pv.log", quiet=True),
+            no_estimate_send_size=False,
+        )
+        job = MagicMock(
+            params=p,
+            is_first_replication_task=SynchronizedBool(False),
+            progress_update_intervals=None,
+        )
+        self.assertEqual("LC_ALL=C pv --force --name=1B --size=1 2>> /tmp/pv.log", _pv_cmd(job, 1, "1B"))
 
     def test_delete_snapshot_cmd(self) -> None:
         p = _make_params(
@@ -916,14 +927,11 @@ class TestReplication(AbstractTestCase):
 
     def test_prepare_src_local_pv(self) -> None:
         def avail(prog: str, loc: str) -> bool:
-            return prog == "sh"
+            return prog in {"sh", "pv"}
 
         job = _prepare_job(dst_host="host", is_program_available=avail)
         with (
             patch("bzfs_main.replication._pv_cmd") as pv,
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -934,14 +942,11 @@ class TestReplication(AbstractTestCase):
 
     def test_prepare_dst_local_pv(self) -> None:
         def avail(prog: str, loc: str) -> bool:
-            return prog == "sh"
+            return prog in {"sh", "pv"}
 
         job = _prepare_job(src_host="host", is_program_available=avail)
         with (
             patch("bzfs_main.replication._pv_cmd") as pv,
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -950,10 +955,13 @@ class TestReplication(AbstractTestCase):
         self.assertEqual("zfs send | pv_dst | zfs recv", cmd)
 
     def test_prepare_local_pv_with_compress_disabled_progress(self) -> None:
-        job = _prepare_job(src_host="src", dst_host="dst", is_program_available=lambda _p, _l: True)
+        job = _prepare_job(
+            src_host="src",
+            dst_host="dst",
+            is_program_available=lambda program, _loc: program in {"sh", "pv", "zstd"},
+        )
         with (
             patch("bzfs_main.replication._pv_cmd") as pv,
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
             patch("bzfs_main.replication._compress_cmd", return_value="comp"),
             patch("bzfs_main.replication._decompress_cmd", return_value="decomp"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
@@ -966,14 +974,11 @@ class TestReplication(AbstractTestCase):
 
     def test_prepare_local_pv_without_compress_no_disable(self) -> None:
         def avail(prog: str, loc: str) -> bool:
-            return prog == "sh"
+            return prog in {"sh", "pv"}
 
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=avail)
         with (
             patch("bzfs_main.replication._pv_cmd") as pv,
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -984,34 +989,31 @@ class TestReplication(AbstractTestCase):
 
     def test_prepare_local_buffer_constructs_pipe(self) -> None:
         def avail(prog: str, loc: str) -> bool:
-            return prog == "sh"
+            return prog == "sh" or (prog in {"mbuffer", "pv"} and loc == "local")
 
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=avail)
 
         def mbuf(_p: MagicMock, loc: str, *_a: object) -> str:
-            return "LBUF" if loc == "local" else "cat"
+            self.assertEqual("local", loc)
+            return "LBUF"
 
         with (
             patch("bzfs_main.replication._pv_cmd", return_value="PV"),
             patch("bzfs_main.replication._mbuffer_cmd", side_effect=mbuf),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
             cmd = _prepare_pipeline(job)
         self.assertEqual("zfs send | LBUF | PV | LBUF | zfs recv", cmd)
 
-    def test_prepare_local_buffer_cat_omits_pipe(self) -> None:
+    def test_prepare_omits_unavailable_local_tools(self) -> None:
+        """Verifies unavailable relay tools add no pipeline stages."""
+
         def avail(prog: str, loc: str) -> bool:
             return prog == "sh"
 
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=avail)
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1020,18 +1022,16 @@ class TestReplication(AbstractTestCase):
 
     def test_prepare_local_buffer_without_pv_uses_single_buffer(self) -> None:
         def avail(prog: str, loc: str) -> bool:
-            return prog == "sh"
+            return prog == "sh" or (prog == "mbuffer" and loc == "local")
 
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=avail)
 
         def mbuf(_p: MagicMock, loc: str, *_a: object) -> str:
-            return "LBUF" if loc == "local" else "cat"
+            self.assertEqual("local", loc)
+            return "LBUF"
 
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
             patch("bzfs_main.replication._mbuffer_cmd", side_effect=mbuf),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1060,7 +1060,7 @@ class TestReplication(AbstractTestCase):
             patch("bzfs_main.replication._pv_cmd", return_value="PV"),
             patch(
                 "bzfs_main.replication._mbuffer_cmd",
-                side_effect=lambda _p, loc, _size, _recordsize: f"{loc.upper()}BUF",
+                side_effect=lambda _p, loc, _recordsize: f"{loc.upper()}BUF",
             ),
             patch("bzfs_main.replication._compress_cmd", return_value="COMPRESS"),
             patch("bzfs_main.replication._decompress_cmd", return_value="DECOMPRESS"),
@@ -1088,10 +1088,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_src_pipe_fail"] = True
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1107,10 +1103,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_src_pipe_fail_pool/ds"] = True
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1126,10 +1118,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_src_pipe_fail_offset"] = 123
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1146,10 +1134,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_src_pipe_garble"] = True
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1163,10 +1147,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_src_send_error"] = True
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1180,10 +1160,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_dst_pipe_fail"] = True
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1197,10 +1173,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_dst_pipe_garble"] = True
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1214,10 +1186,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(is_program_available=avail)
         job.inject_params["inject_dst_receive_error"] = True
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1226,14 +1194,15 @@ class TestReplication(AbstractTestCase):
 
     def test_prepare_src_buffer_added(self) -> None:
         def mbuf(_p: MagicMock, loc: str, *_a: object) -> str:
-            return "SRCBUF" if loc == "src" else "cat"
+            self.assertEqual("src", loc)
+            return "SRCBUF"
 
-        job = _prepare_job(is_program_available=lambda prog, loc: prog == "sh")
+        job = _prepare_job(
+            dst_host="dst",
+            is_program_available=lambda program, loc: program == "sh" or (program == "mbuffer" and loc == "src"),
+        )
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
             patch("bzfs_main.replication._mbuffer_cmd", side_effect=mbuf),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1243,14 +1212,15 @@ class TestReplication(AbstractTestCase):
 
     def test_prepare_dst_buffer_added(self) -> None:
         def mbuf(_p: MagicMock, loc: str, *_a: object) -> str:
-            return "DSTBUF" if loc == "dst" else "cat"
+            self.assertEqual("dst", loc)
+            return "DSTBUF"
 
-        job = _prepare_job(is_program_available=lambda prog, loc: prog == "sh")
+        job = _prepare_job(
+            src_host="src",
+            is_program_available=lambda program, loc: program == "sh" or (program == "mbuffer" and loc == "dst"),
+        )
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
             patch("bzfs_main.replication._mbuffer_cmd", side_effect=mbuf),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1259,10 +1229,8 @@ class TestReplication(AbstractTestCase):
         self.assertTrue(cmd.endswith("zfs recv"))
 
     def test_prepare_compression_commands_included(self) -> None:
-        job = _prepare_job(is_program_available=lambda prog, loc: True)
+        job = _prepare_job(dst_host="dst", is_program_available=lambda program, _loc: program in {"sh", "zstd"})
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
             patch("bzfs_main.replication._compress_cmd", return_value="COMP") as comp,
             patch("bzfs_main.replication._decompress_cmd", return_value="DECOMP") as decomp,
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
@@ -1282,8 +1250,6 @@ class TestReplication(AbstractTestCase):
 
         job = _prepare_job(is_program_available=avail)
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
             patch("bzfs_main.replication._compress_cmd") as comp,
             patch("bzfs_main.replication._decompress_cmd") as decomp,
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
@@ -1304,8 +1270,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=avail)
 
         with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
             patch("bzfs_main.replication._compress_cmd", return_value="COMP"),
             patch("bzfs_main.replication._decompress_cmd", return_value="DECOMP"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
@@ -1321,9 +1285,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(is_program_available=avail)
         with (
             patch("bzfs_main.replication._pv_cmd", return_value="pv"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="BUF"),
-            patch("bzfs_main.replication._compress_cmd", return_value="comp"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="decomp"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1338,9 +1299,6 @@ class TestReplication(AbstractTestCase):
         job = _prepare_job(is_program_available=avail)
         with (
             patch("bzfs_main.replication._pv_cmd", return_value="pv"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="BUF"),
-            patch("bzfs_main.replication._compress_cmd", return_value="comp"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="decomp"),
             patch("bzfs_main.replication.squote", side_effect=lambda _r, s: s),
             patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
         ):
@@ -1349,26 +1307,12 @@ class TestReplication(AbstractTestCase):
 
     def test_prepare_src_remote_quoted(self) -> None:
         job = _prepare_job(src_host="host", is_program_available=lambda prog, loc: prog == "sh")
-        with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
-            patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
-        ):
-            cmd = _prepare_pipeline(job)
+        cmd = _prepare_pipeline(job)
         self.assertEqual("'zfs send' | zfs recv", cmd)
 
     def test_prepare_dst_remote_quoted(self) -> None:
         job = _prepare_job(dst_host="host", is_program_available=lambda prog, loc: prog == "sh")
-        with (
-            patch("bzfs_main.replication._pv_cmd", return_value="cat"),
-            patch("bzfs_main.replication._mbuffer_cmd", return_value="cat"),
-            patch("bzfs_main.replication._compress_cmd", return_value="cat"),
-            patch("bzfs_main.replication._decompress_cmd", return_value="cat"),
-            patch("bzfs_main.replication.dquote", side_effect=lambda s: s),
-        ):
-            cmd = _prepare_pipeline(job)
+        cmd = _prepare_pipeline(job)
         self.assertEqual("zfs send | 'zfs recv'", cmd)
 
     def test_prepare_r2r_pipeline_components(self) -> None:
