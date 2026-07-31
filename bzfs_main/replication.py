@@ -673,7 +673,7 @@ def _prepare_zfs_send_receive(
     use_local_buffer: bool = p.is_program_available("mbuffer", "local")
     use_local_buffer = use_local_buffer and r2r_mode == "off" and is_large_enough and src.is_nonlocal and dst.is_nonlocal
 
-    pv_location: str | None = None
+    pv_location: str = ""
     if r2r_mode == "off" and p.is_program_available("pv", "local"):
         if not src.ssh_user_host:
             pv_location = "src"
@@ -756,7 +756,8 @@ def _prepare_zfs_send_receive(
             # Perf: use local replication if initiator sees src+dst have same user@host, port and ssh configfile.
             # Example: ssh alice@src.example.com "sh -c 'zfs send <src_dataset> | zfs receive <dst_dataset>'"
             return ""
-        cmd: list[str] = [p.ssh_program] + list(remote.ssh_extra_opts)
+        cmd: list[str] = [p.ssh_program]
+        cmd += remote.ssh_extra_opts
         if remote.ssh_config_file:
             cmd += ["-F", remote.ssh_config_file]
         if remote.ssh_cipher:

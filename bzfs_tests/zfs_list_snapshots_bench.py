@@ -91,7 +91,7 @@ ROOT_DATASET/
 
 - `fs-mounted`: ZFS filesystems that remain mounted.
 - `fs-unmounted`: separate ZFS filesystems that remain unmounted with `mountpoint=none`.
-- `zvol`: ZFS volumes, sparse with `volmode=none` and no device nodes.
+- `zvol`: ZFS volumes with `volmode=none`.
 
 Setup establishes each workload's permanent state, and validation checks that mounted and unmounted datasets remain in their
 expected states before a run.
@@ -209,7 +209,7 @@ Every run creates a timestamped directory (below --results) containing:
     )
     parser.add_argument(
         "--zfs_snapshot_list_batch_time_us",
-        default="10000",
+        default=10000,
         type=int,
         metavar="INT",
         help=(
@@ -219,7 +219,7 @@ Every run creates a timestamped directory (below --results) containing:
     )
     parser.add_argument(
         "--zfs_snapshot_list_batch_size",
-        default="1024",
+        default=1024,
         type=int,
         metavar="INT",
         help=(
