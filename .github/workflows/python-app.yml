@@ -125,11 +125,11 @@ jobs:
       fail-fast: false
     timeout-minutes: 200
     steps:
-      - uses: &actions_checkout actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # aka v6.0.2
+      - uses: &actions_checkout actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # aka v7.0.1
         with:
           persist-credentials: false
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # aka v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # aka v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
       - name: make_release
@@ -147,7 +147,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Run zizmor check
-        uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # aka v0.5.7
+        uses: zizmorcore/zizmor-action@6fc4b006235f201fdab3722e17240ab420d580e5 # aka v0.6.1
         with:
           version: "1.26.1"
           advanced-security: false
@@ -671,7 +671,7 @@ jobs:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@4441bea20b31bfa77329a5af583199362489567e # aka v1.4.9; see https://github.com/vmactions/freebsd-vm
+        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@77ed28d336d03fe19a3f4f7266c1d2c4714dd79d # aka v1.4.9; see https://github.com/vmactions/freebsd-vm
         with:
           release: "15.1"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"

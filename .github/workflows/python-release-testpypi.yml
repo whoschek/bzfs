@@ -25,12 +25,12 @@ jobs:
     permissions:
       id-token: write # for PyPI's trusted publishing
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # aka v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # aka v7.0.1
         with:
           persist-credentials: false
           ref: ${{ inputs.git_ref }}
       - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # aka v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # aka v7.0.0
         with:
           python-version: 3.14
       - name: make_release
