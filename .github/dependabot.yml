@@ -16,6 +16,8 @@ updates:
       - "requirements*.txt"
     allow:
       - dependency-type: direct
+    ignore:
+      - dependency-name: "uv-build"
     commit-message:
       prefix: chore
       prefix-development: chore
