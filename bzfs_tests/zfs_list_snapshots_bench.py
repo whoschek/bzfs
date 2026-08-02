@@ -53,6 +53,7 @@ from typing import (
 
 _MOUNTPOINT_ROOT: Final = Path("/mnt") / Path(__file__).stem
 _MODES: Final = ("fs-mounted", "fs-unmounted", "zvol")
+_ENCRYPTION_PASSPHRASE: Final = "zfs-list-snapshots-bench"
 _LOGGER: Final = logging.getLogger(__name__)
 
 
@@ -127,6 +128,12 @@ Every run creates a timestamped directory (below --results) containing:
             "ZFS filesystem that contains all benchmark datasets. Setup recursively destroys this exact dataset and "
             "all descendants if it exists, then recreates the requested workload. (default: %(default)s)\n\n"
         ),
+    )
+    parser.add_argument(
+        "--encryption",
+        choices=("on", "off"),
+        default="off",
+        help=("Whether every workload dataset shall be encrypted. (default: %(default)s)\n\n"),
     )
     parser.add_argument(
         "--dataset-count",
@@ -317,6 +324,7 @@ class _Config:
     """Validated immutable options."""
 
     root_dataset: str
+    encrypted: bool
     dataset_count: int
     snapshots_per_dataset: int
     create_type: str
@@ -392,6 +400,20 @@ class _Benchmark:
         dataset_type = self._output([self._zfs, "list", "-H", "-o", "type", root])
         if dataset_type != "filesystem":
             raise RuntimeError(f"Root dataset is not a filesystem: {root}")
+        encryption = self._zfs_get_value("encryption", root)
+        if config.encrypted:
+            if encryption == "off":
+                raise RuntimeError(f"Root dataset is unencrypted; expected encrypted: {root}")
+        elif encryption != "off":
+            raise RuntimeError(f"Root dataset is encrypted; expected unencrypted: {root}")
+        if "fs-mounted" in config.modes:
+            command = [self._zfs, "mount"]
+            passphrase = None
+            if config.encrypted:
+                command.append("-l")
+                passphrase = _ENCRYPTION_PASSPHRASE + "\n"
+            command += ["-R", root]
+            self._run(command, privileged=True, input_text=passphrase)
         filesystems = {mode: self._validate_filesystems(mode) for mode in config.modes if mode.startswith("fs-")}
         zvols: list[str] = []
         if "zvol" in config.modes:
@@ -531,10 +553,13 @@ class _Benchmark:
             _log(f"Recursively destroying existing root dataset {root}")
             self._run([self._zfs, "destroy", "-r", "-v", root], privileged=True)
         _log(f"Creating root filesystem {root}")
-        self._run(
-            [self._zfs, "create", "-o", "canmount=off", "-o", "mountpoint=none", root],
-            privileged=True,
-        )
+        command = [self._zfs, "create"]
+        passphrase = None
+        if self._config.encrypted:
+            command += ["-o", "encryption=on", "-o", "keyformat=passphrase", "-o", "keylocation=prompt"]
+            passphrase = _ENCRYPTION_PASSPHRASE + "\n"
+        command += ["-o", "canmount=off", "-o", "mountpoint=none", root]
+        self._run(command, privileged=True, input_text=passphrase)
 
     def _setup_filesystems(self, mode: str) -> list[str]:
         """Create one mode-specific filesystem tree in its permanent mount state."""
@@ -634,6 +659,7 @@ class _Benchmark:
             f"- List types: `{self._config.list_type}`",
             f"- Columns: `{self._config.columns}`",
             f"- Sort columns: `{self._config.sort_columns}`",
+            f"- Encrypted: `{self._config.encrypted}`",
             f"- zfs_snapshot_list_batch_time_us: `{self._config.zfs_snapshot_list_batch_time_us}`",
             f"- zfs_snapshot_list_batch_size `{self._config.zfs_snapshot_list_batch_size}`",
             "",
@@ -703,13 +729,14 @@ class _Benchmark:
         capture: bool = False,
         check: bool = True,
         quiet: bool = False,
+        input_text: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         full_command = list(command)
         if privileged and self._sudo:
             full_command = [self._sudo, "-n", *full_command]
         stdout = subprocess.PIPE if capture else subprocess.DEVNULL if quiet else None
         stderr = subprocess.PIPE if capture else subprocess.DEVNULL if quiet else None
-        return subprocess.run(full_command, text=True, stdout=stdout, stderr=stderr, check=check)
+        return subprocess.run(full_command, text=True, stdout=stdout, stderr=stderr, check=check, input=input_text)
 
     def _output(self, command: Sequence[str]) -> str:
         return self._run(command, capture=True).stdout.strip()
@@ -841,6 +868,7 @@ def _parse_args(argv: Sequence[str]) -> tuple[str, _Config]:
         parser.error("--columns must not be empty")
     config = _Config(
         root_dataset=args.root_dataset,
+        encrypted=args.encryption == "on",
         dataset_count=dataset_count,
         snapshots_per_dataset=snapshots,
         create_type=args.create_type,
