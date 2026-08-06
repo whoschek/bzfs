@@ -34,6 +34,7 @@ from collections import (
     defaultdict,
 )
 from collections.abc import (
+    Iterator,
     Sequence,
 )
 from dataclasses import (
@@ -53,6 +54,7 @@ from typing import (
 
 _MOUNTPOINT_ROOT: Final = Path("/mnt") / Path(__file__).stem
 _MODES: Final = ("fs-mounted", "fs-unmounted", "zvol")
+_MAX_DATASETS_PER_VALIDATION_COMMAND: Final = 64
 _ENCRYPTION_PASSPHRASE: Final = "zfs-list-snapshots-bench"
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -192,8 +194,22 @@ Every run creates a timestamped directory (below --results) containing:
         default="1,2,4,8",
         metavar="INTS",
         help=(
-            "Number of concurrent processes to benchmark. Each process runs one non-recursive `zfs list` for "
-            "one dataset. Separate multiple positive integers with commas. (default: %(default)s)\n\n"
+            "Number of concurrent child processes to benchmark. Each child runs one non-recursive `zfs list` with "
+            "the number of datasets selected by --datasets-per-process. Separate multiple positive integers "
+            "with commas. (default: %(default)s)\n\n"
+        ),
+    )
+    parser.add_argument(
+        "--datasets-per-process",
+        default=1,
+        type=int,
+        metavar="INT",
+        help=(
+            "Number of datasets passed to each `zfs list` child process via `xargs -n`. Consider this option if "
+            "--snapshots-per-dataset is so small that process startup costs would significantly perturb the measurement. "
+            "For example, consider using --datasets-per-process=128 with --snapshots-per-dataset=1 --dataset-count=2048. "
+            "For every selected --nprocs value, --dataset-count must be evenly divisible by the product of --nprocs and "
+            "--datasets-per-process. (default: %(default)s)\n\n"
         ),
     )
     parser.add_argument(
@@ -332,6 +348,7 @@ class _Config:
     no_create_recursive: bool
     zvol_size: int
     nprocs: tuple[int, ...]
+    datasets_per_process: int
     warmup_trials: int
     measurement_trials: int
     columns: str
@@ -420,8 +437,7 @@ class _Benchmark:
             expected = self._zvol_names()
             zvols = self._zfs_names("volume", self._zvol_root())
             self._validate_names("zvol", expected, zvols)
-            for dataset in zvols:
-                self._validate_object_counts(dataset)
+            self._validate_object_counts(zvols)
         _log("Validated requested benchmark workloads")
         return filesystems, zvols
 
@@ -498,7 +514,8 @@ class _Benchmark:
             [
                 self._xargs,
                 "-r",
-                "-n1",
+                "-x",
+                f"-n{self._config.datasets_per_process}",
                 f"-P{nprocs}",
                 self._zfs,
                 "list",
@@ -660,6 +677,7 @@ class _Benchmark:
             f"- Columns: `{self._config.columns}`",
             f"- Sort columns: `{self._config.sort_columns}`",
             f"- Encrypted: `{self._config.encrypted}`",
+            f"- Datasets per process: `{self._config.datasets_per_process}`",
             f"- zfs_snapshot_list_batch_time_us: `{self._config.zfs_snapshot_list_batch_time_us}`",
             f"- zfs_snapshot_list_batch_size `{self._config.zfs_snapshot_list_batch_size}`",
             "",
@@ -777,13 +795,14 @@ class _Benchmark:
         """Return the filesystem dataset that contains all benchmark zvols."""
         return f"{self._config.root_dataset}/zvols"
 
-    def _validate_object_counts(self, dataset: str) -> None:
-        expected = self._config.snapshots_per_dataset
-        for object_type in self._config.list_type.split(","):
-            output = self._output([self._zfs, "list", "-H", "-t", object_type, "-o", "name", dataset])
-            count = len(output.splitlines()) if output else 0
-            if count != expected:
-                raise RuntimeError(f"{dataset} has {count} {object_type}s; expected {expected}")
+    def _validate_object_counts(self, datasets: list[str]) -> None:
+        for batch in _batched_datasets(datasets):
+            expected = self._config.snapshots_per_dataset * len(batch)
+            for object_type in self._config.list_type.split(","):
+                output = self._output([self._zfs, "list", "-H", "-t", object_type, "-o", "name"] + batch)
+                count = len(output.splitlines())
+                if count != expected:
+                    raise RuntimeError(f"Dataset batch has {count} {object_type}s; expected {expected}: {batch}")
 
     def _validate_names(self, description: str, expected: Sequence[str], actual: Sequence[str]) -> None:
         if list(expected) != list(actual):
@@ -794,19 +813,21 @@ class _Benchmark:
         expected = self._filesystem_names(mode)
         datasets = self._zfs_names("filesystem", self._filesystem_root(mode))
         self._validate_names(f"{mode} filesystem", expected, datasets)
-        for dataset in datasets:
-            self._validate_object_counts(dataset)
-            mounted = self._zfs_get_value("mounted", dataset)
-            expected_mounted = "yes" if mode == "fs-mounted" else "no"
-            if mounted != expected_mounted:
-                state = "mounted" if expected_mounted == "yes" else "unmounted"
-                raise RuntimeError(f"Filesystem must be {state} for {mode}: {dataset}")
-            mountpoint = self._zfs_get_value("mountpoint", dataset)
-            expected_mountpoint = str(self._filesystem_mountpoint(dataset)) if mode == "fs-mounted" else "none"
-            if mountpoint != expected_mountpoint:
+        self._validate_object_counts(datasets)
+        expected_mounted = "yes" if mode == "fs-mounted" else "no"
+        for batch in _batched_datasets(datasets):
+            rows: list[str] = self._output([self._zfs, "list", "-H", "-p", "-o", "mounted,mountpoint"] + batch).splitlines()
+            if len(rows) != len(batch):
                 raise RuntimeError(
-                    f"Filesystem must have mountpoint={expected_mountpoint} for {mode}: {dataset}; found {mountpoint}"
+                    f"Unexpected filesystem properties for {mode}; expected {len(batch)} rows, found {len(rows)}"
                 )
+            for dataset, row in zip(batch, rows):
+                expected_mountpoint = str(self._filesystem_mountpoint(dataset)) if mode == "fs-mounted" else "none"
+                expected_row = f"{expected_mounted}\t{expected_mountpoint}"
+                if row != expected_row:
+                    raise RuntimeError(
+                        f"Unexpected filesystem properties for {mode}: {dataset}; expected {expected_row!r}, found {row!r}"
+                    )
         return datasets
 
     def _optional_output(self, command: Sequence[str]) -> str:
@@ -819,6 +840,11 @@ class _Benchmark:
 
 def _log(message: str) -> None:
     _LOGGER.info(message)
+
+
+def _batched_datasets(datasets: list[str]) -> Iterator[list[str]]:
+    for i in range(0, len(datasets), _MAX_DATASETS_PER_VALIDATION_COMMAND):
+        yield datasets[i : i + _MAX_DATASETS_PER_VALIDATION_COMMAND]
 
 
 def _listed_object_count(config: _Config) -> int:
@@ -860,6 +886,13 @@ def _parse_args(argv: Sequence[str]) -> tuple[str, _Config]:
     _unique(parser, "nprocs value", nprocs)
 
     dataset_count = _positive_integer(parser, "dataset count", args.dataset_count)
+    datasets_per_process = _positive_integer(parser, "datasets per process", args.datasets_per_process)
+    for nprocs_value in nprocs:
+        if dataset_count % (nprocs_value * datasets_per_process) != 0:
+            parser.error(
+                f"Uneven work partition for nprocs={nprocs_value}: --dataset-count ({dataset_count}) must be "
+                f"divisible by --nprocs * --datasets-per-process ({nprocs_value * datasets_per_process})"
+            )
     snapshots = _positive_integer(parser, "snapshots per dataset", args.snapshots_per_dataset)
     zvol_size = _positive_integer(parser, "zvol size", args.zvol_size)
     warmups = _positive_integer(parser, "warmup trials", args.warmup_trials)
@@ -876,6 +909,7 @@ def _parse_args(argv: Sequence[str]) -> tuple[str, _Config]:
         no_create_recursive=args.no_create_recursive,
         zvol_size=zvol_size,
         nprocs=nprocs,
+        datasets_per_process=datasets_per_process,
         warmup_trials=warmups,
         measurement_trials=measurements,
         columns=args.columns.strip(),
