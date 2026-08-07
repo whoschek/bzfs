@@ -86,6 +86,11 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
     if [[ "$LIMA_VM_IMAGE_VARIANT" != "" ]]; then
         limactl_image_variant_arg=(--image-variant="$LIMA_VM_IMAGE_VARIANT")
     fi
+    limactl_ssh_over_vsock_arg=()
+    if [[ "$(uname -s)" == "Darwin" && "$LIMA_VM_TEMPLATE" == "template:almalinux-10" ]]; then
+        # avoid AF_VSOCK SSH incompatibility after upgrading SELinux policy: https://bugzilla.redhat.com/2406423
+        limactl_ssh_over_vsock_arg=(--set=".ssh.overVsock=false")
+    fi
     limactl create --tty=false \
         --name="$LIMA_VM_NAME" \
         --disk="$LIMA_VM_DISK" \
@@ -93,6 +98,7 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
         --memory="$LIMA_VM_MEMORY" \
         --network="$LIMA_VM_NETWORK" \
         --set=".ssh.loadDotSSHPubKeys=true" \
+        "${limactl_ssh_over_vsock_arg[@]}" \
         --set=".mounts = ${LIMA_VM_MOUNTS:-[]}" \
         --set=".mounts += [{\"location\":\"$LIMA_HOST_WORKDIR\",\"mountPoint\":\"$LIMA_WORKDIR\",\"writable\":$LIMA_WORKDIR_WRITABLE}]" \
         "${shadow_mount_args[@]}" \
