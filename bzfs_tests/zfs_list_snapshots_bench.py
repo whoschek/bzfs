@@ -54,7 +54,7 @@ from typing import (
 
 _MOUNTPOINT_ROOT: Final = Path("/mnt") / Path(__file__).stem
 _MODES: Final = ("fs-mounted", "fs-unmounted", "zvol")
-_MAX_DATASETS_PER_VALIDATION_COMMAND: Final = 64
+_ZFS_MAX_DATASET_NAME_LEN: Final = 256
 _ENCRYPTION_PASSPHRASE: Final = "zfs-list-snapshots-bench"
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -394,6 +394,9 @@ class _Benchmark:
         self._sudo: str = _resolve_program("sudo") if os.geteuid() != 0 else ""
         self._xargs: str = _resolve_program("xargs")
         self._tee: str = _resolve_program("tee")
+        self._max_argv_bytes: int = (  # SC_ARG_MAX is typically 2MB on Linux and 256KB on FreeBSD
+            os.sysconf("SC_ARG_MAX") - 32 * 1024 - sum(len(key) + len(value) + 2 for key, value in os.environb.items())
+        )
 
     def setup(self) -> None:
         """Recreate all requested datasets, populate them, then validate their final state."""
@@ -423,14 +426,10 @@ class _Benchmark:
                 raise RuntimeError(f"Root dataset is unencrypted; expected encrypted: {root}")
         elif encryption != "off":
             raise RuntimeError(f"Root dataset is encrypted; expected unencrypted: {root}")
+        if config.encrypted:
+            self._run([self._zfs, "load-key", "-r", root], privileged=True, input_text=_ENCRYPTION_PASSPHRASE + "\n")
         if "fs-mounted" in config.modes:
-            command = [self._zfs, "mount"]
-            passphrase = None
-            if config.encrypted:
-                command.append("-l")
-                passphrase = _ENCRYPTION_PASSPHRASE + "\n"
-            command += ["-R", root]
-            self._run(command, privileged=True, input_text=passphrase)
+            self._run([self._zfs, "mount", "-R", self._filesystem_root("fs-mounted")], privileged=True)
         filesystems = {mode: self._validate_filesystems(mode) for mode in config.modes if mode.startswith("fs-")}
         zvols: list[str] = []
         if "zvol" in config.modes:
@@ -438,7 +437,7 @@ class _Benchmark:
             zvols = self._zfs_names("volume", self._zvol_root())
             self._validate_names("zvol", expected, zvols)
             self._validate_object_counts(zvols)
-        _log("Validated requested benchmark workloads")
+        _log("Validated workloads")
         return filesystems, zvols
 
     def run_benchmark(self) -> None:
@@ -447,8 +446,10 @@ class _Benchmark:
             self._set_zfs_module_param("zfs_snapshot_list_batch_time_us", str(self._config.zfs_snapshot_list_batch_time_us))
         if self._config.zfs_snapshot_list_batch_size > 0:
             self._set_zfs_module_param("zfs_snapshot_list_batch_size", str(self._config.zfs_snapshot_list_batch_size))
-        scope = f"modes={','.join(self._config.modes)} with {self._config.dataset_count} datasets per mode"
-        _log(f"Validating requested benchmark workloads for {scope} ...")
+        _log(
+            f"Validating workloads for modes={','.join(self._config.modes)} with {self._config.dataset_count} datasets "
+            f"per mode (datasets_per_process={self._config.datasets_per_process}) ..."
+        )
         filesystems, zvols = self.validate()
         timestamp = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
         output_dir = self._config.results_root / f"{timestamp}-{self._config.run_label}"
@@ -567,9 +568,9 @@ class _Benchmark:
     def _setup_root(self) -> None:
         root = self._config.root_dataset
         if self._zfs_exists(root):
-            _log(f"Recursively destroying existing root dataset {root}")
+            _log(f"Recursively destroying existing root dataset {root} ...")
             self._run([self._zfs, "destroy", "-r", "-v", root], privileged=True)
-        _log(f"Creating root filesystem {root}")
+        _log(f"Creating root filesystem {root} ...")
         command = [self._zfs, "create"]
         passphrase = None
         if self._config.encrypted:
@@ -582,7 +583,7 @@ class _Benchmark:
         """Create one mode-specific filesystem tree in its permanent mount state."""
         config = self._config
         filesystem_root = self._filesystem_root(mode)
-        _log(f"Creating {config.dataset_count} {mode} filesystem datasets")
+        _log(f"Creating {config.dataset_count} {mode} filesystem datasets ...")
         self._run(
             [self._zfs, "create", "-o", "canmount=off", "-o", "mountpoint=none", filesystem_root],
             privileged=True,
@@ -596,7 +597,7 @@ class _Benchmark:
     def _setup_zvols(self) -> list[str]:
         """Create the zvol container and its sparse benchmark leaves."""
         config = self._config
-        _log(f"Creating {config.dataset_count} sparse {config.zvol_size} MB zvols")
+        _log(f"Creating {config.dataset_count} sparse {config.zvol_size} MB zvols ...")
         self._run(
             [self._zfs, "create", "-o", "canmount=off", "-o", "mountpoint=none", self._zvol_root()],
             privileged=True,
@@ -613,6 +614,7 @@ class _Benchmark:
         config = self._config
         snapshot_count = config.snapshots_per_dataset if "snapshot" in config.create_type else 1
         bookmark_count = config.snapshots_per_dataset if "bookmark" in config.create_type else 0
+        _log(f"Creating {snapshot_count} snapshots and {bookmark_count} bookmarks per dataset ...")
         for index in range(snapshot_count):
             tag = f"s{index:05d}"
             if config.no_create_recursive:
@@ -751,7 +753,7 @@ class _Benchmark:
     ) -> subprocess.CompletedProcess[str]:
         full_command = list(command)
         if privileged and self._sudo:
-            full_command = [self._sudo, "-n", *full_command]
+            full_command = [self._sudo, "-n"] + full_command
         stdout = subprocess.PIPE if capture else subprocess.DEVNULL if quiet else None
         stderr = subprocess.PIPE if capture else subprocess.DEVNULL if quiet else None
         return subprocess.run(full_command, text=True, stdout=stdout, stderr=stderr, check=check, input=input_text)
@@ -796,13 +798,15 @@ class _Benchmark:
         return f"{self._config.root_dataset}/zvols"
 
     def _validate_object_counts(self, datasets: list[str]) -> None:
-        for batch in _batched_datasets(datasets):
+        max_batch_len = int(256 * 1024 * 1024 / _ZFS_MAX_DATASET_NAME_LEN / self._config.snapshots_per_dataset)
+        for batch in self._batched_datasets(datasets, max_batch_len=max_batch_len):
             expected = self._config.snapshots_per_dataset * len(batch)
             for object_type in self._config.list_type.split(","):
-                output = self._output([self._zfs, "list", "-H", "-t", object_type, "-o", "name"] + batch)
-                count = len(output.splitlines())
+                rows: list = self._output([self._zfs, "list", "-H", "-t", object_type, "-o", "name"] + batch).splitlines()
+                count = len(rows)
                 if count != expected:
                     raise RuntimeError(f"Dataset batch has {count} {object_type}s; expected {expected}: {batch}")
+                del rows
 
     def _validate_names(self, description: str, expected: Sequence[str], actual: Sequence[str]) -> None:
         if list(expected) != list(actual):
@@ -815,7 +819,7 @@ class _Benchmark:
         self._validate_names(f"{mode} filesystem", expected, datasets)
         self._validate_object_counts(datasets)
         expected_mounted = "yes" if mode == "fs-mounted" else "no"
-        for batch in _batched_datasets(datasets):
+        for batch in self._batched_datasets(datasets):
             rows: list[str] = self._output([self._zfs, "list", "-H", "-p", "-o", "mounted,mountpoint"] + batch).splitlines()
             if len(rows) != len(batch):
                 raise RuntimeError(
@@ -837,14 +841,18 @@ class _Benchmark:
             return ""
         return output
 
+    def _batched_datasets(self, datasets: list[str], *, max_batch_len: int = 1000_000_000) -> Iterator[list[str]]:
+        max_dataset_name_len: int = max((len(dataset) for dataset in datasets), default=0)
+        batch_len: int = max_batch_len
+        batch_len = min(batch_len, self._max_argv_bytes // (max_dataset_name_len + 1 + 8))
+        batch_len = min(batch_len, 1024)
+        batch_len = max(1, batch_len)
+        for i in range(0, len(datasets), batch_len):
+            yield datasets[i : i + batch_len]
+
 
 def _log(message: str) -> None:
     _LOGGER.info(message)
-
-
-def _batched_datasets(datasets: list[str]) -> Iterator[list[str]]:
-    for i in range(0, len(datasets), _MAX_DATASETS_PER_VALIDATION_COMMAND):
-        yield datasets[i : i + _MAX_DATASETS_PER_VALIDATION_COMMAND]
 
 
 def _listed_object_count(config: _Config) -> int:
