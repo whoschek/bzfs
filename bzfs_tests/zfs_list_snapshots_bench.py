@@ -397,6 +397,7 @@ class _Benchmark:
         self._max_argv_bytes: int = (  # SC_ARG_MAX is typically 2MB on Linux and 256KB on FreeBSD
             os.sysconf("SC_ARG_MAX") - 32 * 1024 - sum(len(key) + len(value) + 2 for key, value in os.environb.items())
         )
+        self._zfs_version: str = self._output([self._zfs, "version"]).splitlines()[0]
 
     def setup(self) -> None:
         """Recreate all requested datasets, populate them, then validate their final state."""
@@ -616,7 +617,7 @@ class _Benchmark:
         bookmark_count = config.snapshots_per_dataset if "bookmark" in config.create_type else 0
         _log(f"Creating {snapshot_count} snapshots and {bookmark_count} bookmarks per dataset ...")
         for index in range(snapshot_count):
-            tag = f"s{index:05d}"
+            tag = f"s{_pad(index)}"
             if config.no_create_recursive:
                 for dataset in datasets:
                     self._run([self._zfs, "snapshot", f"{dataset}@{tag}"], privileged=True)
@@ -624,15 +625,24 @@ class _Benchmark:
                 self._run([self._zfs, "snapshot", "-r", f"{config.root_dataset}@{tag}"], privileged=True)
             if (index + 1) % 100 == 0:
                 _log(f"Created {index + 1} snapshots per dataset")
+        has_recursive_bookmark_creation = self._zfs_version.startswith(
+            ("zfs-2.4.99", "zfs-2.5", "zfs-2.6", "zfs-2.7", "zfs-2.8", "zfs-2.9", "zfs-2.10", "zfs-2.11", "zfs-3.")
+        )
         for index in range(bookmark_count):
             snapshot_index = index if config.create_type == "snapshot,bookmark" else 0
-            for dataset in datasets:
+            stag = f"s{_pad(snapshot_index)}"
+            btag = f"b{_pad(index)}"
+            if config.no_create_recursive or not has_recursive_bookmark_creation:
+                for dataset in datasets:
+                    self._run([self._zfs, "bookmark", f"{dataset}@{stag}", f"{dataset}#{btag}"], privileged=True)
+            else:
                 self._run(
-                    [self._zfs, "bookmark", f"{dataset}@s{snapshot_index:05d}", f"{dataset}#b{index:05d}"],
+                    [self._zfs, "bookmark", "-r", f"{config.root_dataset}@{stag}", f"{config.root_dataset}#{btag}"],
                     privileged=True,
                 )
             if (index + 1) % 100 == 0:
                 _log(f"Created {index + 1} bookmarks per dataset")
+        _log(f"Created {snapshot_count} snapshots and {bookmark_count} bookmarks per dataset")
 
     def _write_summary(self, output_dir: Path, measurements: dict[tuple[str, int], list[float]]) -> None:
         object_count = _listed_object_count(self._config)
@@ -717,7 +727,7 @@ class _Benchmark:
             ("kernel", self._optional_output(["uname", "-srvm"]) or platform.platform()),
             ("architecture", platform.machine()),
             ("cpus", str(os.cpu_count() or "unknown")),
-            ("zfs_version", self._output([self._zfs, "version"]).splitlines()[0]),
+            ("zfs_version", self._zfs_version),
         ]
         modinfo = shutil.which("modinfo")
         if modinfo:
@@ -781,7 +791,7 @@ class _Benchmark:
     def _filesystem_names(self, mode: str) -> list[str]:
         """Return ordered benchmark leaf names for one filesystem mode."""
         root = self._filesystem_root(mode)
-        return sorted(f"{root}/fs{index:05d}" for index in range(self._config.dataset_count))
+        return sorted(f"{root}/fs{_pad(index)}" for index in range(self._config.dataset_count))
 
     def _filesystem_mountpoint(self, dataset: str) -> Path:
         """Map a mounted-mode dataset to its distinct absolute mountpoint."""
@@ -791,7 +801,7 @@ class _Benchmark:
     def _zvol_names(self) -> list[str]:
         """Return ordered benchmark zvol names below their container dataset."""
         root = self._zvol_root()
-        return sorted(f"{root}/zvol{index:05d}" for index in range(self._config.dataset_count))
+        return sorted(f"{root}/zvol{_pad(index)}" for index in range(self._config.dataset_count))
 
     def _zvol_root(self) -> str:
         """Return the filesystem dataset that contains all benchmark zvols."""
@@ -853,6 +863,10 @@ class _Benchmark:
 
 def _log(message: str) -> None:
     _LOGGER.info(message)
+
+
+def _pad(number: int) -> str:
+    return f"{number:05d}"
 
 
 def _listed_object_count(config: _Config) -> int:
