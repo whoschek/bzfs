@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.24.0] - Not yet released
+## [1.24.0] - August 11, 2026
 
 - [bzfs] Improve reliability of replication from bookmarks: Guarantees that a ZFS snapshot can be safely deleted after
   it has been successfully replicated because we can use a ZFS bookmark as a common base to continue incremental ZFS
@@ -17,6 +17,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Also retry parent filesystem creation failures.
 - [bzfs] Also retry receive resume-token lookup failures.
 - [bzfs] Clear zfs receive resume token when its raw mode flag conflicts with `--zfs-send-program-opts` (cont'd).
+- [bzfs] Various small improvements to the test VM and test infra.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.23.0...v1.24.0
 
 ## [1.23.0] - July 4, 2026
 
