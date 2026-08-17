@@ -323,15 +323,12 @@ def _merge_sorted_iterators(
     """The typical pipelined merge algorithm of a merge sort, slightly adapted to our specific use case."""
     assert len(choices) == 3
     assert choice
-    flags: int = 0
-    for i, item in enumerate(choices):
-        if item in choice:
-            flags |= 1 << i
+    enabled: tuple[bool, ...] = tuple(item in choice for item in choices)
     src_next, dst_next = run_in_parallel(lambda: next(src_itr, None), lambda: next(dst_itr, None))
-    while not (src_next is None and dst_next is None):
+    while (src_next is not None) or (dst_next is not None):
         if src_next == dst_next:
             n = 2
-            if (flags & (1 << n)) != 0:
+            if enabled[n]:
                 assert src_next is not None
                 assert dst_next is not None
                 yield choices[n], src_next, dst_next
@@ -339,14 +336,14 @@ def _merge_sorted_iterators(
             dst_next = next(dst_itr, None)
         elif src_next is None or (dst_next is not None and dst_next < src_next):
             n = 1
-            if (flags & (1 << n)) != 0:
+            if enabled[n]:
                 assert dst_next is not None
                 yield choices[n], dst_next
             dst_next = next(dst_itr, None)
         else:
             assert src_next is not None
             n = 0
-            if (flags & (1 << n)) != 0 and not _is_comparable_tmp_bookmark(src_next):  # suppress tmp bookmarks
+            if enabled[n] and not _is_comparable_tmp_bookmark(src_next):  # suppress tmp bookmarks
                 yield choices[n], src_next
             src_next = next(src_itr, None)
 

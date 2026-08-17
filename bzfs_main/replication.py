@@ -1668,7 +1668,7 @@ class _Continuity:
             self._finalized_src_bookmarks[finalized_bookmark_name] = tmp_bookmark_guid
 
         # gc in parallel
-        bookmark_tags_to_delete = [bookmark.split("#", 1)[1] for bookmark in tmp_bookmarks_to_delete]
+        bookmark_tags_to_delete: list[str] = [bookmark.split("#", 1)[1] for bookmark in tmp_bookmarks_to_delete]
         delete_bookmarks(job, src, self._src_dataset, bookmark_tags_to_delete, loglevel=LOG_DEBUG)
         for bookmark in tmp_bookmarks_to_delete:
             self._tmp_src_bookmarks.pop(bookmark)
