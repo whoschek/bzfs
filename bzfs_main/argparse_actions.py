@@ -69,7 +69,7 @@ class SnapshotFilter:
 
     name: str
     timerange: UnixTimeRange  # defined in bzfs_main.filter
-    options: None | list[RankRange] | list[str] | tuple[list[str], list[str]] | tuple[RegexList, RegexList] = field(
+    options: list[RankRange] | list[str] | tuple[list[str], list[str]] | tuple[RegexList, RegexList] | None = field(
         compare=False, default=None
     )
 

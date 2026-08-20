@@ -661,9 +661,11 @@ class _Benchmark:
                     )
                 )
         summary_lines = [
-            "mode\tnprocs\tmeasurements\tmin_objects_per_second\tmax_objects_per_second\t"
-            "median_objects_per_second\tavg_objects_per_second\tstddev_objects_per_second\t"
-            "min_seconds\tmax_seconds\tmedian_seconds\tavg_seconds\tstddev_seconds"
+            (
+                "mode\tnprocs\tmeasurements\tmin_objects_per_second\tmax_objects_per_second\t"
+                "median_objects_per_second\tavg_objects_per_second\tstddev_objects_per_second\t"
+                "min_seconds\tmax_seconds\tmedian_seconds\tavg_seconds\tstddev_seconds"
+            )
         ]
         summary_lines.extend(
             f"{mode}\t{nprocs}\t{count}\t{rate.minimum:.3f}\t{rate.maximum:.3f}\t{rate.median:.3f}\t"
@@ -693,8 +695,10 @@ class _Benchmark:
             f"- zfs_snapshot_list_batch_time_us: `{self._config.zfs_snapshot_list_batch_time_us}`",
             f"- zfs_snapshot_list_batch_size `{self._config.zfs_snapshot_list_batch_size}`",
             "",
-            "| Mode | nprocs | Min objects/sec | Max objects/sec | Median objects/sec | Avg objects/sec "
-            "| Stddev objects/sec | Min seconds | Max seconds | Median seconds | Avg seconds | Stddev seconds |",
+            (
+                "| Mode | nprocs | Min objects/sec | Max objects/sec | Median objects/sec | Avg objects/sec "
+                "| Stddev objects/sec | Min seconds | Max seconds | Median seconds | Avg seconds | Stddev seconds |"
+            ),
             "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
         markdown.extend(

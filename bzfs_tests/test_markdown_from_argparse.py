@@ -995,8 +995,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         cases: tuple[tuple[str, str, list[str]], ...] = (
             (
                 "inline_command_reference",
-                "Use `pipx install black` when you want the command available on PATH without adding the package to "
-                "the application runtime dependencies.",
+                (
+                    "Use `pipx install black` when you want the command available on PATH without adding the package to "
+                    "the application runtime dependencies."
+                ),
                 [
                     "Use `pipx install black` when you want the command available on PATH without adding the package to the application runtime",
                     "dependencies.",
@@ -1004,8 +1006,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "inline_environment_variable_reference",
-                "Set PIPX_HOME only when you need a different virtual environment root; most users should keep the "
-                "default directory so upgrades remain predictable.",
+                (
+                    "Set PIPX_HOME only when you need a different virtual environment root; most users should keep the "
+                    "default directory so upgrades remain predictable."
+                ),
                 [
                     "Set PIPX_HOME only when you need a different virtual environment root; most users should keep the default directory so",
                     "upgrades remain predictable.",
@@ -1013,8 +1017,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "inline_option_names",
-                "The --quiet and --verbose options adjust logging verbosity for troubleshooting but do not change package "
-                "installation behavior or dependency resolution.",
+                (
+                    "The --quiet and --verbose options adjust logging verbosity for troubleshooting but do not change package "
+                    "installation behavior or dependency resolution."
+                ),
                 [
                     "The --quiet and --verbose options adjust logging verbosity for troubleshooting but do not change package installation",
                     "behavior or dependency resolution.",
@@ -1022,8 +1028,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "inline_paths",
-                "Applications are linked into /usr/local/bin or another configured bin directory so shells can find them "
-                "without activating the virtual environment first.",
+                (
+                    "Applications are linked into /usr/local/bin or another configured bin directory so shells can find them "
+                    "without activating the virtual environment first."
+                ),
                 [
                     "Applications are linked into /usr/local/bin or another configured bin directory so shells can find them without activating",
                     "the virtual environment first.",
@@ -1031,8 +1039,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "inline_url",
-                "See https://pipx.pypa.io/latest/how-to/troubleshoot/ for troubleshooting guidance before deleting "
-                "environments or changing global configuration.",
+                (
+                    "See https://pipx.pypa.io/latest/how-to/troubleshoot/ for troubleshooting guidance before deleting "
+                    "environments or changing global configuration."
+                ),
                 [
                     "See https://pipx.pypa.io/latest/how-to/troubleshoot/ for troubleshooting guidance before deleting environments or changing",
                     "global configuration.",
@@ -1040,8 +1050,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "inline_json_reference",
-                "The JSON output is intended for automation; callers should treat unknown fields as forward-compatible "
-                "extensions instead of hard failures.",
+                (
+                    "The JSON output is intended for automation; callers should treat unknown fields as forward-compatible "
+                    "extensions instead of hard failures."
+                ),
                 [
                     "The JSON output is intended for automation; callers should treat unknown fields as forward-compatible extensions instead of",
                     "hard failures.",
@@ -1049,8 +1061,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "inline_key_value_reference",
-                "Use backend=uv in examples as shorthand for selecting the uv backend; the actual command-line flag "
-                "remains --backend uv in generated troubleshooting documentation.",
+                (
+                    "Use backend=uv in examples as shorthand for selecting the uv backend; the actual command-line flag "
+                    "remains --backend uv in generated troubleshooting documentation."
+                ),
                 [
                     "Use backend=uv in examples as shorthand for selecting the uv backend; the actual command-line flag remains --backend uv in",
                     "generated troubleshooting documentation.",
@@ -1058,8 +1072,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "colon_sentence",
-                "Note: global installation changes where environments and manual pages are stored, but it does not imply "
-                "that package installation itself runs with elevated privileges.",
+                (
+                    "Note: global installation changes where environments and manual pages are stored, but it does not imply "
+                    "that package installation itself runs with elevated privileges."
+                ),
                 [
                     "Note: global installation changes where environments and manual pages are stored, but it does not imply that package",
                     "installation itself runs with elevated privileges.",
@@ -1067,8 +1083,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "semicolon_sentence",
-                "The cache speeds up repeated runs; it is safe to remove because pipx can rebuild temporary environments "
-                "when the same app is invoked again.",
+                (
+                    "The cache speeds up repeated runs; it is safe to remove because pipx can rebuild temporary environments "
+                    "when the same app is invoked again."
+                ),
                 [
                     "The cache speeds up repeated runs; it is safe to remove because pipx can rebuild temporary environments when the same app is",
                     "invoked again.",
@@ -1076,8 +1094,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "parenthetical_sentence",
-                "The selected interpreter must satisfy the project requirement (Python 3.10 or newer) before the package "
-                "manager starts resolving dependencies.",
+                (
+                    "The selected interpreter must satisfy the project requirement (Python 3.10 or newer) before the package "
+                    "manager starts resolving dependencies."
+                ),
                 [
                     "The selected interpreter must satisfy the project requirement (Python 3.10 or newer) before the package manager starts",
                     "resolving dependencies.",
@@ -1085,8 +1105,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "hyphenated_terms",
-                "The package manager uses best-effort clean-up after failures so partially-created environments do not "
-                "hide later successful installation attempts.",
+                (
+                    "The package manager uses best-effort clean-up after failures so partially-created environments do not "
+                    "hide later successful installation attempts."
+                ),
                 [
                     "The package manager uses best-effort clean-up after failures so partially-created environments do not hide later successful",
                     "installation attempts.",
@@ -1094,8 +1116,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "quoted_terms",
-                'When the documentation says "app", it means a console script exposed by the installed package rather '
-                "than an arbitrary importable module.",
+                (
+                    'When the documentation says "app", it means a console script exposed by the installed package rather '
+                    "than an arbitrary importable module."
+                ),
                 [
                     'When the documentation says "app", it means a console script exposed by the installed package rather than an arbitrary',
                     "importable module.",
@@ -1103,8 +1127,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "comma_series",
-                "The command accepts package names, local directories, wheel files, source archives, and version control "
-                "URLs through the same package specification argument.",
+                (
+                    "The command accepts package names, local directories, wheel files, source archives, and version control "
+                    "URLs through the same package specification argument."
+                ),
                 [
                     "The command accepts package names, local directories, wheel files, source archives, and version control URLs through the same",
                     "package specification argument.",
@@ -1146,8 +1172,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "option_metavar_sentence",
-                "Pass --python PYTHON when the package must be installed with a specific interpreter, such as python3.12 "
-                "or an absolute executable path.",
+                (
+                    "Pass --python PYTHON when the package must be installed with a specific interpreter, such as python3.12 "
+                    "or an absolute executable path."
+                ),
                 [
                     "Pass --python PYTHON when the package must be installed with a specific interpreter, such as python3.12 or an absolute",
                     "executable path.",
@@ -1155,8 +1183,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "pep_reference",
-                "PEP 582 support is experimental, and projects should not assume that local __pypackages__ discovery "
-                "will stay unchanged across future releases.",
+                (
+                    "PEP 582 support is experimental, and projects should not assume that local __pypackages__ discovery "
+                    "will stay unchanged across future releases."
+                ),
                 [
                     "PEP 582 support is experimental, and projects should not assume that local __pypackages__ discovery will stay unchanged",
                     "across future releases.",
@@ -1164,8 +1194,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "negative_guidance",
-                "Do not use --force as a routine upgrade mechanism because it can replace files that would otherwise warn "
-                "about conflicting application names.",
+                (
+                    "Do not use --force as a routine upgrade mechanism because it can replace files that would otherwise warn "
+                    "about conflicting application names."
+                ),
                 [
                     "Do not use --force as a routine upgrade mechanism because it can replace files that would otherwise warn about conflicting",
                     "application names.",
@@ -1173,8 +1205,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "multi_clause_warning",
-                "If installation fails after dependencies are downloaded, rerun the same command first; changing several "
-                "options at once makes diagnosis harder.",
+                (
+                    "If installation fails after dependencies are downloaded, rerun the same command first; changing several "
+                    "options at once makes diagnosis harder."
+                ),
                 [
                     "If installation fails after dependencies are downloaded, rerun the same command first; changing several options at once makes",
                     "diagnosis harder.",
@@ -1182,8 +1216,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
             ),
             (
                 "markdown_inline_link",
-                "Read the [installation guide](https://pipx.pypa.io/latest/installation/) when choosing between "
-                "package-manager installation and zipapp installation.",
+                (
+                    "Read the [installation guide](https://pipx.pypa.io/latest/installation/) when choosing between "
+                    "package-manager installation and zipapp installation."
+                ),
                 [
                     "Read the [installation guide](https://pipx.pypa.io/latest/installation/) when choosing between package-manager installation",
                     "and zipapp installation.",
@@ -1249,8 +1285,10 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertListEqual(
             [
                 "- This example alerts the user if the *oldest* src or dst snapshot named",
-                "  `prod_onsite_primary_source_datacenters_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning]"
-                " or more than 300",
+                (
+                    "  `prod_onsite_primary_source_datacenters_<timestamp>_hourly` is more than 30 + 60x36 minutes old [warning]"
+                    " or more than 300"
+                ),
                 "  \\+ 60x36 minutes old [critical], where 36 is the number of period cycles specified in `src_snapshot_plan` or",
                 "  `dst_snapshot_plan`, respectively. Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.",
             ],

@@ -384,8 +384,8 @@ async def call_with_retries_async(
     backoff: BackoffStrategy = full_jitter_backoff_strategy,  # computes delay time before next retry attempt, after failure
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic, e.g. time
     before_attempt: Callable[[Retry], int | Awaitable[int]] = before_attempt_noop,  # e.g rate limiting/internal backpressure
-    after_attempt: Callable[[AttemptOutcome], None | Awaitable[None]] = after_attempt_log_failure,  # e.g. metrics/logging
-    on_retryable_error: Callable[[AttemptOutcome], None | Awaitable[None]] = noop,  # e.g. count RetryableError failures
+    after_attempt: Callable[[AttemptOutcome], Awaitable[None] | None] = after_attempt_log_failure,  # e.g. metrics/logging
+    on_retryable_error: Callable[[AttemptOutcome], Awaitable[None] | None] = noop,  # e.g. count RetryableError failures
     on_exhaustion: Callable[[AttemptOutcome], _T | Awaitable[_T]] = on_exhaustion_raise,  # raise error or return fallback
     log: logging.Logger | None = None,  # set this to ``None`` to disable logging
 ) -> _T:
@@ -489,7 +489,7 @@ def multi_after_attempt(handlers: Iterable[Callable[[AttemptOutcome], None]]) ->
 
 
 def multi_after_attempt_async(
-    handlers: Iterable[Callable[[AttemptOutcome], None | Awaitable[None]]],
+    handlers: Iterable[Callable[[AttemptOutcome], Awaitable[None] | None]],
 ) -> Callable[[AttemptOutcome], Awaitable[None]]:
     """Async version of ``multi_after_attempt()``."""
     handlers = tuple(handlers)
@@ -1099,8 +1099,8 @@ class AsyncRetryTemplate(Generic[_T]):
     backoff: BackoffStrategy = full_jitter_backoff_strategy  # computes delay time before next retry attempt, after failure
     giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic, e.g. time
     before_attempt: Callable[[Retry], int | Awaitable[int]] = before_attempt_noop  # e.g. rate limiting/internal backpressure
-    after_attempt: Callable[[AttemptOutcome], None | Awaitable[None]] = after_attempt_log_failure  # e.g. metrics/logging
-    on_retryable_error: Callable[[AttemptOutcome], None | Awaitable[None]] = noop  # e.g. count RetryableError failures
+    after_attempt: Callable[[AttemptOutcome], Awaitable[None] | None] = after_attempt_log_failure  # e.g. metrics/logging
+    on_retryable_error: Callable[[AttemptOutcome], Awaitable[None] | None] = noop  # e.g. count RetryableError failures
     on_exhaustion: Callable[[AttemptOutcome], _T | Awaitable[_T]] = on_exhaustion_raise  # raise or fallback
     log: logging.Logger | None = None  # set this to ``None`` to disable logging
 
@@ -1136,8 +1136,8 @@ class AsyncRetryTemplate(Generic[_T]):
         backoff: BackoffStrategy | None = None,
         giveup: Callable[[AttemptOutcome], object | None] | None = None,
         before_attempt: Callable[[Retry], int | Awaitable[int]] | None = None,
-        after_attempt: Callable[[AttemptOutcome], None | Awaitable[None]] | None = None,
-        on_retryable_error: Callable[[AttemptOutcome], None | Awaitable[None]] | None = None,
+        after_attempt: Callable[[AttemptOutcome], Awaitable[None] | None] | None = None,
+        on_retryable_error: Callable[[AttemptOutcome], Awaitable[None] | None] | None = None,
         on_exhaustion: Callable[[AttemptOutcome], _R | Awaitable[_R]] | None = None,
         log: logging.Logger | None = None,  # pass NO_LOGGER to override template logger and disable logging for this call
     ) -> _R:
