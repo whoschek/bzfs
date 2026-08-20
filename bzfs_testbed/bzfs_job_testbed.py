@@ -406,4 +406,4 @@ cmd += [f"--worker-timeout-seconds={worker_timeout_seconds}"] if worker_timeout_
 cmd += extra_args + unknown_args
 cmd += ["--root-dataset-pairs"] + root_dataset_pairs
 # print(" ".join(cmd))
-sys.exit(subprocess.run(cmd, stdin=subprocess.DEVNULL, text=True).returncode)
+sys.exit(subprocess.run(cmd, stdin=subprocess.DEVNULL, text=True, check=False).returncode)

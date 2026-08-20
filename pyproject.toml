@@ -102,6 +102,7 @@ line-length = 125
 fix = true            # allow safe auto-fixes?
 unsafe-fixes = false  # allow FA100 and similar "unsafe" auto-fixes?
 show-fixes = true     # display which rule triggered an auto-fix
+output-prefer-rule-codes = true  # make diagnostics easy to correlate
 exclude = [   # toggles to exclude overly strict `ruff` checks of these Python source code directories in development mode:
 #    "bzfs_main",
 #    "bzfs_tests",
@@ -114,13 +115,16 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "ASYNC",    # flake8-async
     "B",        # bugbear
     "C4",       # flake8-comprehensions
+    "CPY001",   # copyright
     "D100", "D101", "D102", "D103", "D106", "D200", "D206", "D403", "D404", "D414", "D418", "D419",  # pydocstyle
+    "DTZ003", "DTZ004", "DTZ006", "DTZ012", "DTZ901",  # flake8-datetimez
     "E",        # pycodestyle error
     "EXE",      # shebang
     "F",        # pyflakes
     "FA",       # forward annotations
     "FAST",     # fastAPI
     "FURB122", "FURB129", "FURB132", "FURB136", "FURB142", "FURB167", "FURB168", "FURB169", "FURB177", "FURB181", "FURB187",
+    "FURB192",
     "G",        # flake8-logging-format
     "I",        # isort: auto-sort and auto-format imports
     "ICN",      # flake8-import-conventions
@@ -129,13 +133,17 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "LOG",      # flake8-logging
     "N",        # pep8-naming, snake_case
     "PERF101",  # unnecessary-list-cast
+    "PERF102",  # use dict keys() or values() if the other items() part is discarded
     "PERF402",  # use list or list.copy to create a copy of a list
     "PGH",      # pygrep-hooks
     "PIE",      # flake8-pie
     "PLC",      # pylint-convention
     "PLE",      # pylint-error
+    "PLR0133",  # pylint-refactor: comparison of constants
     "PLR0206",  # pylint-refactor: property-with-parameters
     "PLR0402",  # pylint-refactor: use from {module} import {name} in lieu of alias
+    "PLR1704",  # pylint-refactor: redefined argument from local
+    "PLR1708",  # pylint-refactor: use return instead of raising StopIteration in a generator
     "PLR1711",  # pylint-refactor: useless return statement at end of function
     "PLR1722",  # pylint-refactor: use sys.exit() instead of exit()
     "PLR1730",  # pylint-refactor: replace if statement with min() or max() if possible
@@ -143,12 +151,16 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "PLR1736",  # pylint-refactor: list index lookup in enumerate() loop
     "PLR2044",  # pylint-refactor: line with empty comment
     "PLW",      # pylint-warning
+    "PTH210",   # flake8-use-pathlib: invalid Path.with_suffix() argument
     "RET501", "RET502", "RET503",  # flake8-return
     "RUF",      # ruff-specifc rules
     "S",        # bandit
+    "SIM107",   # flake8-simplify: return in try-except-finally
     "SIM115",   # flake8-simplify: use a context manager for opening files
     "SIM118",   # flake8-simplify: use `key in foo` instead of `key in foo.keys()`
     "SIM208",   # flake8-simplify: use `a` instead of `not (not a)`
+    "SIM220",   # flake8-simplify: expression and its negation
+    "SIM221",   # flake8-simplify: expression or its negation
     "SIM300",   # flake8-simplify: yoda condition detected
     "SIM401",   # flake8-simplify: use dict.get(x, default) instead of if statement
     "SIM910",   # flake8-simplify: dict.get(x, None)
@@ -160,12 +172,12 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "TRY",      # tryceratops raises
     "TRY201",   # use `raise` without specifying exception name
     "UP",       # pyupgrade
+    "W605",     # pycodestyle warning: invalid escape sequence
     "YTT",      # flake8-2020
 ]
 preview = true                 # enable preview rules
 explicit-preview-rules = true  # only opt into specific preview rules via extend-select whitelist (no blank opt-in)
 extend-select = [
-    "CPY001",   # copyright
     "PLR0202",  # no-classmethod-decorator
     "PLR0203",  # no-staticmethod-decorator
 ]
@@ -174,7 +186,6 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
     "G004",     # logging statement uses f-string
     "PLC0415",  # `import` should be at the top-level of a file
     "PLW0108",  # lambda may be unnecessary; consider inlining inner function
-    "PLW1510",  # subprocess-run
     "PLW2901",  # redefined-loop-name
     "RUF005",   # collection-literal-concatenation
     "S101",     # use of assert detected (harmless)

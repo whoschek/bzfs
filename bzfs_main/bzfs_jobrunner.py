@@ -748,7 +748,7 @@ class Job:
                 )
                 j = 0
                 marker = "prune-dst-snapshots"
-                for dst_hostname, _ in dst_hosts.items():
+                for dst_hostname in dst_hosts:
                     curr_retain_targets: set[str] = set(retain_dst_targets[dst_hostname])
                     curr_dst_snapshot_plan = {  # only retain targets that belong to the host
                         org: {target: periods for target, periods in target_periods.items() if target in curr_retain_targets}
@@ -883,7 +883,7 @@ class Job:
         include_snapshot_plan = {  # only replicate orgs that have at least one relevant target_period
             org: target_periods
             for org, target_periods in include_snapshot_plan.items()
-            if any(len(periods) > 0 for target, periods in target_periods.items())
+            if any(len(periods) > 0 for periods in target_periods.values())
         }
         opts: list[str] = []
         if len(include_snapshot_plan) > 0:
@@ -910,7 +910,7 @@ class Job:
         if len(unknown_local_dst_pools) > 0:  # `zfs list` if local
             existing_pools = {pool[len("-:") :] for pool in unknown_local_dst_pools}
             cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(existing_pools)
-            sp = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout_secs)
+            sp = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout_secs, check=False)
             if sp.returncode not in (0, 1):  # 1 means dataset not found
                 self.die(f"Unexpected error {sp.returncode} on checking for existing local dst pools: {sp.stderr.strip()}")
             existing_pools = {"-:" + pool for pool in sp.stdout.splitlines() if pool}

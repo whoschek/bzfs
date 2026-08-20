@@ -477,7 +477,7 @@ class Connection:
                 log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_sock_cmd))
                 try:
                     proc: subprocess.CompletedProcess = subprocess.run(
-                        ssh_sock_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=0.1
+                        ssh_sock_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=0.1, check=False
                     )
                 except subprocess.TimeoutExpired as e:  # harmless as master auto-exits after ssh_control_persist_secs anyway
                     log.log(LOG_TRACE, "Harmless ssh master connection shutdown timeout: %s", e)

@@ -1885,7 +1885,7 @@ class LocalTestCase(IntegrationTestCase):
                 self.assert_snapshots(ibase.DST_ROOT_DATASET + "/foo", 3, "t")
                 for name, value in included_props.items():
                     self.assertEqual(value, dataset_property(ibase.DST_ROOT_DATASET + "/foo", name))
-                for name, _ in excluded_props.items():
+                for name in excluded_props:
                     self.assertEqual("-", dataset_property(ibase.DST_ROOT_DATASET + "/foo", name))
 
     def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self) -> None:
@@ -1913,7 +1913,7 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_snapshots(ibase.DST_ROOT_DATASET + "/foo", 3, "t")
         for name, value in included_props.items():
             self.assertEqual(value, dataset_property(ibase.DST_ROOT_DATASET + "/foo", name))
-        for name, _ in excluded_props.items():
+        for name in excluded_props:
             self.assertEqual("-", dataset_property(ibase.DST_ROOT_DATASET + "/foo", name))
 
     def test_zfs_recv_program_opts_compact_property_option(self) -> None:
@@ -2025,7 +2025,7 @@ class LocalTestCase(IntegrationTestCase):
                 # Run bzfs in a separate process so advisory flock conflicts across processes,
                 # matching real-world cron/daemon behavior. Use minimal args to match the lock hash.
                 cmd = [sys.executable, "-m", "bzfs_main.bzfs", ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET]
-                result = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+                result = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=False)
                 self.assertEqual(bzfs.STILL_RUNNING_STATUS, result.returncode, f"{result.stdout}\n{result.stderr}")
                 self.assertTrue(os.path.exists(lock_file))
             finally:

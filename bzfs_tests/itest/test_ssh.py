@@ -231,13 +231,13 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
             exit_cmd = ssh_sock_cmd + ("-O", "exit", ssh_user_host)
 
             # Confirm master is running.
-            check_proc1 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            check_proc1 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True, check=False)
             self.assertEqual(0, check_proc1.returncode, check_proc1.stderr)
             self.assertIn("Master running", check_proc1.stderr)
 
             # Kill the master to simulate an intermittent failure.
-            subprocess.run(exit_cmd, stdout=PIPE, stderr=PIPE, text=True)
-            check_proc2 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            subprocess.run(exit_cmd, stdout=PIPE, stderr=PIPE, text=True, check=False)
+            check_proc2 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True, check=False)
             self.assertNotEqual(0, check_proc2.returncode)
             self.assertIn("Control socket connect", check_proc2.stderr)
 
@@ -246,7 +246,7 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
                 # Simulate a detection failure: refresh takes the fast path, ssh falls back to direct connection and succeeds.
                 proc2 = conn.run_ssh_command(["echo", "two"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
                 self.assertEqual("two\n", proc2.stdout)
-                check_proc3 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+                check_proc3 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True, check=False)
                 self.assertNotEqual(0, check_proc3.returncode)  # assert master is not running
 
                 # Wait long enough so that a subsequent refresh performs -O check and recreates the master.
@@ -254,7 +254,7 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
 
                 proc3 = conn.run_ssh_command(["echo", "three"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
                 self.assertEqual("three\n", proc3.stdout)
-            check_proc4 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            check_proc4 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True, check=False)
             self.assertEqual(0, check_proc4.returncode, check_proc4.stderr)
             self.assertIn("Master running", check_proc4.stderr)
             self.assertGreater(conn._last_refresh_time, last_refresh_before)
@@ -271,7 +271,7 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
                 ["echo", "four-after-stale-socket-file"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True
             )
             self.assertEqual("four-after-stale-socket-file\n", proc4.stdout)
-            check_proc5 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True)
+            check_proc5 = subprocess.run(check_cmd, stdout=PIPE, stderr=PIPE, text=True, check=False)
             self.assertEqual(0, check_proc5.returncode, check_proc5.stderr)
         finally:
             pool.shutdown()
