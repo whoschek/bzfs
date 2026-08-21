@@ -304,7 +304,7 @@ class TestHelperFunctions(unittest.TestCase):
                 iter_fd = iter(fd_read)  # Create the iterator on the open fd_read
 
                 # Consume all lines from iter_fd
-                read_lines_initial = []
+                read_lines_initial: list[str] = []
                 for line in iter_fd:
                     read_lines_initial.append(line)
                 self.assertEqual(read_lines_initial, initial_lines, "Initial lines not read correctly.")

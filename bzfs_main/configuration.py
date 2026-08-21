@@ -378,7 +378,7 @@ class Params(MiniParams):
         """Splits option string on runs of one or more whitespace into an option list."""
         text = text.strip()
         opts = self.one_or_more_whitespace_regex.split(text) if text else []
-        xappend(opts, items)
+        xappend(opts, *items)
         if not allow_all:
             self._validate_quoting(opts)
         return opts

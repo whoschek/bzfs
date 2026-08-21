@@ -350,7 +350,7 @@ class Job(MiniJob):
                 log.info("Auxiliary CLI arguments: %s", " ".join(aux_args))
                 args = argument_parser().parse_args(xappend(aux_args, "--", args.root_dataset_pairs), namespace=args)
 
-            def log_error_on_exit(error: Any, status_code: Any, exc_info: bool = False) -> None:
+            def log_error_on_exit(error: object, status_code: object, exc_info: bool = False) -> None:
                 log.error("%s%s", f"Exiting {PROG_NAME} with status code {status_code}. Cause: ", error, exc_info=exc_info)
 
             try:

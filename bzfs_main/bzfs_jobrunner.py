@@ -52,6 +52,7 @@ from ast import (
 )
 from collections.abc import (
     Iterable,
+    Mapping,
 )
 from logging import (
     Logger,
@@ -1228,7 +1229,7 @@ class Job:
         if value < 0:
             self.die(f"{name} must be a non-negative integer: {value}")
 
-    def validate_true(self, expr: Any, msg: str) -> None:
+    def validate_true(self, expr: object, msg: str) -> None:
         """Raises error if ``expr`` evaluates to ``False``."""
         if not bool(expr):
             self.die(msg)
@@ -1326,7 +1327,7 @@ def _log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str
     return f"{SEP}{_sanitize(localhostname)}{SEP}{_sanitize(src_hostname)}{SEP}{_sanitize(dst_hostname)}"
 
 
-def _pretty_print_formatter(dictionary: dict[str, Any]) -> Any:
+def _pretty_print_formatter(dictionary: Mapping[str, object]) -> object:
     """Lazy JSON formatter used to avoid overhead in disabled log levels."""
 
     @final

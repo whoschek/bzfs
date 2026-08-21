@@ -52,6 +52,7 @@ from collections.abc import (
     ItemsView,
     Iterable,
     Iterator,
+    Mapping,
     Sequence,
 )
 from concurrent.futures import (
@@ -140,7 +141,7 @@ def cut(field: int, separator: str = "\t", *, lines: list[str]) -> list[str]:
         raise ValueError(f"Invalid field value: {field}")
 
 
-def drain(iterable: Iterable[Any]) -> None:
+def drain(iterable: Iterable[object]) -> None:
     """Consumes all items in the iterable, effectively draining it."""
     for _ in iterable:
         del _  # help gc (iterable can block)
@@ -159,7 +160,7 @@ def shuffle_dict(dictionary: dict[_K_, _V_], /, rand: random.Random = random.Sys
 
 
 def sorted_dict(
-    dictionary: dict[_K_, _V_], /, *, key: Callable[[tuple[_K_, _V_]], Any] | None = None, reverse: bool = False
+    dictionary: dict[_K_, _V_], /, *, key: Callable[[tuple[_K_, _V_]], Comparable] | None = None, reverse: bool = False
 ) -> dict[_K_, _V_]:
     """Returns a new dict with items sorted, primarily by key and secondarily by value (unless a custom key is supplied)."""
     return dict(sorted(dictionary.items(), key=key, reverse=reverse))
@@ -423,7 +424,7 @@ def is_descendant(dataset: str, of_root_dataset: str) -> bool:
     return dataset == of_root_dataset or dataset.startswith(of_root_dataset + "/")
 
 
-def has_duplicates(sorted_list: list[Any]) -> bool:
+def has_duplicates(sorted_list: Sequence[object]) -> bool:
     """Returns True if any adjacent items within the given sorted sequence are equal."""
     return any(map(operator.eq, sorted_list, itertools.islice(sorted_list, 1, None)))
 
@@ -531,7 +532,7 @@ def compile_regexes(regexes: list[str], *, suffix: str = "") -> RegexList:
     return compiled_regexes
 
 
-def list_formatter(iterable: Iterable[Any], separator: str = " ", lstrip: bool = False) -> Any:
+def list_formatter(iterable: Iterable[object], separator: str = " ", lstrip: bool = False) -> object:
     """Lazy formatter joining items with ``separator`` used to avoid overhead in disabled log levels."""
 
     @final
@@ -545,7 +546,7 @@ def list_formatter(iterable: Iterable[Any], separator: str = " ", lstrip: bool =
     return CustomListFormatter()
 
 
-def pretty_print_formatter(obj_to_format: Any) -> Any:
+def pretty_print_formatter(obj_to_format: object) -> object:
     """Lazy pprint formatter used to avoid overhead in disabled log levels."""
 
     @final
@@ -560,12 +561,12 @@ def pretty_print_formatter(obj_to_format: Any) -> Any:
     return PrettyPrintFormatter()
 
 
-def stderr_to_str(stderr: Any) -> str:
+def stderr_to_str(stderr: object) -> str:
     """Workaround for https://github.com/python/cpython/issues/87597."""
     return str(stderr) if not isinstance(stderr, bytes) else stderr.decode("utf-8", errors="replace")
 
 
-def xprint(log: logging.Logger, value: Any, *, run: bool = True, end: str = "\n", file: TextIO | None = None) -> None:
+def xprint(log: logging.Logger, value: object, *, run: bool = True, end: str = "\n", file: TextIO | None = None) -> None:
     """Optionally logs ``value`` at stdout/stderr level."""
     if run and value:
         value = value if end else str(value).rstrip()
@@ -868,7 +869,7 @@ def nsuffix(s: str) -> str:
     return sys.intern("_" + s) if s else ""
 
 
-def format_dict(dictionary: dict[Any, Any]) -> str:
+def format_dict(dictionary: Mapping[_K_, _V_]) -> str:
     """Returns a formatted dictionary using repr for consistent output."""
     return f'"{dictionary}"'
 
@@ -1106,10 +1107,13 @@ class JobStats:
 
 
 #############################################################################
+_TComparableSelf = TypeVar("_TComparableSelf")
+
+
 class Comparable(Protocol):
     """Partial ordering protocol."""
 
-    def __lt__(self, other: Any) -> bool: ...
+    def __lt__(self: _TComparableSelf, other: _TComparableSelf, /) -> bool: ...
 
 
 TComparable = TypeVar("TComparable", bound=Comparable)  # Generic type variable for elements stored in UpdatablePriorityQueue

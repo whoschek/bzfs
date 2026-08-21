@@ -147,6 +147,7 @@ def create_filesystem(
         if mk_parents:
             cmd.append("-p")
         global zfs_version_is_at_least_2_1_0
+        already_exists: bool = False
         if no_mount:
             if zfs_version_is_at_least_2_1_0 is None:
                 version = zfs_version()

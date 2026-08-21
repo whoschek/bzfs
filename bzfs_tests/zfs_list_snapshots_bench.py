@@ -469,7 +469,7 @@ class _Benchmark:
                     ("warmup", self._config.warmup_trials),
                     ("measurement", self._config.measurement_trials),
                 ]:
-                    throughputs = []
+                    throughputs: list[float] = []
                     for trial in range(1, trials + 1):
                         elapsed, user_seconds, system_seconds, throughput = self._timed_trial(
                             mode, nprocs, phase, trial, datasets
@@ -747,7 +747,7 @@ class _Benchmark:
             revision = self._optional_output(["git", "-C", str(root), "rev-parse", "HEAD"])
             if revision:
                 metadata.append((name, revision))
-        config_lines = []
+        config_lines: list[str] = []
         for key, value in asdict(self._config).items():
             if isinstance(value, tuple):
                 value = ",".join(map(str, value))

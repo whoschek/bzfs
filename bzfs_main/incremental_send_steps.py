@@ -81,7 +81,7 @@ def incremental_send_steps(
 
     assert len(src_guids) == len(src_snapshots)
     assert isinstance(included_guids, set)
-    steps = []
+    steps: list[tuple[str, str, str, list[str]]] = []
     guids: list[str] = src_guids
     n = len(guids)
     i = 0

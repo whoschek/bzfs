@@ -364,6 +364,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         if params and params.get("verbose", None):
             args = args + ["--verbose"]
 
+        old_min_pipe_transfer_size: str | None = None
         if params and "min_pipe_transfer_size" in params:
             old_min_pipe_transfer_size = os.environ.get(ENV_VAR_PREFIX + "min_pipe_transfer_size")
             os.environ[ENV_VAR_PREFIX + "min_pipe_transfer_size"] = str(int(params["min_pipe_transfer_size"]))

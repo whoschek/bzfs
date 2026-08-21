@@ -1697,7 +1697,6 @@ class LocalTestCase(IntegrationTestCase):
                     ibase.DST_ROOT_DATASET,
                     "--skip-parent",
                     "--recursive",
-                    dry_run=(i == 0),
                     skip_on_error="dataset",
                     expected_status=DIE_STATUS,
                 )

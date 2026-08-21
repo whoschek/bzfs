@@ -124,13 +124,13 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
             conn._increment_free(-1)
             return conn
 
-    def return_connection(self, old_conn: Connection) -> None:
-        assert old_conn is not None
+    def return_connection(self, conn: Connection) -> None:
+        assert conn is not None
         with self._lock:
-            assert any(old_conn is c for c in self._priority_queue)
-            old_conn._increment_free(1)
+            assert any(conn is c for c in self._priority_queue)
+            conn._increment_free(1)
             self._last_modified += 1
-            old_conn._update_last_modified(self._last_modified)
+            conn._update_last_modified(self._last_modified)
 
     def __repr__(self) -> str:
         with self._lock:
@@ -367,7 +367,7 @@ class TestConnectionPool(AbstractTestCase):
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
                 # dpool = ConnectionPool(self.src2, SHARED, maxsessions)
                 rng = random.Random(12345)
-                conns = []
+                conns: list[tuple[Connection, Connection]] = []
                 try:
                     for _ in range(items):
                         conns.append(self.get_connection(cpool, dpool))

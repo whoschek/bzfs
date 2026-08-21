@@ -56,7 +56,6 @@ from collections.abc import (
 )
 from typing import (
     TYPE_CHECKING,
-    Any,
     Callable,
     TypeVar,
 )
@@ -89,7 +88,7 @@ def run_ssh_cmd_batched(
     r: MiniRemote,
     cmd: list[str],
     cmd_args: Iterable[str],
-    fn: Callable[[list[str]], Any],
+    fn: Callable[[list[str]], object],
     *,
     max_batch_items: int = 2**29,
     sep: str = " ",
@@ -117,7 +116,7 @@ def run_ssh_cmd_parallel(
     job: Job,
     r: MiniRemote,
     cmd_args_list: Iterable[tuple[list[str], Iterable[str]]],
-    fn: Callable[[list[str], list[str]], Any],
+    fn: Callable[[list[str], list[str]], object],
     *,
     max_batch_items: int = 2**29,
 ) -> None:
