@@ -87,7 +87,7 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
         limactl_image_variant_arg=(--image-variant="$LIMA_VM_IMAGE_VARIANT")
     fi
     limactl_ssh_over_vsock_arg=()
-    if [[ "$(uname -s)" == "Darwin" && "$LIMA_VM_TEMPLATE" == "template:almalinux-10" ]]; then
+    if [[ "$(uname -s)" == "Darwin" && "$LIMA_VM_TEMPLATE" =~ ^template:(almalinux|rocky)-10$ ]]; then
         # avoid AF_VSOCK SSH incompatibility after upgrading SELinux policy: https://bugzilla.redhat.com/2406423
         limactl_ssh_over_vsock_arg=(--set=".ssh.overVsock=false")
     fi
