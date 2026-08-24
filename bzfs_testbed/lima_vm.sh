@@ -202,7 +202,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
         sudo modprobe zfs
         sudo systemctl start zfs-zed.service
     elif [[ "$LIMA_ZFS_VERSION" =~ ^tag:zfs-[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
-        # EXPERIMENTAL: build and install zfs from source via git 'tag:zfs-2.4.3', 'tag:zfs-2.3.8', 'tag:zfs-2.2.10'
+        # EXPERIMENTAL: build and install zfs from source via git 'tag:zfs-2.4.4', 'tag:zfs-2.3.9', 'tag:zfs-2.2.11'
         sudo apt-get -y install git
         upstream_zfs_git_tag="${LIMA_ZFS_VERSION#tag:}"  # strip 'tag:' prefix
         git ls-remote --tags --refs --exit-code https://github.com/openzfs/zfs.git "refs/tags/$upstream_zfs_git_tag" # verify

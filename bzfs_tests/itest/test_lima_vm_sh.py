@@ -171,9 +171,9 @@ class TestLimaVmScript(unittest.TestCase):
             "template:rocky-10",
         ]:
             if "ubuntu-26.04" in template:
-                zfs_versions = ["", "zfs-2.4", "tag:zfs-2.4.3", "tag:zfs-2.3.8"]
+                zfs_versions = ["", "zfs-2.4", "tag:zfs-2.4.4", "tag:zfs-2.3.9"]
             elif "ubuntu-24.04" in template:
-                zfs_versions = ["", "zfs-2.4", "tag:zfs-2.4.3", "tag:zfs-2.3.8", "tag:zfs-2.2.10"]
+                zfs_versions = ["", "zfs-2.4", "tag:zfs-2.4.4", "tag:zfs-2.3.9", "tag:zfs-2.2.11"]
             elif "ubuntu-22.04" in template:
                 zfs_versions = [""]
             else:  # RHEL/EL family
@@ -233,7 +233,9 @@ class TestLimaVmScript(unittest.TestCase):
                 self.assertIn(zfs_version_substring, version_line, msg=msg)
 
         # zfs userland and kernel module must report the same normalized version
-        insignificant_tail = r"(ubuntu)[0-9]*$"  # e.g zfs-2.4.1-1ubuntu5 vs zfs-kmod-2.4.1-1ubuntu4 with LIMA_ZFS_VERSION=""
+        insignificant_tail = (
+            r"(ubuntu)[0-9]+(\.[0-9]+)*$"  # e.g zfs-2.4.1-1ubuntu5.1 vs zfs-kmod-2.4.1-1ubuntu4 with LIMA_ZFS_VERSION=""
+        )
         zfs_userland_version = re.sub(insignificant_tail, r"\1", version_lines[0])
         zfs_kernel_module_version = re.sub(insignificant_tail, r"\1", version_lines[1].replace("kmod-", ""))
         self.assertEqual(zfs_userland_version, zfs_kernel_module_version, msg)
