@@ -185,6 +185,9 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
     fi
 
     if [[ "$LIMA_ZFS_VERSION" == "zfs-2.4" ]]; then
+        sudo apt-get -y install software-properties-common  # ensure `add-apt-repository` is installed
+        sudo apt-get -y install zstd
+        sudo apt-get -y install "linux-headers-$(uname -r)"
         # Upgrade zfs kernel module + userland to specific upstream zfs version
         . /etc/os-release
         if [[ "${VERSION_ID:-}" == "26.04" ]]; then  # ubuntu-26.04
@@ -197,8 +200,8 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
             sudo apt-get -y install zfs-dkms
         fi
         # Ensure just-installed DKMS module is actually the loaded kernel module, and userland has same ZFS version as kernel
-        sudo systemctl stop zfs-zed.service || true
-        sudo modprobe --remove zfs || true
+        sudo systemctl stop zfs-zed.service || { sleep 1; sudo systemctl stop zfs-zed.service; }
+        sudo modprobe --remove zfs
         sudo modprobe zfs
         sudo systemctl start zfs-zed.service
     elif [[ "$LIMA_ZFS_VERSION" =~ ^tag:zfs-[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
@@ -206,6 +209,8 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
         sudo apt-get -y install git
         upstream_zfs_git_tag="${LIMA_ZFS_VERSION#tag:}"  # strip 'tag:' prefix
         git ls-remote --tags --refs --exit-code https://github.com/openzfs/zfs.git "refs/tags/$upstream_zfs_git_tag" # verify
+        sudo apt-get -y install zstd
+        sudo apt-get -y install "linux-headers-$(uname -r)"
         # see https://openzfs.github.io/openzfs-docs/Developer%20Resources/Custom%20Packages.html#debian-and-ubuntu
         sudo apt-get -y install alien autoconf automake build-essential debhelper-compat dh-dkms dh-python dkms fakeroot \
             gawk libaio-dev libattr1-dev libblkid-dev libcurl4-openssl-dev libelf-dev libffi-dev libpam0g-dev libssl-dev \

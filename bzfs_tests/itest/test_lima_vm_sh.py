@@ -179,40 +179,55 @@ class TestLimaVmScript(unittest.TestCase):
             else:  # RHEL/EL family
                 zfs_versions = ["zfs-2.4", "zfs-2.3", "zfs-2.2"]
             for zfs_version in zfs_versions:
-                log_sequence += 1
-                run_env = dict(env)
-                run_env["LIMA_VM_NAME"] = vm_name
-                run_env["LIMA_VM_TEMPLATE"] = template
-                run_env["LIMA_ZFS_VERSION"] = zfs_version
-                run_env["LIMA_START_TIMEOUT"] = "3m"
-                version_name = zfs_version if zfs_version != "" else "default"
-                log_path = os.path.join(
-                    log_dir, f"{self.log_time_prefix}+run{log_sequence:02d}+{template.replace('/','_')}+{version_name}.log"
-                )
-                with self._cleanup_vms(vm_name):
-                    self._run_logged_bash_script(
-                        log_path,
-                        run_env,
-                        shlex.quote(self.script_path),
+                for vm_upgrade in [True, False]:
+                    log_sequence += 1
+                    run_env = dict(env)
+                    run_env["LIMA_VM_NAME"] = vm_name
+                    run_env["LIMA_VM_TEMPLATE"] = template
+                    run_env["LIMA_VM_UPGRADE"] = str(vm_upgrade).lower()
+                    run_env["LIMA_ZFS_VERSION"] = zfs_version
+                    run_env["LIMA_START_TIMEOUT"] = "3m"
+                    version_name = zfs_version if zfs_version != "" else "default"
+                    version_name += f"+upgrade={vm_upgrade}"
+                    log_path = os.path.join(
+                        log_dir,
+                        f"{self.log_time_prefix}+run{log_sequence:02d}+{template.replace('/','_')}+{version_name}.log",
                     )
-                    version_stdout: str = self.validate_zfs_version_string(zfs_version, None, vm_name)
-                    self._run_logged_bash_script(
-                        log_path,
-                        run_env,
-                        f"""
-                        limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'truncate -s 100M ~/test_pool_smoke'
-                        limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'sudo zpool create -f test-pool-smoke ~/test_pool_smoke'
-                        limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'zpool list -H test-pool-smoke | grep -q .'
-                        limactl stop --tty=false {shlex.quote(vm_name)}
-                        limactl start --tty=false {shlex.quote(vm_name)} --timeout=1m
-                        limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'zpool list -H test-pool-smoke | grep -q .'
-                        """,
-                        log_mode="a",
-                    )
-                    self.validate_zfs_version_string(zfs_version, version_stdout, vm_name)
+                    with self._cleanup_vms(vm_name):
+                        self._run_logged_bash_script(
+                            log_path,
+                            run_env,
+                            shlex.quote(self.script_path),
+                        )
+                        version_stdout: str = self.validate_zfs_version_string(zfs_version, None, vm_name)
+                        self._run_logged_bash_script(
+                            log_path,
+                            run_env,
+                            f"""
+                            limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'truncate -s 100M ~/test_pool_smoke'
+                            limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'sudo zpool create -f test-pool-smoke ~/test_pool_smoke'
+                            limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'zpool list -H test-pool-smoke | grep -q .'
+                            limactl stop --tty=false {shlex.quote(vm_name)}
+                            limactl start --tty=false {shlex.quote(vm_name)} --timeout=1m
+                            limactl shell --tty=false --workdir=/ {shlex.quote(vm_name)} -- bash -lc 'zpool list -H test-pool-smoke | grep -q .'
+                            """,
+                            log_mode="a",
+                        )
+                        self.validate_zfs_version_string(zfs_version, version_stdout, vm_name)
 
     def validate_zfs_version_string(self, zfs_version: str, prev_version_stdout: str | None, vm_name: str) -> str:
         """Validates the output of `zfs --version` before and after reboot."""
+
+        def _normalize(s: str) -> str:
+            insignificant_tail = r"(ubuntu)[0-9]+[~]?([\.]?[0-9]+)*$"
+            return re.sub(insignificant_tail, r"\1", s)
+
+        self.assertEqual("zfs-2.4.1-1ubuntu", _normalize("zfs-2.4.1-1ubuntu5.1"))  # with LIMA_ZFS_VERSION=""
+        self.assertEqual("zfs-2.4.1-1ubuntu", _normalize("zfs-2.4.1-1ubuntu4"))  # with LIMA_ZFS_VERSION=""
+
+        self.assertEqual("zfs-2.1.5-1ubuntu", _normalize("zfs-2.1.5-1ubuntu6~22.04.7"))  # with LIMA_ZFS_VERSION=""
+        self.assertEqual("zfs-2.1.5-1ubuntu", _normalize("zfs-2.1.5-1ubuntu6~22.04.6"))  # with LIMA_ZFS_VERSION=""
+
         version_stdout: str = self._run_limactl(
             ["shell", "--tty=false", "--workdir=/", vm_name, "--", "zfs", "--version"], check=True
         ).stdout
@@ -232,12 +247,8 @@ class TestLimaVmScript(unittest.TestCase):
             for version_line in version_lines[:2]:
                 self.assertIn(zfs_version_substring, version_line, msg=msg)
 
-        # zfs userland and kernel module must report the same normalized version
-        insignificant_tail = (
-            r"(ubuntu)[0-9]+(\.[0-9]+)*$"  # e.g zfs-2.4.1-1ubuntu5.1 vs zfs-kmod-2.4.1-1ubuntu4 with LIMA_ZFS_VERSION=""
-        )
-        zfs_userland_version = re.sub(insignificant_tail, r"\1", version_lines[0])
-        zfs_kernel_module_version = re.sub(insignificant_tail, r"\1", version_lines[1].replace("kmod-", ""))
+        zfs_userland_version = _normalize(version_lines[0])
+        zfs_kernel_module_version = _normalize(version_lines[1].replace("kmod-", ""))
         self.assertEqual(zfs_userland_version, zfs_kernel_module_version, msg)
 
         return version_stdout
