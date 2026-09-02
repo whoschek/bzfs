@@ -31,18 +31,14 @@ Snapshots are created exactly once, on `srchost`, and the very same snapshots th
 
 ## Files
 
-| File                         | Purpose                                                                                |
-| ---------------------------- | -------------------------------------------------------------------------------------- |
-| `bzfs_job_src_to_bckp.py`    | tier-1 jobconfig: hosts, datasets and retention for `srchost` --> `bckphost`           |
-| `bzfs_job_bckp_to_arc.py`    | tier-2 jobconfig: hosts, datasets and retention for `bckphost` --> `archost`           |
-| `bzfs_backup_run.sh` / `.py` | single entry point; maps a job name to jobconfig + host filter + actions               |
-| `bzfs_alert.sh` / `.py`      | watchdog: runs one job, alerts only after a grace period, and alerts again only rarely |
-| `bzfs_notify.sh`             | notification transport; edit this to reach email / ntfy / Gotify / Pushover            |
+| File                      | Purpose                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `bzfs_job_src_to_bckp.py` | tier-1 jobconfig: hosts, datasets and retention for `srchost` --> `bckphost`   |
+| `bzfs_job_bckp_to_arc.py` | tier-2 jobconfig: hosts, datasets and retention for `bckphost` --> `archost`   |
+| `bzfs_backup.py`          | the only thing you schedule: runs one named job, and alerts if it stays broken |
+| `bzfs_notify.sh`          | notification transport; edit this to reach email / ntfy / Gotify / Pushover    |
 
-The `.sh` and `.py` variants of `bzfs_backup_run` and `bzfs_alert` are equivalent and share the same state file format.
-**Deploy one language pair and delete the other**, so that a given job name means exactly one thing on a given host.
-
-All five files are deployed unchanged to all three hosts; the job name decides what actually runs where.
+All four files are deployed unchanged to all three hosts; the job name decides what actually runs where.
 
 ## Retention
 
@@ -89,12 +85,12 @@ In `bzfs_job_bckp_to_arc.py`, the following must match tier 1 exactly, because t
 
 Then set `arc_host` and `dst_root_datasets` for the archive pool.
 
-Finally, edit `bzfs_notify.sh` to actually reach a human, and adjust the grace periods in `bzfs_alert.sh` /
-`bzfs_alert.py` if the defaults do not fit your habits.
+Finally, edit `bzfs_notify.sh` to actually reach a human, and adjust the grace periods in `bzfs_backup.py` if the
+defaults do not fit your habits.
 
 ## Jobs and schedule
 
-`bzfs_backup_run.sh <job>` is the only thing you schedule. Every job runs under the watchdog.
+`bzfs_backup.py <job>` is the only thing you schedule. Every job runs under the watchdog.
 
 | Job              | Runs on    | Suggested cadence | What it does                                              |
 | ---------------- | ---------- | ----------------- | --------------------------------------------------------- |
@@ -126,7 +122,7 @@ Type=oneshot
 User=backup
 Environment=DRYRUN=1
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-ExecStart=/opt/bzfs-backup/bzfs_backup_run.sh %i
+ExecStart=/opt/bzfs-backup/bzfs_backup.py %i
 ```
 
 ```ini
@@ -154,21 +150,21 @@ systemctl enable --now bzfs-backup@bckp-to-arc.timer                            
 
 ```cron
 # srchost
-*/15 * * * * backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup_run.sh src-to-bckp
+*/15 * * * * backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup.py src-to-bckp
 
 # bckphost
-17 * * * *   backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup_run.sh bckp-prune
-27 * * * *   backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup_run.sh bckp-freshness
-37 * * * *   backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup_run.sh arc-freshness
-47 3 * * *   backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup_run.sh bckp-bookmarks
+17 * * * *   backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup.py bckp-prune
+27 * * * *   backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup.py bckp-freshness
+37 * * * *   backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup.py arc-freshness
+47 3 * * *   backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup.py bckp-bookmarks
 
 # archost
-*/15 * * * * backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup_run.sh bckp-to-arc
+*/15 * * * * backup DRYRUN=1 /opt/bzfs-backup/bzfs_backup.py bckp-to-arc
 ```
 
 ## Alerting
 
-`bzfs_alert.sh <job> <command...>` runs the job, records the outcome in `~/.bzfs-alert/<job>.state`, and notifies via
+`bzfs_backup.py <job>` runs the job, records the outcome in `~/.bzfs-alert/<job>.state`, and notifies via
 `bzfs_notify.sh` only when **all three** of the following hold:
 
 1. the job failed at least `min_failures` times in a row, and
@@ -179,7 +175,7 @@ When a failing job succeeds again, a single `RECOVERED` notification is sent and
 (`bzfs`: "the same previous periodic job has not completed yet") is treated as neither success nor failure, so a slow
 transfer that overruns its schedule does not look like an outage.
 
-Defaults, all editable at the top of `bzfs_alert.sh` / `bzfs_alert.py`:
+Defaults, all editable in the `JOBS` table at the top of `bzfs_backup.py`:
 
 | Job              | Grace | Min failures | Re-notify |
 | ---------------- | ----- | ------------ | --------- |
@@ -187,7 +183,7 @@ Defaults, all editable at the top of `bzfs_alert.sh` / `bzfs_alert.py`:
 | `bckp-prune`     | 6 h   | 3            | 24 h      |
 | `bckp-freshness` | 24 h  | 2            | 7 d       |
 | `bckp-bookmarks` | 24 h  | 3            | 7 d       |
-| `arc-freshness`  | 36 h  | 3            | 24 h      |
+| `arc-freshness`  | 72 h  | 3            | 48 h      |
 | `bckp-to-arc`    | 36 h  | 3            | 24 h      |
 
 The grace period is measured from the **first failure of the current streak**, not from the last success. That
@@ -209,8 +205,13 @@ that, so the split is:
   at 21 days of no new daily snapshot) so that an ordinary holiday does not page you. Tighten `monitor_snapshot_plan` in
   tier 1 if your `srchost` is on every day.
 
-The `archost` side has no such ambiguity: `archost` is expected daily, so `arc-freshness` alerts after 36 hours without
-a successful check, whether the cause is an unreachable host or a stale replica.
+The `archost` side has no such ambiguity -- `archost` is expected daily -- but it has a subtler trap. `arc-freshness`
+runs on `bckphost` and can only observe `archost` while `archost` happens to be online, so most of its hourly runs
+legitimately fail with "unreachable"; the failure streak is broken only by whichever run lands inside that day's online
+window. If `archost`'s window is short, a day where every check missed it is not an outage at all. The 72 h grace spans
+roughly three of those windows, so an alert means `archost` really has not appeared for three days -- not that we were
+unlucky twice. Shorten the grace only if you also shorten the check interval; if `archost` is up for less than half an
+hour a day, run `arc-freshness` every 15 minutes instead of hourly.
 
 ## Bringing it up
 
@@ -222,7 +223,7 @@ a successful check, whether the cause is an unreachable host or a stale replica.
 4. Edit the two jobconfigs as listed above.
 5. Dry-run every job by hand, on the host it belongs to, and read the output:
    ```
-   /opt/bzfs-backup/bzfs_backup_run.sh src-to-bckp      # DRYRUN defaults to 1
+   /opt/bzfs-backup/bzfs_backup.py src-to-bckp      # DRYRUN defaults to 1
    ```
 6. Do the very first replication by hand with both hosts up and `DRYRUN=0`. It is a full send and can take hours;
    subsequent runs are incremental.
