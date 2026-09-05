@@ -28,6 +28,8 @@ import bisect
 import contextlib
 import dataclasses
 import errno
+import fcntl
+import functools
 import hashlib
 import itertools
 import logging
@@ -70,6 +72,9 @@ from datetime import (
     timedelta,
     timezone,
     tzinfo,
+)
+from pathlib import (
+    Path,
 )
 from subprocess import (
     DEVNULL,
@@ -369,6 +374,42 @@ def close_quietly(fd: int) -> None:
             os.close(fd)
         except OSError:
             pass
+
+
+@contextlib.contextmanager
+def nonblocking_file_lock(path: str) -> Iterator[bool]:
+    """Context manager that yields whether an exclusive non-blocking flock was acquired, deleting its file before releasing
+    a successful acquisition in order to avoid accumulating stale lock files over time."""
+
+    def _is_current_file(fd: int, path: str) -> bool:
+        """Checks identity while holding the flock; a missing or replaced pathname cannot result in lock acquisition."""
+        try:
+            return os.path.samestat(os.fstat(fd), os.stat(path, follow_symlinks=False))
+        except FileNotFoundError:
+            return False
+
+    while True:
+        fd: int = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, FILE_PERMISSIONS)
+        with xfinally(functools.partial(os.close, fd)):
+            try:
+                # Acquire an exclusive lock; will raise a BlockingIOError if lock is already held by this process or
+                # another process. The (advisory) lock is auto-released when the process terminates or the fd is closed.
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
+            except BlockingIOError:
+                yield False
+                return
+
+            if not _is_current_file(fd, path):
+                continue  # retry on race
+
+            # xfinally: unlink the lock_file while still holding the flock on its fd - it's a correct and safe
+            # standard POSIX pattern:
+            # - Performing unlink() before close(fd) avoids a race where a subsequent bzfs process could recreate and
+            #   lock a fresh inode for the same path between our close() and a later unlink(). In that case, a late
+            #   unlink would delete the newer process's lock_file path.
+            with xfinally(lambda: Path(path).unlink(missing_ok=True)):  # don't accumulate stale files
+                yield True
+            return
 
 
 _P = TypeVar("_P")

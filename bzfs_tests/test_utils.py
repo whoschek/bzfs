@@ -20,6 +20,7 @@ from __future__ import (
 import argparse
 import base64
 import errno
+import fcntl
 import hashlib
 import logging
 import os
@@ -57,6 +58,9 @@ from enum import (
 )
 from logging import (
     Logger,
+)
+from pathlib import (
+    Path,
 )
 from subprocess import (
     DEVNULL,
@@ -141,6 +145,7 @@ from bzfs_tests.tools import (
 
 #############################################################################
 def suite() -> unittest.TestSuite:
+    """Registers utility tests, including file-lock lifetime checks, for the standard unit runner."""
     test_cases = [
         TestHelperFunctions,
         TestBase64,
@@ -155,6 +160,7 @@ def suite() -> unittest.TestSuite:
         TestOpenNoFollow,
         TestCloseQuietly,
         TestValidateFilePermissions,
+        TestNonblockingFileLock,
         TestFindMatch,
         TestReplaceCapturingGroups,
         TestTaskTiming,
@@ -976,6 +982,157 @@ class TestValidateFilePermissions(unittest.TestCase):
         self.assertIn("rw-------", msg)  # actual 0o600
         self.assertIn(f"{expected_mode:03o}", msg)
         self.assertIn("rwx------", msg)  # expected 0o700
+
+
+#############################################################################
+class TestNonblockingFileLock(unittest.TestCase):
+    """Check mutual exclusion, recovery from pathname races, and exception cleanup using isolated real files and flocks."""
+
+    def setUp(self) -> None:
+        """Isolates real lock operations in a disposable directory without touching running jobs."""
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name, "job.lock")
+
+    def test_busy_contender_preserves_owner_file(self) -> None:
+        """A failed acquisition must preserve the owner's pathname, contents, and modification time."""
+        self.path.write_text("unchanged", encoding="utf-8")
+        os.utime(self.path, (1, 1))
+        with utils.nonblocking_file_lock(str(self.path)) as acquired:
+            self.assertTrue(acquired)
+            with utils.nonblocking_file_lock(str(self.path)) as contender_acquired:
+                self.assertFalse(contender_acquired)
+            self.assertEqual("unchanged", self.path.read_text(encoding="utf-8"))
+            self.assertEqual(1, self.path.stat().st_mtime)
+        self.assertFalse(self.path.exists())
+
+    def test_body_exception_releases_ownership(self) -> None:
+        """Exceptional work must remove its lock and permit another run without changing the original exception."""
+        for error in (RuntimeError("work failed"), BlockingIOError("work failed"), SystemExit(3)):
+            with self.subTest(error=error), self.assertRaises(type(error)) as cm:
+                with utils.nonblocking_file_lock(str(self.path)) as acquired:
+                    self.assertTrue(acquired)
+                    raise error
+            self.assertIs(error, cm.exception)
+            self.assertFalse(self.path.exists())
+            with utils.nonblocking_file_lock(str(self.path)) as acquired:
+                self.assertTrue(acquired)
+
+    def test_cleanup_failure_preserves_body_exception_and_releases_lock(self) -> None:
+        """Failed unlink must preserve the work error and release the lock. Catch the error directly because Python 3.9's
+        assertRaises traceback cleanup can loop on cyclic exception contexts."""
+        error = RuntimeError("work failed")
+        caught_error: RuntimeError | None = None
+        with patch.object(Path, "unlink", autospec=True, side_effect=PermissionError("cleanup failed")) as unlink:
+            try:
+                with utils.nonblocking_file_lock(str(self.path)) as acquired:
+                    self.assertTrue(acquired)
+                    raise error
+            except RuntimeError as caught:
+                caught_error = caught
+        self.assertIs(error, caught_error)
+        self.assertIsInstance(error.__context__, PermissionError)
+        unlink.assert_called_once_with(self.path, missing_ok=True)
+        self.assertTrue(self.path.exists())
+        with utils.nonblocking_file_lock(str(self.path)) as acquired:
+            self.assertTrue(acquired)
+
+    def test_another_process_is_excluded(self) -> None:
+        """A separate interpreter must observe the parent's real flock and leave its file intact."""
+        script = (
+            "import sys\n"
+            "from bzfs_main.util.utils import nonblocking_file_lock\n"
+            "with nonblocking_file_lock(sys.argv[1]) as acquired:\n"
+            "    print(acquired)\n"
+        )
+        with utils.nonblocking_file_lock(str(self.path)) as acquired:
+            self.assertTrue(acquired)
+            result = subprocess.run(
+                [sys.executable, "-c", script, str(self.path)], capture_output=True, text=True, timeout=2, check=False
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual("False\n", result.stdout)
+            self.assertTrue(self.path.exists())
+
+    def test_lock_is_held_until_unlink(self) -> None:
+        """Opening contenders must remain excluded until unlink; intercept Path.unlink directly for portable ordering
+        checks."""
+        real_unlink = Path.unlink
+        checked = False
+
+        def check_before_unlink(path: Path, *, missing_ok: bool = False) -> None:
+            nonlocal checked
+            fd = os.open(path, os.O_WRONLY)
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                checked = True
+            finally:
+                os.close(fd)
+            real_unlink(path, missing_ok=missing_ok)
+
+        with patch.object(Path, "unlink", autospec=True, side_effect=check_before_unlink):
+            with utils.nonblocking_file_lock(str(self.path)) as acquired:
+                self.assertTrue(acquired)
+        self.assertTrue(checked)
+        self.assertFalse(self.path.exists())
+
+    def test_abrupt_process_exit_leaves_reusable_lock(self) -> None:
+        """A child exiting without context cleanup must leave a lock that a later run can acquire and remove."""
+        script = (
+            "import os, sys\n"
+            "from bzfs_main.util.utils import nonblocking_file_lock\n"
+            "with nonblocking_file_lock(sys.argv[1]) as acquired:\n"
+            "    os._exit(0 if acquired else 1)\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script, str(self.path)], capture_output=True, text=True, timeout=2, check=False
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertTrue(self.path.exists())
+        with utils.nonblocking_file_lock(str(self.path)) as acquired:
+            self.assertTrue(acquired)
+        self.assertFalse(self.path.exists())
+
+    def test_retries_when_opened_path_is_deleted(self) -> None:
+        """A missing pathname race must cause a retry; a controlled unlink avoids reliance on process scheduling."""
+        self._assert_retries_after_path_change(replace=False)
+
+    def test_retries_when_opened_path_is_replaced(self) -> None:
+        """A different inode race must cause a retry; replacing a real file exercises the identity check without fabricated
+        stats."""
+        self._assert_retries_after_path_change(replace=True)
+
+    def _assert_retries_after_path_change(self, *, replace: bool) -> None:
+        """Changes the pathname after the first flock, checking that retries release the stale inode and lock the current
+        one."""
+        real_flock = fcntl.flock
+        attempts = 0
+
+        def _flock_with_path_race(fd: int, operation: int) -> None:
+            """Performs real flocks and changes the first locked pathname to reproduce a race deterministically."""
+            nonlocal attempts
+            attempts += 1
+            self.assertLessEqual(attempts, 2, "Lock acquisition did not recover from the pathname race")
+            real_flock(fd, operation)
+            if attempts == 1:
+                self.path.unlink()
+                if replace:
+                    self.path.write_text("replacement", encoding="utf-8")
+
+        with self.path.open("wb") as stale_file:
+            with patch("fcntl.flock", side_effect=_flock_with_path_race):
+                with utils.nonblocking_file_lock(str(self.path)) as acquired:
+                    self.assertTrue(acquired)
+                    self.assertEqual(2, attempts)
+                    real_flock(stale_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    with self.path.open("r+b") as current_file:
+                        self.assertFalse(os.path.samestat(os.fstat(stale_file.fileno()), os.fstat(current_file.fileno())))
+                        with self.assertRaises(BlockingIOError):
+                            real_flock(current_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    if replace:
+                        self.assertEqual("replacement", self.path.read_text(encoding="utf-8"))
+        self.assertFalse(self.path.exists())
 
 
 #############################################################################

@@ -44,7 +44,6 @@ from __future__ import (
 )
 import argparse
 import contextlib
-import fcntl
 import heapq
 import itertools
 import logging
@@ -68,9 +67,6 @@ from datetime import (
 )
 from logging import (
     Logger,
-)
-from pathlib import (
-    Path,
 )
 from subprocess import (
     DEVNULL,
@@ -174,7 +170,6 @@ from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
     DIE_STATUS,
     DONT_SKIP_DATASET,
-    FILE_PERMISSIONS,
     LOG_DEBUG,
     LOG_TRACE,
     PROG_NAME,
@@ -195,6 +190,7 @@ from bzfs_main.util.utils import (
     human_readable_bytes,
     human_readable_duration,
     is_descendant,
+    nonblocking_file_lock,
     percent,
     pretty_print_formatter,
     replace_in_lines,
@@ -360,36 +356,19 @@ class Job(MiniJob):
                 self.params = p = Params(args, sys_argv or [], log_params, log, self.inject_params)
                 self.timeout_duration_nanos = p.timeout_duration_nanos
                 lock_file: str = p.lock_file_name()
-                lock_fd = os.open(
-                    lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, FILE_PERMISSIONS
-                )
-                with xfinally(lambda: os.close(lock_fd)):
-                    try:
-                        # Acquire an exclusive lock; will raise a BlockingIOError if lock is already held by this process or
-                        # another process. The (advisory) lock is auto-released when the process terminates or the fd is
-                        # closed.
-                        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
-                    except BlockingIOError:
+                with nonblocking_file_lock(lock_file) as acquired:
+                    if not acquired:
                         msg = "Exiting as same previous periodic job is still running without completion yet per "
                         die(msg + lock_file, STILL_RUNNING_STATUS)
-
-                    # xfinally: unlink the lock_file while still holding the flock on its fd - it's a correct and safe
-                    # standard POSIX pattern:
-                    # - Performing unlink() before close(fd) avoids a race where a subsequent bzfs process could recreate and
-                    #   lock a fresh inode for the same path between our close() and a later unlink(). In that case, a late
-                    #   unlink would delete the newer process's lock_file path.
-                    # - At this point, critical work is complete; the remaining steps are shutdown mechanics that have no
-                    #   side effect, so this pattern is correct, safe, and simple.
-                    with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # don't accumulate stale files
-                        try:
-                            self.run_tasks()  # do the real work
-                        except BaseException:
-                            self.terminate()
-                            raise
-                        self.shutdown()
-                        with contextlib.suppress(BrokenPipeError):
-                            sys.stderr.flush()
-                            sys.stdout.flush()
+                    try:
+                        self.run_tasks()  # do the real work
+                    except BaseException:
+                        self.terminate()
+                        raise
+                    self.shutdown()
+                    with contextlib.suppress(BrokenPipeError):
+                        sys.stderr.flush()
+                        sys.stdout.flush()
             except subprocess.CalledProcessError as e:
                 log_error_on_exit(e, e.returncode)
                 raise
