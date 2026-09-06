@@ -52,6 +52,7 @@ from bzfs_main.configuration import (
     Remote,
 )
 from bzfs_main.filter import (
+    _NEVER_MATCHES_REGEX,
     SNAPSHOT_REGEX_FILTER_NAME,
     _filter_datasets_by_exclude_property,
     _filter_snapshots_by_regex,
@@ -160,14 +161,14 @@ class TestHelperFunctions(CommonTest):
         mock_dst = MagicMock(spec=Remote, root_dataset="tank/dst")
         datasets = ["foo", "bar/", "/tank/src/a", "/tank/dst/b", "/ignorenonexistent", "baz", ""]
         result = dataset_regexes(mock_src, mock_dst, datasets)
-        self.assertListEqual(["foo", "bar", "a", "b", "baz", ".*"], result)
+        self.assertListEqual(["foo", "bar", "a", "b", _NEVER_MATCHES_REGEX, "baz", ".*"], result)
 
     def test_dataset_regexes_all_branches(self) -> None:
         mock_src = MagicMock(spec=Remote, root_dataset="tank/src")
         mock_dst = MagicMock(spec=Remote, root_dataset="tank/dst")
         datasets = ["/tank/src", "/tank/dst/", "/nonexistent", "foo", "bar/", "/tank/src/a", "/tank/dst//c/", ""]
         result = dataset_regexes(mock_src, mock_dst, datasets)
-        self.assertListEqual([".*", ".*", "foo", "bar", "a", "/c", ".*"], result)
+        self.assertListEqual([".*", ".*", _NEVER_MATCHES_REGEX, "foo", "bar", "a", "/c", ".*"], result)
 
     def test_filter_snapshots_by_regex(self) -> None:
         job = MagicMock(spec=Job, params=MagicMock(spec=Params, log=MagicMock()))

@@ -58,6 +58,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 SNAPSHOT_REGEX_FILTER_NAME: Final[str] = "snapshot_regex"
 SNAPSHOT_REGEX_FILTER_NAMES: Final[frozenset[str]] = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
 SNAPSHOT_FILTERS_VAR: Final[str] = "snapshot_filters_var"
+_NEVER_MATCHES_REGEX: Final[str] = r"(?!)"  # empty negative lookahead always fails, even on an empty string
 
 
 UnixTimeRange = Optional[tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
@@ -366,7 +367,8 @@ def dataset_regexes(src: Remote, dst: Remote, datasets: list[str]) -> list[str]:
             elif is_descendant(dataset, of_root_dataset=dst.root_dataset):
                 dataset = relativize_dataset(dataset, dst.root_dataset)
             else:
-                continue  # ignore datasets that make no difference
+                results.append(_NEVER_MATCHES_REGEX)
+                continue
             if dataset.startswith("/"):
                 dataset = dataset[1:]
         if dataset.endswith("/"):
