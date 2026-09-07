@@ -1199,7 +1199,7 @@ def _create_zfs_bookmarks(
                 if actual_guid == expected_guid:
                     return  # harmless
                 die(
-                    f"Conflict: Cannot create bookmark {bookmark!r} with expected GUID {expected_guid!r} from {snapshot!r}, "
+                    f"Conflict: Cannot create bookmark {bookmark!r} with expected GUID {expected_guid!r} from {snapshot!r} "
                     f"because the bookmark already exists with a different GUID {actual_guid!r}"
                 )
             xprint(p.log, stderr, file=sys.stderr, end="")
