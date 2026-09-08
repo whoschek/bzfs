@@ -88,6 +88,8 @@ from bzfs_main.util.utils import (
     DIE_STATUS,
     RegexList,
     is_descendant,
+    sort_datasets,
+    sort_datasets_key,
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
@@ -219,7 +221,7 @@ class TestHelperFunctions(AbstractTestCase):
     ) -> list[str] | None:
         # Assumes that src_datasets and basis_src_datasets are both sorted (and thus root_datasets is sorted too)
         src_datasets_set = set(src_datasets)
-        root_datasets = bzfs.Job().find_root_datasets(src_datasets)
+        root_datasets = sorted(bzfs.Job().find_root_datasets(sort_datasets(src_datasets)))
         for basis_dataset in basis_src_datasets:
             for root_dataset in root_datasets:
                 if is_descendant(basis_dataset, of_root_dataset=root_dataset):
@@ -232,6 +234,8 @@ class TestHelperFunctions(AbstractTestCase):
         datasets: list[str], basis_datasets: list[str]
     ) -> list[str] | None:
         # Assumes that src_datasets and basis_src_datasets are both sorted (and thus root_datasets is sorted too)
+        datasets = sort_datasets(datasets)
+        basis_datasets = sort_datasets(basis_datasets)
         root_datasets = bzfs.Job().find_root_datasets(datasets)
         datasets_set: set[str] = set(datasets)
         i = 0
@@ -239,7 +243,7 @@ class TestHelperFunctions(AbstractTestCase):
         len_root_datasets = len(root_datasets)
         len_basis_datasets = len(basis_datasets)
         while i < len_root_datasets and j < len_basis_datasets:  # walk and "merge" both sorted lists, in sync
-            if basis_datasets[j] < root_datasets[i]:  # irrelevant subtree?
+            if sort_datasets_key(basis_datasets[j]) < sort_datasets_key(root_datasets[i]):  # irrelevant subtree?
                 j += 1  # move to the next basis_src_dataset
             elif is_descendant(basis_datasets[j], of_root_dataset=root_datasets[i]):  # relevant subtree?
                 if basis_datasets[j] not in datasets_set:  # was dataset chopped off by schedule or --incl/exclude-dataset*?
@@ -247,7 +251,34 @@ class TestHelperFunctions(AbstractTestCase):
                 j += 1  # move to the next basis_src_dataset
             else:
                 i += 1  # move to next root dataset; no need to check root_datasets that are nomore (or not yet) reachable
-        return root_datasets
+        return sorted(root_datasets)
+
+    def test_snapshot_roots_across_punctuation_siblings(self) -> None:
+        """Check minimal exclusion and root-order counterexamples against production and both references. Explicit
+        expected results distinguish missing descendants from complete subtrees without sharing root-finding logic."""
+        job = bzfs.Job()
+        job.is_test_mode = True
+        for separator in ("-", ".", " "):
+            sibling = f"pool/a{separator}copy"
+            basis = sorted(["pool", "pool/a", "pool/a/child", sibling, sibling + "/child"])
+            cases: list[tuple[list[str], list[str] | None]] = [
+                (["pool/a"], None),
+                (["pool/a", sibling], None),
+                (["pool/a/child", sibling], None),
+                (["pool/a/child", sibling, sibling + "/child"], sorted(["pool/a/child", sibling])),
+                (["pool/a", "pool/a/child", sibling, sibling + "/child"], ["pool/a", sibling]),
+            ]
+            for selected, expected in cases:
+                datasets = sorted(selected)
+                for check in (
+                    job.root_datasets_if_recursive_zfs_snapshot_is_possible,
+                    self.root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct,
+                    self.root_datasets_if_recursive_zfs_snapshot_is_possible_faster_but_not_ideal,
+                ):
+                    with self.subTest(separator=separator, selected=datasets, implementation=check.__name__):
+                        self.assertEqual(expected, check(datasets, basis))
+                        self.assertListEqual(sorted(selected), datasets)
+                        self.assertListEqual(sorted(basis), basis)
 
     def test_root_datasets_if_recursive_zfs_snapshot_is_possible(self) -> None:
         """Also exhaustively compares optimized root dataset detection against a baseline impl that is slow but correct."""
@@ -342,6 +373,22 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertListEqual(["a/B", "a/D", "a/X"], run_filter(["a/B", "a/B/c", "a/X", "a/X/c", "a/D"], basis_src_datasets))
 
         exhaustive_basis_sets: list[list[str]] = [
+            ["pool", "pool/a", "pool/a-copy", "pool/a-copy/child", "pool/a/child"],
+            ["pool", "pool/a", "pool/a.copy", "pool/a.copy/child", "pool/a/child"],
+            ["pool", "pool/a", "pool/a copy", "pool/a copy/child", "pool/a/child"],
+            [
+                "pool",
+                "pool/a",
+                "pool/a/b",
+                "pool/a/b/c",
+                "pool/a/b-copy",
+                "pool/a/b-copy/c",
+                "pool/a-copy",
+                "pool/a-copy/b",
+                "pool/a-copy/b/child",
+                "pool/a.copy",
+                "pool/a copy",
+            ],
             ["a", "a/b", "a/b/c", "a/d"],
             ["a", "a/b", "a/b/c", "a/d", "e", "e/f"],
             ["a", "e", "h"],
@@ -1145,6 +1192,28 @@ class TestJobMethods(AbstractTestCase):
         job.params.src.root_dataset = job.params.src.basis_root_dataset = src_ds
         job.params.dst.root_dataset = job.params.dst.basis_root_dataset = dst_ds
         return job
+
+    def test_create_src_snapshots_respects_dataset_selection(self) -> None:
+        """Translate filtered dataset selection into exact snapshot commands, keeping ZFS I/O mocked. Excluded children
+        require nonrecursive commands; fully selected trees permit recursive commands with nonoverlapping roots."""
+        basis = ["pool", "pool/a", "pool/a-copy", "pool/a/child"]
+        cases = [
+            (basis, ["zfs", "snapshot", "-r"], ["pool"]),
+            (basis[1:], ["zfs", "snapshot", "-r"], ["pool/a", "pool/a-copy"]),
+            (["pool/a", "pool/a-copy"], ["zfs", "snapshot"], ["pool/a", "pool/a-copy"]),
+        ]
+        for selected, command, roots in cases:
+            with self.subTest(selected=selected):
+                job = self.make_job(["pool", "dummy", "-r", "--create-src-snapshots", "--skip-replication"])
+                label = job.params.create_src_snapshots_config.snapshot_labels()[0]
+                with (
+                    patch("bzfs_main.bzfs.run_ssh_cmd_parallel") as run,
+                    patch("bzfs_main.bzfs.is_caching_snapshots", return_value=False),
+                ):
+                    job.create_src_snapshots_task(basis, selected)
+                run.assert_called_once()
+                commands = [(cmd, list(snapshots)) for cmd, snapshots in run.call_args.args[2]]
+                self.assertEqual([(command, [f"{root}@{label}" for root in roots])], commands)
 
     def test_sudo_cmd_root_user(self) -> None:
         """Root user needs no sudo prefix nor delegation."""

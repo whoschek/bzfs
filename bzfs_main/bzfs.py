@@ -197,6 +197,8 @@ from bzfs_main.util.utils import (
     replace_prefix,
     sha256_85_urlsafe_base64,
     sha256_128_urlsafe_base64,
+    sort_datasets,
+    sort_datasets_key,
     stderr_to_str,
     termination_signal_handler,
     validate_dataset_name,
@@ -1412,6 +1414,8 @@ class Job(MiniJob):
         assert (not self.is_test_mode) or basis_datasets == sorted(basis_datasets), "List is not sorted"
         assert (not self.is_test_mode) or not has_duplicates(basis_datasets), "List contains duplicates"
         assert (not self.is_test_mode) or set(datasets).issubset(set(basis_datasets)), "Not a subset"
+        datasets = sort_datasets(datasets)
+        basis_datasets = sort_datasets(basis_datasets)
         root_datasets: list[str] = self.find_root_datasets(datasets)
         i = 0
         j = 0
@@ -1420,17 +1424,17 @@ class Job(MiniJob):
         len_basis_datasets = len(basis_datasets)
         len_datasets = len(datasets)
         while i < len_root_datasets and j < len_basis_datasets:  # walk and "merge" the sorted lists, in sync
-            if basis_datasets[j] < root_datasets[i]:  # irrelevant subtree?
+            if sort_datasets_key(basis_datasets[j]) < sort_datasets_key(root_datasets[i]):  # irrelevant subtree?
                 j += 1  # move to next basis_datasets[j]
             elif is_descendant(basis_datasets[j], of_root_dataset=root_datasets[i]):  # relevant subtree?
-                while k < len_datasets and datasets[k] < basis_datasets[j]:
+                while k < len_datasets and sort_datasets_key(datasets[k]) < sort_datasets_key(basis_datasets[j]):
                     k += 1  # move to next datasets[k]
                 if k == len_datasets or datasets[k] != basis_datasets[j]:  # dataset chopped off by schedule or --incl/excl*?
                     return None  # detected filter pruning that is incompatible with 'zfs snapshot -r'
                 j += 1  # move to next basis_datasets[j]
             else:
                 i += 1  # move to next root_dataset[i]; no need to check root_datasets that are no longer (or not yet) reachable
-        return root_datasets
+        return sorted(root_datasets)
 
     @staticmethod
     def find_root_datasets(sorted_datasets: list[str]) -> list[str]:

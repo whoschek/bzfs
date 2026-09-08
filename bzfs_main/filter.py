@@ -43,6 +43,7 @@ from bzfs_main.util.utils import (
     is_descendant,
     is_included,
     relativize_dataset,
+    sort_datasets,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
@@ -110,7 +111,7 @@ def _filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_datase
     results: list[str] = []
     localhostname: str | None = None
     skip_dataset: str = DONT_SKIP_DATASET
-    for dataset in sorted_datasets:
+    for dataset in sort_datasets(sorted_datasets):
         if is_descendant(dataset, of_root_dataset=skip_dataset):
             # skip_dataset shall be ignored or has been deleted by some third party while we're running
             continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
@@ -143,7 +144,7 @@ def _filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_datase
             else:
                 skip_dataset = dataset
                 log.debug("Excluding b/c dataset prop: %s%s", dataset, reason)
-    return results
+    return sorted(results)
 
 
 def filter_snapshots(

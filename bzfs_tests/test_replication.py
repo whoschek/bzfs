@@ -39,6 +39,9 @@ from unittest.mock import (
 from bzfs_main.argparse_actions import (
     SnapshotFilter,
 )
+from bzfs_main.bzfs import (
+    Job,
+)
 from bzfs_main.detect import (
     POOL_GUID,
 )
@@ -67,6 +70,7 @@ from bzfs_main.replication import (
     _sanitize_recv_opts_for_dataset_type,
     _zfs_get,
     _zfs_set,
+    delete_datasets,
     replicate_dataset,
 )
 from bzfs_main.util.retry import (
@@ -85,9 +89,6 @@ from bzfs_tests.abstract_testcase import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - for type hints only
-    from bzfs_main.bzfs import (
-        Job,
-    )
     from bzfs_main.configuration import (
         Params,
         Remote,
@@ -678,6 +679,31 @@ class TestReplication(AbstractTestCase):
             ["sudo", "zfs", "destroy", "-f", "-v", "-n", "pool/ds@s1,pool/ds@s2"],
             cmd,
         )
+
+    def test_delete_datasets_skips_descendants_across_siblings(self) -> None:
+        """Delete each selected subtree once, including punctuation siblings. Inspect exact commands with mocked I/O to catch
+        redundant child deletions and preserve dataset names containing spaces."""
+        for separator in ("-", ".", " "):
+            with self.subTest(separator=separator):
+                args = self.argparser_parse_args(["src", "dst", "--dryrun"])
+                job = Job()
+                job.is_test_mode = True
+                job.params = self.make_params(args=args)
+                sibling = f"dst/a{separator}copy"
+                datasets = ["dst/a", "dst/a/child", "dst/a/child/grandchild", sibling, sibling + "/child", "dst/z"]
+                expected = [
+                    call(
+                        job.params.dst,
+                        LOG_DEBUG,
+                        is_dry=False,
+                        print_stdout=True,
+                        cmd=["zfs", "destroy", "-r", "-v", "-n", dataset],
+                    )
+                    for dataset in ("dst/a", sibling, "dst/z")
+                ]
+                with patch.object(job, "run_ssh_command") as run:
+                    delete_datasets(job, job.params.dst, iter(sorted(datasets)))
+                self.assertEqual(expected, run.call_args_list)
 
     def test_is_zfs_dataset_busy(self) -> None:
         procs = [

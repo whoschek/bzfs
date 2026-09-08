@@ -173,6 +173,17 @@ def sorted_dict(
     return dict(sorted(dictionary.items(), key=key, reverse=reverse))
 
 
+def sort_datasets_key(dataset: str) -> str:
+    """Ensures that the '/' ZFS dataset component separator sorts before any other character, such as '-', '.', ' '."""
+    return dataset.replace("/", "\x00")  # replace '/' with the ASCII NUL character, which sorts before any other character
+
+
+def sort_datasets(datasets: Iterable[str]) -> list[str]:
+    """Sorts the given datasets such that the '/' ZFS dataset component separator sorts before any other character."""
+    # perf: sorted() is fast because Powersort is close to O(N) for nearly sorted input, which is our case
+    return sorted(datasets, key=lambda dataset: sort_datasets_key(dataset))
+
+
 def tail(file: str, *, n: int, errors: str | None = None) -> Sequence[str]:
     """Return the last ``n`` lines of ``file`` without following symlinks."""
     if not os.path.isfile(file):

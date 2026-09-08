@@ -101,6 +101,7 @@ class CommonTest(AbstractTestCase):
     ) -> list[str]:
         args = self.argparser_parse_args(args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks])
         job = bzfs.Job()
+        job.is_test_mode = True
         job.params = self.make_params(args=args)
         job.params.log.setLevel(loglevel)
         snapshots = [f"{i}\t" + snapshot for i, snapshot in enumerate(snapshots)]  # simulate creation time
@@ -152,6 +153,7 @@ class TestHelperFunctions(CommonTest):
         # test with Job.is_test_mode == False for coverage with the assertion therein disabled
         args = self.argparser_parse_args(args=["src", "dst"])
         job = bzfs.Job()
+        job.is_test_mode = True
         job.params = self.make_params(args=args)
         src = Remote("src", args, job.params)
         filter_datasets(job, src, ["dataset1"])
@@ -186,6 +188,7 @@ class TestHelperFunctions(CommonTest):
         stream = io.StringIO()
         log.addHandler(logging.StreamHandler(stream))
         job = bzfs.Job()
+        job.is_test_mode = True
         job.params = self.make_params(args=args, log=log)
         snapshots = ["\tds@a1", "\tds@b2", "\tds@c3", "\tds@other", "\tds#bookmark"]
         regexes = (
@@ -212,6 +215,7 @@ class TestHelperFunctions(CommonTest):
         stream = io.StringIO()
         log.addHandler(logging.StreamHandler(stream))
         job = bzfs.Job()
+        job.is_test_mode = True
         job.params = self.make_params(args=args, log=log)
         props: dict[str, str | None] = {"a1": "v1", "a2": "v2", "skip": "v"}
         include_regexes = compile_regexes(["a.*"])
@@ -226,6 +230,7 @@ class TestHelperFunctions(CommonTest):
         args = self.argparser_parse_args(["src", "dst"])
         log = logging.getLogger("snap_call")
         job = bzfs.Job()
+        job.is_test_mode = True
         job.params = self.make_params(args=args, log=log)
         regexes = (compile_regexes([]), compile_regexes(["keep"]))
         job.params.snapshot_filters = [[SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, regexes)]]
@@ -707,6 +712,7 @@ class TestFilterSnapshotsWithBookmarks(CommonTest):
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
         self.job = bzfs.Job()
+        self.job.is_test_mode = True
         self.job.params = self.make_params(args=args)
         self.job.params.log.setLevel(logging.INFO)  # Set to INFO to avoid verbose output during tests
 
@@ -820,14 +826,13 @@ class TestFilterDatasets(CommonTest):
         skip_parent: bool = False,
         exclude_property: str | None = None,
         debug: bool = False,
-        test_mode: bool = False,
     ) -> tuple[Job, Remote]:
         args = self.argparser_parse_args(["src", "dst"])
         log = logging.getLogger(f"datasets_{id(self)}_{debug}")
         log.setLevel(LOG_DEBUG if debug else logging.INFO)
         job = bzfs.Job()
+        job.is_test_mode = True
         job.params = self.make_params(args=args, log=log)
-        job.is_test_mode = test_mode
         p = job.params
         p.include_dataset_regexes = compile_regexes(include or [".*"])
         p.exclude_dataset_regexes = compile_regexes(exclude or [])
@@ -843,7 +848,7 @@ class TestFilterDatasets(CommonTest):
 
     def test_exclude_matching(self) -> None:
         job, remote = self.make_job(exclude=["foo"])
-        datasets = ["src/foo", "src/bar"]
+        datasets = ["src/bar", "src/foo"]
         self.assertListEqual(["src/bar"], filter_datasets(job, remote, datasets))
 
     def test_include_specific(self) -> None:
@@ -880,7 +885,7 @@ class TestFilterDatasets(CommonTest):
         self.assertIn("Finally included", stream.getvalue())
 
     def test_test_mode_asserts(self) -> None:
-        job, remote = self.make_job(test_mode=True)
+        job, remote = self.make_job()
         datasets = ["src/a", "src/a/b", "src/c"]
         self.assertListEqual(datasets, filter_datasets(job, remote, datasets))
 
@@ -902,6 +907,7 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
         log = logging.getLogger(f"prop_{id(self)}_{debug}")
         log.setLevel(LOG_DEBUG if debug else logging.INFO)
         job = bzfs.Job()
+        job.is_test_mode = True
         job.params = self.make_params(args=args, log=log)
         remote = MagicMock(spec=Remote, location="src")
         return job, remote
@@ -951,6 +957,58 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
                     result = _filter_datasets_by_exclude_property(job, remote, ["a", "a/b", "c"])
         self.assertListEqual(["c"], result)
         self.assertEqual(2, mock_try.call_count)
+
+    def test_skip_descendant_after_intervening_sibling(self) -> None:
+        """An intervening sibling must not override an ancestor's property exclusion."""
+        mapping: dict[str, str | None] = {"a": "false", "a-": "true", "a/child": "true"}
+        self.assertListEqual(["a-"], self.run_filter(mapping))
+
+    def test_skip_descendant_after_intervening_sibling2(self) -> None:
+        """An intervening sibling must not override an ancestor's property exclusion."""
+        mapping: dict[str, str | None] = {
+            "a": "false",
+            "a-": "true",
+            "a-/b": "false",
+            "a-/b/c": "true",
+            "a/child": "true",
+        }
+        self.assertListEqual(["a-"], self.run_filter(mapping))
+
+    def test_skip_descendant_after_interleaved_missing_or_host_exclusion(self) -> None:
+        """Missing datasets and host exclusions must protect descendants across sibling subtrees."""
+        for value in (None, "host2"):
+            with self.subTest(value=value):
+                mapping: dict[str, str | None] = {
+                    "a": value,
+                    "a-": "true",
+                    "a-/b": "false",
+                    "a-/b/c": "true",
+                    "a/child": "true",
+                    "a0": "true",
+                }
+                self.assertListEqual(["a-", "a0"], self.run_filter(mapping))
+
+    def test_included_property_datasets_preserve_lexical_order(self) -> None:
+        """Return lexical order even when hierarchy traversal visits descendants before punctuation siblings."""
+        mapping: dict[str, str | None] = {"a": "true", "a-copy": "true", "a/child": "true"}
+        self.assertListEqual(["a", "a-copy", "a/child"], self.run_filter(mapping))
+
+    def test_excluded_descendants_are_not_queried_across_siblings(self) -> None:
+        """Excluded or missing ancestors suppress descendant property reads even when siblings interleave lexically."""
+        for value in ("false", None, "host2"):
+            with self.subTest(value=value):
+                job, remote = self.make_job()
+                mapping: dict[str, str | None] = {"a": value, "a-copy": "true", "a/child": "true"}
+                with (
+                    patch.object(
+                        job, "try_ssh_command_with_retries", side_effect=lambda *args, cmd, mapping=mapping: mapping[cmd[-1]]
+                    ) as query,
+                    patch.object(job, "maybe_inject_delete"),
+                    patch("socket.gethostname", return_value="host1"),
+                ):
+                    result = _filter_datasets_by_exclude_property(job, remote, sorted(mapping))
+                self.assertListEqual(["a-copy"], result)
+                self.assertListEqual(["a", "a-copy"], [item.kwargs["cmd"][-1] for item in query.call_args_list])
 
     def test_property_none(self) -> None:
         job, remote = self.make_job()

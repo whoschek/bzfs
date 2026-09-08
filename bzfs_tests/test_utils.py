@@ -25,10 +25,12 @@ import hashlib
 import logging
 import os
 import pickle
+import random
 import re
 import shutil
 import signal
 import stat
+import string
 import subprocess
 import sys
 import tempfile
@@ -127,6 +129,8 @@ from bzfs_main.util.utils import (
     sha256_hex,
     sha256_urlsafe_base64,
     shuffle_dict,
+    sort_datasets,
+    sort_datasets_key,
     sorted_dict,
     subprocess_run,
     tail,
@@ -222,6 +226,37 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(is_descendant("", ""))
         self.assertFalse(is_descendant("pool/fs-backup", "pool/fs"))
         self.assertTrue(is_descendant("pool/fs", "pool"))
+
+    def test_sort_datasets_keeps_subtrees_together(self) -> None:
+        """Keep nested subtrees contiguous for punctuation siblings, preserving names and the caller's input list."""
+        expected = [
+            "pool/a",
+            "pool/a/b",
+            "pool/a/b/c",
+            "pool/a/b-copy",
+            "pool/a/b-copy/c",
+            "pool/a copy",
+            "pool/a copy/c",
+            "pool/a-copy",
+            "pool/a-copy/c",
+            "pool/a.copy",
+            "pool/a.copy/c",
+            "pool/a0",
+        ]
+        datasets: list[str] = sorted(expected)
+        self.assertListEqual(expected, sort_datasets(datasets))
+        self.assertListEqual(expected, sort_datasets(reversed(datasets)))
+        random.Random(12345).shuffle(datasets)
+        self.assertListEqual(expected, sort_datasets(datasets))
+
+    def test_sort_datasets_key_orders_component_boundaries(self) -> None:
+        """Parents and descendants must precede every valid extension of the parent's final name component."""
+        for parent in ("pool/a", "pool/a/b"):
+            child = parent + "/child"
+            self.assertLess(sort_datasets_key(parent), sort_datasets_key(child))
+            for char in string.ascii_letters + string.digits + " _.:-":
+                with self.subTest(parent=parent, char=char):
+                    self.assertLess(sort_datasets_key(child), sort_datasets_key(parent + char + "copy"))
 
     def test_dataset_paths(self) -> None:
         self.assertEqual(list(dataset_paths("a")), ["a"])

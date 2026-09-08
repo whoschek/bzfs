@@ -108,6 +108,7 @@ from bzfs_main.util.utils import (
     open_nofollow,
     replace_prefix,
     sha256_urlsafe_base64,
+    sort_datasets,
     stderr_to_str,
     xprint,
 )
@@ -1121,7 +1122,7 @@ def delete_datasets(job: Job, remote: Remote, datasets: Iterable[str]) -> None:
     # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
     p, log = job.params, job.params.log
     last_deleted_dataset: str = DONT_SKIP_DATASET
-    for dataset in sorted(datasets):
+    for dataset in sort_datasets(datasets):
         if is_descendant(dataset, of_root_dataset=last_deleted_dataset):
             continue
         log.info(p.dry("Deleting dataset tree: %s"), f"{dataset} ...")
