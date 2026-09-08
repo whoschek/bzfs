@@ -835,6 +835,9 @@ def _run_zfs_send_receive(
             else:
                 xprint(log, process.stdout, file=sys.stdout)
                 xprint(log, process.stderr, file=sys.stderr)
+                if re.search(r"cannot send '.+': source key must be loaded", process.stderr):
+                    msg = f"Cannot send {src_dataset}: source key must be loaded"
+                    raise RetryableError(display_msg="zfs send") from RuntimeError(msg)
 
 
 def _clear_resumable_recv_state(job: Job, dst_dataset: str) -> bool:

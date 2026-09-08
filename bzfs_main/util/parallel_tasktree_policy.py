@@ -114,6 +114,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
             SystemExit,
             UnicodeDecodeError,
             RetryTerminationError,
+            RuntimeError,
         ) as e:
             exception = e  # may be reraised later
         finally:

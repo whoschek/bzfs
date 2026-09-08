@@ -4299,6 +4299,39 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
         self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["n1"])
 
+    def test_send_with_unloaded_key(self) -> None:
+        """Reject a non-raw `zfs send` of an encrypted dataset with an unloaded source key, even when the `zfs receive`
+        succeeds."""
+        if not is_zfs_at_least_2_1_0():
+            self.skipTest("Legacy ZFS send can leak encryption-key references during test setup")
+
+        src_dataset = create_filesystem(
+            ibase.SRC_ROOT_DATASET,
+            "unloadedkey",
+            props=[
+                "-o",
+                f"encryption={ENCRYPTION_ALGO}",
+                "-o",
+                "keyformat=passphrase",
+                "-o",
+                f"keylocation={ibase.KEYLOCATION}",
+            ],
+        )
+        dst_dataset = ibase.DST_ROOT_DATASET + "/unloadedkey"
+        take_snapshot(src_dataset, fix("s1"))
+        self.run_bzfs(src_dataset, dst_dataset, "--zfs-send-program-opts=")
+        take_snapshot(src_dataset, fix("s2"))
+        take_snapshot(src_dataset, fix("s3"))
+        run_cmd(SUDO_CMD + ["zfs", "unload-key", src_dataset])
+
+        job = self.run_bzfs(src_dataset, dst_dataset, "--zfs-send-program-opts=", expected_status=DIE_STATUS)
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+        self.assertIn("Incremental send -I:", log_text)
+        self.assertIn("source key must be loaded", log_text)
+        self.assertEqual(0, job.num_snapshots_replicated)
+        self.assert_snapshot_names(dst_dataset, ["s1"])
+        self.assert_bookmark_names(src_dataset, ["s1"])
+
     def test_compare_snapshot_lists_with_nonexisting_source(self) -> None:
         destroy(ibase.SRC_ROOT_DATASET, recursive=True)
         self.run_bzfs(
