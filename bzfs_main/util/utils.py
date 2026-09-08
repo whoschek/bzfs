@@ -570,7 +570,12 @@ def compile_regexes(regexes: list[str], *, suffix: str = "") -> RegexList:
             regex = regex[1:]
         regex = replace_capturing_groups_with_non_capturing_groups(regex)
         if regex != ".*" or not (suffix.startswith("(") and suffix.endswith(")?")):
-            regex = f"{regex}{suffix}"
+            if suffix:
+                # wrap in (non-capturing) group to retain semantics of regex alternations
+                # while preserving global inline flags as-is, e.g. for case-insensitive matching
+                prefix: re.Match[str] | None = re.match(r"(\(\?[aimsux]+\))+", regex)  # e.g. (?i)
+                end: int = prefix.end() if prefix else 0
+                regex = f"{regex[:end]}(?:{regex[end:]}){suffix}"
         compiled_regexes.append((re.compile(regex), is_negation))
     return compiled_regexes
 

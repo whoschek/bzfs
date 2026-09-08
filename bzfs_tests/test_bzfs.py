@@ -84,6 +84,7 @@ from bzfs_main.util.retry import (
     RetryTerminationError,
 )
 from bzfs_main.util.utils import (
+    DESCENDANTS_RE_SUFFIX,
     DIE_STATUS,
     RegexList,
     is_descendant,
@@ -117,6 +118,11 @@ def suite() -> unittest.TestSuite:
         TestPerformance,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
+
+
+#############################################################################
+def include_exclude_dataset_regex(regex: str) -> str:
+    return "(?:" + regex + ")" + DESCENDANTS_RE_SUFFIX
 
 
 #############################################################################
@@ -1191,7 +1197,7 @@ class TestJobMethods(AbstractTestCase):
         job.validate_once()
         self.assertSetEqual({"foo", "bar"}, job.params.zfs_recv_ox_names)
         patterns = [r.pattern for r, _ in job.params.tmp_exclude_dataset_regexes]
-        self.assertIn("foo.*(?:/.*)?", patterns)
+        self.assertIn(include_exclude_dataset_regex("foo.*"), patterns)
 
     def test_validate_once_requires_bytes_option(self) -> None:
         """Missing --bytes or --bits in pv opts raises SystemExit."""
@@ -1248,7 +1254,7 @@ class TestJobMethods(AbstractTestCase):
         job.validate_once()
         self.assertListEqual(["/pool/src/abs"], job.params.abs_exclude_datasets)
         patterns = [r.pattern for r, _ in job.params.tmp_exclude_dataset_regexes]
-        self.assertIn("rel(?:/.*)?", patterns)
+        self.assertIn(include_exclude_dataset_regex("rel"), patterns)
 
     def test_validate_once_separates_abs_and_rel_include_datasets(self) -> None:
         """Absolute and relative include datasets are split correctly."""
@@ -1263,7 +1269,7 @@ class TestJobMethods(AbstractTestCase):
         job.validate_once()
         self.assertListEqual(["/pool/dst/abs"], job.params.abs_include_datasets)
         patterns = [r.pattern for r, _ in job.params.tmp_include_dataset_regexes]
-        self.assertIn("rel(?:/.*)?", patterns)
+        self.assertIn(include_exclude_dataset_regex("rel"), patterns)
 
     def test_validate_once_skips_pv_checks_when_disabled(self) -> None:
         """No pv option validation occurs when pv program is disabled."""

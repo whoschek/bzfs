@@ -267,6 +267,19 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(re.error):
             compile_regexes(["fo$o"], suffix=re_suffix)
 
+        for text in ["bar", "bar/", "foo", "foo/"]:
+            with self.subTest(text=text):
+                assert_full_match(text, r"foo|bar", re_suffix)
+                assert_not_full_match("_" + text, r"foo|bar", re_suffix)
+
+        for text in ["BAR", "BAR/", "FOO", "FOO/"]:
+            with self.subTest(text=text):
+                assert_full_match(text, r"(?i:foo|bar)", re_suffix)
+                assert_full_match(text, r"(?i)foo|bar", re_suffix)
+                assert_full_match(text, r"(?aimsx)foo|bar", re_suffix)
+                assert_full_match(text, r"(?iu)foo|bar", re_suffix)
+                assert_full_match(text, r"(?i)(?a)(?x)foo|bar", re_suffix)
+
     def test_is_included_with_negated_exclude_regex(self) -> None:
         """Negated exclude regex excludes non-matching names but not matching ones."""
         exclude_regexes = compile_regexes(["!foo"])
