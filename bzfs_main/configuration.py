@@ -770,6 +770,8 @@ class CreateSrcSnapshotConfig:
         self._snapshot_labels: Final[list[SnapshotLabel]] = labels
         for label in self.snapshot_labels():
             label.validate_label("--create-src-snapshots-plan ")
+            if (not label.infix) and not self.timeformat.startswith("%Y"):
+                die(f"--create-src-snapshots-timeformat: Must start with '%Y' (four-digit year): {self.timeformat!r}")
 
     def snapshot_labels(self) -> list[SnapshotLabel]:
         """Returns the snapshot name patterns for which snapshots shall be created."""

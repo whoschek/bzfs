@@ -525,11 +525,11 @@ class TestHelperFunctions(AbstractTestCase):
                 "dst",
                 "--create-src-snapshots",
                 "--create-src-snapshots-plan=" + str({"prod": {"": {"": 1}}}),  # empty infix and suffix
-                "--create-src-snapshots-timeformat=xxx",
+                "--create-src-snapshots-timeformat=%Yxxx",
             ]
         )
         config = configuration.CreateSrcSnapshotConfig(good_args, params)
-        self.assertListEqual(["prod_xxx"], [str(label) for label in config.snapshot_labels()])
+        self.assertListEqual([f"prod_{config.current_datetime:%Y}xxx"], [str(label) for label in config.snapshot_labels()])
 
         good_args = bzfs.argument_parser().parse_args(
             [
@@ -676,6 +676,21 @@ class TestHelperFunctions(AbstractTestCase):
         args = bzfs.argument_parser().parse_args(["src", "dst"])
         params.daemon_frequency = "2adhoc"  # type: ignore[misc]  # cannot assign to final attribute
         with self.assertRaises(SystemExit):
+            configuration.CreateSrcSnapshotConfig(args, params)
+
+    def test_create_src_snapshot_timeformat_requires_year_for_empty_target(self) -> None:
+        """Reject missing year prefixes when a CLI creation plan contains an empty target."""
+        params = self.make_params(args=bzfs.argument_parser().parse_args(["src", "dst"]))
+        args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--create-src-snapshots",
+                "--create-src-snapshots-plan=" + str({"prod": {"": {"daily": 1}}}),
+                "--create-src-snapshots-timeformat=%d-%m-%Y",
+            ]
+        )
+        with self.assertRaisesRegex(SystemExit, "--create-src-snapshots-timeformat: Must start with '%Y'"):
             configuration.CreateSrcSnapshotConfig(args, params)
 
     def test_MonitorSnapshotsConfig(self) -> None:  # noqa: N802
