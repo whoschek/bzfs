@@ -176,11 +176,12 @@ class TestCompareSnapshotLists(AbstractTestCase):
         dst_datasets: list[str],
         compare_choice: str = "src+dst+all",
         options: tuple[str, ...] = (),
+        batch_size: int = 1024,
     ) -> tuple[list[list[str]], list[list[str]]]:
         """Runs run_compare_snapshot_lists() with stubbed ZFS output and returns TSV rows.
 
-        Assumes src_lines and dst_lines map dataset names to zfs list output lines. Uses patching to avoid the external zfs
-        CLI and isolates snapshot comparison logic.
+        Assumes src_lines and dst_lines map datasets to ZFS output lines in snapshot creation order. Simulates ZFS batch
+        ordering, which compares snapshot owners but full bookmark names, to exercise the streaming comparison logic.
         """
 
         job = Job()
@@ -201,8 +202,9 @@ class TestCompareSnapshotLists(AbstractTestCase):
                 _job: Job, r: Any, _cmd: list[str], datasets: list[str], ordered: bool = True
             ) -> Iterator[list[str]]:
                 mapping = src_lines if r.location == "src" else dst_lines
-                for ds in datasets:
-                    yield mapping.get(ds, [])
+                for i in range(0, len(datasets), batch_size):
+                    lines = [line for ds in datasets[i : i + batch_size] for line in mapping.get(ds, [])]
+                    yield sorted(lines, key=lambda line: line.rsplit("\t", 1)[1].split("@", 1)[0])
 
             with (
                 patch("bzfs_main.compare_snapshot_lists.zfs_list_snapshots_in_parallel", side_effect=fake_zfs_list),
@@ -287,6 +289,52 @@ class TestCompareSnapshotLists(AbstractTestCase):
         rows, rel_rows = self._run_compare(src_lines, {}, ["tank/src/empty"], [])
         self.assertEqual([], rows)
         self.assertEqual([["src", "/empty", "tank/src/empty", ""]], rel_rows)
+
+    def test_run_compare_snapshot_lists_groups_interleaved_bookmarks(self) -> None:
+        """Space-named sibling datasets must not split a dataset's snapshots and bookmarks. Check matching and filtering
+        across batch boundaries, including an empty trailing dataset and temporary bookmarks, against explicit TSV rows."""
+        for bookmark in ("old", ".TMPBZFS.old.AAAAAAAAAAA.AAAAAAAAAAA.abcdefghij"):
+            src_lines = {
+                "tank/src/a": ["200\tg2\t2\t20\ttank/src/a@new", f"100\tg1\t1\t-\ttank/src/a#{bookmark}"],
+                "tank/src/a copy": ["300\tg3\t3\t30\ttank/src/a copy@shared"],
+            }
+            dst_lines = {
+                "tank/dst/a": ["100\tg1\t1\t10\ttank/dst/a@old"],
+                "tank/dst/a copy": ["300\tg3\t3\t30\ttank/dst/a copy@shared"],
+            }
+            for trailing_empty in (False, True):
+                suffixes = ["/a", "/a copy"] + (["/z"] if trailing_empty else [])
+                for batch_size in (1, 2, 1024):
+                    for options in ((), ("--include-snapshot-regex=old",)):
+                        with self.subTest(bookmark=bookmark, empty=trailing_empty, batch=batch_size, options=options):
+                            rows, rel_rows = self._run_compare(
+                                src_lines,
+                                dst_lines,
+                                ["tank/src" + suffix for suffix in suffixes],
+                                ["tank/dst" + suffix for suffix in suffixes],
+                                options=options,
+                                batch_size=batch_size,
+                            )
+                            expected = [("all", "g1", f"tank/src/a#{bookmark}")]
+                            if not options:
+                                expected += [("src", "g2", "tank/src/a@new"), ("all", "g3", "tank/src/a copy@shared")]
+                            self.assertEqual(expected, [(row[0], row[4], row[7]) for row in rows])
+                            self.assertEqual(
+                                [["all", suffix, "tank/src" + suffix, "tank/dst" + suffix] for suffix in suffixes],
+                                rel_rows,
+                            )
+
+    def test_run_compare_snapshot_lists_deduplicates_interleaved_bookmarks(self) -> None:
+        """Keep snapshots before equivalent bookmarks when regrouping a batch, so GUID deduplication retains snapshots."""
+        src_lines = {
+            "tank/src/a": ["100\tg1\t1\t10\ttank/src/a@old", "100\tg1\t1\t-\ttank/src/a#old"],
+            "tank/src/a copy": ["200\tg2\t2\t20\ttank/src/a copy@shared"],
+        }
+        rows, _rel_rows = self._run_compare(src_lines, {}, sorted(src_lines), [])
+        self.assertEqual(
+            [("src", "g1", "tank/src/a@old"), ("src", "g2", "tank/src/a copy@shared")],
+            [(row[0], row[4], row[7]) for row in rows],
+        )
 
     def test_run_compare_snapshot_lists_ignores_duplicate_bookmarks(self) -> None:
         """Bookmarks with a matching snapshot GUID must not produce extra TSV rows."""

@@ -110,6 +110,10 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     is_first_row: bool = True
     now: int | None = None
 
+    def _dataset_name(line: str) -> str:
+        """Extracts the dataset name from a ZFS output line whose final column is a snapshot or bookmark name."""
+        return line.rsplit("\t", 1)[1].replace("#", "@", 1).split("@", 1)[0]
+
     def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Iterator[str]:
         """Lists snapshots sorted by dataset name; All snapshots of a given dataset will be adjacent."""
         assert (not job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
@@ -121,6 +125,10 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
             types = "snapshot,bookmark"  # output list ordering: intentionally makes bookmarks appear *after* snapshots
         cmd: list[str] = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
         for lines in zfs_list_snapshots_in_parallel(job, r, cmd, sorted_datasets):
+            if list_bookmarks:
+                # `zfs list` can interleave a space-named sibling dataset between a dataset's snapshots and bookmarks.
+                # e.g. [tank/src@foo, tank/src copy@bar, tank/src#bar] --> [tank/src@foo, tank/src#bar, tank/src copy@bar]
+                lines.sort(key=_dataset_name)  # stable sort by dataset name
             yield from lines
 
     def snapshot_iterator(r: Remote, root_dataset: str, sorted_itr: Iterator[str]) -> Iterator[_ComparableSnapshot]:
@@ -129,9 +137,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         snapshots."""
         list_bookmarks: bool = p.use_bookmark and r.location == "src" and are_bookmarks_enabled(p, r)
         # streaming group by dataset name (consumes constant memory only)
-        for dataset, group in itertools.groupby(
-            sorted_itr, key=lambda line: line.rsplit("\t", 1)[1].replace("#", "@", 1).split("@", 1)[0]
-        ):
+        for dataset, group in itertools.groupby(sorted_itr, key=_dataset_name):
             snapshots: list[str] = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
             tmp_bookmarks: list[str] = []
             if list_bookmarks:  # temporary bookmarks bypass include/exclude filters, e.g. name and rank filters
