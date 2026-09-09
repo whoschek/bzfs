@@ -802,6 +802,7 @@ class Job:
                     for org, target_periods in monitor_plan.items()
                 }
 
+            subjob_name += "/" + BARRIER_CHAR + "/monitor-snapshots"
             if args.monitor_src_snapshots:
                 marker = "monitor-src-snapshots"
                 monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan, "src_snapshot_")
@@ -811,8 +812,7 @@ class Job:
                 )
                 opts += [POSIX_END_OF_OPTIONS_MARKER]
                 opts += _flatten(_dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
-                subjob_name += "/" + marker
-                subjobs[subjob_name] = bzfs_prog_header + opts
+                subjobs[subjob_name + "/." + marker] = bzfs_prog_header + opts
 
             if args.monitor_dst_snapshots:
                 j = 0
