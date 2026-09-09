@@ -895,24 +895,30 @@ class Job:
     def skip_nonexisting_local_dst_pools(
         self, root_dataset_pairs: list[tuple[str, str]], timeout_secs: float | None = None
     ) -> list[tuple[str, str]]:
-        """Skip datasets that point to removable destination drives that are not currently (locally) attached, if any."""
+        """Skip dst datasets that point to removable destination drives that are not currently (locally) attached, if any."""
 
         def zpool(dataset: str) -> str:
             """Returns pool name portion of ``dataset``."""
             return dataset.split("/", 1)[0]
 
         assert len(root_dataset_pairs) > 0
+        if getenv_bool("disable_skip_nonexisting_local_dst_pools", False):
+            return root_dataset_pairs
         unknown_dst_pools = {zpool(dst) for src, dst in root_dataset_pairs}
         unknown_dst_pools = unknown_dst_pools.difference(self.cache_known_dst_pools)
 
         # Here we treat a zpool as existing if the zpool isn't local, aka if it isn't prefixed with "-:". A remote host
         # will raise an appropriate error if it turns out that the remote zpool doesn't actually exist.
         unknown_local_dst_pools = {pool for pool in unknown_dst_pools if pool.startswith("-:")}
-        if len(unknown_local_dst_pools) > 0:  # `zfs list` if local
+        if len(unknown_local_dst_pools) > 0:  # `zpool list` if local
             existing_pools = {pool[len("-:") :] for pool in unknown_local_dst_pools}
-            cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(existing_pools)
+            cmd = "zpool version".split(" ")  # ensure `zpool` CLI works and returns exit code zero
             sp = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout_secs, check=False)
-            if sp.returncode not in (0, 1):  # 1 means dataset not found
+            if sp.returncode != 0:
+                self.die(f"Unexpected error {sp.returncode} on checking for existing local dst zpools: {sp.stderr.strip()}")
+            cmd = "zpool list -Hp -o name".split(" ") + sorted(existing_pools)  # don't wake up drives of unrelated pools
+            sp = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout_secs, check=False)
+            if sp.returncode not in (0, 1):  # 1 means pool not found
                 self.die(f"Unexpected error {sp.returncode} on checking for existing local dst pools: {sp.stderr.strip()}")
             existing_pools = {"-:" + pool for pool in sp.stdout.splitlines() if pool}
             self.cache_existing_dst_pools.update(existing_pools)  # union
