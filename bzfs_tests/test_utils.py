@@ -134,7 +134,9 @@ from bzfs_main.util.utils import (
     termination_signal_handler,
     unixtime_fromisoformat,
     urlsafe_base64,
+    validate_dataset_name,
     validate_file_permissions,
+    validate_property_name,
     xfinally,
     xprint,
 )
@@ -314,6 +316,85 @@ class TestHelperFunctions(unittest.TestCase):
         xprint(log, "", run=True)
         xprint(log, "", run=False)
         xprint(log, None)
+
+    def test_validate_dataset_name_valid(self) -> None:
+        """Accept ordinary names and valid component boundaries."""
+        for name in ("p", "pool", "Pool/a b", "pool/a-._:0/Z9", "pool/.hidden/..backup/fs../...", "pool/0/-child"):
+            with self.subTest(name=name):
+                validate_dataset_name(name, "test")
+
+    def test_validate_dataset_name_invalid(self) -> None:
+        """Reject malformed paths and unsafe characters."""
+        input_text = "backup-host:pool/fs"
+        for name in (
+            "",
+            ".",
+            "..",
+            "/pool",
+            "./pool",
+            "../pool",
+            "pool/",
+            "pool/.",
+            "pool/..",
+            "pool//fs",
+            "pool/./fs",
+            "pool/../fs",
+            "1pool",
+            "-pool",
+            "_pool",
+            ".pool",
+            " pool",
+            "\u00e9pool",
+            "pool/caf\u00e9",
+            "pool/a\x00b",
+            "pool/a\x7fb",
+            "pool/a\tb",
+            "pool/fs\n",
+            "pool/fs@snap",
+            "pool/fs#bookmark",
+            "pool/fs;id",
+            "pool/$(id)",
+            "pool/a\\b",
+        ):
+            with self.subTest(name=name):
+                with self.assertRaises(SystemExit) as cm:
+                    validate_dataset_name(name, input_text)
+                self.assertEqual(utils.DIE_STATUS, cm.exception.code)
+                self.assertEqual(f"Invalid ZFS dataset name: '{name}' for: '{input_text}'", str(cm.exception))
+
+    def test_validate_property_name_valid(self) -> None:
+        """Return accepted native and user property names unchanged, including their punctuation."""
+        for name in ("x", "readonly", "backup:enabled", "org.example:keep_1-2"):
+            with self.subTest(name=name):
+                self.assertEqual(name, validate_property_name(name, "test"))
+
+    def test_validate_property_name_invalid(self) -> None:
+        """Reject option-like names and unsupported characters."""
+        input_text = "--preserve-properties"
+        for name in (
+            "",
+            "-",
+            "-readonly",
+            "ReadOnly",
+            "backup:Enabled",
+            "backup:caf\u00e9",
+            "backup:a\x00b",
+            "backup:a\x7fb",
+            "backup/a",
+            " readonly",
+            "readonly ",
+            "read\tonly",
+            "readonly\n",
+            "backup:keep=on",
+            "backup:keep;id",
+            "backup:$(id)",
+            "backup:`id`",
+        ):
+            with self.subTest(name=name):
+                with self.assertRaises(SystemExit) as cm:
+                    validate_property_name(name, input_text)
+                self.assertEqual(utils.DIE_STATUS, cm.exception.code)
+                self.assertEqual(f"Invalid ZFS property name: '{name}' for: '{input_text}'", str(cm.exception))
 
 
 #############################################################################

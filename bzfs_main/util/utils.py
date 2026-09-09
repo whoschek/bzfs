@@ -108,6 +108,8 @@ LOG_TRACE: Final[int] = logging.DEBUG // 2  # custom log level is halfway in bet
 YEAR_WITH_FOUR_DIGITS_REGEX: Final[re.Pattern] = re.compile(r"[1-9][0-9][0-9][0-9]")  # empty shall not match nonempty target
 UNIX_TIME_INFINITY_SECS: Final[int] = 2**64  # billions of years and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET: Final[str] = ""
+ZFS_DATASET_NAME_REGEX: Final[re.Pattern] = re.compile(r"[a-zA-Z][a-zA-Z0-9 _.:/-]*")  # see zfs_namecheck.c
+ZFS_PROPERTY_NAME_REGEX: Final[re.Pattern] = re.compile(r"[a-z0-9_.:-]+")  # see zfs_prop.c
 SHELL_CHARS: Final[str] = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"  # intentionally not included: -_.:/
 SHELL_CHARS_AND_SLASH: Final[str] = SHELL_CHARS + "/"
 FILE_PERMISSIONS: Final[int] = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
@@ -922,25 +924,22 @@ def format_obj(obj: object) -> str:
 
 def validate_dataset_name(dataset: str, input_text: str) -> None:
     """'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc."""
-    # Also see https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
+    # Also see zfs_namecheck.c and https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
     # and https://github.com/openzfs/zfs/issues/8798
     # and (by now no longer accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
-    invalid_chars: str = SHELL_CHARS
     if (
         dataset in ("", ".", "..")
         or dataset.startswith(("/", "./", "../"))
         or dataset.endswith(("/", "/.", "/.."))
         or any(substring in dataset for substring in ("//", "/./", "/../"))
-        or any(char in invalid_chars or (char.isspace() and char != " ") for char in dataset)
-        or not dataset[0].isalpha()
+        or not ZFS_DATASET_NAME_REGEX.fullmatch(dataset)
     ):
         die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")
 
 
 def validate_property_name(propname: str, input_text: str) -> str:
     """Checks that the ZFS property name contains no spaces or shell chars, etc."""
-    invalid_chars: str = SHELL_CHARS
-    if (not propname) or propname.startswith("-") or any(char.isspace() or char in invalid_chars for char in propname):
+    if propname.startswith("-") or not ZFS_PROPERTY_NAME_REGEX.fullmatch(propname):
         die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
     return propname
 
