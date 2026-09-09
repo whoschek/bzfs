@@ -568,26 +568,53 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
         self.log_mock = MagicMock(Logger)
         self.job = make_bzfs_jobrunner_job(log=self.log_mock)
 
+    def _mock_pool_list(self, mock_run: MagicMock, stdout: str, returncode: int = 0, stderr: str = "") -> None:
+        """Model successful library initialization followed by the supplied pool-list outcome."""
+        mock_run.side_effect = [
+            subprocess.CompletedProcess(
+                args=["zpool", "version"], returncode=0, stdout="zfs-2.2.6\nzfs-kmod-2.2.6\n", stderr=""
+            ),
+            subprocess.CompletedProcess(args=["zpool", "list"], returncode=returncode, stdout=stdout, stderr=stderr),
+        ]
+
+    def _assert_pool_commands(
+        self, mock_run: MagicMock, *pool_batches: list[str], timeout_secs: float | None = None
+    ) -> None:
+        """Check each discovery batch initializes ZFS before querying exactly its uncached local pools."""
+        expected_calls = [
+            unittest.mock.call(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout_secs, check=False)
+            for pools in pool_batches
+            for cmd in (["zpool", "version"], ["zpool", "list", "-Hp", "-o", "name", *pools])
+        ]
+        self.assertEqual(expected_calls, mock_run.call_args_list)
+
     def test_empty_input_raises(self) -> None:
         with self.assertRaises(AssertionError):
             self.job.skip_nonexisting_local_dst_pools([])
 
+    @patch.dict("os.environ", {"bzfs_disable_skip_nonexisting_local_dst_pools": "True"})
+    @patch("subprocess.run")
+    def test_disable_skip_nonexisting_local_dst_pools(self, mock_run: MagicMock) -> None:
+        """Disabling pool filtering retains local destinations without invoking pool discovery."""
+        pairs = [("src/dataset", "-:missing_pool/dataset")]
+        self.assertListEqual(pairs, self.job.skip_nonexisting_local_dst_pools(pairs))
+        mock_run.assert_not_called()
+
     @patch("subprocess.run")
     def test_single_existing_pool(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\n", stderr="")
+        """Successful initialization and discovery retain the local destination and cache its pool."""
+        self._mock_pool_list(mock_run, "dstpool1\n")
         pairs = [("-:srcpool1/src1", "-:dstpool1/dst1")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual(pairs, result)
         self.assertSetEqual({"-:dstpool1"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool1"}, self.job.cache_known_dst_pools)
-        expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["dstpool1"]
-        mock_run.assert_called_once_with(
-            expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=None, check=False
-        )
+        self._assert_pool_commands(mock_run, ["dstpool1"])
 
     @patch("subprocess.run")
     def test_single_nonexisting_pool(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        """After successful initialization, a missing pool is cached and its destination is skipped with a warning."""
+        self._mock_pool_list(mock_run, "", returncode=1, stderr="cannot open 'dstpool2': no such pool\n")
         pairs = [("-:srcpool2/src2", "-:dstpool2/dst2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual([], result)
@@ -599,7 +626,8 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
 
     @patch("subprocess.run")
     def test_multiple_pools_mixed(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\n", stderr="")
+        """A pool-list exit status of one can still return existing pools whose destinations must be retained."""
+        self._mock_pool_list(mock_run, "dstpool1\n", returncode=1, stderr="cannot open 'dstpool2': no such pool\n")
         pairs = [
             ("srcpool1/src1", "-:dstpool1/dst1"),
             ("srcpool2/src2", "-:dstpool2/dst2"),
@@ -627,31 +655,32 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
 
     @patch("subprocess.run")
     def test_multiple_pools_exist_returns_all(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\ndstpool2\n", stderr="")
+        """One initialization and one batched query suffice to retain all destinations on existing pools."""
+        self._mock_pool_list(mock_run, "dstpool1\ndstpool2\n")
         pairs = [("srcpool1/src1", "-:dstpool1/dst1"), ("srcpool2/src2", "-:dstpool2/dst2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual(pairs, result)
         self.assertSetEqual({"-:dstpool1", "-:dstpool2"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool1", "-:dstpool2"}, self.job.cache_known_dst_pools)
-        mock_run.assert_called_once()
+        self._assert_pool_commands(mock_run, ["dstpool1", "dstpool2"])
 
     @patch("subprocess.run")
     def test_repeated_call_caching(self, mock_run: MagicMock) -> None:
-        mock_run.side_effect = [
-            subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\n", stderr=""),
-            subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool3\n", stderr=""),
-        ]
+        """Subsequent discovery queries only unknown pools, preserving cached missing-pool decisions."""
+        self._mock_pool_list(mock_run, "dstpool1\n", returncode=1, stderr="cannot open 'dstpool2': no such pool\n")
         pairs1 = [("srcpool1/src1", "-:dstpool1/dst1"), ("srcpool1/src2", "-:dstpool2/dst2")]
         res1 = self.job.skip_nonexisting_local_dst_pools(pairs1)
         self.assertListEqual([("srcpool1/src1", "-:dstpool1/dst1")], res1)
+        self._mock_pool_list(mock_run, "dstpool3\n")
         pairs2 = [("srcpool1/src2", "-:dstpool2/dst2"), ("srcpool3/src3", "-:dstpool3/dst3")]
         res2 = self.job.skip_nonexisting_local_dst_pools(pairs2)
         self.assertListEqual([("srcpool3/src3", "-:dstpool3/dst3")], res2)
-        self.assertEqual(2, mock_run.call_count)
+        self._assert_pool_commands(mock_run, ["dstpool1", "dstpool2"], ["dstpool3"])
 
     @patch("subprocess.run")
     def test_multislash_dataset_names(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\n", stderr="")
+        """Nested destination paths are retained when their pool is found after initialization."""
+        self._mock_pool_list(mock_run, "dstpool1\n")
         pairs = [("srcpool1/src1", "-:dstpool1/child/grand")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual(pairs, result)
@@ -659,7 +688,10 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
 
     @patch("subprocess.run")
     def test_multiple_warnings_for_nonexistent(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        """Each destination on a missing pool produces its own warning after successful initialization."""
+        self._mock_pool_list(
+            mock_run, "", returncode=1, stderr="cannot open 'dstpool2': no such pool\ncannot open 'srcpool1': no such pool\n"
+        )
         pairs = [("srcpool1/src1", "-:srcpool1/dst1"), ("srcpool2/src2", "-:dstpool2/dst2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual([], result)
@@ -671,30 +703,30 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
 
     @patch("subprocess.run")
     def test_duplicate_pool_input(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\n", stderr="")
+        """Destinations sharing a pool require only one initialization and one pool query."""
+        self._mock_pool_list(mock_run, "dstpool1\n")
         pairs = [("srcpool1/src1", "-:dstpool1/dst1"), ("srcpool2/src2", "-:dstpool1/dst2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual(pairs, result)
-        mock_run.assert_called_once()
+        self._assert_pool_commands(mock_run, ["dstpool1"])
 
     # dst without slash, existing pool
     @patch("subprocess.run")
     def test_dst_without_slash_existing_pool(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool4\n", stderr="")
+        """A destination naming the pool root follows the same initialization and discovery path as a child dataset."""
+        self._mock_pool_list(mock_run, "dstpool4\n")
         pairs = [("srcpool4/src4", "-:dstpool4")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual(pairs, result)
         self.assertSetEqual({"-:dstpool4"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool4"}, self.job.cache_known_dst_pools)
-        expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["dstpool4"]
-        mock_run.assert_called_once_with(
-            expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=None, check=False
-        )
+        self._assert_pool_commands(mock_run, ["dstpool4"])
 
     # dst without slash, non-existing pool
     @patch("subprocess.run")
     def test_dst_without_slash_nonexisting_pool(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        """A missing pool root is skipped after library initialization succeeds."""
+        self._mock_pool_list(mock_run, "", returncode=1, stderr="cannot open 'dstpool2': no such pool\n")
         pairs = [("srcpool4/src4", "-:dstpool2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual([], result)
@@ -707,17 +739,19 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
     # non-local dst and without slash
     @patch("subprocess.run")
     def test_nonlocaldst_without_slash(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        """Remote pool roots bypass local ZFS initialization and discovery, leaving validation to the remote host."""
         pairs = [("srcpool4/src4", "127.0.0.1:dstpool2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual(pairs, result)
         self.assertSetEqual({"127.0.0.1:dstpool2"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"127.0.0.1:dstpool2"}, self.job.cache_known_dst_pools)
         self.assertEqual([], self.log_mock.warning.mock_calls)
+        mock_run.assert_not_called()
 
     @patch("subprocess.run")
     def test_mixed_local_existing_and_remote(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="local1\n", stderr="")
+        """Only local pools are queried, while destinations on existing local and assumed remote pools are retained."""
+        self._mock_pool_list(mock_run, "local1\n")
         pairs = [
             ("srcpool4/src1", "-:local1/src1"),  # Local, should be checked and found
             ("srcpool4/src2", "127.0.0.1:dstpool1/src2"),  # Remote, should be assumed to exist
@@ -726,15 +760,13 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
         self.assertCountEqual(pairs, result)
         self.assertSetEqual({"-:local1", "127.0.0.1:dstpool1"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:local1", "127.0.0.1:dstpool1"}, self.job.cache_known_dst_pools)
-        expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["local1"]
-        mock_run.assert_called_once_with(
-            expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=None, check=False
-        )
+        self._assert_pool_commands(mock_run, ["local1"])
         self.log_mock.warning.assert_not_called()
 
     @patch("subprocess.run")
     def test_mixed_local_nonexisting_and_remote(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")  # local2 nonexistng
+        """A missing local pool does not discard a remote destination after successful initialization."""
+        self._mock_pool_list(mock_run, "", returncode=1, stderr="cannot open 'local2': no such pool\n")
         pairs = [
             ("src1/src1", "-:local2/src1"),  # Local, should be checked and NOT found
             ("src2/src2", "127.0.0.1:dstpool1/src2"),  # Remote, should be assumed to exist
@@ -745,19 +777,15 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
         self.assertCountEqual(expected_result, result)
         self.assertSetEqual({"127.0.0.1:dstpool1"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:local2", "127.0.0.1:dstpool1"}, self.job.cache_known_dst_pools)
-        expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["local2"]
-        mock_run.assert_called_once_with(
-            expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=None, check=False
-        )
+        self._assert_pool_commands(mock_run, ["local2"])
         self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:local2/src1"
         )
 
     @patch("subprocess.run")
     def test_mixed_local_existing_nonexisting_and_remote(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="local1\n", stderr=""
-        )  # local1 exists, local2 does not
+        """A partial local listing retains discovered and remote pools while skipping only the missing local pool."""
+        self._mock_pool_list(mock_run, "local1\n", returncode=1, stderr="cannot open 'local2': no such pool\n")
         pairs = [
             ("src1/src1", "-:local1/src1"),  # Local, exists
             ("src2/src2", "127.0.0.1:dstpool1/src2"),  # Remote
@@ -771,13 +799,7 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
         self.assertCountEqual(expected_result, result)
         self.assertSetEqual({"-:local1", "127.0.0.1:dstpool1"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:local1", "127.0.0.1:dstpool1", "-:local2"}, self.job.cache_known_dst_pools)
-        # zfs list should be called for both local1 and local2
-        expected_cmd_parts = "zfs list -t filesystem,volume -Hp -o name".split(" ")
-        # Order of pools in the command might vary, so check args more flexibly
-        self.assertEqual(1, mock_run.call_count)
-        called_cmd = mock_run.call_args[0][0]
-        self.assertEqual(expected_cmd_parts, called_cmd[: len(expected_cmd_parts)])
-        self.assertCountEqual(sorted(["local1", "local2"]), sorted(called_cmd[len(expected_cmd_parts) :]))
+        self._assert_pool_commands(mock_run, ["local1", "local2"])
 
         self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:local2/data3"
@@ -798,45 +820,36 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
 
     @patch("subprocess.run")
     def test_unexpected_error_on_local_dst_pool_check_raises_exception(self, mock_subprocess_run: MagicMock) -> None:
-        mock_subprocess_run.return_value = subprocess.CompletedProcess(
-            args=["zfs", "list", "-t", "filesystem,volume", "-Hp", "-o", "name"],
-            returncode=2,
-            stdout="",
-            stderr="Permission denied",
-        )
+        """Successful initialization does not suppress an unexpected failure of the subsequent pool listing."""
+        self._mock_pool_list(mock_subprocess_run, "", returncode=2, stderr="Permission denied")
         with self.assertRaises(SystemExit) as cm:
             self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:nonexistent_pool/dataset")])
         self.assertEqual(3, cm.exception.code)
         self.assertIn("Unexpected error 2 on checking for existing local dst pools: Permission denied", str(cm.exception))
+        self._assert_pool_commands(mock_subprocess_run, ["nonexistent_pool"])
 
     @patch("subprocess.run")
     def test_local_dst_pool_not_found_skips_dataset(self, mock_subprocess_run: MagicMock) -> None:
-        mock_subprocess_run.return_value = subprocess.CompletedProcess(
-            args=["zfs", "list", "-t", "filesystem,volume", "-Hp", "-o", "name"],
-            returncode=1,
-            stdout="",
-            stderr="dataset not found",
-        )
+        """The expected missing-pool exit status remains skippable when library initialization succeeds."""
+        self._mock_pool_list(mock_subprocess_run, "", returncode=1, stderr="cannot open 'nonexistent_pool': no such pool\n")
         result = self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:nonexistent_pool/dataset")])
         self.assertEqual([], result)
         self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:nonexistent_pool/dataset"
         )
+        self._assert_pool_commands(mock_subprocess_run, ["nonexistent_pool"])
 
     @patch("subprocess.run")
     def test_local_dst_pool_exists_processes_dataset(self, mock_subprocess_run: MagicMock) -> None:
-        mock_subprocess_run.return_value = subprocess.CompletedProcess(
-            args=["zfs", "list", "-t", "filesystem,volume", "-Hp", "-o", "name"],
-            returncode=0,
-            stdout="existing_pool\n",
-            stderr="",
-        )
+        """A successful pool listing retains the requested destination after initialization succeeds."""
+        self._mock_pool_list(mock_subprocess_run, "existing_pool\n")
         result = self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:existing_pool/dataset")])
         self.assertEqual([("src/dataset", "-:existing_pool/dataset")], result)
 
     @patch("subprocess.run")
     def test_unexpected_error_logs_and_raises(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = subprocess.CompletedProcess(args=["zfs", "list"], returncode=5, stdout="", stderr="boom")
+        """Pool-list failures after initialization preserve the diagnostic in both the error log and raised exit."""
+        self._mock_pool_list(mock_run, "", returncode=5, stderr="boom")
         with patch.object(self.job.log, "error") as mock_error:
             with self.assertRaises(SystemExit) as cm:
                 self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:pool/dataset")])
@@ -844,6 +857,68 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
         mock_error.assert_called_once_with("%s", expected)
         self.assertEqual(3, cm.exception.code)
         self.assertIn(expected, str(cm.exception))
+        self._assert_pool_commands(mock_run, ["pool"])
+
+    @patch("subprocess.run")
+    def test_zpool_version_failure_aborts_cli_before_subjobs(self, mock_run: MagicMock) -> None:
+        """An initialization failure must fail the CLI before backup jobs or missing-pool cache entries are created."""
+        stderr = "The ZFS modules cannot be auto-loaded.\n"
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["zpool", "version"], returncode=1, stdout="", stderr=stderr
+        )
+        argv = [
+            bzfs_jobrunner.PROG_NAME,
+            "--job-id=test",
+            "--src-hosts=['src1']",
+            "--localhost=localhost",
+            "--dst-hosts={'localhost': ['onsite']}",
+            "--retain-dst-targets={'localhost': ['onsite']}",
+            "--dst-root-datasets={'localhost': ''}",
+            "--dst-snapshot-plan={'prod': {'onsite': {'daily': 1}}}",
+            "--worker-timeout-seconds=7",
+            "--replicate",
+            "--root-dataset-pairs",
+            "tank/data",
+            "backup/data",
+        ]
+        with (
+            patch.object(self.job, "get_localhost_ips", return_value=set()),
+            patch.object(self.job, "run_subjobs") as mock_run_subjobs,
+            self.assertRaises(SystemExit) as cm,
+        ):
+            self.job.run_main(argv)
+        self.assertEqual(DIE_STATUS, cm.exception.code)
+        expected = f"Unexpected error 1 on checking for existing local dst zpools: {stderr.strip()}"
+        self.assertIn(expected, str(cm.exception))
+        self.log_mock.error.assert_called_once_with("%s", expected)
+        self.log_mock.warning.assert_not_called()
+        mock_run_subjobs.assert_not_called()
+        mock_run.assert_called_once_with(
+            ["zpool", "version"], stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=7, check=False
+        )
+        self.assertSetEqual(set(), self.job.cache_known_dst_pools)
+        self.assertSetEqual(set(), self.job.cache_existing_dst_pools)
+
+    @patch("subprocess.run")
+    def test_zpool_version_timeout_leaves_pool_discovery_retryable(self, mock_run: MagicMock) -> None:
+        """A timed-out initialization must leave caches untouched so another attempt can discover the destination."""
+        mock_run.side_effect = subprocess.TimeoutExpired(["zpool", "version"], timeout=2.5)
+        pairs = [("src/dataset", "-:pool/dataset")]
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.job.skip_nonexisting_local_dst_pools(pairs, timeout_secs=2.5)
+        mock_run.assert_called_once_with(
+            ["zpool", "version"], stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=2.5, check=False
+        )
+        self.assertSetEqual(set(), self.job.cache_known_dst_pools)
+        self.assertSetEqual(set(), self.job.cache_existing_dst_pools)
+        self.log_mock.warning.assert_not_called()
+
+        mock_run.reset_mock()
+        self._mock_pool_list(mock_run, "pool\n")
+        self.assertListEqual(pairs, self.job.skip_nonexisting_local_dst_pools(pairs, timeout_secs=2.5))
+        self.assertSetEqual({"-:pool"}, self.job.cache_known_dst_pools)
+        self.assertSetEqual({"-:pool"}, self.job.cache_existing_dst_pools)
+        self._assert_pool_commands(mock_run, ["pool"], timeout_secs=2.5)
 
 
 #############################################################################
