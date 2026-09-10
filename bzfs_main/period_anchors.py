@@ -128,36 +128,6 @@ class PeriodAnchors:
         23:55:01, 2 hours --> 00:00:00 on the next day
         """
 
-        def add_months(dt: datetime, months: int) -> datetime:
-            """Build a boundary offset from dt's month, clamping the configured day only against the target month's end."""
-            total_month: int = dt.month - 1 + months
-            new_year: int = dt.year + total_month // 12
-            new_month: int = total_month % 12 + 1
-            last_day: int = calendar.monthrange(new_year, new_month)[1]  # last valid day of the target month
-            return dt.replace(
-                year=new_year,
-                month=new_month,
-                day=min(self.monthly_monthday, last_day),
-                hour=self.monthly_hour,
-                minute=self.monthly_minute,
-                second=self.monthly_second,
-                microsecond=0,
-            )
-
-        def add_years(dt: datetime, years: int) -> datetime:
-            """Build a boundary offset from dt's year using yearly anchors, clamping the configured day to the target month's end."""
-            new_year: int = dt.year + years
-            last_day: int = calendar.monthrange(new_year, self.yearly_month)[1]  # last valid day of the target month
-            return dt.replace(
-                year=new_year,
-                month=self.yearly_month,
-                day=min(self.yearly_monthday, last_day),
-                hour=self.yearly_hour,
-                minute=self.yearly_minute,
-                second=self.yearly_second,
-                microsecond=0,
-            )
-
         if duration_amount == 0:
             return dt
 
@@ -203,17 +173,47 @@ class PeriodAnchors:
         elif duration_unit == "monthly":
             months_since_anchor: int = (dt.year - self.monthly_year) * 12 + dt.month - self.monthly_month
             offset_months: int = -months_since_anchor % duration_amount
-            anchor = add_months(dt, offset_months)
+            anchor = self._add_months(dt, offset_months)
             if anchor < dt:
-                anchor = add_months(dt, offset_months + duration_amount)
+                anchor = self._add_months(dt, offset_months + duration_amount)
             return anchor
 
         elif duration_unit == "yearly":
             offset_years: int = (self.yearly_year - dt.year) % duration_amount
-            anchor = add_years(dt, offset_years)
+            anchor = self._add_years(dt, offset_years)
             if anchor < dt:
-                anchor = add_years(dt, offset_years + duration_amount)
+                anchor = self._add_years(dt, offset_years + duration_amount)
             return anchor
 
         else:
             raise ValueError(f"Unsupported duration unit: {duration_unit}")
+
+    def _add_months(self, dt: datetime, months: int) -> datetime:
+        """Build a boundary offset from dt's month, clamping the configured day only against the target month's end."""
+        total_month: int = dt.month - 1 + months
+        new_year: int = dt.year + total_month // 12
+        new_month: int = total_month % 12 + 1
+        last_day: int = calendar.monthrange(new_year, new_month)[1]  # last valid day of the target month
+        return dt.replace(
+            year=new_year,
+            month=new_month,
+            day=min(self.monthly_monthday, last_day),
+            hour=self.monthly_hour,
+            minute=self.monthly_minute,
+            second=self.monthly_second,
+            microsecond=0,
+        )
+
+    def _add_years(self, dt: datetime, years: int) -> datetime:
+        """Build a boundary offset from dt's year using yearly anchors, clamping the configured day to the target month's end."""
+        new_year: int = dt.year + years
+        last_day: int = calendar.monthrange(new_year, self.yearly_month)[1]  # last valid day of the target month
+        return dt.replace(
+            year=new_year,
+            month=self.yearly_month,
+            day=min(self.yearly_monthday, last_day),
+            hour=self.yearly_hour,
+            minute=self.yearly_minute,
+            second=self.yearly_second,
+            microsecond=0,
+        )
