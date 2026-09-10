@@ -211,6 +211,287 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "minutely")
         self.assertEqual(dt, result)
 
+    def test_minutes_future1a(self) -> None:
+        """Rounding up to the next minute when anchor is on 0 second."""
+        dt = datetime(2025, 2, 11, 14, 0, 5, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "minutely")
+        expected = dt.replace(minute=1, second=0, microsecond=0)
+        self.assertEqual(expected, result)
+
+    def test_minutes_future1b(self) -> None:
+        """Rounding up to the next minute when anchor is in the past."""
+        dt = datetime(2025, 2, 11, 14, 0, 5, 0, tzinfo=self.tz)
+        anchors = PeriodAnchors(minutely_second=2)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "minutely", anchors)
+        expected = dt.replace(minute=1, second=2, microsecond=0)
+        self.assertEqual(expected, result)
+
+    def test_minutes_future1c(self) -> None:
+        """Rounding up to the next minute when anchor is in the future."""
+        dt = datetime(2025, 2, 11, 14, 0, 5, 0, tzinfo=self.tz)
+        anchors = PeriodAnchors(minutely_second=7)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "minutely", anchors)
+        expected = dt.replace(minute=0, second=7, microsecond=0)
+        self.assertEqual(expected, result)
+
+    def test_minutes_future2(self) -> None:
+        """Rounding up to the next minute when anchor is in the future."""
+        dt = datetime(2025, 2, 11, 14, 0, 5, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "minutely")
+        expected = dt.replace(minute=2, second=0, microsecond=0)
+        self.assertEqual(expected, result)
+
+    def test_two_unit_anchor_boundaries(self) -> None:
+        """Check two-unit schedules from milliseconds through years using explicit boundary pairs and timezone-aware
+        datetimes. Probe exact and adjacent times plus midnight/year rollover; explicit monthly dates preserve calendar
+        semantics.
+        """
+        cases: list[tuple[str, PeriodAnchors, datetime, datetime]] = [
+            (
+                "millisecondly",
+                PeriodAnchors(),
+                datetime(2027, 1, 1, tzinfo=self.tz),
+                datetime(2027, 1, 1, microsecond=2000, tzinfo=self.tz),
+            ),
+            (
+                "secondly",
+                PeriodAnchors(),
+                datetime(2027, 1, 1, tzinfo=self.tz),
+                datetime(2027, 1, 1, second=2, tzinfo=self.tz),
+            ),
+            (
+                "minutely",
+                PeriodAnchors(minutely_second=30),
+                datetime(2027, 1, 1, 0, 0, 30, tzinfo=self.tz),
+                datetime(2027, 1, 1, 0, 2, 30, tzinfo=self.tz),
+            ),
+            (
+                "hourly",
+                PeriodAnchors(hourly_minute=15, hourly_second=30),
+                datetime(2027, 1, 1, 0, 15, 30, tzinfo=self.tz),
+                datetime(2027, 1, 1, 2, 15, 30, tzinfo=self.tz),
+            ),
+            (
+                "daily",
+                PeriodAnchors(daily_year=2026, daily_hour=6, daily_minute=7, daily_second=8),
+                datetime(2026, 12, 31, 6, 7, 8, tzinfo=self.tz),
+                datetime(2027, 1, 2, 6, 7, 8, tzinfo=self.tz),
+            ),
+            (
+                "weekly",
+                PeriodAnchors(weekly_weekday=4, weekly_hour=6, weekly_minute=7, weekly_second=8),
+                datetime(2026, 12, 31, 6, 7, 8, tzinfo=self.tz),
+                datetime(2027, 1, 14, 6, 7, 8, tzinfo=self.tz),
+            ),
+            (
+                "monthly",
+                PeriodAnchors(monthly_monthday=31, monthly_hour=6, monthly_minute=7, monthly_second=8),
+                datetime(2026, 11, 30, 6, 7, 8, tzinfo=self.tz),
+                datetime(2027, 1, 31, 6, 7, 8, tzinfo=self.tz),
+            ),
+            (
+                "yearly",
+                PeriodAnchors(
+                    yearly_year=2026, yearly_month=12, yearly_monthday=31, yearly_hour=6, yearly_minute=7, yearly_second=8
+                ),
+                datetime(2026, 12, 31, 6, 7, 8, tzinfo=self.tz),
+                datetime(2028, 12, 31, 6, 7, 8, tzinfo=self.tz),
+            ),
+        ]
+        tick = timedelta(microseconds=1)
+        for unit, anchors, boundary, following in cases:
+            observations: list[tuple[datetime, datetime]] = [
+                (boundary.replace(hour=0, minute=0, second=0, microsecond=0), boundary),
+                (boundary - tick, boundary),
+                (boundary, boundary),
+                (boundary + tick, following),
+                (following - tick, following),
+                (following, following),
+            ]
+            if unit == "minutely":
+                observations.append((datetime(2026, 12, 31, 23, 58, 30, 1, tzinfo=self.tz), boundary))
+            elif unit == "weekly":
+                observations.append((datetime(2027, 1, 3, 12, tzinfo=self.tz), following))
+            for current, expected in observations:
+                with self.subTest(unit=unit, current=current):
+                    actual = round_datetime_up_to_duration_multiple(current, 2, unit, anchors)
+                    self.assertEqual(expected, actual)
+                    self.assertEqual(self.tz, actual.tzinfo)
+
+    def test_daily_boundaries_use_fixed_reference_year(self) -> None:
+        """Keep daily phases across intervening days, year changes and leap days. Explicit consecutive boundaries
+        before and after the reference year distinguish a fixed cycle from one that restarts each day or year.
+        """
+        cases = [
+            (2, 2025, "2024-12-30", "2025-01-01"),
+            (2, 2025, "2025-01-01", "2025-01-03"),
+            (2, 2025, "2025-12-31", "2026-01-02"),
+            (2, 2025, "2026-09-09", "2026-09-11"),
+            (2, 2024, "2024-02-28", "2024-03-01"),
+            (2, 2024, "2024-12-30", "2025-01-01"),
+            (3, 2024, "2024-02-27", "2024-03-01"),
+            (7, 2025, "2025-12-31", "2026-01-07"),
+            (370, 2025, "2025-01-01", "2026-01-06"),
+        ]
+        for amount, year, previous_date, following_date in cases:
+            anchors = PeriodAnchors(daily_year=year, daily_hour=6, daily_minute=7, daily_second=8)
+            self._assert_fixed_phase_interval(anchors, amount, "daily", previous_date, following_date)
+
+    def test_weekly_boundaries_use_fixed_reference_year(self) -> None:
+        """Keep weekly phases across intervening weeks, year changes and leap days. Explicit boundary pairs cover
+        multiple periods and reference years, including a future origin, without recomputing the expected phase.
+        """
+        cases = [
+            (2, 2025, 4, "2024-12-19", "2025-01-02"),
+            (2, 2025, 4, "2025-01-02", "2025-01-16"),
+            (2, 2025, 4, "2025-12-18", "2026-01-01"),
+            (2, 2025, 4, "2026-09-10", "2026-09-24"),
+            (2, 2025, 4, "2026-12-31", "2027-01-14"),
+            (2, 2027, 4, "2025-12-25", "2026-01-08"),
+            (2, 2024, 1, "2024-02-26", "2024-03-11"),
+            (3, 2025, 0, "2025-12-28", "2026-01-18"),
+        ]
+        for amount, year, weekday, previous_date, following_date in cases:
+            anchors = PeriodAnchors(
+                weekly_year=year, weekly_weekday=weekday, weekly_hour=6, weekly_minute=7, weekly_second=8
+            )
+            self._assert_fixed_phase_interval(anchors, amount, "weekly", previous_date, following_date)
+
+    def _assert_fixed_phase_interval(
+        self, anchors: PeriodAnchors, amount: int, unit: str, previous_date: str, following_date: str
+    ) -> None:
+        """Require a constant ceiling between known consecutive boundaries. Sample both callers' microsecond tick and
+        intervening six-hour times; exact matches, idempotence and fixed-offset timezones guard boundary precision.
+        """
+        tick = timedelta(microseconds=1)
+        for tz in (timezone.utc, self.tz, timezone(timedelta(hours=5, minutes=30))):
+            previous = datetime.fromisoformat(previous_date).replace(hour=6, minute=7, second=8, tzinfo=tz)
+            following = datetime.fromisoformat(following_date).replace(hour=6, minute=7, second=8, tzinfo=tz)
+            observations = [
+                (previous - tick, previous),
+                (previous, previous),
+                (previous + tick, following),
+                (following - tick, following),
+                (following, following),
+            ]
+            current = previous + timedelta(hours=6)
+            while current < following:
+                observations.append((current, following))
+                current += timedelta(hours=6)
+            for current, expected in observations:
+                with self.subTest(unit=unit, amount=amount, anchors=anchors, current=current):
+                    actual = anchors.round_datetime_up_to_duration_multiple(current, amount, unit)
+                    self.assertEqual(expected, actual)
+                    self.assertEqual(expected, anchors.round_datetime_up_to_duration_multiple(actual, amount, unit))
+                    self.assertEqual(tz, actual.tzinfo)
+
+    def test_daily_weekly_reference_year_sets_phase(self) -> None:
+        """Changing a reference year must select the corresponding two-unit cycle. Hold the input fixed to make
+        phase differences observable, including a weekly reference year after the input date.
+        """
+        current = datetime(2026, 1, 1, 12, tzinfo=self.tz)
+        cases = [
+            ("daily", 2025, "2026-01-02"),
+            ("daily", 2026, "2026-01-03"),
+            ("weekly", 2025, "2026-01-15"),
+            ("weekly", 2026, "2026-01-15"),
+            ("weekly", 2027, "2026-01-08"),
+        ]
+        for unit, year, expected_date in cases:
+            anchors = PeriodAnchors(daily_year=year, daily_hour=6, weekly_year=year, weekly_weekday=4, weekly_hour=6)
+            expected = datetime.fromisoformat(expected_date).replace(hour=6, tzinfo=self.tz)
+            with self.subTest(unit=unit, year=year):
+                self.assertEqual(expected, anchors.round_datetime_up_to_duration_multiple(current, 2, unit))
+
+    def test_weekly_first_weekday_on_or_after_january_1(self) -> None:
+        """Use the first configured weekday in the reference year. January 1, 2025 is Wednesday; explicit day numbers
+        cover all cron weekdays and distinguish the following occurrence from the preceding year's occurrence.
+        """
+        current = datetime(2025, 1, 1, tzinfo=self.tz)
+        tick = timedelta(microseconds=1)
+        for weekday, day in enumerate([5, 6, 7, 1, 2, 3, 4]):
+            anchors = PeriodAnchors(
+                weekly_year=2025, weekly_weekday=weekday, weekly_hour=6, weekly_minute=7, weekly_second=8
+            )
+            first = datetime(2025, 1, day, 6, 7, 8, tzinfo=self.tz)
+            for amount in (1, 2, 3):
+                with self.subTest(weekday=weekday, amount=amount):
+                    self.assertEqual(first, anchors.round_datetime_up_to_duration_multiple(current, amount, "weekly"))
+                    self.assertEqual(first, anchors.round_datetime_up_to_duration_multiple(first, amount, "weekly"))
+                    self.assertEqual(
+                        first + timedelta(weeks=amount),
+                        anchors.round_datetime_up_to_duration_multiple(first + tick, amount, "weekly"),
+                    )
+
+    def test_daily_weekly_datetime_limits(self) -> None:
+        """Keep representable daily/weekly results at the calendar limits. Reference years 1 and 9999 exercise distant
+        anchors in both directions; rounding to the first Sunday must not construct a preceding year-zero date.
+        """
+        cases = [
+            ("daily", "0001-01-01", "0001-01-01"),
+            ("daily", "9999-12-31", "9999-12-31"),
+            ("weekly", "0001-01-01", "0001-01-07"),
+            ("weekly", "9999-12-25", "9999-12-26"),
+        ]
+        for year in (1, 9999):
+            anchors = PeriodAnchors(daily_year=year, daily_hour=6, weekly_year=year, weekly_hour=6)
+            for unit, current_date, expected_date in cases:
+                current = datetime.fromisoformat(current_date).replace(tzinfo=self.tz)
+                expected = datetime.fromisoformat(expected_date).replace(hour=6, tzinfo=self.tz)
+                with self.subTest(year=year, unit=unit, current=current):
+                    self.assertEqual(expected, anchors.round_datetime_up_to_duration_multiple(current, 1, unit))
+
+    def test_subhour_anchor_boundaries_at_midnight(self) -> None:
+        """Verify that subhour rounding preserves anchored boundaries across midnight.
+
+        Exercise periods of 10 milliseconds, 10 seconds, and 10 minutes, with the minute schedule anchored at second 30.
+        Probe midnight, the first daily boundary and adjacent microseconds, one microsecond after midnight, and one
+        microsecond after the preceding boundary. Each input must round up to the earliest valid boundary, with exact
+        matches unchanged. Run every case in UTC and UTC+05:30 and assert timezone preservation to catch rounding errors and
+        incorrect date rollover.
+        """
+        cases: list[tuple[str, PeriodAnchors, timedelta, timedelta]] = [
+            ("millisecondly", PeriodAnchors(), timedelta(0), timedelta(milliseconds=10)),
+            ("secondly", PeriodAnchors(), timedelta(0), timedelta(seconds=10)),
+            ("minutely", PeriodAnchors(minutely_second=30), timedelta(seconds=30), timedelta(minutes=10)),
+        ]
+        tick: timedelta = timedelta(microseconds=1)
+        for tz in (timezone.utc, timezone(timedelta(hours=5, minutes=30))):
+            midnight: datetime = datetime(2026, 9, 9, tzinfo=tz)
+            for unit, anchors, offset, period in cases:
+                first: datetime = midnight + offset
+                observations: list[tuple[datetime, datetime]] = [
+                    (midnight, first),
+                    (midnight + tick, first if offset else first + period),
+                    (first - tick, first),
+                    (first, first),
+                    (first + tick, first + period),
+                    (first - period + tick, first),
+                ]
+                for current, expected in observations:
+                    with self.subTest(tz=tz, unit=unit, current=current):
+                        actual: datetime = anchors.round_datetime_up_to_duration_multiple(current, 10, unit)
+                        self.assertEqual(expected, actual)
+                        self.assertEqual(tz, actual.tzinfo)
+
+    def test_subhour_single_period_anchor_at_midnight(self) -> None:
+        """Verify that single-unit subhour schedules honor their anchors at exact midnight.
+
+        Use local midnight in the fixed UTC-05:00 timezone with a duration amount of one for millisecond, second, and
+        minute schedules. Default millisecond and second anchors must return the input unchanged because midnight is
+        already a valid boundary. With the minute anchor set to second 30, the result must advance to 00:00:30. These
+        cases check that exact midnight respects the configured anchor when rounding by a single unit.
+        """
+        midnight = datetime(2026, 9, 9, tzinfo=self.tz)
+        cases: list[tuple[str, PeriodAnchors, datetime]] = [
+            ("millisecondly", PeriodAnchors(), midnight),
+            ("secondly", PeriodAnchors(), midnight),
+            ("minutely", PeriodAnchors(minutely_second=30), midnight.replace(second=30)),
+        ]
+        for unit, anchors, expected in cases:
+            with self.subTest(unit=unit):
+                self.assertEqual(expected, anchors.round_datetime_up_to_duration_multiple(midnight, 1, unit))
+
     def test_hours_non_boundary(self) -> None:
         """Rounding up to the next hour when dt is not on an hour boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
@@ -683,6 +964,118 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result2 = round_datetime_up_to_duration_multiple(dt2, 1, "monthly", anchors=anchors)
         self.assertEqual(expected2, result2)
 
+    def test_monthly_preserves_anchor_day_after_short_month(self) -> None:
+        """Keep the original day across shorter months, custom phases and year rollover using explicit boundary pairs."""
+        cases = [
+            (1, 1, "2026-04-30", "2026-05-31"),
+            (1, 5, "2026-04-30", "2026-05-31"),
+            (2, 1, "2026-11-30", "2027-01-31"),
+            (3, 1, "2026-04-30", "2026-07-31"),
+            (4, 1, "2026-09-30", "2027-01-31"),
+            (6, 3, "2026-09-30", "2027-03-31"),
+            (12, 1, "2026-01-31", "2027-01-31"),
+        ]
+        tick = timedelta(microseconds=1)
+        for tz in (timezone.utc, timezone(timedelta(hours=5, minutes=30))):
+            for amount, month, previous_date, following_date in cases:
+                anchors = PeriodAnchors(
+                    monthly_month=month, monthly_monthday=31, monthly_hour=6, monthly_minute=7, monthly_second=8
+                )
+                previous = datetime.fromisoformat(previous_date).replace(hour=6, minute=7, second=8, tzinfo=tz)
+                following = datetime.fromisoformat(following_date).replace(hour=6, minute=7, second=8, tzinfo=tz)
+                observations = [
+                    (previous, previous),
+                    (previous + tick, following),
+                    (following - tick, following),
+                    (following, following),
+                ]
+                for current, expected in observations:
+                    with self.subTest(tz=tz, amount=amount, month=month, current=current):
+                        actual = anchors.round_datetime_up_to_duration_multiple(current, amount, "monthly")
+                        self.assertEqual(expected, actual)
+                        self.assertEqual(tz, actual.tzinfo)
+
+    def test_monthly_preserves_anchor_day_after_early_snapshot(self) -> None:
+        """An early May 30 snapshot must still round to May 31; use its creation time plus the scheduler's microsecond tick."""
+        anchors = PeriodAnchors(monthly_month=5, monthly_monthday=31)
+        latest = datetime(2026, 5, 30, tzinfo=self.tz)
+        expected = datetime(2026, 5, 31, tzinfo=self.tz)
+        actual = anchors.round_datetime_up_to_duration_multiple(latest + timedelta(microseconds=1), 1, "monthly")
+        self.assertEqual(expected, actual)
+
+    def test_monthly_clamps_only_to_target_month(self) -> None:
+        """Preserve day 31 after an April boundary; explicit expected dates distinguish phase from target-month clamping."""
+        anchors = PeriodAnchors(monthly_month=4, monthly_monthday=31)
+        current = datetime(2026, 4, 30, microsecond=1, tzinfo=self.tz)
+        for amount, expected_date in [(1, "2026-05-31"), (3, "2026-07-31"), (12, "2027-04-30")]:
+            with self.subTest(amount=amount):
+                expected = datetime.fromisoformat(expected_date).replace(tzinfo=self.tz)
+                self.assertEqual(expected, anchors.round_datetime_up_to_duration_multiple(current, amount, "monthly"))
+
+    def test_monthly_equivalent_phases_preserve_day(self) -> None:
+        """Equivalent phases must preserve days 29-31, even when an anchor month is short. Explicit dates cover
+        single-month, quarterly and half-year schedules without deriving expectations from the rounding algorithm.
+        """
+        current = datetime(2026, 5, 1, tzinfo=self.tz)
+        cases = [
+            (1, range(1, 13), 5),
+            (3, range(1, 13, 3), 7),
+            (6, range(2, 13, 6), 8),
+        ]
+        for amount, months, target_month in cases:
+            for month in months:
+                for day in (29, 30, 31):
+                    with self.subTest(amount=amount, month=month, day=day):
+                        anchors = PeriodAnchors(monthly_month=month, monthly_monthday=day)
+                        expected = datetime(2026, target_month, day, tzinfo=self.tz)
+                        self.assertEqual(
+                            expected, anchors.round_datetime_up_to_duration_multiple(current, amount, "monthly")
+                        )
+
+    def test_monthly_boundaries_across_leap_years(self) -> None:
+        """Use explicit boundary pairs across leap/common years for periods that divide a year. Old snapshot times
+        and New Year's current time must agree; adjacent microseconds, exact matches and repeated rounding verify a stable
+        schedule. Fixed-offset timezones isolate calendar behavior from DST policy, and century cases check leap rules.
+        """
+        cases = [
+            (1, 29, "2027-12-29", "2028-01-29"),
+            (1, 29, "2028-12-29", "2029-01-29"),
+            (1, 30, "2027-12-30", "2028-01-30"),
+            (1, 31, "2028-12-31", "2029-01-31"),
+            (2, 29, "2027-12-29", "2028-02-29"),
+            (3, 29, "2027-11-29", "2028-02-29"),
+            (4, 29, "2027-10-29", "2028-02-29"),
+            (6, 29, "2027-08-29", "2028-02-29"),
+            (12, 29, "2027-02-28", "2028-02-29"),
+            (12, 30, "2027-02-28", "2028-02-29"),
+            (12, 31, "2027-02-28", "2028-02-29"),
+            (12, 29, "2028-02-29", "2029-02-28"),
+            (12, 29, "2099-02-28", "2100-02-28"),
+            (12, 29, "2399-02-28", "2400-02-29"),
+        ]
+        tick = timedelta(microseconds=1)
+        for tz in (timezone.utc, timezone(timedelta(hours=5, minutes=30))):
+            for amount, day, previous_date, following_date in cases:
+                anchors = PeriodAnchors(
+                    monthly_month=2, monthly_monthday=day, monthly_hour=6, monthly_minute=7, monthly_second=8
+                )
+                previous = datetime.fromisoformat(previous_date).replace(hour=6, minute=7, second=8, tzinfo=tz)
+                following = datetime.fromisoformat(following_date).replace(hour=6, minute=7, second=8, tzinfo=tz)
+                observations = [
+                    (previous - tick, previous),
+                    (previous, previous),
+                    (previous + tick, following),
+                    (datetime(following.year, 1, 1, tzinfo=tz), following),
+                    (following - tick, following),
+                    (following, following),
+                ]
+                for current, expected in observations:
+                    with self.subTest(tz=tz, amount=amount, day=day, current=current):
+                        actual = anchors.round_datetime_up_to_duration_multiple(current, amount, "monthly")
+                        self.assertEqual(expected, actual)
+                        self.assertEqual(expected, anchors.round_datetime_up_to_duration_multiple(actual, amount, "monthly"))
+                        self.assertEqual(tz, actual.tzinfo)
+
     def test_multi_month_with_phase_wrapping_year(self) -> None:
         """Tests a multi-month schedule where the anchor phase causes cycles to straddle year boundaries."""
         # Schedule: Every 4 months, starting in November.
@@ -763,6 +1156,68 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result2 = round_datetime_up_to_duration_multiple(dt2, 1, "yearly", anchors=anchors)
         self.assertEqual(expected2, result2)
 
+    def test_yearly_boundaries_across_leap_years(self) -> None:
+        """Preserve February days 29-31 across leap/common years and multi-year phases using explicit boundary pairs.
+        Fixed-offset timezones isolate calendar rules; adjacent microseconds and repeated rounding check stable boundaries.
+        Century cases cover both the 100-year exception and the 400-year leap rule.
+        """
+        cases = [
+            (1, 2025, "2027-02-28", "2028-02-29"),
+            (1, 2025, "2028-02-29", "2029-02-28"),
+            (2, 2024, "2026-02-28", "2028-02-29"),
+            (3, 2031, "2025-02-28", "2028-02-29"),
+            (4, 2096, "2100-02-28", "2104-02-29"),
+            (1, 2025, "2099-02-28", "2100-02-28"),
+            (1, 2025, "2399-02-28", "2400-02-29"),
+            (100, 1900, "1900-02-28", "2000-02-29"),
+            (100, 2000, "2000-02-29", "2100-02-28"),
+        ]
+        tick = timedelta(microseconds=1)
+        for tz in (timezone.utc, self.tz):
+            for amount, year, previous_date, following_date in cases:
+                for day in (29, 30, 31):
+                    anchors = PeriodAnchors(
+                        yearly_year=year,
+                        yearly_month=2,
+                        yearly_monthday=day,
+                        yearly_hour=6,
+                        yearly_minute=7,
+                        yearly_second=8,
+                    )
+                    previous = datetime.fromisoformat(previous_date).replace(hour=6, minute=7, second=8, tzinfo=tz)
+                    following = datetime.fromisoformat(following_date).replace(hour=6, minute=7, second=8, tzinfo=tz)
+                    observations = [
+                        (previous - tick, previous),
+                        (previous, previous),
+                        (previous + tick, following),
+                        (datetime(previous.year + 1, 1, 1, tzinfo=tz), following),
+                        (following - tick, following),
+                        (following, following),
+                    ]
+                    for current, expected in observations:
+                        with self.subTest(tz=tz, amount=amount, year=year, day=day, current=current):
+                            actual = anchors.round_datetime_up_to_duration_multiple(current, amount, "yearly")
+                            self.assertEqual(expected, actual)
+                            self.assertEqual(
+                                expected, anchors.round_datetime_up_to_duration_multiple(actual, amount, "yearly")
+                            )
+                            self.assertEqual(tz, actual.tzinfo)
+
+    def test_yearly_large_duration_with_representable_boundary(self) -> None:
+        """A valid next boundary must not require a representable previous boundary. Explicit dates cover a 3000-year
+        period before, on, and just after its anchor to guard both rounding up and preserving exact boundaries.
+        """
+        anchors = PeriodAnchors(yearly_year=2027)
+        boundary = datetime(2027, 1, 1, tzinfo=self.tz)
+        cases = [
+            (datetime(2026, 9, 10, tzinfo=self.tz), boundary),
+            (boundary, boundary),
+            (boundary + timedelta(microseconds=1), datetime(5027, 1, 1, tzinfo=self.tz)),
+        ]
+        for current, expected in cases:
+            with self.subTest(current=current):
+                self.assertEqual(expected, anchors.round_datetime_up_to_duration_multiple(current, 3000, "yearly"))
+
     def test_yearly_cycle_with_future_anchor_year(self) -> None:
         """Tests that the cycle phase works correctly even if the anchor year is in the future.
 
@@ -787,12 +1242,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected, result)
 
     def test_monthly_anchor_invalid_day_with_custom_anchor_month(self) -> None:
-        """Verifies clamping to the last valid day of the anchor month.
-
-        When the requested anchor day exceeds the anchor month length (e.g., 31 in February), the day is clamped to that
-        month's last valid day. If the computed anchor is after dt, subtracting one period can yield the corresponding
-        clamped day in the previous month.
-        """
+        """A February phase must preserve January 31; a valid target day must not inherit the phase month's clamp."""
         tz = self.tz
         anchors = PeriodAnchors(
             monthly_month=2,  # February
@@ -802,8 +1252,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
             monthly_second=0,
         )
         dt = datetime(2025, 1, 15, 10, 0, 0, tzinfo=tz)
-        # With anchor phase February and day=31 -> base anchor is Feb 28; subtracting one period yields Jan 28.
-        expected = datetime(2025, 1, 28, 12, 0, 0, tzinfo=tz)
+        expected = datetime(2025, 1, 31, 12, 0, 0, tzinfo=tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
         self.assertEqual(expected, result)
 
@@ -818,10 +1267,10 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected, result)
 
     def test_monthly_feb29_anchor_in_non_leap_year(self) -> None:
-        """Anchoring on Feb 29: in a non-leap year, clamps to 28 - next boundary is Jan 28 for Jan dt."""
+        """Preserve January 29 with a February phase in a common year; only the target month's length limits its day."""
         anchors = PeriodAnchors(monthly_month=2, monthly_monthday=29, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 1, 15, 10, 0, tzinfo=self.tz)  # non-leap year
-        expected = datetime(2025, 1, 28, 12, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 1, 29, 12, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
         self.assertEqual(expected, result)
 
@@ -858,10 +1307,10 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected, result)
 
     def test_monthly_custom_anchor_month_31_from_leap_feb(self) -> None:
-        """If anchor month is February with day=31, in a leap year base anchor is Feb 29; next is Mar 29."""
+        """Preserve March 31 after leap February; target-month clamping must retain the configured day."""
         anchors = PeriodAnchors(monthly_month=2, monthly_monthday=31)
         dt = datetime(2024, 3, 1, 10, 0, tzinfo=self.tz)  # leap year; past Feb anchor
-        expected = datetime(2024, 3, 29, 0, 0, tzinfo=self.tz)
+        expected = datetime(2024, 3, 31, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
         self.assertEqual(expected, result)
 
@@ -872,6 +1321,67 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = datetime(2026, 3, 1, 0, 0, tzinfo=self.tz)  # Jan 1 + 14 months = Mar 1 next year
         result = round_datetime_up_to_duration_multiple(dt, 14, "monthly", anchors=anchors)
         self.assertEqual(expected, result)
+
+    def test_monthly_arbitrary_durations_keep_phase(self) -> None:
+        """Use the default 2025 reference year for arbitrary positive monthly durations. Explicit boundary pairs
+        before and after that origin verify cross-year continuity, short-month clamping, exact matches and repeated rounding.
+        Observations at intervening New Years detect phase resets even when a single interval spans multiple years.
+        """
+        cases = [
+            (5, 1, 31, "2024-08-31", "2025-01-31"),
+            (5, 1, 31, "2025-11-30", "2026-04-30"),
+            (5, 1, 31, "2026-04-30", "2026-09-30"),
+            (5, 1, 31, "2026-09-30", "2027-02-28"),
+            (5, 2, 31, "2025-12-31", "2026-05-31"),
+            (7, 1, 31, "2025-08-31", "2026-03-31"),
+            (14, 1, 31, "2023-11-30", "2025-01-31"),
+            (14, 1, 1, "2025-01-01", "2026-03-01"),
+            (14, 1, 31, "2026-03-31", "2027-05-31"),
+            (14, 11, 31, "2024-09-30", "2025-11-30"),
+            (14, 2, 31, "2030-12-31", "2032-02-29"),
+            (14, 2, 31, "2032-02-29", "2033-04-30"),
+            (24, 1, 31, "2025-01-31", "2027-01-31"),
+            (25, 1, 31, "2025-01-31", "2027-02-28"),
+        ]
+        tick = timedelta(microseconds=1)
+        for tz in (timezone.utc, timezone(timedelta(hours=5, minutes=30))):
+            for amount, month, day, previous_date, following_date in cases:
+                anchors = PeriodAnchors(
+                    monthly_month=month, monthly_monthday=day, monthly_hour=6, monthly_minute=7, monthly_second=8
+                )
+                previous = datetime.fromisoformat(previous_date).replace(hour=6, minute=7, second=8, tzinfo=tz)
+                following = datetime.fromisoformat(following_date).replace(hour=6, minute=7, second=8, tzinfo=tz)
+                observations = [
+                    (previous - tick, previous),
+                    (previous, previous),
+                    (previous + tick, following),
+                    (following - tick, following),
+                    (following, following),
+                ]
+                observations.extend(
+                    (datetime(year, 1, 1, tzinfo=tz), following) for year in range(previous.year + 1, following.year + 1)
+                )
+                for current, expected in observations:
+                    with self.subTest(tz=tz, amount=amount, month=month, day=day, current=current):
+                        actual = anchors.round_datetime_up_to_duration_multiple(current, amount, "monthly")
+                        self.assertEqual(expected, actual)
+                        self.assertEqual(expected, anchors.round_datetime_up_to_duration_multiple(actual, amount, "monthly"))
+                        self.assertEqual(tz, actual.tzinfo)
+
+    def test_monthly_uses_reference_year(self) -> None:
+        """Monthly cycles use monthly_year as their reference. Equivalent five-month phases must agree for each reference
+        year; explicit dates check that moving the reference shifts the cycle, including when the reference is in the future.
+        """
+        current = datetime(2025, 12, 15, tzinfo=self.tz)
+        for year, expected in [
+            (2024, datetime(2026, 2, 28, tzinfo=self.tz)),
+            (2025, datetime(2026, 4, 30, tzinfo=self.tz)),
+            (2026, datetime(2026, 1, 31, tzinfo=self.tz)),
+        ]:
+            for month in [1, 6, 11]:
+                with self.subTest(year=year, month=month):
+                    anchors = PeriodAnchors(monthly_year=year, monthly_month=month, monthly_monthday=31)
+                    self.assertEqual(expected, anchors.round_datetime_up_to_duration_multiple(current, 5, "monthly"))
 
     def test_monthly_exact_boundary_with_custom_time(self) -> None:
         """Exactly on boundary with custom time-of-day returns dt unchanged."""
