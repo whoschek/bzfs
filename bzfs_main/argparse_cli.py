@@ -1447,7 +1447,7 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
             max_ = f.metadata.get("max")
             anchor_group.add_argument(
                 "--" + f.name, type=int, min=min_, max=max_, default=f.default, action=CheckRange, metavar="INT",
-                help=f"{f.metadata.get('help')} ({min_} ≤ x ≤ {max_}, default: %(default)s).\n\n")
+                help=f"{f.metadata.get('help')} ({min_} ≤ x ≤ {max_}, default: %(default)s).\n\n" if f.metadata.get('help') else argparse.SUPPRESS)
 
     for option_name, flag in ZFS_RECV_GROUPS.items():
         grup: str = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
