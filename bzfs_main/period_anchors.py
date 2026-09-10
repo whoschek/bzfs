@@ -63,36 +63,42 @@ class PeriodAnchors:
     yearly_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
     yearly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
-    # monthly: Anchor(dt) = latest T <= dt at phase month (monthly_month) + anchor.monthly_* vars (day clamped; multi-month)
+    # monthly: Count months from anchor.monthly_* vars
+    monthly_year: int = field(default=2025, metadata={"min": 1, "max": 9999, "help": None})
     monthly_month: int = field(default=1, metadata={"min": 1, "max": 12, "help": "The anchor month of multi-month periods"})
     monthly_monthday: int = field(default=1, metadata=METADATA_DAY)  # 1 <= x <= 31
     monthly_hour: int = field(default=0, metadata=METADATA_HOUR)  # 0 <= x <= 23
     monthly_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
     monthly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
-    # weekly: Anchor(dt) = latest T where T <= dt && T == Latest midnight from Sunday to Monday of dt + anchor.weekly_* vars
+    # weekly: Anchor(dt) = midnight of dt + anchor.weekly_* vars
     weekly_weekday: int = field(default=0, metadata=METADATA_WEEKDAY)  # 0 <= x <= 6 (0=Sunday, ..., 6=Saturday)
     weekly_hour: int = field(default=0, metadata=METADATA_HOUR)  # 0 <= x <= 23
     weekly_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
     weekly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
-    # daily: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.daily_* vars
+    # daily: Anchor(dt) = midnight of dt + anchor.daily_* vars
     daily_hour: int = field(default=0, metadata=METADATA_HOUR)  # 0 <= x <= 23
     daily_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
     daily_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
-    # hourly: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.hourly_* vars
+    # hourly: Anchor(dt) = midnight of dt + anchor.hourly_* vars
     hourly_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
     hourly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
-    # minutely: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.minutely_* vars
+    # minutely: Anchor(dt) = midnight of dt + anchor.minutely_* vars
     minutely_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
-    # secondly: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.secondly_* vars
+    # secondly: Anchor(dt) = midnight of dt + anchor.secondly_* vars
     secondly_millisecond: int = field(default=0, metadata=METADATA_MILLISECOND)  # 0 <= x <= 999
 
-    # secondly: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.millisecondly_* vars
+    # millisecondly: Anchor(dt) = midnight of dt + anchor.millisecondly_* vars
     millisecondly_microsecond: int = field(default=0, metadata=METADATA_MICROSECOND)  # 0 <= x <= 999
+
+    def __post_init__(self) -> None:
+        """Zero fractional offsets to match the whole-second precision of ZFS creation times."""
+        object.__setattr__(self, "secondly_millisecond", 0)
+        object.__setattr__(self, "millisecondly_microsecond", 0)
 
     @classmethod
     def parse(cls, args: argparse.Namespace) -> PeriodAnchors:
@@ -123,61 +129,66 @@ class PeriodAnchors:
         """
 
         def add_months(dt: datetime, months: int) -> datetime:
-            """Returns ``dt`` plus ``months`` with day clamped to month's end."""
+            """Build a boundary offset from dt's month, clamping the configured day only against the target month's end."""
             total_month: int = dt.month - 1 + months
             new_year: int = dt.year + total_month // 12
             new_month: int = total_month % 12 + 1
-            last_day: int = calendar.monthrange(new_year, new_month)[1]  # last valid day of the current month
-            return dt.replace(year=new_year, month=new_month, day=min(dt.day, last_day))
+            last_day: int = calendar.monthrange(new_year, new_month)[1]  # last valid day of the target month
+            return dt.replace(
+                year=new_year,
+                month=new_month,
+                day=min(self.monthly_monthday, last_day),
+                hour=self.monthly_hour,
+                minute=self.monthly_minute,
+                second=self.monthly_second,
+                microsecond=0,
+            )
 
         def add_years(dt: datetime, years: int) -> datetime:
-            """Returns ``dt`` plus ``years`` with day clamped to month's end."""
+            """Build a boundary offset from dt's year using yearly anchors, clamping the configured day to the target month's end."""
             new_year: int = dt.year + years
-            last_day: int = calendar.monthrange(new_year, dt.month)[1]  # last valid day of the current month
-            return dt.replace(year=new_year, day=min(dt.day, last_day))
+            last_day: int = calendar.monthrange(new_year, self.yearly_month)[1]  # last valid day of the target month
+            return dt.replace(
+                year=new_year,
+                month=self.yearly_month,
+                day=min(self.yearly_monthday, last_day),
+                hour=self.yearly_hour,
+                minute=self.yearly_minute,
+                second=self.yearly_second,
+                microsecond=0,
+            )
 
         if duration_amount == 0:
             return dt
 
         period: timedelta | None = None
         anchor: datetime
-        daily_base: datetime
-        last_day: int
         if duration_unit == "millisecondly":
             anchor = dt.replace(hour=0, minute=0, second=0, microsecond=self.millisecondly_microsecond)
-            anchor = anchor if anchor <= dt else anchor - timedelta(milliseconds=1)
             period = timedelta(milliseconds=duration_amount)
 
         elif duration_unit == "secondly":
             anchor = dt.replace(hour=0, minute=0, second=0, microsecond=self.secondly_millisecond * 1000)
-            anchor = anchor if anchor <= dt else anchor - timedelta(seconds=1)
             period = timedelta(seconds=duration_amount)
 
         elif duration_unit == "minutely":
             anchor = dt.replace(hour=0, minute=0, second=self.minutely_second, microsecond=0)
-            anchor = anchor if anchor <= dt else anchor - timedelta(minutes=1)
             period = timedelta(minutes=duration_amount)
 
         elif duration_unit == "hourly":
-            daily_base = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-            anchor = daily_base + timedelta(minutes=self.hourly_minute, seconds=self.hourly_second)
-            anchor = anchor if anchor <= dt else anchor - timedelta(days=1)
+            anchor = dt.replace(hour=0, minute=self.hourly_minute, second=self.hourly_second, microsecond=0)
             period = timedelta(hours=duration_amount)
 
         elif duration_unit == "daily":
-            daily_base = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-            anchor = daily_base + timedelta(hours=self.daily_hour, minutes=self.daily_minute, seconds=self.daily_second)
-            anchor = anchor if anchor <= dt else anchor - timedelta(days=1)
+            anchor = dt.replace(hour=self.daily_hour, minute=self.daily_minute, second=self.daily_second, microsecond=0)
             period = timedelta(days=duration_amount)
 
         elif duration_unit == "weekly":
-            daily_base = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-            anchor = daily_base + timedelta(hours=self.weekly_hour, minutes=self.weekly_minute, seconds=self.weekly_second)
+            anchor = dt.replace(hour=self.weekly_hour, minute=self.weekly_minute, second=self.weekly_second, microsecond=0)
             # Convert cron weekday (0=Sunday, 1=Monday, ..., 6=Saturday) to Python's weekday (0=Monday, ..., 6=Sunday)
             target_py_weekday: int = (self.weekly_weekday - 1) % 7
             diff_days: int = (anchor.weekday() - target_py_weekday) % 7
             anchor = anchor - timedelta(days=diff_days)
-            anchor = anchor if anchor <= dt else anchor - timedelta(weeks=1)
             period = timedelta(weeks=duration_amount)
 
         if period is not None:  # "millisecondly", "secondly", "minutely", "hourly", "daily", "weekly"
@@ -190,39 +201,18 @@ class PeriodAnchors:
             return dt + timedelta(microseconds=period_micros - remainder)
 
         elif duration_unit == "monthly":
-            last_day = calendar.monthrange(dt.year, self.monthly_month)[1]  # last valid day of the anchor month
-            anchor = dt.replace(  # Compute the base anchor for the anchor month ensuring the day is valid
-                month=self.monthly_month,
-                day=min(self.monthly_monthday, last_day),
-                hour=self.monthly_hour,
-                minute=self.monthly_minute,
-                second=self.monthly_second,
-                microsecond=0,
-            )
-            if anchor > dt:
-                anchor = add_months(anchor, -duration_amount)
-            diff_months: int = (dt.year - anchor.year) * 12 + (dt.month - anchor.month)
-            anchor_boundary: datetime = add_months(anchor, duration_amount * (diff_months // duration_amount))
-            if anchor_boundary < dt:
-                anchor_boundary = add_months(anchor_boundary, duration_amount)
-            return anchor_boundary
+            months_since_anchor: int = (dt.year - self.monthly_year) * 12 + dt.month - self.monthly_month
+            offset_months: int = -months_since_anchor % duration_amount
+            anchor = add_months(dt, offset_months)
+            if anchor < dt:
+                anchor = add_months(dt, offset_months + duration_amount)
+            return anchor
 
         elif duration_unit == "yearly":
-            # Calculate the start of the cycle period that `dt` falls into.
-            year_offset: int = (dt.year - self.yearly_year) % duration_amount
-            period_start_year: int = dt.year - year_offset
-            last_day = calendar.monthrange(period_start_year, self.yearly_month)[1]  # last valid day of the month
-            anchor = dt.replace(
-                year=period_start_year,
-                month=self.yearly_month,
-                day=min(self.yearly_monthday, last_day),
-                hour=self.yearly_hour,
-                minute=self.yearly_minute,
-                second=self.yearly_second,
-                microsecond=0,
-            )
+            offset_years: int = (self.yearly_year - dt.year) % duration_amount
+            anchor = add_years(dt, offset_years)
             if anchor < dt:
-                return add_years(anchor, duration_amount)
+                anchor = add_years(dt, offset_years + duration_amount)
             return anchor
 
         else:
