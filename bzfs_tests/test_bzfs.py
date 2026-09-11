@@ -37,6 +37,7 @@ from itertools import (
 from typing import (
     Callable,
     cast,
+    final,
 )
 from unittest.mock import (
     MagicMock,
@@ -114,6 +115,7 @@ def suite() -> unittest.TestSuite:
         TestDeleteEmptyDstDatasetsTask,
         TestHandleMinMaxSnapshots,
         TestFindDatasetsToSnapshot,
+        TestRunTasksErrorPropagation,
         TestTerminationEventBehavior,
         TestPerJobTermination,
         TestPythonVersionCheck,
@@ -2123,6 +2125,72 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
 
         self.assertListEqual(["tank/b"], received)
         self.assertDictEqual({label: ["tank/a"]}, result)
+
+
+#############################################################################
+@final
+class TestRunTasksErrorPropagation(AbstractTestCase):
+    """Exercise error collection and root iteration with controlled failures to isolate exception selection from ZFS I/O."""
+
+    def _make_job(self, *opts: str) -> bzfs.Job:
+        args = self.argparser_parse_args(["--skip-replication", "dummy", "tank/first", "dummy", "tank/second", *opts])
+        job = bzfs.Job()
+        job.params = self.make_params(args=args)
+        return job
+
+    @contextlib.contextmanager
+    def _task_outcomes(self, job: bzfs.Job, outcomes: list[BaseException | None]) -> Iterator[MagicMock]:
+        with (
+            patch.object(job, "validate_once"),
+            patch.object(job, "validate_task"),
+            patch.object(job, "run_task", side_effect=outcomes) as run_task,
+            patch.object(bzfs, "ProgressReporter"),
+            patch.object(job, "sleep_until_next_daemon_iteration", return_value=False),
+        ):
+            yield run_task
+
+    def test_append_generic_failure_outranks_monitor_alert(self) -> None:
+        """Check generic failures outrank surrounding CRITICAL alerts using direct collection to isolate classification."""
+        job = self._make_job()
+        critical = SystemExit(bzfs.CRITICAL_STATUS)
+        failure = RuntimeError("dataset operation failed")
+        job.append_exception(critical, "task", "tank/first")
+        job.append_exception(failure, "task", "tank/second")
+        self.assertIs(failure, job.worst_exception)
+        job.append_exception(critical, "task", "tank/third")
+        self.assertIs(failure, job.worst_exception)
+
+    def test_monitor_severity_across_roots(self) -> None:
+        """Report the worst alert regardless of root order, retaining the original first exception on equal severity."""
+        for first, second, expected in ((1, 2, 2), (2, 1, 2), (1, 1, 1), (2, 2, 2), (1, None, 1), (None, 2, 2)):
+            with self.subTest(first=first, second=second):
+                job = self._make_job()
+                outcomes: list[BaseException | None] = [
+                    None if code is None else SystemExit(code) for code in (first, second)
+                ]
+                expected_exception = next(e for e in outcomes if isinstance(e, SystemExit) and e.code == expected)
+                with self._task_outcomes(job, outcomes) as run_task:
+                    with self.assertRaises(SystemExit) as caught:
+                        job.run_tasks()
+                self.assertIs(expected_exception, caught.exception)
+                self.assertEqual(2, run_task.call_count)
+                self.assertEqual([str(e) for e in outcomes if e is not None], job.all_exceptions)
+
+    def test_command_failure_outranks_monitor_alerts(self) -> None:
+        """Reserved and negative subprocess statuses remain operational failures, preserving the original exception."""
+        for returncode in (1, 2, 3, 4, 7, -15):
+            for failure_first in (False, True):
+                with self.subTest(returncode=returncode, failure_first=failure_first):
+                    job = self._make_job()
+                    failure = subprocess.CalledProcessError(returncode, ["zfs", "list"], output="output", stderr="error")
+                    outcomes: list[BaseException | None] = [SystemExit(bzfs.CRITICAL_STATUS), failure]
+                    if failure_first:
+                        outcomes.reverse()
+                    with self._task_outcomes(job, outcomes) as run_task:
+                        with self.assertRaises(subprocess.CalledProcessError) as caught:
+                            job.run_tasks()
+                    self.assertIs(failure, caught.exception)
+                    self.assertEqual(2, run_task.call_count)
 
 
 #############################################################################

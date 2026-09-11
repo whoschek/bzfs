@@ -50,6 +50,7 @@ from bzfs_main import (
 )
 from bzfs_main.bzfs import (
     STILL_RUNNING_STATUS,
+    get_worst_exception,
 )
 from bzfs_main.util.utils import (
     DIE_STATUS,
@@ -1220,7 +1221,7 @@ class TestGetWorstException(AbstractTestCase):
         """Both inputs fatal => pick max(exit_code)."""
         for existing_code, new_code, expected in ((7, 9, 9), (9, 7, 9), (5, 5, 5)):
             with self.subTest(existing_code=existing_code, new_code=new_code):
-                self.assertEqual(expected, bzfs_jobrunner.Job.get_worst_exception(existing_code, new_code))
+                self.assertEqual(expected, get_worst_exception(existing_code, new_code))
 
     def test_success_and_still_running_choose_still_running(self) -> None:
         """Non-monitor, non-fatal inputs (0/4) reach final max() branch in get_worst_exception()."""
@@ -1230,7 +1231,7 @@ class TestGetWorstException(AbstractTestCase):
             (STILL_RUNNING_STATUS, STILL_RUNNING_STATUS),
         ):
             with self.subTest(existing_code=existing_code, new_code=new_code):
-                self.assertEqual(STILL_RUNNING_STATUS, bzfs_jobrunner.Job.get_worst_exception(existing_code, new_code))
+                self.assertEqual(STILL_RUNNING_STATUS, get_worst_exception(existing_code, new_code))
 
 
 #############################################################################

@@ -271,6 +271,7 @@ class Job(MiniJob):
         self.all_exceptions_count: int = 0
         self.max_exceptions_to_summarize: int = 10000
         self.first_exception: BaseException | None = None
+        self.worst_exception: BaseException | None = None
         self.remote_conf_cache: dict[tuple, RemoteConfCacheItem] = {}
         self.max_datasets_per_minibatch_on_list_snaps: dict[str, int] = {}
         self.max_workers: dict[str, int] = {}
@@ -399,6 +400,7 @@ class Job(MiniJob):
         self.all_exceptions = []
         self.all_exceptions_count = 0
         self.first_exception = None
+        self.worst_exception = None
         self.remote_conf_cache = {}
         self.validate_once()
         self.replication_start_time_nanos = time.monotonic_ns()
@@ -453,12 +455,24 @@ class Job(MiniJob):
         if error_count > 0 and p.daemon_lifetime_nanos == 0:
             msgs = "\n".join(f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions))
             log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
-            assert self.first_exception is not None
-            raise self.first_exception
+            assert self.worst_exception is not None
+            raise self.worst_exception
 
     def append_exception(self, e: BaseException, task_name: str, task_description: str) -> None:
         """Records and logs an exception that was encountered while running a subtask."""
+
+        def _exit_code(error: BaseException) -> int:
+            """Classifies failures using CLI exit codes, reserving monitoring statuses for explicit SystemExit alerts."""
+            if isinstance(error, subprocess.CalledProcessError):
+                return normalize_called_process_error(error)
+            if isinstance(error, SystemExit) and isinstance(error.code, int):
+                return error.code
+            return DIE_STATUS
+
         self.first_exception = self.first_exception or e
+        existing_code = None if self.worst_exception is None else _exit_code(self.worst_exception)
+        if get_worst_exception(existing_code, _exit_code(e)) != existing_code:
+            self.worst_exception = e
         if len(self.all_exceptions) < self.max_exceptions_to_summarize:  # cap max memory consumption
             self.all_exceptions.append(str(e))
         self.all_exceptions_count += 1
@@ -1873,6 +1887,35 @@ def normalize_called_process_error(error: subprocess.CalledProcessError) -> int:
     ret: int = error.returncode
     ret = DIE_STATUS if isinstance(ret, int) and 1 <= ret <= STILL_RUNNING_STATUS else ret
     return ret
+
+
+def get_worst_exception(existing_code: int | None, new_code: int | None) -> int:
+    """Process exit code precedence: fatal/non-monitor failure > monitor CRITICAL/WARNING > STILL_RUNNING > success."""
+    new_code = DIE_STATUS if new_code is None else new_code
+    if existing_code is None:
+        return new_code
+    assert existing_code is not None
+    assert new_code is not None
+
+    nonfatal: tuple[int, ...] = (0, WARNING_STATUS, CRITICAL_STATUS, STILL_RUNNING_STATUS)
+    existing_is_fatal = existing_code not in nonfatal
+    new_is_fatal = new_code not in nonfatal
+    if existing_is_fatal and new_is_fatal:
+        return max(existing_code, new_code)
+    if existing_is_fatal or new_is_fatal:
+        return existing_code if existing_is_fatal else new_code
+
+    monitor: tuple[int, ...] = (WARNING_STATUS, CRITICAL_STATUS)
+    existing_is_monitor = existing_code in monitor
+    new_is_monitor = new_code in monitor
+    if existing_is_monitor and new_is_monitor:
+        return max(existing_code, new_code)
+    if existing_is_monitor or new_is_monitor:
+        return existing_code if existing_is_monitor else new_code
+
+    assert existing_code in (0, STILL_RUNNING_STATUS), existing_code
+    assert new_code in (0, STILL_RUNNING_STATUS), new_code
+    return max(existing_code, new_code)
 
 
 #############################################################################
