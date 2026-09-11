@@ -969,6 +969,18 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
             f"Expected first log starting with 'Terminating worker job', got {logs!r}",
         )
 
+    def test_timeout_with_clean_child_exit_is_failure(self) -> None:
+        """Preserves timeout failure when a real POSIX child exits zero on SIGTERM, without spawning any grandchildren."""
+        cmd = [
+            sys.executable,
+            "-c",
+            "import signal, sys; signal.signal(signal.SIGTERM, lambda *_: sys.exit(0)); signal.pause()",
+        ]
+        code, logs = self.run_and_capture(cmd, timeout_secs=0.1)
+        self.assertIsNone(code)
+        self.assertEqual(1, len(logs))
+        self.assertTrue(logs[0].startswith("Terminating worker job as it failed to complete"), logs)
+
     def test_timeout_kill(self) -> None:
         """SIGTERM ignored->SIGKILL path: return code and kill-log present."""
         code, logs = self.run_and_capture(["sh", "-c", 'trap "" TERM; sleep 1'], timeout_secs=0.1)
