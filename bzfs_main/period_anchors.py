@@ -25,6 +25,9 @@ from __future__ import (
 import argparse
 import calendar
 import dataclasses
+from collections.abc import (
+    Collection,
+)
 from dataclasses import (
     dataclass,
     field,
@@ -56,7 +59,7 @@ class PeriodAnchors:
 
     # The anchors for a given duration unit are computed as follows:
     # yearly: Anchor(dt) = latest T where T <= dt and T == Start of January 1 of dt + anchor.yearly_* vars
-    yearly_year: int = field(default=2025, metadata={"min": 1, "max": 9999, "help": "The anchor year of multi-year periods"})
+    yearly_year: int = field(default=2025, metadata={"min": 1, "max": 9999, "help": None})
     yearly_month: int = field(default=1, metadata=METADATA_MONTH)  # 1 <= x <= 12
     yearly_monthday: int = field(default=1, metadata=METADATA_DAY)  # 1 <= x <= 31
     yearly_hour: int = field(default=0, metadata=METADATA_HOUR)  # 0 <= x <= 23
@@ -98,9 +101,9 @@ class PeriodAnchors:
     millisecondly_microsecond: int = field(default=0, metadata=METADATA_MICROSECOND)  # 0 <= x <= 999
 
     @classmethod
-    def parse(cls, args: argparse.Namespace) -> PeriodAnchors:
+    def parse(cls, args: argparse.Namespace, exclude: Collection[str] = frozenset()) -> PeriodAnchors:
         """Creates a ``PeriodAnchors`` instance from parsed CLI arguments."""
-        kwargs: dict[str, int] = {f.name: getattr(args, f.name) for f in dataclasses.fields(cls)}
+        kwargs: dict[str, int] = {f.name: getattr(args, f.name) for f in dataclasses.fields(cls) if f.name not in exclude}
         return cls(**kwargs)
 
     def round_datetime_up_to_duration_multiple(self, dt: datetime, duration_amount: int, duration_unit: str) -> datetime:

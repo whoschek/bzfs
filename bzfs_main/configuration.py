@@ -722,7 +722,10 @@ class CreateSrcSnapshotConfig:
         self.tz: Final[tzinfo | None] = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: Final[str] = args.create_src_snapshots_timeformat
-        self.anchors: Final[PeriodAnchors] = PeriodAnchors.parse(args)
+        self.anchors: Final[PeriodAnchors] = PeriodAnchors.parse(
+            args,  # match whole-second precision of ZFS snapshot creation times
+            exclude=set() if self.skip_create_src_snapshots else {"secondly_millisecond", "millisecondly_microsecond"},
+        )
 
         # Compute the schedule for upcoming periodic time events (suffix_durations). This event schedule is also used in
         # daemon mode via sleep_until_next_daemon_iteration()

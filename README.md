@@ -585,7 +585,6 @@ usage: bzfs [-h]
             [--log-syslog-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
             [--include-envvar-regex REGEX [REGEX ...]]
             [--exclude-envvar-regex REGEX [REGEX ...]]
-            [--yearly_year INT]
             [--yearly_month INT]
             [--yearly_monthday INT]
             [--yearly_hour INT]
@@ -1920,12 +1919,6 @@ usage: bzfs [-h]
 
 Use these options to customize when snapshots that happen every N years are scheduled to be created on the source by the
 --create-src-snapshots option.
-
-<!-- -->
-
-<span id="--yearly_year" class="man-option-title">**--yearly_year** *INT*</span> <a href="#--yearly_year" title="Permalink to --yearly_year" aria-label="Permalink to --yearly_year" class="man-option-permalink">&#x1F517;</a>
-
-- The anchor year of multi-year periods (1 ≤ x ≤ 9999, default: 2025).
 
 <!-- -->
 
