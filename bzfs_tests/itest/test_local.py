@@ -6485,3 +6485,42 @@ class LocalTestCase(IntegrationTestCase):
             if held_snapshot in snapshots(ibase.SRC_ROOT_DATASET):
                 run_cmd(SUDO_CMD + ["zfs", "release", hold_tag, held_snapshot])
                 self.assertEqual("0", snapshot_property(held_snapshot, "userrefs"))
+
+    def test_jobrunner_exit_status_when_monitoring_multiple_root_datasets(self) -> None:
+        """Verify CLI exit code severity when monitoring multiple root datasets using real snapshots.
+
+        A slightly stale snapshot produces a monitoring WARNING, while an empty dataset produces monitoring CRITICAL.
+        A WARNING status in an earlier root dataset must not mask a CRITICAL status in a subsequent root dataset.
+        """
+        warning_root = create_filesystem(ibase.SRC_ROOT_DATASET, "warning")
+        critical_root = create_filesystem(ibase.SRC_ROOT_DATASET, "critical")
+        take_snapshot(warning_root, "prod_onsite_20000101_000000_secondly")
+        time.sleep(2)  # ZFS creation timestamps have second precision; WARNING starts after 1.1 seconds.
+        plan = {"prod": {"onsite": {"secondly": {"warning": "100 milliseconds", "critical": "2 days"}}}}
+        base_cmd = [
+            sys.executable,
+            "-m",
+            "bzfs_main.bzfs_jobrunner",
+            "--no-argument-file",
+            "--job-id=monitor-root-severity",
+            "--src-hosts=['localhost']",
+            "--monitor-src-snapshots",
+            "--monitor-snapshots-no-oldest-check",
+            f"--monitor-snapshot-plan={plan}",
+        ] + self.log_dir_opt()
+        for spawn_process in [False, True]:
+            for root_datasets, expected_returncode in [
+                ([warning_root], bzfs.WARNING_STATUS),
+                ([critical_root], bzfs.CRITICAL_STATUS),
+                ([warning_root, critical_root], bzfs.CRITICAL_STATUS),
+                ([critical_root, warning_root], bzfs.CRITICAL_STATUS),
+            ]:
+                with self.subTest(spawn_process=spawn_process, roots=root_datasets):
+                    cmd = base_cmd.copy()
+                    if spawn_process:
+                        cmd += ["--spawn-process-per-job"]
+                    cmd += ["--root-dataset-pairs"]
+                    for root_dataset in root_datasets:
+                        cmd += [root_dataset, DUMMY_DATASET]
+                    result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=5)
+                    self.assertEqual(expected_returncode, result.returncode, msg=result.stdout + result.stderr)
