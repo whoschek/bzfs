@@ -1095,7 +1095,9 @@ class Job:
                     timeout_secs = 1.0 if timeout_secs is None else timeout_secs
                     raise subprocess.TimeoutExpired(cmd, timeout_secs)  # do not wait for normal completion
                 proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to complete and exit normally
+                returncode: int | None = proc.returncode
             except subprocess.TimeoutExpired:
+                returncode = proc.returncode
                 cmd_str = " ".join(cmd)
                 if self.termination_event.is_set():
                     log.error("%s", f"Terminating worker job due to async termination request: {cmd_str}")
@@ -1113,7 +1115,9 @@ class Job:
                     timeout_secs = min(0.025, timeout_secs)
                     with contextlib.suppress(subprocess.TimeoutExpired):
                         proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
-        return proc.returncode
+                if proc.returncode and not returncode:
+                    returncode = proc.returncode
+        return returncode
 
     @staticmethod
     def get_worst_exception(existing_code: int | None, new_code: int | None) -> int:
