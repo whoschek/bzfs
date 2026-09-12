@@ -196,6 +196,7 @@ def detect_available_programs(job: Job) -> None:
     if (
         len(p.args.preserve_properties) > 0
         and any(prop in p.zfs_send_program_opts for prop in ["--props", "-p"])
+        and not p.skip_replication
         and not p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, p.dst.location)
     ):
         die(
