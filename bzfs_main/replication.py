@@ -136,7 +136,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     dst_dataset: str = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
     log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
-    list_result: bool | tuple[list[str], list[str], list[str], set[str], str, str, _Continuity | None] = (
+    list_result: bool | tuple[list[str], list[str], list[str], dict[str, str], str, str, _Continuity | None] = (
         _list_and_filter_src_and_dst_snapshots(job, src_dataset, dst_dataset, tid)
     )
     if isinstance(list_result, bool):
@@ -238,7 +238,7 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
 
 def _list_and_filter_src_and_dst_snapshots(
     job: Job, src_dataset: str, dst_dataset: str, tid: str
-) -> bool | tuple[list[str], list[str], list[str], set[str], str, str, _Continuity | None]:
+) -> bool | tuple[list[str], list[str], list[str], dict[str, str], str, str, _Continuity | None]:
     """On replication, list and filter src and dst snapshots."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
@@ -289,17 +289,17 @@ def _list_and_filter_src_and_dst_snapshots(
         src_snapshots_with_guids = cut(field=2, lines=src_snapshots_with_guids)
         basis_src_snapshots_with_guids = cut(field=2, lines=basis_src_snapshots_with_guids)
 
-    # find oldest and latest "true" snapshot, as well as GUIDs of all snapshots and bookmarks.
+    # find oldest and latest selected "true" snapshot, and map selected snapshot GUIDs to names.
     # a snapshot is "true" if it is not a bookmark.
     oldest_src_snapshot: str = ""
     latest_src_snapshot: str = ""
-    included_src_guids: set[str] = set()
+    included_src_guids: dict[str, str] = {}
     for line in src_snapshots_with_guids:
         guid, snapshot = line.split("\t", 1)
         assert guid
         assert snapshot
         if "@" in snapshot:
-            included_src_guids.add(guid)
+            included_src_guids[guid] = snapshot
             latest_src_snapshot = snapshot
             if not oldest_src_snapshot:
                 oldest_src_snapshot = snapshot
@@ -414,7 +414,7 @@ def _replicate_dataset_fully(
     oldest_src_snapshot: str,
     latest_src_snapshot: str,
     latest_dst_snapshot: str,
-    included_src_guids: set[str],
+    included_src_guids: Mapping[str, str],
     dst_snapshots_with_guids: list[str],
     continuity: _Continuity | None,
     props_cache: dict[tuple[str, ...], dict[str, str | None]],
@@ -505,7 +505,7 @@ def _replicate_dataset_incrementally(
     latest_common_src_snapshot: str,
     latest_src_snapshot: str,
     basis_src_snapshots_with_guids: list[str],
-    included_src_guids: set[str],
+    included_src_guids: Mapping[str, str],
     recv_resume_token_result: tuple[str | None, list[str], list[str]],
     continuity: _Continuity | None,
     props_cache: dict[tuple[str, ...], dict[str, str | None]],
@@ -574,7 +574,7 @@ def _replicate_dataset_incrementally(
         else:
             # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
             # a series of -i/-I send/receive steps that skip excluded src snapshots.
-            steps_todo = _incremental_send_steps_wrapper(p, cand_snapshots, cand_guids, included_src_guids, False)
+            steps_todo = _incremental_send_steps_wrapper(p, cand_snapshots, cand_guids, set(included_src_guids), False)
         estimate_send_sizes = _estimate_send_sizes_in_parallel(job, src, dst_dataset, recv_resume_token, steps_todo)
 
     log.log(LOG_TRACE, "steps_todo: %s", list_formatter(steps_todo, "; "))
@@ -952,9 +952,9 @@ def _recv_resume_token(job: Job, dst_dataset: str) -> tuple[str | None, list[str
 
 
 def _decode_resume_token(
-    job: Job, recv_resume_token: str, src_dataset: str, dst_dataset: str, included_src_guids: set[str]
+    job: Job, recv_resume_token: str, src_dataset: str, dst_dataset: str, included_src_guids: Mapping[str, str]
 ) -> str:
-    """Return the token's source snapshot after validating identity and effective raw mode."""
+    """Return the token's source snapshot after validating identity, GUID/name and effective raw mode."""
     p, log = job.params, job.params.log
     decode_cmd: list[str] = p.split_args(f"{p.src.sudo} {p.zfs_program} send -n -v -t", recv_resume_token)
     try:
@@ -972,15 +972,16 @@ def _decode_resume_token(
     decoded_src_snapshot: str = name_match.group(1)
     decoded_src_guid: str = str(int(guid_match.group(1).strip(), base=16))
     log.log(LOG_TRACE, f"decoded recv_resume_token src snapshot: {decoded_src_snapshot}, guid: {decoded_src_guid}")
-    assert "@" in decoded_src_snapshot or "#" in decoded_src_snapshot, decoded_src_snapshot
-    decoded_src_dataset, decoded_src_tag = decoded_src_snapshot.split("@" if "@" in decoded_src_snapshot else "#", 1)
+    assert "@" in decoded_src_snapshot, decoded_src_snapshot
+    decoded_src_dataset, decoded_src_tag = decoded_src_snapshot.split("@", 1)
+    assert decoded_src_tag
     if decoded_src_dataset != src_dataset:
         _clear_resumable_recv_state(job, dst_dataset)
         msg = "because zfs receive resume token is stale"
         raise RetryableError(display_msg=msg, retry_immediately_once=True) from RuntimeError(msg)
-    if decoded_src_guid not in included_src_guids:
+    if included_src_guids.get(decoded_src_guid) != decoded_src_snapshot:
         _clear_resumable_recv_state(job, dst_dataset)
-        msg = "because zfs receive resume token is not a selected source snapshot"
+        msg = "because zfs receive resume token does not match a selected source snapshot GUID and name"
         raise RetryableError(display_msg=msg, retry_immediately_once=True) from RuntimeError(msg)
 
     def _is_raw_zfs_send(send_opts: Iterable[str]) -> bool:
@@ -1001,7 +1002,6 @@ def _decode_resume_token(
             die("Cannot clear the ZFS receive resume token because --dryrun never modifies state.")
         msg = f"as zfs receive resume token raw mode conflicts with --zfs-send-program-opts: {p.curr_zfs_send_program_opts}"
         raise RetryableError(display_msg=msg, retry_immediately_once=True) from RuntimeError(msg)
-    assert decoded_src_tag
     return decoded_src_snapshot
 
 

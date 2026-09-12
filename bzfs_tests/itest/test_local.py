@@ -4299,6 +4299,47 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_receive_resume_token(ibase.DST_ROOT_DATASET, exists=False)
         self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["n1"])
 
+    def test_resume_recv_renamed_snapshot_is_aborted(self) -> None:
+        """Verify retry and recovery when an incremental receive target is renamed, with or without snapshot exclusion.
+        Real truncated streams retain the original token; replication must receive only selected snapshots and bookmark them.
+        """
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+
+        for i, exclude_renamed in enumerate([False, True]):
+            with stop_on_failure_subtest(exclude_renamed=exclude_renamed):
+                if i > 0:
+                    self.tearDownAndSetup()
+                src_dataset, dst_dataset = ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET
+                self.create_resumable_snapshots(1, 2)
+                self.run_bzfs(src_dataset, dst_dataset, "--create-bookmarks=all")
+
+                self.create_resumable_snapshots(2, 3)
+                from_snapshot = src_dataset + "@" + fix("s1")
+                target_snapshot = src_dataset + "@" + fix("s2")
+                target_guid = snapshot_property(target_snapshot, "guid")
+                self.generate_recv_resume_token(from_snapshot, target_snapshot, dst_dataset)
+                token = self.assert_receive_resume_token(dst_dataset, exists=True)
+                self.assert_snapshot_names(dst_dataset, ["s1"])
+
+                renamed_snapshot = src_dataset + "@" + fix("s2_renamed")
+                run_cmd(SUDO_CMD + ["zfs", "rename", target_snapshot, renamed_snapshot])
+                self.assertEqual(target_guid, snapshot_property(renamed_snapshot, "guid"))
+                self.assertEqual(token, self.assert_receive_resume_token(dst_dataset, exists=True))
+                self.create_resumable_snapshots(3, 4)
+
+                filters = ["--exclude-snapshot-regex=.*s2_renamed.*"] if exclude_renamed else []
+                self.run_bzfs(src_dataset, dst_dataset, "--create-bookmarks=all", *filters, retries=1)
+                self.assert_receive_resume_token(dst_dataset, exists=False)
+                expected_names = ["s1"]
+                if not exclude_renamed:
+                    expected_names.append("s2_renamed")
+                    self.assertEqual(target_guid, snapshot_property(dst_dataset + "@" + fix("s2_renamed"), "guid"))
+                expected_names.append("s3")
+                self.assert_dst_snapshots_have_src_bookmarks(expected_names)
+
     def test_send_with_unloaded_key(self) -> None:
         """Reject a non-raw `zfs send` of an encrypted dataset with an unloaded source key, even when the `zfs receive`
         succeeds."""
