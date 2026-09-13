@@ -881,7 +881,12 @@ class TestReplication(AbstractTestCase):
         job = _make_job(zfs_program="zfs", dry_run=False)
         _zfs_set(job, ["foo=bar", "baz=qux"], remote, "pool/ds")
         batched.assert_called_once()
+        self.assertEqual(["sudo", "zfs", "set", "pool/ds"], batched.call_args[0][2])
         self.assertEqual(["foo=bar", "baz=qux"], batched.call_args[0][3])
+        batched.call_args[0][4](["foo=bar", "baz=qux"])
+        self.assertEqual(
+            ["sudo", "zfs", "set", "foo=bar", "baz=qux", "pool/ds"], job.run_ssh_command.call_args.kwargs["cmd"]
+        )
 
     def test_zfs_get_uses_cache(self) -> None:
         job = _make_job(zfs_program="zfs", log=MagicMock())

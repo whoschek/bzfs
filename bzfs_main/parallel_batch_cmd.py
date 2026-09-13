@@ -48,6 +48,7 @@ zfs list -t snapshot d1 d2 d3 d4 d5
 from __future__ import (
     annotations,
 )
+import shlex
 import sys
 from collections.abc import (
     Iterable,
@@ -109,7 +110,14 @@ def itr_ssh_cmd_batched(
 ) -> Iterator[_T]:
     """Runs fn(cmd_args) in sequential batches w/ cmd, without creating a cmdline that's too big for the OS to handle."""
     max_bytes: int = _max_batch_bytes(job, r, cmd, sep)
-    return batch_cmd_iterator(cmd_args=cmd_args, fn=fn, max_batch_items=max_batch_items, max_batch_bytes=max_bytes, sep=sep)
+    return batch_cmd_iterator(
+        cmd_args=cmd_args,
+        fn=fn,
+        max_batch_items=max_batch_items,
+        max_batch_bytes=max_bytes,
+        sep=sep,
+        quote_args=bool(r.ssh_user_host),
+    )
 
 
 def run_ssh_cmd_parallel(
@@ -183,18 +191,25 @@ def zfs_list_snapshots_in_parallel(
 
 
 def _max_batch_bytes(job: Job, r: MiniRemote, cmd: Sequence[str], sep: str) -> int:
-    """Avoids creating a cmdline that's too big for the OS to handle.
+    """Avoids creating a cmdline that's too big for the OS or SSH transport to handle.
 
     The calculation subtracts 'header_bytes', which accounts for the full SSH invocation (including control socket/options)
     plus the fixed subcommand prefix, so that the remaining budget is reserved exclusively for the batched arguments.
     """
     assert isinstance(sep, str)
     max_bytes: int = min(_get_max_command_line_bytes(job, "local"), _get_max_command_line_bytes(job, r.location))
-    # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html
-    max_bytes = max_bytes if sep == " " else min(max_bytes, 128 * 1024 - 1)  # e.g. 'zfs destroy foo@s1,s2,...,sN'
+    if r.ssh_user_host or sep != " ":  # e.g. 'zfs destroy foo@s1,s2,...,sN', or sshd executes `sh -c <large_blurb>`
+        # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html
+        max_bytes = min(max_bytes, 128 * 1024 - 1)
+    if r.ssh_user_host and job.params.ssh_program == "hpnssh":
+        # HPN-SSH caps authenticated packets at 33 KiB; leave room for SSH packet framing.
+        # https://github.com/rapier1/hpn-ssh/blob/hpn-18.9.0/packet.c#L2466-L2478
+        max_bytes = min(max_bytes, 32 * 1024 - 1)
     conn_pool: ConnectionPool = job.params.connection_pools[r.location].pool(SHARED)
     with conn_pool.connection() as conn:
         ssh_cmd: tuple[str, ...] = conn.ssh_cmd
+    if r.ssh_user_host:
+        cmd = tuple(shlex.quote(arg) for arg in cmd)
     header_bytes: int = len(" ".join(ssh_cmd + tuple(cmd)).encode(sys.getfilesystemencoding()))
     return max_bytes - header_bytes
 

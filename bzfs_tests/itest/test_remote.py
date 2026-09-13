@@ -268,6 +268,12 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
     def test_zfs_set_via_set_include(self) -> None:
         LocalTestCase(param=self.param).test_zfs_set_via_set_include()
 
+    def test_delete_many_dst_snapshots(self) -> None:
+        LocalTestCase(param=self.param).test_delete_many_dst_snapshots()
+
+    def test_set_large_property_batches(self) -> None:
+        LocalTestCase(param=self.param).test_set_large_property_batches()
+
     def _is_bad_pv_version(self) -> bool:
         return is_pv_at_least_1_9_0() and is_pv_at_most_1_10_5()
 
