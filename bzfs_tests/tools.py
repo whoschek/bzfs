@@ -23,6 +23,7 @@ import gc
 import inspect
 import io
 import logging
+import os
 import types
 import unittest
 from collections.abc import (
@@ -33,6 +34,23 @@ from typing import (
     Callable,
     final,
 )
+
+
+@contextlib.contextmanager
+def temporary_env_var(name: str, value: str | bool | float | None, unset: bool = False) -> Iterator[None]:
+    """Temporarily override one environment variable and restore it on exit."""
+    old_value = os.environ.get(name)
+    try:
+        if unset and value is None:
+            os.environ.pop(name, None)
+        if value is not None:
+            os.environ[name] = str(value)
+        yield
+    finally:
+        if old_value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = old_value
 
 
 @contextlib.contextmanager

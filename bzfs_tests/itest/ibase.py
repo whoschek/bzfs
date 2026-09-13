@@ -39,6 +39,9 @@ from collections import (
 from collections.abc import (
     Iterable,
 )
+from contextlib import (
+    nullcontext,
+)
 from pathlib import (
     Path,
 )
@@ -76,6 +79,9 @@ from bzfs_main.util.utils import (
 )
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
+)
+from bzfs_tests.tools import (
+    temporary_env_var,
 )
 from bzfs_tests.zfs_util import (
     bookmark_name,
@@ -294,6 +300,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
         src_user = ["--ssh-src-user", os_username()]
         params = self.param
+
         ssh_mode: str = params.get("ssh_mode", "local") if params else "local"
         is_r2r_mode: bool = ssh_mode in ("r2r-pull", "r2r-push")
         effective_ssh_mode: str = "pull-push" if is_r2r_mode else ssh_mode
@@ -337,8 +344,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         args += self.log_dir_opt()
 
         if params and "skip_missing_snapshots" in params:
-            i = find_match(args, lambda arg: arg.startswith("-"))
-            i = max(i, 0)
+            i = max(0, find_match(args, lambda arg: arg.startswith("-")))
             args = args[0:i] + ["--skip-missing-snapshots=" + str(params["skip_missing_snapshots"])] + args[i:]
 
         if self.is_no_privilege_elevation():
@@ -360,160 +366,104 @@ class IntegrationTestCase(ParametrizedTestCase):
                 run_cmd(cmd)
 
         if SSH_PROGRAM != "ssh" and "--ssh-program" not in args and "--ssh-program=" not in args:
-            args = args + ["--ssh-program=" + SSH_PROGRAM]
+            args += ["--ssh-program=" + SSH_PROGRAM]
 
         if params and params.get("verbose", None):
-            args = args + ["--verbose"]
+            args += ["--verbose"]
 
-        old_min_pipe_transfer_size: str | None = None
-        if params and "min_pipe_transfer_size" in params:
-            old_min_pipe_transfer_size = os.environ.get(ENV_VAR_PREFIX + "min_pipe_transfer_size")
-            os.environ[ENV_VAR_PREFIX + "min_pipe_transfer_size"] = str(int(params["min_pipe_transfer_size"]))
+        with (
+            temporary_env_var(ENV_VAR_PREFIX + "min_pipe_transfer_size", int(params["min_pipe_transfer_size"]))
+            if params and "min_pipe_transfer_size" in params
+            else nullcontext()
+        ):
+            if dry_run:
+                args += ["--dryrun=recv"]
+            if no_create_bookmark:
+                args += ["--create-bookmarks=none"]
+            if no_use_bookmark:
+                args += ["--no-use-bookmark"]
+            if skip_on_error:
+                args += ["--skip-on-error=" + skip_on_error]
 
-        if dry_run:
-            args = args + ["--dryrun=recv"]
+            args += ["--exclude-envvar-regex=EDITOR"]
+            args += ["--cache-snapshots"] if cache_snapshots else []
 
-        if no_create_bookmark:
-            args = args + ["--create-bookmarks=none"]
-
-        if no_use_bookmark:
-            args = args + ["--no-use-bookmark"]
-
-        if skip_on_error:
-            args = args + ["--skip-on-error=" + skip_on_error]
-
-        args = args + ["--exclude-envvar-regex=EDITOR"]
-        args += ["--cache-snapshots"] if cache_snapshots else []
-
-        job: bzfs.Job | bzfs_jobrunner.Job
-        if use_jobrunner:
-            job = bzfs_jobrunner.Job(log=None, termination_event=threading.Event())
-            job.is_test_mode = True
-            if spawn_process_per_job:
-                args += ["--spawn-process-per-job"]
-        else:
-            job = bzfs.Job()
-            job.is_test_mode = True
-
-            if error_injection_triggers is not None:
-                job.error_injection_triggers = error_injection_triggers
-                args = args + ["--threads=1"]
-
-            if delete_injection_triggers is not None:
-                job.delete_injection_triggers = delete_injection_triggers
-                args = args + ["--threads=1"]
-
-            if param_injection_triggers is not None:
-                job.param_injection_triggers = param_injection_triggers
-                args = args + ["--threads=1"]
-
-            if inject_params is not None:
-                job.inject_params = inject_params
-
-            if max_command_line_bytes is not None:
-                job.max_command_line_bytes = max_command_line_bytes
-
-            if creation_prefix is not None:
-                job.creation_prefix = creation_prefix
-
-            if max_exceptions_to_summarize is not None:
-                job.max_exceptions_to_summarize = max_exceptions_to_summarize
-
-            if use_select is not None:
-                job.use_select = use_select
-
-            if progress_update_intervals is not None:
-                job.progress_update_intervals = progress_update_intervals
-
-        old_ssh_control_persist_margin_secs = os.environ.get(ENV_VAR_PREFIX + "ssh_control_persist_margin_secs")
-        if ssh_control_persist_margin_secs is not None:
-            os.environ[ENV_VAR_PREFIX + "ssh_control_persist_margin_secs"] = str(ssh_control_persist_margin_secs)
-
-        old_max_datasets_per_minibatch_on_list_snaps = os.environ.get(
-            ENV_VAR_PREFIX + "max_datasets_per_minibatch_on_list_snaps"
-        )
-        if max_datasets_per_minibatch_on_list_snaps is not None:
-            os.environ[ENV_VAR_PREFIX + "max_datasets_per_minibatch_on_list_snaps"] = str(
-                max_datasets_per_minibatch_on_list_snaps
-            )
-
-        old_dedicated_tcp_connection_per_zfs_send = os.environ.get(ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send")
-        if platform.platform().startswith("FreeBSD-13"):
-            # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
-            # probably caused by https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=283101
-            # via https://github.com/openzfs/zfs/issues/16731#issuecomment-2561987688
-            os.environ[ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send"] = "false"
-
-        old_isatty = os.environ.get(ENV_VAR_PREFIX + "isatty")
-        if isatty is not None:
-            os.environ[ENV_VAR_PREFIX + "isatty"] = str(isatty)
-
-        old_reuse_ssh_connection = os.environ.get(ENV_VAR_PREFIX + "reuse_ssh_connection")
-        if reuse_ssh_connection is not None:
-            os.environ[ENV_VAR_PREFIX + "reuse_ssh_connection"] = str(reuse_ssh_connection)
-
-        returncode = 0
-        try:
+            job: bzfs.Job | bzfs_jobrunner.Job
             if use_jobrunner:
-                assert isinstance(job, bzfs_jobrunner.Job)
-                job.run_main([bzfs_jobrunner.PROG_NAME] + args)
+                job = bzfs_jobrunner.Job(log=None, termination_event=threading.Event())
+                job.is_test_mode = True
+                if spawn_process_per_job:
+                    args += ["--spawn-process-per-job"]
             else:
-                assert isinstance(job, bzfs.Job)
-                job.run_main(bzfs.argument_parser().parse_args(args), args)
-        except subprocess.CalledProcessError as e:
-            returncode = e.returncode
-            if expected_status != returncode:
-                traceback.print_exc()
-        except SystemExit as e:
-            assert isinstance(e.code, int)
-            returncode = e.code
-            if expected_status != returncode:
-                traceback.print_exc()
-        finally:
-            if self.is_no_privilege_elevation():
-                # revoke all ZFS delegation permissions
-                cmd = f"sudo -n zfs unallow -r -u {os_username()}".split(" ") + [SRC_POOL_NAME]
-                if dataset_exists(SRC_POOL_NAME):
-                    run_cmd(cmd)
-                cmd = f"sudo -n zfs unallow -r -u {os_username()}".split(" ") + [DST_POOL_NAME]
-                if dataset_exists(DST_POOL_NAME):
-                    run_cmd(cmd)
+                job = bzfs.Job()
+                job.is_test_mode = True
+                if error_injection_triggers is not None:
+                    job.error_injection_triggers = error_injection_triggers
+                    args += ["--threads=1"]
+                if delete_injection_triggers is not None:
+                    job.delete_injection_triggers = delete_injection_triggers
+                    args += ["--threads=1"]
+                if param_injection_triggers is not None:
+                    job.param_injection_triggers = param_injection_triggers
+                    args += ["--threads=1"]
+                if inject_params is not None:
+                    job.inject_params = inject_params
+                if max_command_line_bytes is not None:
+                    job.max_command_line_bytes = max_command_line_bytes
+                if creation_prefix is not None:
+                    job.creation_prefix = creation_prefix
+                if max_exceptions_to_summarize is not None:
+                    job.max_exceptions_to_summarize = max_exceptions_to_summarize
+                if use_select is not None:
+                    job.use_select = use_select
+                if progress_update_intervals is not None:
+                    job.progress_update_intervals = progress_update_intervals
 
-            if params and "min_pipe_transfer_size" in params:
-                if old_min_pipe_transfer_size is None:
-                    os.environ.pop(ENV_VAR_PREFIX + "min_pipe_transfer_size", None)
-                else:
-                    os.environ[ENV_VAR_PREFIX + "min_pipe_transfer_size"] = old_min_pipe_transfer_size
-
-            if max_datasets_per_minibatch_on_list_snaps is not None:
-                if old_max_datasets_per_minibatch_on_list_snaps is None:
-                    os.environ.pop(ENV_VAR_PREFIX + "max_datasets_per_minibatch_on_list_snaps", None)
-                else:
-                    os.environ[ENV_VAR_PREFIX + "max_datasets_per_minibatch_on_list_snaps"] = (
-                        old_max_datasets_per_minibatch_on_list_snaps
+            with (
+                temporary_env_var(ENV_VAR_PREFIX + "ssh_control_persist_margin_secs", ssh_control_persist_margin_secs),
+                (
+                    temporary_env_var(
+                        ENV_VAR_PREFIX + "max_datasets_per_minibatch_on_list_snaps", max_datasets_per_minibatch_on_list_snaps
                     )
-
-            if old_dedicated_tcp_connection_per_zfs_send is None:
-                os.environ.pop(ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send", None)
-            else:
-                os.environ[ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send"] = (
-                    old_dedicated_tcp_connection_per_zfs_send
-                )
-
-            if old_isatty is None:
-                os.environ.pop(ENV_VAR_PREFIX + "isatty", None)
-            else:
-                os.environ[ENV_VAR_PREFIX + "isatty"] = old_isatty
-
-            if old_ssh_control_persist_margin_secs is None:
-                os.environ.pop(ENV_VAR_PREFIX + "ssh_control_persist_margin_secs", None)
-            else:
-                os.environ[ENV_VAR_PREFIX + "ssh_control_persist_margin_secs"] = old_ssh_control_persist_margin_secs
-
-            if old_reuse_ssh_connection is None:
-                os.environ.pop(ENV_VAR_PREFIX + "reuse_ssh_connection", None)
-            else:
-                os.environ[ENV_VAR_PREFIX + "reuse_ssh_connection"] = old_reuse_ssh_connection
+                    if max_datasets_per_minibatch_on_list_snaps is not None
+                    else nullcontext()
+                ),
+                temporary_env_var(
+                    # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
+                    # probably caused by https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=283101
+                    # via https://github.com/openzfs/zfs/issues/16731#issuecomment-2561987688
+                    ENV_VAR_PREFIX + "dedicated_tcp_connection_per_zfs_send",
+                    "false" if platform.platform().startswith("FreeBSD-13") else None,
+                ),
+                temporary_env_var(ENV_VAR_PREFIX + "isatty", isatty),
+                temporary_env_var(ENV_VAR_PREFIX + "reuse_ssh_connection", reuse_ssh_connection),
+            ):
+                returncode = 0
+                try:
+                    if use_jobrunner:
+                        assert isinstance(job, bzfs_jobrunner.Job)
+                        job.run_main([bzfs_jobrunner.PROG_NAME] + args)
+                    else:
+                        assert isinstance(job, bzfs.Job)
+                        job.run_main(bzfs.argument_parser().parse_args(args), args)
+                except subprocess.CalledProcessError as e:
+                    returncode = e.returncode
+                    if expected_status != returncode:
+                        traceback.print_exc()
+                except SystemExit as e:
+                    assert isinstance(e.code, int)
+                    returncode = e.code
+                    if expected_status != returncode:
+                        traceback.print_exc()
+                finally:
+                    if self.is_no_privilege_elevation():
+                        # revoke all ZFS delegation permissions
+                        cmd = f"sudo -n zfs unallow -r -u {os_username()}".split(" ") + [SRC_POOL_NAME]
+                        if dataset_exists(SRC_POOL_NAME):
+                            run_cmd(cmd)
+                        cmd = f"sudo -n zfs unallow -r -u {os_username()}".split(" ") + [DST_POOL_NAME]
+                        if dataset_exists(DST_POOL_NAME):
+                            run_cmd(cmd)
 
         if isinstance(expected_status, list):
             self.assertIn(returncode, expected_status)
