@@ -130,6 +130,7 @@ from bzfs_tests.zfs_util import (
     snapshot_property,
     snapshots,
     take_snapshot,
+    zfs_get,
     zfs_list,
     zfs_set,
 )
@@ -1413,31 +1414,23 @@ class LocalTestCase(IntegrationTestCase):
 
     def test_basic_replication_flat_simple_with_multiple_root_datasets(self) -> None:
         self.setup_basic()
-        param_name = ENV_VAR_PREFIX + "reuse_ssh_connection"
-        old_value = os.environ.get(param_name)
-        try:
-            os.environ[param_name] = "False"
-            for i in range(2):
-                with stop_on_failure_subtest(i=i):
-                    self.run_bzfs(
-                        ibase.SRC_ROOT_DATASET,
-                        ibase.DST_ROOT_DATASET,
-                        ibase.SRC_ROOT_DATASET,
-                        ibase.DST_ROOT_DATASET,
-                        "-v",
-                        "-v",
-                        dry_run=(i == 0),
-                    )
-                    self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET + "/foo"))
-                    if i == 0:
-                        self.assert_snapshots(ibase.DST_ROOT_DATASET, 0)
-                    else:
-                        self.assert_snapshots(ibase.DST_ROOT_DATASET, 3, "s")
-        finally:
-            if old_value is None:
-                os.environ.pop(param_name, None)
-            else:
-                os.environ[param_name] = old_value
+        for i in range(2):
+            with stop_on_failure_subtest(i=i):
+                self.run_bzfs(
+                    ibase.SRC_ROOT_DATASET,
+                    ibase.DST_ROOT_DATASET,
+                    ibase.SRC_ROOT_DATASET,
+                    ibase.DST_ROOT_DATASET,
+                    "-v",
+                    "-v",
+                    dry_run=(i == 0),
+                    reuse_ssh_connection=False,
+                )
+                self.assertFalse(dataset_exists(ibase.DST_ROOT_DATASET + "/foo"))
+                if i == 0:
+                    self.assert_snapshots(ibase.DST_ROOT_DATASET, 0)
+                else:
+                    self.assert_snapshots(ibase.DST_ROOT_DATASET, 3, "s")
 
     def test_basic_replication_flat_simple_with_multiple_root_datasets_with_skip_on_error(self) -> None:
         self.setup_basic()
@@ -1756,6 +1749,63 @@ class LocalTestCase(IntegrationTestCase):
         self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="Darwin") > 0)
         self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="Windows") > 0)
         self.assertTrue(_get_max_command_line_bytes(job, "dst", os_name="unknown") > 0)
+
+    def test_delete_many_dst_snapshots(self) -> None:
+        """Delete 700 snapshots, which is more than can fit into the operating system's single-argument CLI limit."""
+        root = ibase.DST_ROOT_DATASET
+        snapshot_tags = [f"s{i:04d}" + "x" * 195 for i in range(700)]
+        snapshot_names = [f"{root}@{tag}" for tag in snapshot_tags]
+        self.assertLessEqual(max(len(name.encode()) for name in snapshot_names), 255)
+        self.assertGreater(len(f"{root}@{','.join(snapshot_tags)}".encode("ascii")), 128 * 1024)
+        for tag in snapshot_tags:
+            take_snapshot(root, tag)
+        self.assertListEqual(snapshot_names, snapshots(root))
+
+        self.run_bzfs(
+            DUMMY_DATASET,
+            root,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--threads=1",
+            # don't reuse connection to workaround https://github.com/rapier1/hpn-ssh/issues/158
+            reuse_ssh_connection=False if SSH_PROGRAM == "hpnssh" else None,
+        )
+
+        self.assertListEqual([], snapshots(root))
+
+    def test_set_large_property_batches(self) -> None:
+        """Set 700 user properties which is more than can fit into the operating system's single-argument CLI limit."""
+        if self.is_no_privilege_elevation():
+            self.skipTest("setting properties via zfs set needs extra permissions")
+        k = 1
+        # k = 16
+        src = ibase.SRC_ROOT_DATASET
+        dst = ibase.DST_ROOT_DATASET
+        take_snapshot(src, fix("s1"))
+        props = {f"bzfs_test:batch_{i:05d}": f"{i:05d}" + "x" * 194 for i in range(700 * k)}
+        command = ["zfs", "set"] + [f"{name}={value}" for name, value in props.items()] + [dst]
+        self.assertGreater(len(" ".join(command).encode()), 128 * 1024 * k)
+        self.assertLess(max(len(arg.encode()) for arg in command), 128 * 1024 * k)
+        iterator = iter(props.items())
+        while batch := tuple(itertools.islice(iterator, 700)):
+            zfs_set([src], dict(batch))
+
+        self.run_bzfs(
+            src,
+            dst,
+            "--zfs-set-include-regex=bzfs_test:batch.*",
+            "--threads=1",
+            # "--verbose",
+            # don't reuse connection to workaround https://github.com/rapier1/hpn-ssh/issues/158
+            reuse_ssh_connection=False if SSH_PROGRAM == "hpnssh" else None,
+        )
+
+        self.assert_snapshot_names(dst, ["s1"])
+        actual_props: dict[str, str] = {}
+        for line in zfs_get([dst], props=list(props), max_depth=0, fields=["property", "value"]):
+            name, value = line.split("\t")
+            actual_props[name] = value
+        self.assertDictEqual(props, actual_props)
 
     def test_zfs_set(self) -> None:
         if self.is_no_privilege_elevation():

@@ -1285,7 +1285,7 @@ def _zfs_set(job: Job, properties: list[str], remote: Remote, dataset: str) -> N
     run_ssh_cmd_batched(
         job,
         remote,
-        cmd,
+        cmd + [dataset],
         properties,
         lambda batch: job.run_ssh_command(
             remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch + [dataset]

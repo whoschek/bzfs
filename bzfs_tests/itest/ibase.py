@@ -285,6 +285,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         dst_host_str: str = "127.0.0.1",
         enable_ipv6: bool = getenv_bool("test_enable_IPv6", True),
         port: str | None = getenv_any("test_ssh_port"),  # if sshd is on non-standard port: export bzfs_test_ssh_port=12345
+        reuse_ssh_connection: bool | None = None,
     ) -> bzfs.Job | bzfs_jobrunner.Job:
         args = list(arguments)
         src_host = [] if use_jobrunner else ["--ssh-src-host", src_host_str]
@@ -447,6 +448,10 @@ class IntegrationTestCase(ParametrizedTestCase):
         if isatty is not None:
             os.environ[ENV_VAR_PREFIX + "isatty"] = str(isatty)
 
+        old_reuse_ssh_connection = os.environ.get(ENV_VAR_PREFIX + "reuse_ssh_connection")
+        if reuse_ssh_connection is not None:
+            os.environ[ENV_VAR_PREFIX + "reuse_ssh_connection"] = str(reuse_ssh_connection)
+
         returncode = 0
         try:
             if use_jobrunner:
@@ -504,6 +509,11 @@ class IntegrationTestCase(ParametrizedTestCase):
                 os.environ.pop(ENV_VAR_PREFIX + "ssh_control_persist_margin_secs", None)
             else:
                 os.environ[ENV_VAR_PREFIX + "ssh_control_persist_margin_secs"] = old_ssh_control_persist_margin_secs
+
+            if old_reuse_ssh_connection is None:
+                os.environ.pop(ENV_VAR_PREFIX + "reuse_ssh_connection", None)
+            else:
+                os.environ[ENV_VAR_PREFIX + "reuse_ssh_connection"] = old_reuse_ssh_connection
 
         if isinstance(expected_status, list):
             self.assertIn(returncode, expected_status)

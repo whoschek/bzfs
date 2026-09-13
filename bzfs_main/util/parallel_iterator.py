@@ -20,6 +20,7 @@ from __future__ import (
 import concurrent
 import itertools
 import os
+import shlex
 import sys
 from collections import (
     deque,
@@ -212,6 +213,7 @@ def batch_cmd_iterator(
     max_batch_items: int = 2**29,  # max number of args per batch
     max_batch_bytes: int = 127 * 1024,  # max number of bytes per batch
     sep: str = " ",  # separator between batch args
+    quote_args: bool = False,  # calculate byte size assuming each arg will be quoted
 ) -> Iterator[_T]:
     """Returns an iterator that runs fn(cmd_args) in sequential batches, without creating a cmdline that's too big for the OS
     to handle; Can be seen as a Pythonic xargs -n / -s with OS-aware safety margin.
@@ -227,7 +229,8 @@ def batch_cmd_iterator(
     batch: list[str]
     batch, total_bytes, total_items = [], 0, 0
     for cmd_arg in cmd_args:
-        arg_bytes: int = seplen + len(cmd_arg.encode(fsenc))
+        # Include a conservative eight-byte argv pointer
+        arg_bytes: int = 8 + seplen + len((shlex.quote(cmd_arg) if quote_args else cmd_arg).encode(fsenc))
         if (total_items >= max_batch_items or total_bytes + arg_bytes > max_batch_bytes) and len(batch) > 0:
             yield fn(batch)
             batch, total_bytes, total_items = [], 0, 0
