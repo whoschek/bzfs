@@ -571,12 +571,13 @@ def compile_regexes(regexes: list[str], *, suffix: str = "") -> RegexList:
     compiled_regexes: RegexList = []
     for regex in regexes:
         if suffix:  # disallow non-trailing end-of-str symbol in dataset regexes to ensure descendants will also match
+            original = regex
             if regex.endswith("\\$"):
                 pass  # trailing literal $ is ok
             elif regex.endswith("$"):
                 regex = regex[0:-1]  # ok because all users of compile_regexes() call re.fullmatch()
-            elif "$" in regex:
-                raise re.error("Must not use non-trailing '$' character", regex)
+            if "$" in regex.removesuffix("\\$"):
+                raise re.error("Must not use non-trailing '$' character", original)
         if is_negation := regex.startswith("!"):
             regex = regex[1:]
         regex = replace_capturing_groups_with_non_capturing_groups(regex)

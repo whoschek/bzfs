@@ -315,6 +315,38 @@ class TestHelperFunctions(unittest.TestCase):
                 assert_full_match(text, r"(?iu)foo|bar", re_suffix)
                 assert_full_match(text, r"(?i)(?a)(?x)foo|bar", re_suffix)
 
+    def test_compile_regexes_rejects_remaining_dollar_anchors_with_suffix(self) -> None:
+        """Reject dollar signs that prevent a dataset pattern from protecting its descendants."""
+        for regex in ["^archive$|^scratch$", "^(archive|scratch)$$", "archive$$", "$$", r"archive$|scratch\$", r"arch\$ive"]:
+            with self.subTest(regex=regex), self.assertRaises(re.error):
+                compile_regexes([regex], suffix=DESCENDANTS_RE_SUFFIX)
+
+    def test_compile_regexes_preserves_trailing_literal_dollar_with_suffix(self) -> None:
+        """An escaped final dollar remains literal and permits descendant matching after optional anchor removal."""
+        for regex in [r"archive\$", r"archive\$$"]:
+            with self.subTest(regex=regex):
+                compiled = compile_regexes([regex], suffix=DESCENDANTS_RE_SUFFIX)[0][0]
+                self.assertIsNotNone(compiled.fullmatch("archive$"))
+                self.assertIsNotNone(compiled.fullmatch("archive$/app"))
+
+    def test_compile_regexes_single_trailing_anchor_protects_descendants(self) -> None:
+        """Normalizing one final anchor must preserve exclusions for parents and their descendants."""
+        excludes = compile_regexes(["^(archive|scratch)$"], suffix=DESCENDANTS_RE_SUFFIX)
+        includes = compile_regexes([".*"], suffix=DESCENDANTS_RE_SUFFIX)
+        for name in ["archive", "archive/app", "scratch", "scratch/app"]:
+            with self.subTest(name=name):
+                self.assertFalse(is_included(name, includes, excludes))
+        self.assertTrue(is_included("work", includes, excludes))
+
+    def test_compile_regexes_keeps_dollar_anchors_without_suffix(self) -> None:
+        """Snapshot regexes without descendant suffixes retain their ordinary anchor semantics."""
+        for regex in ["^archive$|^scratch$", "^(archive|scratch)$$"]:
+            with self.subTest(regex=regex):
+                compiled = compile_regexes([regex])[0][0]
+                self.assertIsNotNone(compiled.fullmatch("archive"))
+                self.assertIsNotNone(compiled.fullmatch("scratch"))
+                self.assertIsNone(compiled.fullmatch("archive/app"))
+
     def test_is_included_with_negated_exclude_regex(self) -> None:
         """Negated exclude regex excludes non-matching names but not matching ones."""
         exclude_regexes = compile_regexes(["!foo"])
