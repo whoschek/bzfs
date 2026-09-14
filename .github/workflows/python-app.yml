@@ -147,7 +147,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Run zizmor check
-        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # aka v0.6.2
+        uses: zizmorcore/zizmor-action@70fb788f84895a7701f5643d103d587e460b5c99 # aka v0.6.3
         with:
           version: "1.29.0"
           advanced-security: false
@@ -671,7 +671,7 @@ jobs:
           persist-credentials: false
       - name: Run tests for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
         id: test
-        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@4441bea20b31bfa77329a5af583199362489567e # aka v1.4.9; see https://github.com/vmactions/freebsd-vm
+        uses: &vmactions_freebsd_vm vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1 # aka v1.4.9; see https://github.com/vmactions/freebsd-vm
         with:
           release: "15.1"
           envs: "bzfs_test_mode bzfs_test_no_run_quietly"
@@ -918,7 +918,7 @@ jobs:
           path: generate_website
       - name: Deploy website to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # aka v5.0.0; see https://github.com/actions/deploy-pages
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # aka v5.0.0; see https://github.com/actions/deploy-pages
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
       - name: "Display URL of GitHub Pages"
