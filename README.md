@@ -339,8 +339,15 @@ $ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-dst-dat
 sudo apt-get -y install zfsutils-linux python3  # ensure zfs and python are installed
 sudo apt-get -y install zstd pv mbuffer         # auxiliary helpers are optional
 
-# AlmaLinux, RHEL, FreeBSD, etc: See https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml
+# RHEL / EL, AlmaLinux, Rocky:
+sudo dnf -y install epel-release
+sudo dnf -y install zstd pv mbuffer --enablerepo=epel
 
+# FreeBSD:
+pkg install -y python3 bash
+pkg install -y sudo zstd pv mbuffer             # auxiliary helpers are optional
+
+# Install from git repo:
 git clone https://github.com/whoschek/bzfs.git
 cd bzfs/bzfs_main
 ./bzfs --help  # Run the CLI
@@ -350,7 +357,7 @@ sudo ln -sf $(pwd)/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner # Optional syste
 
 # Alternatively, install a release via pip:
 python3 -m pip install bzfs
-python3 -m pip install --upgrade bzfs     # To upgrade an existing bzfs installation
+python3 -m pip install --upgrade bzfs                           # To upgrade an existing bzfs installation
 bzfs --help  # Run the CLI
 bzfs_jobrunner --help
 
