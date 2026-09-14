@@ -2,6 +2,34 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.25.0] - Not yet released
+
+- [bzfs_jobrunner] feat: Monitor source and destination snapshots independently.
+- [bzfs_jobrunner] fix: Don't skip job for a suspended local zpool.
+- [bzfs_jobrunner] fix: `--spawn-process-per-job`: A worker terminated for exceeding its timeout can be reported as
+  successful.
+- [bzfs] docs: Improve installation instructions.
+- [bzfs] fix: Skip descendants when full replication fails.
+- [bzfs] fix: Simplify snapshot scheduling datetime math.
+- [bzfs] fix: Skip `--props` sanity check when `--skip-replication` is specified.
+- [bzfs] fix: Exit process with the exit code of the most severe alert when monitoring multiple root datasets.
+- [bzfs] fix: Make `--force-once` disable `--force-rollback-to-latest-common-snapshot` even on full sends.
+- [bzfs] fix: Don't exceed single-argument operating system limit for large remote CLI commands.
+- [bzfs] fix: Clear zfs receive resume token if it does not represent a selected source snapshot (cont'd).
+- [bzfs] fix: Validate `--{include/exclude}-dataset-regex` more strictly.
+- [bzfs] feat: `--create-src-snapshots-timeformat`: Reject missing `%Y` four digit year prefix when
+  `--create-src-snapshots-plan` contains an empty target.
+- [bzfs] fix: Reject a non-raw `zfs send` of an encrypted dataset with an unloaded source key, even when the
+  `zfs receive` succeeds.
+- [bzfs] fix: `--compare-snapshot-lists`: Preserve dataset order with bookmarks even for a sibling dataset that has a
+  name suffix that starts with a space.
+- [bzfs] fix: Honor `--exclude-dataset*` even with space, hyphen, or period.
+- [bzfs] fix: Don't ignore `--{include/exclude}-dataset` if the dataset spec is absolute and neither matches source or
+  destination.
+- [bzfs] fix: `--{include/exclude}-dataset-regex`: Retain semantics of regex alternations.
+- [bzfs] Also run nightly CI tests on zfs-2.4.4, zfs-2.3.9 and zfs-2.2.11.
+- [bzfs] Various small improvements to the test VM and test infra.
+
 ## [1.24.0] - August 11, 2026
 
 - [bzfs] Improve reliability of replication from bookmarks: Guarantees that a ZFS snapshot can be safely deleted after
