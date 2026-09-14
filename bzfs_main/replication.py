@@ -128,16 +128,16 @@ INJECT_DST_PIPE_FAIL_KBYTES: Final[int] = 400  # for testing only
 _RIGHT_JUST: Final[int] = 7
 
 
-def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
+def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry, *, has_descendant_dataset: bool) -> bool:
     """Replicates src_dataset to dst_dataset (thread-safe); For replication of multiple datasets, including recursive
-    replication, see bzfs.py:replicate_datasets()."""
+    replication, see bzfs.py:replicate_datasets(); Return False to skip descendants; True to recurse into them."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
     dst_dataset: str = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
     log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
     list_result: bool | tuple[list[str], list[str], list[str], dict[str, str], str, str, _Continuity | None] = (
-        _list_and_filter_src_and_dst_snapshots(job, src_dataset, dst_dataset, tid)
+        _list_and_filter_src_and_dst_snapshots(job, src_dataset, dst_dataset, tid, has_descendant_dataset)
     )
     if isinstance(list_result, bool):
         return list_result
@@ -237,9 +237,10 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
 
 
 def _list_and_filter_src_and_dst_snapshots(
-    job: Job, src_dataset: str, dst_dataset: str, tid: str
+    job: Job, src_dataset: str, dst_dataset: str, tid: str, has_descendant: bool
 ) -> bool | tuple[list[str], list[str], list[str], dict[str, str], str, str, _Continuity | None]:
-    """On replication, list and filter src and dst snapshots."""
+    """On replication, list and filter src and dst snapshots; return early with False to skip descendants; True to recurse
+    into them."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
 
@@ -305,16 +306,23 @@ def _list_and_filter_src_and_dst_snapshots(
                 oldest_src_snapshot = snapshot
     if len(src_snapshots_with_guids) == 0:
         if p.skip_missing_snapshots == "fail":
-            die(f"Source dataset includes no snapshot: {src_dataset}. Consider using --skip-missing-snapshots=dataset")
+            die(f"Source dataset includes no snapshot: {src_dataset!r}. Consider using --skip-missing-snapshots=dataset")
         elif p.skip_missing_snapshots == "dataset":
             log.warning("Skipping source dataset because it includes no snapshot: %s", src_dataset)
-            if p.recursive and not job.dst_dataset_exists[dst_dataset]:
-                log.warning("Also skipping descendant datasets as dst dataset does not exist for %s", src_dataset)
-            return job.dst_dataset_exists[dst_dataset]
+            recurse = has_descendant and job.dst_dataset_exists[dst_dataset] and not is_inconsistent(job, dst, dst_dataset)
+            if has_descendant and not recurse:
+                log.warning("Skipping descendant datasets as dst dataset does not exist or is inconsistent: %s", dst_dataset)
+            return recurse
     log.debug("latest_src_snapshot: %s", latest_src_snapshot)
     if latest_src_snapshot == "":
+        recurse = has_descendant and not (job.dst_dataset_exists[dst_dataset] and is_inconsistent(job, dst, dst_dataset))
+        if has_descendant and not recurse:
+            die(
+                f"Cannot replicate descendant datasets as destination dataset is inconsistent: {dst_dataset!r} "
+                f"and source dataset selects no snapshot: {src_dataset!r}. Resolve the interrupted receive before retrying."
+            )
         log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
-        return True
+        return recurse
     if p.create_bookmarks != "none" and are_bookmarks_enabled(p, src) and not p.dry_run:
         continuity: _Continuity | None = _Continuity(
             p,
@@ -1056,6 +1064,16 @@ def _pv_cmd(job: Job, size_estimate_bytes: int, size_estimate_human: str, disabl
     pv_program_opts += ["--force", f"--name={size_estimate_human}"]
     pv_program_opts += [size] if size else []
     return f"LC_ALL=C {shlex.join(pv_program_opts)} 2>> {shlex.quote(pv_log_file)}"
+
+
+def is_inconsistent(job: Job, remote: Remote, dataset: str) -> bool:
+    """Returns the `inconsistent` ZFS property of the given dataset."""
+    p = job.params
+    cmd: list[str] = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o inconsistent", dataset)
+    try:
+        return job.run_ssh_command(remote, LOG_DEBUG, cmd=cmd).rstrip() != "0"
+    except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
+        raise RetryableError(display_msg="zfs list inconsistent") from e
 
 
 def delete_snapshots(job: Job, remote: Remote, dataset: str, snapshot_tags: list[str]) -> None:

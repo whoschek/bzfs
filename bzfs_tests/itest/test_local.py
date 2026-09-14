@@ -1718,6 +1718,63 @@ class LocalTestCase(IntegrationTestCase):
                 self.assert_snapshots(dst_user2, 1, "v")
                 self.assert_snapshots(dst_user2_bar, 1, "b")
 
+    def test_full_replication_failure_skips_descendants_and_recovers(self) -> None:
+        """When replicating with --recursive --skip-on-error=dataset into a previously absent destination dataset, don't
+        create descendant datasets of that destination dataset until a full `zfs send/receive` completes successfully,
+        including on retry after an interrupted `zfs send/receive`.
+
+        This test deals with the fact that when a full `zfs send/receive` into an absent dataset is interrupted, OpenZFS
+        creates the destination dataset and makes it visible but leaves it in an inconsistent state.
+
+        An interrupted `zfs send/receive` is retried and under --skip-on-error=dataset sibling replication must proceed even
+        on error. Deleting the original source snapshot then forces abort of the receive token on restart of replication.
+        Replication must then succeed without child datasets blocking removal of the inconsistent partial parent on full
+        `zfs send/receive`.
+        """
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        src_parent = create_filesystem(ibase.SRC_ROOT_DATASET, "parent", props=self.encryption_dataset_props())
+        src_child = create_filesystem(src_parent, "child")
+        src_sibling = create_filesystem(ibase.SRC_ROOT_DATASET, "sibling")
+        self.create_resumable_snapshots(1, 2, size_in_bytes=2 * 1024 * 1024, dataset=src_parent)
+        take_snapshot(src_child, fix("s1"))
+        take_snapshot(src_sibling, fix("s1"))
+        dst_parent = ibase.DST_ROOT_DATASET + "/parent"
+        dst_child = dst_parent + "/child"
+        dst_sibling = ibase.DST_ROOT_DATASET + "/sibling"
+        args = [ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET, "--recursive", "--skip-parent"]
+
+        job = self.run_bzfs(
+            *args,
+            skip_on_error="dataset",
+            no_create_bookmark=True,
+            retries=1,
+            expected_status=1,
+            inject_params={"inject_dst_pipe_fail": True},
+        )
+
+        self.assertTrue(dataset_exists(dst_parent))
+        self.assert_receive_resume_token(dst_parent, exists=True)
+        self.assert_snapshot_names(dst_parent, [])
+        self.assertFalse(dataset_exists(dst_child))
+        self.assert_snapshot_names(dst_sibling, ["s1"])
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+        self.assertIn("Retrying zfs send/receive [1/1]", log_text)
+
+        destroy(src_parent + "@" + fix("s1"))
+        take_snapshot(src_parent, fix("s2"))
+        self.run_bzfs(
+            *args,
+            skip_on_error="dataset",
+            no_create_bookmark=True,
+            retries=1,
+        )
+
+        self.assert_receive_resume_token(dst_parent, exists=False)
+        self.assert_snapshot_names(dst_parent, ["s2"])
+        self.assert_snapshot_names(dst_child, ["s1"])
+        self.assert_snapshot_names(dst_sibling, ["s1"])
+
     def test_basic_replication_flat_simple_using_main(self) -> None:
         self.setup_basic()
         with patch("sys.argv", ["bzfs.py", ibase.SRC_ROOT_DATASET, ibase.DST_ROOT_DATASET] + self.log_dir_opt()):

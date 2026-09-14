@@ -1495,6 +1495,7 @@ class TestJobMethods(AbstractTestCase):
                     log=None,
                     previous_outcomes=(),
                 ),
+                has_descendant_dataset=False,
             )
             # Assert: incremental planning was invoked (found common base -> incremental)
             mock_steps.assert_called_once()

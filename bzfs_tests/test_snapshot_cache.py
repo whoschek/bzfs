@@ -875,7 +875,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Helper to run replicate and count invocations
             called: list[str] = []
 
-            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: RetryPolicy) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: RetryPolicy, **_kwargs: object) -> bool:
                 called.append(src_dataset)
                 return True
 
@@ -1008,7 +1008,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Use time patch to ensure maturity for equality/skip decisions
             mature_now = max(a_src_changed, a_dst_changed) + MATURITY_TIME_THRESHOLD_SECS + 5.0
 
-            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry, **_kwargs: object) -> bool:
                 # Simple phase markers for test determinism
                 if job is job_a:
                     a_repl_started.set()
@@ -1151,7 +1151,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_111_111_111, if_more_recent=True)
             mature_now = max(repl_src_changed_a, repl_dst_changed_a) + MATURITY_TIME_THRESHOLD_SECS + 5.0
 
-            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry, **_kwargs: object) -> bool:
                 if job is job_r:
                     r_repl_done.set()
                 return True
@@ -1287,7 +1287,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_222_222_222, if_more_recent=True)
             mature_now2 = max(repl_src_changed, repl_dst_changed) + MATURITY_TIME_THRESHOLD_SECS + 5.0
 
-            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry, **_kwargs: object) -> bool:
                 if job is job_r:
                     r_repl_done2.set()
                 return True
@@ -1476,7 +1476,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=1_333_333_333, if_more_recent=True)
             mature_now3 = max(r_src_sc, r_dst_sc) + MATURITY_TIME_THRESHOLD_SECS + 5.0
 
-            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry, **_kwargs: object) -> bool:
                 if job is job_r:
                     r3_repl_done.set()
                 return True
@@ -2333,7 +2333,7 @@ class TestSnapshotCache(AbstractTestCase):
                 job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed_value)
                 job.dst_dataset_exists[ds.replace("src", "dst")] = True
 
-            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry, **_kwargs: object) -> bool:
                 """Simulate replicate_dataset(job, src_dataset, tid, retry) with one failing dataset."""
                 if src_dataset == ds_fail:
                     raise subprocess.CalledProcessError(1, "fail")
@@ -2496,7 +2496,7 @@ class TestSnapshotCache(AbstractTestCase):
 
             called: list[str] = []
 
-            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: RetryPolicy) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: RetryPolicy, **_kwargs: object) -> bool:
                 called.append(src_dataset)
                 return True
 
@@ -2556,7 +2556,7 @@ class TestSnapshotCache(AbstractTestCase):
 
             called: list[str] = []
 
-            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: RetryPolicy) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: RetryPolicy, **_kwargs: object) -> bool:
                 called.append(src_dataset)
                 return True
 
@@ -2953,7 +2953,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Phase 1: src is in the future -> miss; no cheap skip
             called: list[str] = []
 
-            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> bool:
+            def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry, **_kwargs: object) -> bool:
                 called.append(src_dataset)
                 return True
 

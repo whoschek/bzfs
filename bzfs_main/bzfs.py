@@ -136,6 +136,7 @@ from bzfs_main.replication import (
     delete_bookmarks,
     delete_datasets,
     delete_snapshots,
+    is_inconsistent,
     is_tmp_bookmark,
     replicate_dataset,
 )
@@ -187,6 +188,7 @@ from bzfs_main.util.utils import (
     cut,
     die,
     has_duplicates,
+    has_prefix,
     human_readable_bytes,
     human_readable_duration,
     is_descendant,
@@ -1319,18 +1321,34 @@ class Job(MiniJob):
         done_src_datasets: list[str] = []
         done_src_datasets_lock: threading.Lock = threading.Lock()
 
+        def _has_descendant_dataset(src_dataset: str) -> bool:
+            return has_prefix(stale_src_datasets, prefix=src_dataset + "/", is_test_mode=self.is_test_mode)
+
         def _process_dataset_fn(src_dataset: str, tid: str, retry: Retry) -> bool:
-            result: bool = replicate_dataset(job=self, src_dataset=src_dataset, tid=tid, retry=retry)
+            has_descendant_dataset: bool = _has_descendant_dataset(src_dataset)
+            result: bool = replicate_dataset(
+                job=self, src_dataset=src_dataset, tid=tid, retry=retry, has_descendant_dataset=has_descendant_dataset
+            )
             with done_src_datasets_lock:
                 done_src_datasets.append(src_dataset)  # record datasets that were actually replicated (not skipped)
             return result
+
+        def _skip_tree_on_error(src_dataset: str) -> bool:
+            has_descendant_dataset: bool = _has_descendant_dataset(src_dataset)
+            dst_dataset: str = src2dst(src_dataset)
+            if (not has_descendant_dataset) or not self.dst_dataset_exists[dst_dataset]:
+                return True
+            try:
+                return is_inconsistent(self, dst, dst_dataset)
+            except Exception:
+                return True
 
         # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
         failed: bool = process_datasets_in_parallel_and_fault_tolerant(
             log=log,
             datasets=stale_src_datasets,
             process_dataset=_process_dataset_fn,
-            skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[src2dst(dataset)],
+            skip_tree_on_error=_skip_tree_on_error,
             skip_on_error=p.skip_on_error,
             max_workers=max_workers,
             timing=self.task_timing,

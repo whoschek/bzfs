@@ -227,6 +227,35 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertFalse(is_descendant("pool/fs-backup", "pool/fs"))
         self.assertTrue(is_descendant("pool/fs", "pool"))
 
+    def test_has_prefix(self) -> None:
+        """Checks literal prefix membership in lexicographically sorted lists."""
+
+        def _has_prefix(prefix: str, strings: list[str]) -> bool:
+            return utils.has_prefix(strings, prefix=prefix, is_test_mode=True)
+
+        self.assertFalse(_has_prefix("", []))
+        self.assertTrue(_has_prefix("", [""]))
+        self.assertTrue(_has_prefix("", ["apple"]))
+        self.assertFalse(_has_prefix("a", [""]))
+        self.assertTrue(_has_prefix("apple", ["apple"]))
+        self.assertTrue(_has_prefix("apple", ["apple", "apple"]))
+        self.assertTrue(_has_prefix("ap", ["apple", "banana"]))
+        self.assertTrue(_has_prefix(" ", [" apple"]))
+        self.assertTrue(_has_prefix("ban", ["apple", "banana"]))
+        self.assertFalse(_has_prefix("apple", ["app"]))
+        self.assertFalse(_has_prefix("pool/fs/", []))
+        self.assertFalse(_has_prefix("pool/fs/", ["pool/fs"]))
+        self.assertFalse(_has_prefix("pool/fs/", ["pool/fs", "pool/fs"]))
+        self.assertFalse(_has_prefix("pool/fs/child/", ["pool", "pool/fs"]))
+        self.assertFalse(_has_prefix("pool/a/", ["pool/b/child"]))
+        self.assertFalse(_has_prefix("pool/z/", ["pool/a/child"]))
+        self.assertFalse(_has_prefix("pool/fs/", ["pool/a/child", "pool/z/child"]))
+        self.assertFalse(_has_prefix("pool/fs/", ["other/fs/child"]))
+        self.assertTrue(_has_prefix("pool/", ["pool/fs"]))
+        self.assertTrue(_has_prefix("pool/fs/", ["pool/fs/child"]))
+        self.assertTrue(_has_prefix("pool/fs/", ["pool/fs/child/grandchild"]))
+        self.assertTrue(_has_prefix("pool/fs/", ["pool/a", "pool/fs", "pool/fs/child", "pool/z"]))
+
     def test_sort_datasets_keeps_subtrees_together(self) -> None:
         """Keep nested subtrees contiguous for punctuation siblings, preserving names and the caller's input list."""
         expected = [

@@ -79,6 +79,7 @@ from bzfs_main.util.retry import (
     RetryPolicy,
 )
 from bzfs_main.util.utils import (
+    DIE_STATUS,
     LOG_DEBUG,
     SynchronizedBool,
     compile_regexes,
@@ -377,6 +378,174 @@ class TestResumeErrorParsing(AbstractTestCase):
 ###############################################################################
 class TestReplication(AbstractTestCase):
     """Covers command builders and safety helpers in replication."""
+
+    def test_missing_snapshots_only_release_safe_descendants(self) -> None:
+        """Checks recursive scheduling after a parent's source snapshots have been pruned.
+
+        Command results model absent, consistent and interrupted destination parents. The real scheduler and snapshot
+        filtering must preserve recovery by skipping descendants of inconsistent parents, while allowing an absent
+        parent with the continue policy. Failed state queries must also prevent descendant processing. Each case uses
+        isolated command results.
+        """
+        query_error = subprocess.CalledProcessError(255, ["ssh", "host"], stderr="Connection reset by peer")
+        cases: list[tuple[str, bool, str | Exception | None, bool]] = [
+            ("continue", True, "1\n", False),
+            ("continue", False, None, True),
+            ("continue", True, "0\n", True),
+            ("dataset", True, "1\n", False),
+            ("dataset", False, None, False),
+            ("dataset", True, "0\n", True),
+            ("continue", True, query_error, False),
+            ("dataset", True, query_error, False),
+        ]
+
+        def list_snapshots(remote: Remote, _level: int, *, cmd: list[str], **_kwargs: object) -> str | None:
+            if remote is p.src:
+                listed_src_datasets.append(cmd[-1])
+                return ""
+            return "" if dst_exists else None
+
+        for policy, dst_exists, state, expect_child in cases:
+            with self.subTest(policy=policy, dst_exists=dst_exists, state=state):
+                src_dataset, dst_dataset = "pool/src", "pool/dst"
+                args = self.argparser_parse_args(
+                    [
+                        src_dataset,
+                        dst_dataset,
+                        "--recursive",
+                        f"--skip-missing-snapshots={policy}",
+                        "--skip-on-error=dataset",
+                        "--retries=0",
+                        "--no-use-bookmark",
+                        "--create-bookmarks=none",
+                    ]
+                )
+                job = Job()
+                job.is_test_mode = True
+                p = job.params = self.make_params(args)
+                p.src.root_dataset, p.dst.root_dataset = src_dataset, dst_dataset
+                listed_src_datasets: list[str] = []
+
+                with (
+                    patch.object(job, "try_ssh_command", side_effect=list_snapshots),
+                    patch.object(
+                        job,
+                        "run_ssh_command",
+                        return_value=state,
+                        side_effect=state if isinstance(state, Exception) else None,
+                    ) as query_state,
+                ):
+                    failed = job.replicate_datasets([src_dataset, src_dataset + "/child"], "test", max_workers=1)
+
+                self.assertEqual(isinstance(state, Exception) or (policy == "continue" and state == "1\n"), failed)
+                self.assertEqual([src_dataset] + ([src_dataset + "/child"] if expect_child else []), listed_src_datasets)
+                if not dst_exists:
+                    query_state.assert_not_called()
+
+    def test_inconsistent_leaf_does_not_fail_recursive_replication(self) -> None:
+        """Allows the continue policy to skip an inconsistent leaf with no selected snapshots.
+
+        The scheduler's dataset list defines selected work; similarly named siblings are not descendants. Real snapshot
+        filtering and scheduling must succeed when no descendant would be skipped, including a dataset whose children
+        were excluded from this replication task.
+        """
+        src_dataset, dst_dataset = "pool/src", "pool/dst"
+        leaf = src_dataset + "/leaf"
+        for datasets in ([leaf], [leaf, leaf + "-sibling", leaf + "2"]):
+            with self.subTest(datasets=datasets):
+                args = self.argparser_parse_args(
+                    [
+                        src_dataset,
+                        dst_dataset,
+                        "--recursive",
+                        "--skip-missing-snapshots=continue",
+                        "--skip-on-error=fail",
+                        "--retries=0",
+                        "--no-use-bookmark",
+                        "--create-bookmarks=none",
+                    ]
+                )
+                job = Job()
+                job.is_test_mode = True
+                p = job.params = self.make_params(args)
+                p.src.root_dataset, p.dst.root_dataset = src_dataset, dst_dataset
+                with (
+                    patch.object(job, "try_ssh_command", return_value="") as list_commands,
+                    patch.object(job, "run_ssh_command", return_value="1\n"),
+                ):
+                    self.assertFalse(job.replicate_datasets(datasets, "test", max_workers=1))
+
+                self.assertEqual(0, job.all_exceptions_count)
+                listed_src_datasets = [c.kwargs["cmd"][-1] for c in list_commands.call_args_list if c.args[0] is p.src]
+                self.assertEqual(datasets, listed_src_datasets)
+
+    def test_inconsistent_parent_reports_blocked_descendants_as_failure(self) -> None:
+        """Reports blocked child backups when the continue policy cannot safely recurse.
+
+        An interrupted initial receive leaves an inconsistent parent after its source snapshot is pruned; the child
+        still has a selected snapshot. Real scheduling and snapshot filtering must fail without visiting that child or
+        claiming the parent is up to date. Healthy siblings proceed according to the error policy, even when a sibling
+        sorts between the parent and its first descendant. Selected grandchildren also require safe ancestors.
+        """
+        src_dataset, dst_dataset = "pool/src", "pool/dst"
+        src_parent, dst_parent = src_dataset + "/parent", dst_dataset + "/parent"
+        src_sibling = src_parent + "-sibling"
+
+        def list_snapshots(remote: Remote, _level: int, *, cmd: list[str], **_kwargs: object) -> str | None:
+            dataset = cmd[-1]
+            if remote.location == "src":
+                return "" if dataset == src_parent else f"123\t{dataset}@s1\n"
+            if dataset == dst_parent:
+                return ""
+            return f"123\t{dataset}@s1\n" if dataset == dst_parent + "-sibling" else None
+
+        for skip_on_error, suffix in (
+            ("fail", "/child"),
+            ("tree", "/child"),
+            ("dataset", "/child"),
+            ("dataset", "/child/grandchild"),
+        ):
+            with self.subTest(skip_on_error=skip_on_error, suffix=suffix):
+                args = self.argparser_parse_args(
+                    [
+                        src_dataset,
+                        dst_dataset,
+                        "--recursive",
+                        "--skip-missing-snapshots=continue",
+                        f"--skip-on-error={skip_on_error}",
+                        "--retries=0",
+                        "--no-use-bookmark",
+                        "--create-bookmarks=none",
+                    ]
+                )
+                job = Job()
+                job.is_test_mode = True
+                p = job.params = self.make_params(args)
+                p.src.root_dataset, p.dst.root_dataset = src_dataset, dst_dataset
+                datasets = [src_parent, src_sibling, src_parent + suffix]
+
+                with (
+                    patch.object(job, "try_ssh_command", side_effect=list_snapshots) as list_commands,
+                    patch.object(job, "run_ssh_command", return_value="1\n"),
+                    patch.object(p.log, "info") as log_info,
+                ):
+                    if skip_on_error == "fail":
+                        with self.assertRaises(SystemExit) as ctx:
+                            job.replicate_datasets(datasets, "test", max_workers=1)
+                        self.assertEqual(DIE_STATUS, ctx.exception.code)
+                        error_message = str(ctx.exception)
+                    else:
+                        self.assertTrue(job.replicate_datasets(datasets, "test", max_workers=1))
+                        self.assertEqual(1, job.all_exceptions_count)
+                        error_message = str(job.worst_exception)
+
+                self.assertIn(dst_parent, error_message)
+                self.assertIn("inconsistent", error_message)
+                self.assertIn("descendant", error_message)
+                expected_datasets = [src_parent] + ([] if skip_on_error == "fail" else [src_sibling])
+                listed_src_datasets = [c.kwargs["cmd"][-1] for c in list_commands.call_args_list if c.args[0] is p.src]
+                self.assertEqual(expected_datasets, listed_src_datasets)
+                self.assertNotIn(call("1/3 Already-up-to-date: %s", dst_parent), log_info.call_args_list)
 
     def test_prepare_adds_outer_ssh_commands(self) -> None:
         """Verifies each transfer mode uses the expected outer SSH connection.
@@ -1460,6 +1629,7 @@ class TestReplication(AbstractTestCase):
                         log=None,
                         previous_outcomes=(),
                     ),
+                    has_descendant_dataset=False,
                 )
 
         self.assertTrue(captured_steps, "No steps captured")
