@@ -844,8 +844,8 @@ def _run_zfs_send_receive(
             else:
                 xprint(log, process.stdout, file=sys.stdout)
                 xprint(log, process.stderr, file=sys.stderr)
-                if re.search(r"cannot send '.+': source key must be loaded", process.stderr):
-                    msg = f"Cannot send {src_dataset}: source key must be loaded"
+                if match := re.search(r"cannot send '[^'\r\n]+': ([^\r\n]+)", process.stderr, re.IGNORECASE):
+                    msg = f"Cannot send {src_dataset}: {match.group(1)}"
                     raise RetryableError(display_msg="zfs send") from RuntimeError(msg)
 
 

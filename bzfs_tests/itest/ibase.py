@@ -271,6 +271,7 @@ class IntegrationTestCase(ParametrizedTestCase):
         skip_on_error: str = "fail",
         retries: int = 0,
         expected_status: int | list[int] = 0,
+        src_permissions: str | None = None,
         error_injection_triggers: dict[str, Counter] | None = None,
         delete_injection_triggers: dict[str, Counter] | None = None,
         param_injection_triggers: dict[str, dict[str, bool | int]] | None = None,
@@ -347,12 +348,14 @@ class IntegrationTestCase(ParametrizedTestCase):
             i = max(0, find_match(args, lambda arg: arg.startswith("-")))
             args = args[0:i] + ["--skip-missing-snapshots=" + str(params["skip_missing_snapshots"])] + args[i:]
 
-        if self.is_no_privilege_elevation():
+        no_privilege_elevation: bool = self.is_no_privilege_elevation() or src_permissions is not None
+        if no_privilege_elevation:
             # test ZFS delegation in combination with --no-privilege-elevation flag
-            args = args + ["--no-privilege-elevation"]
-            src_permissions = "send,snapshot,hold,bookmark,destroy"
-            if delete_injection_triggers is not None:
-                src_permissions += ",destroy,mount"
+            args += ["--no-privilege-elevation"]
+            if src_permissions is None:
+                src_permissions = "send,snapshot,hold,bookmark,destroy"
+                if delete_injection_triggers is not None:
+                    src_permissions += ",destroy,mount"
             # optional_dst_permissions = ",canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize"
             optional_dst_permissions = ",keylocation,compression"
             if self.is_encryption_mode():
@@ -456,7 +459,7 @@ class IntegrationTestCase(ParametrizedTestCase):
                     if expected_status != returncode:
                         traceback.print_exc()
                 finally:
-                    if self.is_no_privilege_elevation():
+                    if no_privilege_elevation:
                         # revoke all ZFS delegation permissions
                         cmd = f"sudo -n zfs unallow -r -u {os_username()}".split(" ") + [SRC_POOL_NAME]
                         if dataset_exists(SRC_POOL_NAME):
