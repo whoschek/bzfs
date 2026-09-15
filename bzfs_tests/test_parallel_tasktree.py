@@ -47,6 +47,7 @@ from unittest.mock import (
 
 from bzfs_main.util.parallel_tasktree import (
     BARRIER_CHAR,
+    COMPONENT_SEPARATOR,
     CompletionCallback,
     CompletionCallbackResult,
     ParallelTaskTree,
@@ -116,11 +117,11 @@ class TestBuildTree(unittest.TestCase):
         return {key: self._reverse_tree(value) for key, value in reversed(tree.items())}
 
     def build_tree(self, datasets: list[str]) -> dict[str, Any]:
-        return self._reverse_tree(_build_dataset_tree(datasets)[0])
+        return self._reverse_tree(_build_dataset_tree(datasets, COMPONENT_SEPARATOR)[0])
 
     def test_empty_leaf_nodes_are_shared(self) -> None:
         datasets = ["other", "pool/a", "pool/b/c"]
-        tree, _ = _build_dataset_tree(datasets)
+        tree, _ = _build_dataset_tree(datasets, COMPONENT_SEPARATOR)
         leaves = [
             tree["other"],
             tree["pool"]["a"],
@@ -131,7 +132,7 @@ class TestBuildTree(unittest.TestCase):
     def test_raw_tree_keys_descend(self) -> None:
         datasets = ["pool", "pool/dataset", "pool/dataset/sub", "pool/other", "pool/other/sub/child"]
         expected_tree = {"pool": {"other": {"sub": {"child": {}}}, "dataset": {"sub": {}}}}
-        tree, _ = _build_dataset_tree(datasets)
+        tree, _ = _build_dataset_tree(datasets, COMPONENT_SEPARATOR)
         self.assertEqual(expected_tree, tree)
 
     def test_basic_tree(self) -> None:
@@ -246,7 +247,7 @@ class TestBuildTree(unittest.TestCase):
 
     def test_x_has_siblings(self) -> None:
         def has_siblings(sorted_datasets: list[str]) -> bool:
-            return _build_dataset_tree(sorted_datasets)[1]
+            return _build_dataset_tree(sorted_datasets, COMPONENT_SEPARATOR)[1]
 
         self.assertFalse(has_siblings([]))
         self.assertFalse(has_siblings(["a"]))
@@ -988,6 +989,24 @@ class TestBarrierName(unittest.TestCase):
                         barrier_name=barrier_name,
                         is_test_mode=True,
                     )
+
+    def test_rejects_empty_component_separator(self) -> None:
+        """Validates that component_separator must be non-empty."""
+
+        log = MagicMock(logging.Logger)
+        datasets: list[str] = []
+
+        def process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
+            raise AssertionError("process_dataset should not be called for invalid component_separator")
+
+        with self.assertRaisesRegex(ValueError, r"Invalid component_separator"):
+            run_parallel_tasktree(
+                log=log,
+                datasets=datasets,
+                process_dataset=process_dataset,
+                component_separator="",
+                is_test_mode=True,
+            )
 
 
 #############################################################################
