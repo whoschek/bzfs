@@ -1934,6 +1934,33 @@ class TestHandleMinMaxSnapshots(AbstractTestCase):
         self.assertListEqual([(0, 200, "tank/ds1", "bzfs_2023-03-01_00:00:00_hourly")], latest_calls)
         self.assertListEqual([(0, 150, "tank/ds1", "bzfs_2023-02-01_00:00:00_hourly")], oldest_calls)
 
+    def test_oldest_skip_holds_distinguishes_all_held_from_missing_labels(self) -> None:
+        """Skip oldest callbacks only for all-held matches, keeping missing labels scoped to each dataset."""
+        job = bzfs.Job()
+        job.params = self.make_params(self.argparser_parse_args(["src", "dst"]))
+        job.is_test_mode = True
+        labels = [SnapshotLabel("bzfs_", target, "", "_hourly") for target in ("onsite_", "offsite_")]
+        datasets = ["tank/a", "tank/b", "tank/empty"]
+        onsite = "bzfs_onsite_2026-09-14_00:00:00_hourly"
+        offsite = "bzfs_offsite_2026-09-14_00:00:00_hourly"
+        lines = [f"tank/a@{onsite}\t1\t100\t1", f"tank/b@{offsite}\t2\t200\t1"]
+        latest, oldest = MagicMock(), MagicMock()
+        with patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", return_value=[lines]):
+            missing = job.handle_minmax_snapshots(
+                job.params.dst,
+                datasets,
+                labels,
+                fn_latest=latest,
+                fn_oldest=oldest,
+                fn_oldest_skip_holds=[True, True],
+            )
+        self.assertEqual(["tank/empty"], missing)
+        self.assertEqual(
+            [(0, 100, "tank/a", onsite), (1, 0, "tank/a", ""), (0, 0, "tank/b", ""), (1, 200, "tank/b", offsite)],
+            [call.args for call in latest.call_args_list],
+        )
+        self.assertEqual([(1, 0, "tank/a", ""), (0, 0, "tank/b", "")], [call.args for call in oldest.call_args_list])
+
     def test_latest_only(self) -> None:
         """Ensures latest callback runs when oldest is omitted and reports missing datasets."""
 

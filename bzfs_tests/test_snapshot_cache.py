@@ -455,6 +455,129 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertIn(ds_crit, exit_msg)
             self.assertNotIn("Oldest snapshot", exit_msg)
 
+    def test_monitor_all_held_preserves_latest_and_missing_alerts(self) -> None:
+        """Exercise real selection and alert evaluation with held, unheld and absent matches using fixed creation times."""
+        fresh = f"{DST_DATASET}@org_onsite_fresh_secondly\t2\t999\t1"
+        stale = f"{DST_DATASET}@org_onsite_stale_secondly\t1\t900\t1"
+        unheld = f"{DST_DATASET}@org_onsite_stale_secondly\t1\t900\t0"
+        unrelated = f"{DST_DATASET}@unrelated\t1\t900\t0"
+        no_latest = ["--monitor-snapshots-no-latest-check"]
+        cases = [
+            ("fresh held", [fresh], True, [], (0, "")),
+            ("stale held", [stale], True, [], (-CRITICAL_STATUS, "Latest")),
+            ("oldest only held", [stale], True, no_latest, (0, "")),
+            ("snapshotless", [], True, [], (-CRITICAL_STATUS, "Latest")),
+            ("oldest only snapshotless", [], True, no_latest, (-CRITICAL_STATUS, "Oldest")),
+            ("oldest only absent label", [unrelated], True, no_latest, (-CRITICAL_STATUS, "Oldest")),
+            ("mixed holds", [unheld, fresh], True, [], (-CRITICAL_STATUS, "Oldest")),
+            ("hold filtering disabled", [stale], False, no_latest, (-CRITICAL_STATUS, "Oldest")),
+            ("oldest disabled", [stale], True, ["--monitor-snapshots-no-oldest-check"], (-CRITICAL_STATUS, "Latest")),
+        ]
+        for name, rows, skip_holds, opts, expected in cases:
+            with self.subTest(name=name):
+                plan = {
+                    "org": {
+                        "onsite": {
+                            "secondly": {
+                                "latest": {"critical": "2 seconds"},
+                                "oldest": {"critical": "2 seconds", "oldest_skip_holds": skip_holds},
+                            }
+                        }
+                    }
+                }
+                with self.job_context(["--monitor-snapshots", str(plan), *opts, SRC_DATASET, DST_DATASET]) as (job, _):
+                    job.params.dst.root_dataset = DST_DATASET
+                    job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(1000, tz=timezone.utc)
+                    with (
+                        patch("bzfs_main.bzfs.is_caching_snapshots", return_value=False),
+                        patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", return_value=[rows]),
+                    ):
+                        result = job.monitor_snapshots(job.params.dst, [DST_DATASET])
+                    self.assertEqual(expected, result[:2])
+
+    def test_monitor_oldest_skip_holds_refreshes_cached_ages(self) -> None:
+        """Rescan hold-sensitive oldest checks across hold changes, even when snapshot timestamps and cached ages match."""
+        plan = {
+            "org": {
+                "onsite": {
+                    "secondly": {
+                        "latest": {"critical": "2 seconds"},
+                        "oldest": {"critical": "2 seconds", "oldest_skip_holds": True},
+                    }
+                }
+            }
+        }
+        with self.job_context(["--monitor-snapshots", str(plan), SRC_DATASET, DST_DATASET]) as (job, _):
+            job.params.dst.root_dataset = DST_DATASET
+            job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(1000, tz=timezone.utc)
+            job.dst_properties[DST_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=999)
+            alerts = job.params.monitor_snapshots_config.alerts
+            alert = alerts[0]
+            for kind, creation in [("Latest", 999), ("Oldest", 0)]:
+                label = self.monitor_cache_label(kind, alert.label, alerts)
+                path = job.cache.last_modified_cache_file(job.params.dst, DST_DATASET, label)
+                set_last_modification_time_safe(path, unixtime_in_secs=(creation, 999))
+
+            for held, expected in [(1, (0, "")), (0, (-CRITICAL_STATUS, "Oldest")), (1, (0, ""))]:
+                with self.subTest(held=held, expected=expected):
+                    rows = [
+                        f"{DST_DATASET}@org_onsite_stale_secondly\t1\t900\t{held}",
+                        f"{DST_DATASET}@org_onsite_fresh_secondly\t2\t999\t1",
+                    ]
+                    with (
+                        patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                        patch("time.time", return_value=2000),
+                        patch(
+                            "bzfs_main.bzfs.zfs_list_snapshots_in_parallel",
+                            side_effect=lambda _job, _remote, _cmd, datasets, _rows=rows, **_kwargs: (
+                                [_rows] if datasets else []
+                            ),
+                        ) as listing,
+                    ):
+                        result = job.monitor_snapshots(job.params.dst, [DST_DATASET])
+                    self.assertEqual(expected, result[:2])
+                    self.assertEqual([DST_DATASET], listing.call_args.args[3])
+            self.assertEqual(0, job.num_cache_hits)
+            self.assertEqual(3, job.num_cache_misses)
+
+    def test_monitor_hold_filter_preserves_unaffected_cache_hits(self) -> None:
+        """Keep cached alerts usable when hold filtering is off or the oldest check is disabled."""
+        cases = [
+            (False, [], (-CRITICAL_STATUS, "Oldest")),
+            (True, ["--monitor-snapshots-no-oldest-check"], (0, "")),
+        ]
+        for skip_holds, opts, expected in cases:
+            with self.subTest(skip_holds=skip_holds, opts=opts):
+                plan = {
+                    "org": {
+                        "onsite": {
+                            "secondly": {
+                                "latest": {"critical": "2 seconds"},
+                                "oldest": {"critical": "2 seconds", "oldest_skip_holds": skip_holds},
+                            }
+                        }
+                    }
+                }
+                with self.job_context(["--monitor-snapshots", str(plan), *opts, SRC_DATASET, DST_DATASET]) as (job, _):
+                    job.params.dst.root_dataset = DST_DATASET
+                    job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(1000, tz=timezone.utc)
+                    job.dst_properties[DST_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=999)
+                    alerts = job.params.monitor_snapshots_config.alerts
+                    for kind, creation in [("Latest", 999), ("Oldest", 900)]:
+                        label = self.monitor_cache_label(kind, alerts[0].label, alerts)
+                        path = job.cache.last_modified_cache_file(job.params.dst, DST_DATASET, label)
+                        set_last_modification_time_safe(path, unixtime_in_secs=(creation, 999))
+                    with (
+                        patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+                        patch("time.time", return_value=2000),
+                        patch("bzfs_main.bzfs.zfs_list_snapshots_in_parallel", return_value=[]) as listing,
+                    ):
+                        result = job.monitor_snapshots(job.params.dst, [DST_DATASET])
+                    self.assertEqual(expected, result[:2])
+                    self.assertEqual([], listing.call_args.args[3])
+                    self.assertEqual(1, job.num_cache_hits)
+                    self.assertEqual(0, job.num_cache_misses)
+
     def test_last_replicated_cache_must_be_monotonic(self) -> None:
         """Purpose: Prove the src-->dst "last replicated" cache (the src-side "==" marker keyed by user/host+dst+filters)
         never regresses even when an older job finishes after a newer job. This cache is a correctness accelerator for

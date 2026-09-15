@@ -8,6 +8,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs_jobrunner] fix: Don't skip job for a suspended local zpool.
 - [bzfs_jobrunner] fix: `--spawn-process-per-job`: A worker terminated for exceeding its timeout can be reported as
   successful.
+- [bzfs] feat: Skip monitoring alert for oldest snapshot when all matching snapshots are held and skipped.
 - [bzfs] docs: Improve installation instructions.
 - [bzfs] fix: Skip descendants when full replication fails.
 - [bzfs] fix: Simplify snapshot scheduling datetime math.

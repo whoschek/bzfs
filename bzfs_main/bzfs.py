@@ -1193,6 +1193,9 @@ class Job(MiniJob):
                     for cfg in (alert.latest, alert.oldest):
                         if cfg is None:
                             continue
+                        if cfg is alert.oldest and alert.oldest_skip_holds:
+                            is_stale_dataset = True  # `zfs hold` and `zfs release` do not update snapshots_changed
+                            continue
                         if (
                             snapshots_changed != 0
                             and snapshots_changed < time_threshold
@@ -1687,6 +1690,7 @@ class Job(MiniJob):
                         creation_unixtime_secs: int = 0  # find creation time of latest or oldest snapshot matching the label
                         minmax_snapshot: str = ""
                         no_skip_holds: bool = is_reverse or not fn_oldest_skip_holds[i]
+                        has_match: bool = False
                         for j in range(len(snapshot_names) - 1, -1, -1) if is_reverse else range(len(snapshot_names)):
                             snapshot_name: str = snapshot_names[j]
                             if (
@@ -1694,11 +1698,14 @@ class Job(MiniJob):
                                 and startswith(snapshot_name, start)  # aka snapshot_name.startswith(start)
                                 and len(snapshot_name) >= minlen
                                 and (has_infix or year_with_4_digits_regex_fullmatch(snapshot_name, startlen, startlen_4))
-                                and (no_skip_holds or snapshots[j][3])
                             ):
-                                creation_unixtime_secs = snapshots[j][1]
-                                minmax_snapshot = snapshot_name
-                                break
+                                has_match = True
+                                if no_skip_holds or snapshots[j][3]:
+                                    creation_unixtime_secs = snapshots[j][1]
+                                    minmax_snapshot = snapshot_name
+                                    break
+                        if (not no_skip_holds) and (not minmax_snapshot) and has_match:
+                            continue  # skip fn_oldest monitoring alert when all matching snapshots are held and skipped
                         fn(i, creation_unixtime_secs, dataset, minmax_snapshot)
                 fn_on_finish_dataset(dataset)
         datasets_without_snapshots = [dataset for dataset in sorted_datasets if dataset not in datasets_with_snapshots]
