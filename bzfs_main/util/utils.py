@@ -181,7 +181,7 @@ def sort_datasets_key(dataset: str) -> str:
 def sort_datasets(datasets: Iterable[str]) -> list[str]:
     """Sorts the given datasets such that the '/' ZFS dataset component separator sorts before any other character."""
     # perf: sorted() is fast because Powersort is close to O(N) for nearly sorted input, which is our case
-    return sorted(datasets, key=lambda dataset: sort_datasets_key(dataset))
+    return sorted(datasets, key=sort_datasets_key)
 
 
 def tail(file: str, *, n: int, errors: str | None = None) -> Sequence[str]:
