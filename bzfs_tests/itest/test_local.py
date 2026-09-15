@@ -4447,6 +4447,37 @@ class LocalTestCase(IntegrationTestCase):
                 expected_names.append("s3")
                 self.assert_dst_snapshots_have_src_bookmarks(expected_names)
 
+    def test_send_without_permission(self) -> None:
+        """Reject a delegated incremental send without send permission, then recover after granting it.
+
+        Run as a non-root user with explicit source permissions managed by the shared runner. Real ZFS commands verify failed
+        sends cannot advance replication state and restoring send permission allows replication to complete.
+        """
+        if os.geteuid() == 0:
+            self.skipTest("Root bypasses ZFS delegation permission checks")
+
+        src_dataset = create_filesystem(ibase.SRC_ROOT_DATASET, "nosend")
+        dst_dataset = ibase.DST_ROOT_DATASET + "/nosend"
+        args = [src_dataset, dst_dataset, "--zfs-send-program-opts=", "--pv-program=-"]
+        take_snapshot(src_dataset, fix("s1"))
+        self.run_bzfs(*args)
+        self.assert_snapshot_names(dst_dataset, ["s1"])
+
+        take_snapshot(src_dataset, fix("s2"))
+        take_snapshot(src_dataset, fix("s3"))
+        job = self.run_bzfs(*args, src_permissions="hold,bookmark,destroy", expected_status=DIE_STATUS)
+        log_text = Path(job.params.log_params.log_file).read_text(encoding="utf-8")
+        self.assertIn("Incremental send -I:", log_text)
+        for name in ("s2", "s3"):
+            self.assertIn(f"cannot send '{src_dataset}@{fix(name)}': permission denied", log_text)
+        self.assertIn(f"Cannot send {src_dataset}: permission denied", log_text)
+        self.assertEqual(0, job.num_snapshots_replicated)
+        self.assert_snapshot_names(dst_dataset, ["s1"])
+
+        job = self.run_bzfs(*args, src_permissions="send,hold,bookmark,destroy")
+        self.assertEqual(2, job.num_snapshots_replicated)
+        self.assert_snapshot_names(dst_dataset, ["s1", "s2", "s3"])
+
     def test_send_with_unloaded_key(self) -> None:
         """Reject a non-raw `zfs send` of an encrypted dataset with an unloaded source key, even when the `zfs receive`
         succeeds."""

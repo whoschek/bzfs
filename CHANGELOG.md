@@ -19,8 +19,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] fix: Validate `--{include/exclude}-dataset-regex` more strictly.
 - [bzfs] feat: `--create-src-snapshots-timeformat`: Reject missing `%Y` four digit year prefix when
   `--create-src-snapshots-plan` contains an empty target.
-- [bzfs] fix: Reject a non-raw `zfs send` of an encrypted dataset with an unloaded source key, even when the
-  `zfs receive` succeeds.
+- [bzfs] fix: Reject a non-raw `zfs send` of an encrypted dataset with an unloaded source key, when the `zfs receive`
+  succeeds. Also reject similar "cannot send '<dataset>': <reason>" cases where reason is one of ["source key must be
+  loaded", "permission denied", "Input/output error", "Invalid argument", "unsupported version or feature", "incremental
+  source (@<snapshot>) does not exist"], or equivalent, when `zfs receive` succeeds.
 - [bzfs] fix: `--compare-snapshot-lists`: Preserve dataset order with bookmarks even for a sibling dataset that has a
   name suffix that starts with a space.
 - [bzfs] fix: Honor `--exclude-dataset*` even with space, hyphen, or period.

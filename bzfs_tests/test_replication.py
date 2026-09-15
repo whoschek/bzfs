@@ -67,6 +67,7 @@ from bzfs_main.replication import (
     _prepare_zfs_send_receive,
     _pv_cmd,
     _recv_resume_token,
+    _run_zfs_send_receive,
     _sanitize_recv_opts_for_dataset_type,
     _zfs_get,
     _zfs_set,
@@ -378,6 +379,65 @@ class TestResumeErrorParsing(AbstractTestCase):
 ###############################################################################
 class TestReplication(AbstractTestCase):
     """Covers command builders and safety helpers in replication."""
+
+    def test_native_send_errors_with_successful_receive_are_retryable(self) -> None:
+        """Verify that replication rejects native `zfs send` errors despite a zero `zfs receive` exit code.
+
+        Mock the completed pipeline to exercise error handling without ZFS. Cover unterminated mbuffer progress before
+        diagnostics, single-line and multiline send failures, optional warning prefixes for quoted errors, multiple
+        diagnostics, CRLF, and an unterminated final line so reason capture stays independent of surrounding output.
+        """
+        mbuffer_status = "in @  0.0 kiB/s, out @  0.0 kiB/s, 20.0 MiB total, buffer 100% full"
+        cases = [
+            ("warning: cannot send 'pool/src@s2': ", "source key must be loaded", "\n"),
+            ("warning: cannot send 'pool/src@s2': ", "permission denied", "\n"),
+            (
+                "warning: cannot send 'pool/src@s2': ",
+                "Input/output error",
+                "\nwarning: cannot send 'pool/src@s3': Invalid argument\n",
+            ),
+            ("cannot send 'pool/src@s2': ", "Invalid argument", "\r\n"),
+            ("warning: cannot send 'pool/src@s2': ", "unsupported version or feature", ""),
+            ("cannot send 'pool/src@s2': ", "dataset key must be loaded", "\n"),
+            ("warning: cannot send 'pool/src@s2': ", "incremental source (@s1) does not exist", "\n"),
+            (mbuffer_status + "warning: cannot send 'pool/src@s2': ", "permission denied", "\n"),
+            (mbuffer_status + "cannot send 'pool/src@s2': ", "source key must be loaded", "\n"),
+            ("foo\n" + mbuffer_status + "cannot send 'pool/src@s2': ", "source key must be loaded", "\nfoo\n"),
+            ("WARNING: could not send pool/src@s3: ", "does not exist", "\n"),
+            ("WARNING: could not send pool/src@s3:\n", "incremental source (pool/src@s1) does not exist", "\n"),
+            ("WARNING: could not send pool/src@s3:\n", "incremental source (pool/src@s1) is not earlier than it", ""),
+            (
+                "WARNING: could not send pool/src child@daily: 12:00:\r\n",
+                "incremental source (pool/src child@daily: 11:00) does not exist",
+                "\r\n",
+            ),
+            ("WARNING: could not send pool/src child@daily: 12:00: ", "does not exist", ""),
+            (mbuffer_status + "WARNING: could not send pool/src/child@s3: ", "does not exist", "\n"),
+            (
+                mbuffer_status + "WARNING: could not send pool/src@s3:\n",
+                "incremental source (pool/src@s1) does not exist",
+                "\nWARNING: could not send pool/src@s4: does not exist\n",
+            ),
+        ]
+        pipeline = "zfs send -I pool/src@s1 pool/src@s3 | zfs receive pool/dst"
+        for prefix, reason, suffix in cases:
+            with self.subTest(prefix=prefix, reason=reason):
+                job = _make_job(r2r_mode="off", shell_program_local="sh")
+                job.timeout_nanos = None
+                stderr = f"TIME        SENT   SNAPSHOT\n{prefix}{reason}{suffix}"
+                job.subprocesses.subprocess_run.return_value = subprocess.CompletedProcess(
+                    ["sh", "-c", pipeline], 0, stdout="", stderr=stderr
+                )
+                with (
+                    patch("bzfs_main.replication._prepare_zfs_send_receive", return_value=pipeline),
+                    self.assertRaises(RetryableError) as raised,
+                ):
+                    _run_zfs_send_receive(job, "pool/src", "pool/dst", [], [], 0, "0B", False)
+                self.assertEqual("zfs send", raised.exception.display_msg)
+                self.assertIsInstance(raised.exception.__cause__, RuntimeError)
+                self.assertEqual(f"Cannot send pool/src: {reason}", str(raised.exception.__cause__))
+                self.assertFalse(raised.exception.retry_immediately_once)
+                job.subprocesses.subprocess_run.assert_called_once()
 
     def test_missing_snapshots_only_release_safe_descendants(self) -> None:
         """Checks recursive scheduling after a parent's source snapshots have been pruned.
