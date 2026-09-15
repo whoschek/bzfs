@@ -136,6 +136,7 @@ class ParallelTaskTree:
             [int, str, int], int
         ] = lambda last_update_nanos, dataset, submit_count: 0,  # optionally spread tasks out over time; e.g. for jitter
         timing: TaskTiming = TaskTiming(),  # noqa: B008
+        component_separator: str = COMPONENT_SEPARATOR,
         enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
         barrier_name: str = BARRIER_CHAR,
         is_test_mode: bool = False,
@@ -205,26 +206,30 @@ class ParallelTaskTree:
           jitter/back-pressure control; arguments are ``(last_update_nanos, dataset, submit_count)``
         - max_workers: Maximum number of parallel worker threads
         - executors: Factory returning an Executor to submit tasks to; None means 'auto-choose'
+        - component_separator: String that separates dataset components (default '/'); must be non-empty
         - enable_barriers: Force enable/disable barrier algorithm (None = auto-detect)
         - barrier_name: Directory name that denotes a barrier within dataset/job strings (default '~'); must be non-empty and
-          not contain '/'
+          not contain the component_separator
         - timing: Optionally request early async termination; stops new submissions and cancels in-flight tasks
         """
         assert log is not None
         assert (not is_test_mode) or datasets == sorted(datasets), "List is not sorted"
         assert (not is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
-        if COMPONENT_SEPARATOR in barrier_name or not barrier_name:
+        if not component_separator:
+            raise ValueError(f"Invalid component_separator: {component_separator}")
+        if component_separator in barrier_name or not barrier_name:
             raise ValueError(f"Invalid barrier_name: {barrier_name}")
         for dataset in datasets:
-            if dataset.startswith(COMPONENT_SEPARATOR) or not dataset:
+            if dataset.startswith(component_separator) or not dataset:
                 raise ValueError(f"Invalid dataset name: {dataset}")
         assert callable(process_dataset)
         assert callable(priority)
         assert max_workers > 0
         assert callable(interval_nanos)
-        has_barrier: Final[bool] = any(barrier_name in dataset.split(COMPONENT_SEPARATOR) for dataset in datasets)
+        has_barrier: Final[bool] = any(barrier_name in dataset.split(component_separator) for dataset in datasets)
         assert (enable_barriers is not False) or not has_barrier, "Barrier seen in datasets but barriers explicitly disabled"
 
+        self._component_separator: Final[str] = component_separator
         self._barriers_enabled: Final[bool] = has_barrier or bool(enable_barriers)
         self._barrier_name: Final[str] = barrier_name
         self._log: Final[logging.Logger] = log
@@ -236,7 +241,7 @@ class ParallelTaskTree:
         self._timing: Final[TaskTiming] = timing
         self._is_test_mode: Final[bool] = is_test_mode
         self._priority_queue: Final[list[_TreeNode]] = []
-        tree, has_siblings = _build_dataset_tree(datasets)  # tree consists of nested dictionaries and is immutable
+        tree, has_siblings = _build_dataset_tree(datasets, component_separator)  # tree is nested dicts and is immutable
         self._tree: Final[_Tree] = tree
         self._has_siblings: Final[bool] = has_siblings
         self._empty_barrier: Final[_TreeNode] = _make_tree_node("empty_barrier", "empty_barrier", {})  # immutable!
@@ -429,7 +434,7 @@ class ParallelTaskTree:
 
     def _join_dataset(self, parent: str, child: str) -> str:
         """Concatenates parent and child dataset names; accommodates synthetic root node; interns for memory footprint."""
-        return self._datasets_set.interned(f"{parent}{COMPONENT_SEPARATOR}{child}" if parent else child)
+        return self._datasets_set.interned(f"{parent}{self._component_separator}{child}" if parent else child)
 
 
 #############################################################################
@@ -471,9 +476,10 @@ def _make_tree_node(priority: Comparable, dataset: str, children: _Tree, parent:
 _Tree = dict[str, "_Tree"]  # Type alias
 
 
-def _build_dataset_tree(sorted_datasets: list[str]) -> tuple[_Tree, bool]:
+def _build_dataset_tree(sorted_datasets: list[str], component_separator: str) -> tuple[_Tree, bool]:
     """Takes as input a sorted list of datasets and returns a (reverse) sorted directory tree containing the same dataset
     names, in the form of nested dicts; This converts the dataset list into a dependency tree."""
+    assert component_separator
     tree: _Tree = {}
     has_siblings: bool = False
     interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint
@@ -481,7 +487,7 @@ def _build_dataset_tree(sorted_datasets: list[str]) -> tuple[_Tree, bool]:
 
     for dataset in reversed(sorted_datasets):
         current: _Tree = tree
-        components: list[str] = dataset.split(COMPONENT_SEPARATOR)
+        components: list[str] = dataset.split(component_separator)
         k: int = len(components) - 1
         for i, component in enumerate(components):
             child: _Tree | None = current.get(component)
