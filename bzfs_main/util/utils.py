@@ -585,6 +585,8 @@ def compile_regexes(regexes: list[str], *, suffix: str = "") -> RegexList:
                 regex = regex[0:-1]  # ok because all users of compile_regexes() call re.fullmatch()
             if "$" in regex.removesuffix("\\$"):
                 raise re.error("Must not use non-trailing '$' character", original)
+            if "\\z" in regex or "\\Z" in regex:
+                raise re.error("Must not use  '\\z' or '\\Z' character", original)
         if is_negation := regex.startswith("!"):
             regex = regex[1:]
         regex = replace_capturing_groups_with_non_capturing_groups(regex)

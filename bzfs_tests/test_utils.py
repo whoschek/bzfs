@@ -330,6 +330,10 @@ class TestHelperFunctions(unittest.TestCase):
         assert_full_match("foo", "!foo")
         with self.assertRaises(re.error):
             compile_regexes(["fo$o"], suffix=re_suffix)
+        with self.assertRaises(re.error):
+            compile_regexes([r"foo\z"], suffix=re_suffix)
+        with self.assertRaises(re.error):
+            compile_regexes([r"foo\Z"], suffix=re_suffix)
 
         for text in ["bar", "bar/", "foo", "foo/"]:
             with self.subTest(text=text):
