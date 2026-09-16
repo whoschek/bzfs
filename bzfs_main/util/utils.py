@@ -556,14 +556,14 @@ def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexLis
     A regex that starts with a `!` is a negation - the regex matches if the regex without the `!` prefix does not match.
     """
     for regex, is_negation in exclude_regexes:
-        is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
+        is_match = regex.fullmatch(name) is not None
         if is_negation:
             is_match = not is_match
         if is_match:
             return False
 
     for regex, is_negation in include_regexes:
-        is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
+        is_match = regex.fullmatch(name) is not None
         if is_negation:
             is_match = not is_match
         if is_match:

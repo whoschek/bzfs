@@ -306,19 +306,21 @@ def _filter_snapshots_by_creation_time_and_rank(
             if (not filter_bookmarks) and not is_snapshot:
                 continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
             else:
-                msg = None
+                msg = ""
                 if is_snapshot and lo <= i < hi:
                     msg = "Including b/c snapshot rank: %s"
                 elif lo_time <= int(snapshot[: snapshot.index("\t")]) < hi_time:
                     msg = "Including b/c creation time: %s"
                 if msg:
                     results.append(snapshot)
-                    k += 1 if is_snapshot else 0
+                    if is_snapshot:
+                        k += 1
                 else:
                     msg = "Excluding b/c snapshot rank: %s"
                 if is_debug:
                     log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
-                i += 1 if is_snapshot else 0
+                if is_snapshot:
+                    i += 1
         snapshots = results
         n = k
     return snapshots

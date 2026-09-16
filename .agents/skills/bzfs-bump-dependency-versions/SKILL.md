@@ -22,7 +22,7 @@ Rules:
 - Only consider stable releases. Ignore release candidates, prereleases, alpha and beta releases.
 - Respect the cooldown period defined in `preinstall_dev.sh`. A cooldown period of N days implies that a newer version
   must be at least N days old (the release is well known at this point), AND no higher version was released in the N
-  days after that (the release had no teething issues requiring an emergency patch release)
+  days after that (the release had no teething issues requiring an emergency patch release).
 - Check if the version is compatible.
 - Critical: If a relevant new version passes the filters above, evaluate its supply chain risk (including transitive
   dependency updates). Never blindly update just because you can.

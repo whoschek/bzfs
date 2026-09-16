@@ -340,8 +340,8 @@ sudo apt-get -y install zfsutils-linux python3  # ensure zfs and python are inst
 sudo apt-get -y install zstd pv mbuffer         # auxiliary helpers are optional
 
 # RHEL / EL, AlmaLinux, Rocky:
-sudo dnf -y install epel-release
-sudo dnf -y install zstd pv mbuffer --enablerepo=epel
+sudo dnf -y install epel-release                       # auxiliary helpers are optional
+sudo dnf -y install zstd pv mbuffer --enablerepo=epel  # auxiliary helpers are optional
 
 # FreeBSD:
 pkg install -y python3 bash

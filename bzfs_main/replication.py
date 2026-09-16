@@ -1074,9 +1074,9 @@ def is_inconsistent(job: Job, remote: Remote, dataset: str) -> bool:
     p = job.params
     cmd: list[str] = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o inconsistent", dataset)
     try:
-        return job.run_ssh_command(remote, LOG_DEBUG, cmd=cmd).rstrip() != "0"
+        return job.run_ssh_command(remote, LOG_TRACE, cmd=cmd).rstrip() != "0"
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-        raise RetryableError(display_msg="zfs list inconsistent") from e
+        raise RetryableError(display_msg="zfs list -o inconsistent") from e
 
 
 def delete_snapshots(job: Job, remote: Remote, dataset: str, snapshot_tags: list[str]) -> None:
