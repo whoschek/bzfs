@@ -478,7 +478,7 @@ def is_descendant(dataset: str, of_root_dataset: str) -> bool:
     return dataset == of_root_dataset or dataset.startswith(of_root_dataset + "/")
 
 
-def has_prefix(sorted_strings: list[str], prefix: str, is_test_mode: bool = False) -> bool:
+def has_prefix(sorted_strings: list[str], prefix: str, *, is_test_mode: bool = False) -> bool:
     """Returns whether any string in lexicographically sorted_strings starts with the given prefix."""
     assert (not is_test_mode) or sorted_strings == sorted(sorted_strings), "List is not sorted"
     i = bisect.bisect_left(sorted_strings, prefix)
