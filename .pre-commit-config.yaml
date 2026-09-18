@@ -134,6 +134,8 @@ repos:
         args:
           - --shellcheck=tools/shellcheck
           - '-ignore=^label "ubuntu-26\.04" is unknown\.'  # ignore false error for now, until actionlint catches up
+          # actionlint lacks self-repository syntax support for now: https://github.com/rhysd/actionlint/issues/711
+          - '-ignore=^specifying action "\$/\.github/actions/(common|coverage-upload|pre-commit|print-versions|test-almalinux-lima)" in invalid format because ref is missing\.'
   # - repo: https://github.com/woodruffw/zizmor-pre-commit  # also see https://github.com/zizmorcore/zizmor
   #   rev: 9257c6050c0261b8c57e712f632dc4a8010109a9  # aka v1.25.2
   #   hooks:
