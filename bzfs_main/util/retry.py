@@ -349,7 +349,7 @@ def call_with_retries(
                     sleep_nanos, curr_max_sleep_nanos = backoff(  # compute delay before next retry attempt, after failure
                         BackoffContext(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)
                     )
-                    assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, sleep_nanos
+                    assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, (sleep_nanos, curr_max_sleep_nanos)
 
                 if sleep_nanos > 0:
                     outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
@@ -438,7 +438,7 @@ async def call_with_retries_async(
                     sleep_nanos, curr_max_sleep_nanos = backoff(  # compute delay before next retry attempt, after failure
                         BackoffContext(retry, curr_max_sleep_nanos, rng, elapsed_nanos, retryable_error)
                     )
-                    assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, sleep_nanos
+                    assert sleep_nanos >= 0 and curr_max_sleep_nanos >= 0, (sleep_nanos, curr_max_sleep_nanos)
 
                 if sleep_nanos > 0:
                     outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
