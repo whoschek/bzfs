@@ -22,7 +22,8 @@ Purpose:
   the risk of retrying non-idempotent operations.
 - Provide a thread-safe, fast implementation; avoid shared RNG contention.
 - Provide both sync and async API, both with the same semantics, except the async API awaits ``fn``, awaitable
-  ``before_attempt`` / ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` results, and non-blocking sleep.
+  ``before_attempt`` / ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion``  / ``giveup`` results, and non-blocking
+  sleep.
 - Avoid unnecessary complexity and add zero dependencies beyond the Python standard library. Everything you need is in this
   single Python file.
 
@@ -382,7 +383,7 @@ async def call_with_retries_async(
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
     backoff: BackoffStrategy = full_jitter_backoff_strategy,  # computes delay time before next retry attempt, after failure
-    giveup: Callable[[AttemptOutcome], object | None] = no_giveup,  # stop retrying based on domain-specific logic, e.g. time
+    giveup: Callable[[AttemptOutcome], object | Awaitable] = no_giveup,  # stop retrying based on custom logic, e.g. time
     before_attempt: Callable[[Retry], int | Awaitable[int]] = before_attempt_noop,  # e.g rate limiting/internal backpressure
     after_attempt: Callable[[AttemptOutcome], Awaitable[None] | None] = after_attempt_log_failure,  # e.g. metrics/logging
     on_retryable_error: Callable[[AttemptOutcome], Awaitable[None] | None] = noop,  # e.g. count RetryableError failures
@@ -390,8 +391,8 @@ async def call_with_retries_async(
     log: logging.Logger | None = None,  # set this to ``None`` to disable logging
 ) -> _T:
     """Async version of call_with_retries() with the same semantics except it awaits ``fn``, awaitable ``before_attempt`` /
-    ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` results and non-blocking sleep. Note that ``backoff``,
-    ``giveup``, and ``RetryTiming.is_terminated`` are not async as they are intentionally fast **synchronous** decisions;
+    ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` / ``giveup`` results and non-blocking sleep. Note that
+    ``backoff``, and ``RetryTiming.is_terminated`` are not async as they are intentionally fast **synchronous** decisions;
     they must not block."""
     rng: random.Random | None = None
     retry_count: int = 0
@@ -442,7 +443,7 @@ async def call_with_retries_async(
 
                 if sleep_nanos > 0:
                     outcome = AttemptOutcome(retry, False, False, False, None, elapsed_nanos, sleep_nanos, retryable_error)
-                if (not is_terminated(retry)) and (giveup_reason := giveup(outcome)) is None:
+                if (not is_terminated(retry)) and (giveup_reason := await _await_result(giveup(outcome))) is None:
                     await _await_result(after_attempt(outcome))
                     await sleep(sleep_nanos, retry)
                     idle_nanos += sleep_nanos
@@ -1090,14 +1091,14 @@ class RetryTemplate(Generic[_T]):
 @final
 class AsyncRetryTemplate(Generic[_T]):
     """Async version of ``RetryTemplate`` with the same semantics except it awaits ``fn``, awaitable ``before_attempt`` /
-    ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` results and non-blocking sleep. Note that ``backoff``,
-    ``giveup``, and ``RetryTiming.is_terminated`` are not async as they are intentionally fast **synchronous** decisions;
+    ``after_attempt`` / ``on_retryable_error`` / ``on_exhaustion`` / ``giveup`` results and non-blocking sleep. Note that
+    ``backoff``, and ``RetryTiming.is_terminated`` are not async as they are intentionally fast **synchronous** decisions;
     they must not block."""
 
     fn: Callable[[Retry], Awaitable[_T]] = _fn_not_implemented  # set this to make the RetryTemplate object itself callable
     policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
     backoff: BackoffStrategy = full_jitter_backoff_strategy  # computes delay time before next retry attempt, after failure
-    giveup: Callable[[AttemptOutcome], object | None] = no_giveup  # stop retrying based on domain-specific logic, e.g. time
+    giveup: Callable[[AttemptOutcome], object | Awaitable] = no_giveup  # stop retrying based on custom logic, e.g. time
     before_attempt: Callable[[Retry], int | Awaitable[int]] = before_attempt_noop  # e.g. rate limiting/internal backpressure
     after_attempt: Callable[[AttemptOutcome], Awaitable[None] | None] = after_attempt_log_failure  # e.g. metrics/logging
     on_retryable_error: Callable[[AttemptOutcome], Awaitable[None] | None] = noop  # e.g. count RetryableError failures
@@ -1134,7 +1135,7 @@ class AsyncRetryTemplate(Generic[_T]):
         policy: RetryPolicy | None = None,
         *,
         backoff: BackoffStrategy | None = None,
-        giveup: Callable[[AttemptOutcome], object | None] | None = None,
+        giveup: Callable[[AttemptOutcome], object | Awaitable] | None = None,
         before_attempt: Callable[[Retry], int | Awaitable[int]] | None = None,
         after_attempt: Callable[[AttemptOutcome], Awaitable[None] | None] | None = None,
         on_retryable_error: Callable[[AttemptOutcome], Awaitable[None] | None] | None = None,
