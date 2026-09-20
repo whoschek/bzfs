@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.25.0] - Not yet released
+## [1.25.0] - September 20, 2026
 
 - [bzfs_jobrunner] feat: Monitor source and destination snapshots independently.
 - [bzfs_jobrunner] fix: Don't skip job for a suspended local zpool.
@@ -32,6 +32,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] fix: `--{include/exclude}-dataset-regex`: Retain semantics of regex alternations.
 - [bzfs] Also run nightly CI tests on zfs-2.4.4, zfs-2.3.9 and zfs-2.2.11.
 - [bzfs] Various small improvements to the test VM and test infra.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.24.0...v1.25.0
 
 ## [1.24.0] - August 11, 2026
 
