@@ -22,6 +22,9 @@ import logging
 import random
 import time
 import unittest
+from collections import (
+    defaultdict,
+)
 from collections.abc import (
     Iterable,
     Mapping,
@@ -31,6 +34,7 @@ from enum import (
     auto,
 )
 from typing import (
+    Any,
     Callable,
     Final,
     TypeVar,
@@ -59,6 +63,7 @@ from bzfs_main.util.retry import (
 #############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
+        TestGiveupExamples,
         TestMiscBackoffStrategies,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
@@ -270,6 +275,109 @@ class RetryableErrorCategory(Enum):
     THROTTLING = auto()
     TRANSIENT = auto()
     OTHER = auto()
+
+
+def category_giveup(
+    *, max_retries: dict[Any, int] | None = None, max_elapsed_nanos: dict[Any, int] | None = None
+) -> Callable[[AttemptOutcome], object | None]:
+    """Returns a giveup function that enforces per-category retry and duration budgets.
+
+    Gives up if the maximum number of retries of any error category is exceeded, or the maximum duration of any error
+    category is exceeded. Supply a fresh copy of counters for each call_with_retries() invocation.
+    """
+
+    def _giveup(outcome: AttemptOutcome) -> object:
+        assert isinstance(outcome.result, RetryableError)
+        category: object = outcome.result.category
+        if max_retries is not None:
+            max_retries[category] -= 1
+            if max_retries[category] < 0:
+                return f"exceeded {category}"
+        if max_elapsed_nanos is not None:
+            max_elapsed_nanos[category] -= outcome.attempt_elapsed_nanos() + outcome.sleep_nanos
+            if max_elapsed_nanos[category] < 0:
+                return f"exceeded {category}"
+        return None  # don't give up retrying
+
+    return _giveup
+
+
+#############################################################################
+MAX_ELAPSED_NANOS_FACTORY: Final[Callable[[], dict[RetryableErrorCategory | None, int]]] = {
+    RetryableErrorCategory.CONCURRENCY: 1 * 1_000_000_000,
+    RetryableErrorCategory.SERVER_ISSUE: 1 * 1_000_000_000,
+    RetryableErrorCategory.THROTTLING: 1 * 1_000_000_000,
+    RetryableErrorCategory.TRANSIENT: 5 * 1_000_000_000,
+    RetryableErrorCategory.OTHER: 0 * 1_000_000_000,
+    None: 0,
+}.copy
+
+
+class TestGiveupExamples(unittest.TestCase):
+
+    def test_category_giveup(self) -> None:
+
+        def unreliable_operation(retry: Retry) -> str:
+            if retry.count < 3:
+                raise RetryableError(
+                    display_msg="temporary failure connecting to foo.example.com",
+                    category=RetryableErrorCategory.TRANSIENT,
+                ) from ValueError("oops")
+            return "ok"
+
+        retry_policy = RetryPolicy(
+            max_sleep_secs=60,
+            max_elapsed_secs=600,
+        )
+        log = logging.getLogger(__name__)
+        actual: str = call_with_retries(
+            fn=unreliable_operation,
+            policy=retry_policy,
+            backoff=backoff_from_classifier(
+                classifier=lambda backoff_context: backoff_context.retryable_error.category,
+                strategies={
+                    RetryableErrorCategory.THROTTLING: retry_after_or_fallback_strategy(),
+                    RetryableErrorCategory.TRANSIENT: full_jitter_backoff_strategy,
+                    RetryableErrorCategory.OTHER: lambda backoff_context: random_backoff_strategy(backoff_context),
+                },
+                fallback=full_jitter_backoff_strategy,
+            ),
+            giveup=category_giveup(
+                max_retries={
+                    RetryableErrorCategory.CONCURRENCY: 1,
+                    RetryableErrorCategory.SERVER_ISSUE: 1,
+                    RetryableErrorCategory.THROTTLING: 1,
+                    RetryableErrorCategory.TRANSIENT: 5,
+                    RetryableErrorCategory.OTHER: 0,
+                    None: 0,
+                },
+                max_elapsed_nanos=MAX_ELAPSED_NANOS_FACTORY(),
+            ),
+            log=log,
+        )
+        self.assertEqual("ok", actual)
+
+        with self.assertRaises(ValueError) as cm:
+            _result: str = call_with_retries(
+                fn=unreliable_operation,
+                policy=retry_policy,
+                giveup=category_giveup(
+                    max_retries=defaultdict(
+                        int,
+                        {
+                            RetryableErrorCategory.TRANSIENT: 1,
+                        },
+                    ),
+                    max_elapsed_nanos=defaultdict(
+                        int,
+                        {
+                            RetryableErrorCategory.TRANSIENT: 1 * 1_000_000_000,
+                        },
+                    ),
+                ),
+                log=log,
+            )
+        self.assertIn("oops", cm.exception.args)
 
 
 #############################################################################
