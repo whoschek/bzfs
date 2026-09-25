@@ -21,15 +21,14 @@ import asyncio
 import functools
 import logging
 import pickle
+import sys
 import unittest
 from collections.abc import (
     Awaitable,
 )
-from contextlib import (
-    suppress,
-)
 from typing import (
     Callable,
+    NoReturn,
     TypeVar,
 )
 from unittest.mock import (
@@ -51,6 +50,7 @@ from bzfs_main.util.retry import (
     before_attempt_noop,
     call_with_retries_async,
     multi_after_attempt_async,
+    raise_retryable_error_from,
 )
 
 
@@ -60,6 +60,7 @@ def suite() -> unittest.TestSuite:
         TestAsyncCallWithRetries,
         TestAsyncRetryTemplateCall,
         TestAsyncRetryTemplateWraps,
+        TestAsyncioAwaitWithRetryableTimeout,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -68,36 +69,45 @@ def suite() -> unittest.TestSuite:
 _T = TypeVar("_T")
 
 
-async def asyncio_await_with_timeout(awaitable: Awaitable[_T], timeout_nanos: int, *, display_msg: object = "timeout") -> _T:
-    """Convenience function that awaits an awaitable with a hard timeout; on timeout raises RetryableError.
+async def asyncio_await_with_retryable_timeout(
+    awaitable: Awaitable[_T],
+    timeout_nanos: int,
+    *,
+    reraise_timeout_error: bool = True,
+    raise_retryable_error: Callable[[TimeoutError], NoReturn] = lambda exc: raise_retryable_error_from(
+        exc, display_msg="timeout"
+    ),
+) -> _T:
+    """Await an awaitable (for example a coroutine), translating successful cancellation on timeout into RetryableError while
+    preserving the awaitable's results and errors, including its own TimeoutError if `reraise_timeout_error == True`;
+    assumes cooperative cancellation and that retrying on timeout is appropriate.
 
-    Assumes awaitable handles cancellation (CancelledError) correctly.
+    The semantics are intended for cooperative, per-attempt timeouts for work the caller knows is safe to retry. For example
+    reads, idempotent writes, requests with deduplication keys, and operations with explicit reconciliation or recovery.
+
+    Requires Python >= 3.11.
+    Cancellation is cooperative; the awaitable may exceed the timeout while running or performing cleanup.
+    Zero and negative `timeout_nanos` still permit work to start, consistent with asyncio's scheduling semantics.
+    Direct coroutines run in the caller's task; supplied tasks may already be running and retain their own task identity.
+
+    reraise_timeout_error=False treats all directly raised TimeoutErrors as retryable.
+    For example, with timeout_nanos=2_000_000_000, if the `awaitable` internally raises TimeoutError after one second:
+    - reraise_timeout_error=False: raises RetryableError to enable convenient automatic retry.
+    - reraise_timeout_error=True: propagates the original TimeoutError so callers can handle it in custom ways.
     """
-    import asyncio
-
-    if timeout_nanos < 0:
-        raise ValueError(f"Invalid timeout_nanos: must be >= 0 but got {timeout_nanos}")
-    if timeout_nanos == 0:
-        raise RetryableError(display_msg=display_msg) from TimeoutError("Async operation timed out")
-
-    task: asyncio.Future[_T] = asyncio.ensure_future(awaitable)
+    reraise: bool = False
     try:
-        done, pending = await asyncio.wait({task}, timeout=timeout_nanos / 1_000_000_000)
-        if task in done:
-            return task.result()
-        assert task in pending
-        task.cancel()
-        with suppress(asyncio.CancelledError, Exception):
-            await task
-        raise RetryableError(display_msg=display_msg) from TimeoutError(
-            f"Async operation timed out after {timeout_nanos / 1_000_000_000}s"
-        )
-    except BaseException:
-        if not task.done():
-            task.cancel()
-            with suppress(asyncio.CancelledError, Exception):
-                await task
-        raise
+        async with asyncio.timeout(timeout_nanos / 1_000_000_000):  # type: ignore[attr-defined]  # requires Python >= 3.11
+            try:
+                return await awaitable
+            except TimeoutError:
+                reraise = reraise_timeout_error
+                raise
+    except TimeoutError as exc:
+        if reraise:
+            raise
+        else:
+            raise_retryable_error(exc)
 
 
 #############################################################################
@@ -1158,47 +1168,6 @@ class TestAsyncCallWithRetries(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(outcomes[0].is_success)
             self.assertIsNone(outcomes[0].retry.log)
 
-    async def test_await_with_timeout_success_and_timeout(self) -> None:
-        loop = asyncio.get_running_loop()
-
-        with self.subTest("success"):
-
-            async def immediate() -> str:
-                return "ok"
-
-            actual = await asyncio_await_with_timeout(immediate(), timeout_nanos=1_000_000_000)
-            self.assertEqual("ok", actual)
-
-        with self.subTest("timeout"):
-            cancelled = asyncio.Event()
-
-            async def long_running() -> None:
-                try:
-                    await asyncio.sleep(1)
-                except asyncio.CancelledError:
-                    cancelled.set()
-                    raise
-
-            with self.assertRaises(RetryableError) as exc:
-                await asyncio_await_with_timeout(long_running(), timeout_nanos=50_000_000, display_msg="connect")
-            self.assertEqual("connect", exc.exception.display_msg)
-            self.assertIsInstance(exc.exception.__cause__, TimeoutError)
-            self.assertTrue(cancelled.is_set())
-
-        with self.subTest("invalid_timeout"):
-            fut: asyncio.Future[None] = loop.create_future()
-            fut.set_result(None)
-            with self.assertRaises(ValueError):
-                await asyncio_await_with_timeout(fut, timeout_nanos=-1)
-
-        with self.subTest("zero_timeout"):
-            fut2: asyncio.Future[str] = loop.create_future()
-            fut2.set_result("ok")
-            with self.assertRaises(RetryableError) as exc2:
-                await asyncio_await_with_timeout(fut2, timeout_nanos=0, display_msg="connect")
-            self.assertEqual("connect", exc2.exception.display_msg)
-            self.assertIsInstance(exc2.exception.__cause__, TimeoutError)
-
     async def test_make_from_asyncio_none_returns_default_timing(self) -> None:
         sleep_nanos = 456_000_000
         expected_secs = sleep_nanos / 1_000_000_000
@@ -1624,3 +1593,241 @@ class TestAsyncRetryTemplateWraps(unittest.IsolatedAsyncioTestCase):
         actual: int = await wrapped()
         self.assertEqual(10, actual)
         self.assertEqual([(0, 5), (1, 5)], calls)
+
+
+#############################################################################
+@unittest.skipIf(sys.version_info < (3, 11), "Requires asyncio.timeout() (Python >= 3.11)")
+class TestAsyncioAwaitWithRetryableTimeout(unittest.IsolatedAsyncioTestCase):
+    """Test retryable timeouts on Python 3.11+ with cooperative awaitables and isolated event loops, separating helper
+    behavior from retry-loop coverage."""
+
+    async def test_await_with_timeout_runs_in_caller_task(self) -> None:
+        """Require a directly supplied coroutine to share the caller's task across suspension, avoiding child-task scheduling."""
+        caller = asyncio.current_task()
+
+        async def operation() -> str:
+            self.assertIs(caller, asyncio.current_task())
+            await asyncio.sleep(0)
+            self.assertIs(caller, asyncio.current_task())
+            return "ok"
+
+        loop = asyncio.get_running_loop()
+        with patch.object(loop, "time", return_value=loop.time()):
+            actual = await asyncio_await_with_retryable_timeout(operation(), timeout_nanos=1_000_000_000)
+        self.assertEqual("ok", actual)
+
+    async def test_await_with_timeout_success_and_timeout(self) -> None:
+        """Verify success, cooperative cancellation and fresh default errors for positive and nonpositive budgets. Freeze
+        the loop clock and advance it inside the operation so deadlines do not race with startup."""
+        loop = asyncio.get_running_loop()
+        errors: list[RetryableError] = []
+
+        async def immediate() -> str:
+            return "ok"
+
+        for timeout_nanos in (1_000_000_000, 0, -1):
+            with (
+                self.subTest(timeout_nanos=timeout_nanos),
+                patch.object(loop, "time", return_value=loop.time()) as clock,
+            ):
+                with self.subTest("success"):
+                    actual = await asyncio_await_with_retryable_timeout(immediate(), timeout_nanos=timeout_nanos)
+                    self.assertEqual("ok", actual)
+
+                with self.subTest("timeout"):
+                    cancelled = asyncio.Event()
+
+                    async def long_running(cancelled_event: asyncio.Event) -> None:
+                        try:
+                            clock.return_value += 2
+                            await asyncio.Event().wait()  # wait forever until cancellation
+                        except asyncio.CancelledError:
+                            cancelled_event.set()
+                            raise
+                        raise AssertionError("unreachable")
+
+                    with self.assertRaises(RetryableError) as exc:
+                        await asyncio_await_with_retryable_timeout(long_running(cancelled), timeout_nanos=timeout_nanos)
+                    errors.append(exc.exception)
+                    self.assertEqual("timeout", exc.exception.display_msg)
+                    self.assertIsInstance(exc.exception.__cause__, TimeoutError)
+                    self.assertTrue(cancelled.is_set())
+        self.assertEqual(3, len({id(error) for error in errors}))
+
+    async def test_await_with_timeout_skips_handler_for_completed_future(self) -> None:
+        """Avoid invoking the handler for completed results or propagated errors; completed futures isolate conversion
+        from timeout scheduling without leaving unawaited coroutines on failure."""
+        raise_retryable_error = MagicMock(side_effect=AssertionError("raise_retryable_error must not be called"))
+        for error in (None, TimeoutError("operation"), ValueError("operation"), asyncio.CancelledError("operation")):
+            with self.subTest(error=error):
+                future: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+                if error is None:
+                    future.set_result("ok")
+                    actual = await asyncio_await_with_retryable_timeout(
+                        future, timeout_nanos=0, raise_retryable_error=raise_retryable_error
+                    )
+                    self.assertEqual("ok", actual)
+                else:
+                    future.set_exception(error)
+                    with self.assertRaises(type(error)) as exc:
+                        await asyncio_await_with_retryable_timeout(
+                            future, timeout_nanos=0, raise_retryable_error=raise_retryable_error
+                        )
+                    self.assertIs(error, exc.exception)
+        raise_retryable_error.assert_not_called()
+
+    async def test_await_with_timeout_preserves_completed_result_after_deadline(self) -> None:
+        """Keep authoritative results when synchronous work exceeds the deadline, using a frozen loop clock for determinism."""
+        loop = asyncio.get_running_loop()
+
+        async def operation() -> str:
+            clock.return_value += 2
+            return "committed"
+
+        with patch.object(loop, "time", return_value=loop.time()) as clock:
+            actual = await asyncio_await_with_retryable_timeout(operation(), timeout_nanos=1_000_000_000)
+        self.assertEqual("committed", actual)
+
+    async def test_await_with_timeout_propagates_operation_errors(self) -> None:
+        """Preserve operation exception identity; cancellation must propagate but asyncio may reconstruct its exception."""
+
+        async def fail(error: BaseException) -> None:
+            raise error
+
+        for error in (
+            TimeoutError("operation"),
+            ValueError("operation"),
+            asyncio.CancelledError("operation"),
+        ):
+            with self.subTest(error=error):
+                with self.assertRaises(type(error)) as exc:
+                    await asyncio_await_with_retryable_timeout(fail(error), timeout_nanos=1_000_000_000)
+                if not isinstance(error, asyncio.CancelledError):
+                    self.assertIs(error, exc.exception)
+
+    async def test_await_with_timeout_wraps_operation_timeout_when_requested(self) -> None:
+        """Verify opting in invokes the handler once for an operation's TimeoutError and preserves its cause; fail before
+        suspension to isolate conversion from timeout scheduling."""
+        error = TimeoutError("operation")
+        expected_error = RetryableError(display_msg="connect")
+
+        def raise_error(exc: TimeoutError) -> NoReturn:
+            raise expected_error from exc
+
+        raise_retryable_error = MagicMock(side_effect=raise_error)
+
+        async def fail() -> None:
+            raise error
+
+        with self.assertRaises(RetryableError) as exc:
+            await asyncio_await_with_retryable_timeout(
+                fail(), timeout_nanos=1_000_000_000, reraise_timeout_error=False, raise_retryable_error=raise_retryable_error
+            )
+        raise_retryable_error.assert_called_once_with(error)
+        self.assertIs(expected_error, exc.exception)
+        self.assertIs(error, exc.exception.__cause__)
+
+    async def test_await_with_timeout_uses_cancellation_cleanup_outcome(self) -> None:
+        """Preserve cleanup outcomes using real cancellation; advance the frozen loop clock after startup to avoid timing races."""
+        loop = asyncio.get_running_loop()
+        start_time = loop.time()
+
+        async def long_running(error: Exception | None) -> str:
+            try:
+                clock.return_value += 2
+                await asyncio.Event().wait()  # wait forever until cancellation
+            except asyncio.CancelledError:
+                if error is not None:
+                    raise error from None
+            return "cleanup result"
+
+        for error in (None, ValueError("cleanup"), TimeoutError("cleanup")):
+            with (
+                self.subTest(error=error),
+                patch.object(loop, "time", return_value=start_time) as clock,
+            ):
+                coroutine = long_running(error)
+                if error is None:
+                    actual = await asyncio_await_with_retryable_timeout(coroutine, timeout_nanos=1_000_000_000)
+                    self.assertEqual("cleanup result", actual)
+                else:
+                    with self.assertRaises(type(error)) as exc:
+                        await asyncio_await_with_retryable_timeout(coroutine, timeout_nanos=1_000_000_000)
+                    self.assertIs(error, exc.exception)
+
+    async def test_await_with_timeout_propagates_caller_cancellation(self) -> None:
+        """Freeze the loop clock so caller cancellation is the only cancellation source; require asynchronous
+        cleanup before cancellation propagates."""
+        loop = asyncio.get_running_loop()
+        started = asyncio.Event()
+        blocked = asyncio.Event()
+        cleaned_up = asyncio.Event()
+
+        async def long_running() -> None:
+            started.set()
+            try:
+                await blocked.wait()
+            finally:
+                await asyncio.sleep(0)
+                cleaned_up.set()
+
+        with patch.object(loop, "time", return_value=loop.time()):
+            task = asyncio.create_task(asyncio_await_with_retryable_timeout(long_running(), timeout_nanos=1_000_000_000))
+            await started.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+        self.assertTrue(cleaned_up.is_set())
+
+    async def test_await_with_timeout_accepts_future(self) -> None:
+        """Await a pending future through the keyword API; freeze the clock so scheduled completion wins deterministically."""
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[str] = loop.create_future()
+        with patch.object(loop, "time", return_value=loop.time()):
+            loop.call_soon(future.set_result, "ok")
+            actual = await asyncio_await_with_retryable_timeout(awaitable=future, timeout_nanos=1_000_000_000)
+        self.assertEqual("ok", actual)
+
+    async def test_await_with_timeout_accepts_task(self) -> None:
+        """Preserve a supplied task's identity across suspension; freeze the clock to isolate execution from timeout races."""
+
+        async def operation() -> asyncio.Task | None:
+            await asyncio.sleep(0)
+            return asyncio.current_task()
+
+        loop = asyncio.get_running_loop()
+        with patch.object(loop, "time", return_value=loop.time()):
+            task = asyncio.create_task(operation())
+            actual = await asyncio_await_with_retryable_timeout(awaitable=task, timeout_nanos=1_000_000_000)
+        self.assertIs(task, actual)
+        self.assertIsNot(asyncio.current_task(), actual)
+
+    async def test_await_with_timeout_cancels_future(self) -> None:
+        """Require timeout cancellation to reach a pending future, using a zero budget to avoid timing races."""
+        future: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        with self.assertRaises(RetryableError) as exc:
+            await asyncio_await_with_retryable_timeout(awaitable=future, timeout_nanos=0)
+        self.assertTrue(future.cancelled())
+        self.assertIsInstance(exc.exception.__cause__, TimeoutError)
+
+    async def test_await_with_timeout_cancels_task_after_cleanup(self) -> None:
+        """Build retry metadata after asynchronous cancellation cleanup, preserving configured metadata and cause;
+        synchronize task startup before the zero-budget wait."""
+        started = asyncio.Event()
+        cleaned_up = asyncio.Event()
+
+        async def operation() -> None:
+            started.set()
+            try:
+                await asyncio.Event().wait()  # wait forever until cancellation
+            finally:
+                await asyncio.sleep(0)
+                cleaned_up.set()
+
+        task = asyncio.create_task(operation())
+        await started.wait()
+        with self.assertRaises(RetryableError) as exc:
+            await asyncio_await_with_retryable_timeout(awaitable=task, timeout_nanos=0)
+        self.assertTrue(task.cancelled())
+        self.assertTrue(cleaned_up.is_set())
+        self.assertIsInstance(exc.exception.__cause__, TimeoutError)
