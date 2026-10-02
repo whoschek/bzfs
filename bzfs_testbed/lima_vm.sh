@@ -37,6 +37,7 @@ LIMA_VM_PROTECT="${LIMA_VM_PROTECT:-false}"  # 'true' prohibits accidental delet
 LIMA_VM_NETWORK="${LIMA_VM_NETWORK:-lima:user-v2}"  # lima:user-v2 network enables VM-to-VM connectivity
 LIMA_VM_MOUNT_TYPE="${LIMA_VM_MOUNT_TYPE:-}"  # empty (the default) lets `limactl` pick a good mount type
 LIMA_VM_UPGRADE="${LIMA_VM_UPGRADE:-true}"  # update all installed packages to their latest stable versions on first boot?
+LIMA_VM_SET="${LIMA_VM_SET:-}"  # optional `limactl create --set` yq expression; other --set directives take precedence
 LIMA_SSH_PORT="${LIMA_SSH_PORT:-0}"  # 0 picks random unused port;
                                      # host box: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM
                                      # guest VM: ssh 127.0.0.1:$LIMA_SSH_PORT --> guest VM loopback
@@ -91,7 +92,13 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
         # avoid AF_VSOCK SSH incompatibility after upgrading SELinux policy: https://bugzilla.redhat.com/2406423
         limactl_ssh_over_vsock_arg=(--set=".ssh.overVsock=false")
     fi
-    limactl create --tty=false \
+    limactl_set_arg=()
+    if [[ "$LIMA_VM_SET" != "" ]]; then
+        limactl_set_arg=(--set="$LIMA_VM_SET")
+    fi
+    limactl create \
+        "${limactl_set_arg[@]}" \
+        --tty=false \
         --name="$LIMA_VM_NAME" \
         --disk="$LIMA_VM_DISK" \
         --cpus="$LIMA_VM_CPUS" \
