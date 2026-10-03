@@ -30,6 +30,7 @@ import subprocess
 import types
 import unittest
 from collections.abc import (
+    Iterable,
     Iterator,
 )
 from typing import (
@@ -129,8 +130,7 @@ def gc_disabled(run_gc_first: bool = False) -> Iterator[None]:
 def is_qemu_software_emulation() -> bool:
     """Detects likely QEMU software emulation on Linux x86 aka whether we're running in a QEMU VM without hardware assisted
     virtualization such as kvm. QEMU software emulation is extremely slow, whereas QEMU on kvm runs at native speed.
-    This function method can be used to skip or adapt flaky tests that fail due too timing issues when the machine is
-    extremely slow.
+    This function can be used to skip or adapt flaky tests that fail due too timing issues if the machine is extremely slow.
     """
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         return False
@@ -159,22 +159,22 @@ class TestSuiteCompleteness(unittest.TestCase):
     def __init__(
         self,
         method_name: str = "runTest",
-        modules: list[types.ModuleType] | None = None,
-        class_predicate: Callable[[type[unittest.TestCase]], bool] | None = None,
+        modules: Iterable[types.ModuleType] = (),
+        class_predicate: Callable[[type[unittest.TestCase]], bool] = lambda _cls: False,
     ) -> None:
         """Assumes each module in ``modules`` expose a ``suite()`` function and ``class_predicate`` returns True for classes
         that must appear in that suite."""
         super().__init__(method_name)
-        self.modules = modules or []
-        self.class_predicate = class_predicate or (lambda _cls: False)
+        self._modules = modules
+        self._class_predicate = class_predicate
 
     def test_all_modules_have_a_complete_suite(self) -> None:
         failures: list[str] = []
-        for module in self.modules:
+        for module in self._modules:
             # Discover locally defined TestCase classes starting with 'Test'
             local_classes: set[str] = set()
             for _, obj in inspect.getmembers(module, inspect.isclass):
-                if issubclass(obj, unittest.TestCase) and obj.__module__ == module.__name__ and self.class_predicate(obj):
+                if issubclass(obj, unittest.TestCase) and obj.__module__ == module.__name__ and self._class_predicate(obj):
                     local_classes.add(obj.__name__)
 
             # Collect classes actually included by the module's suite() into a flattened set
