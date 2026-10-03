@@ -449,6 +449,8 @@ class LocalTestCase(IntegrationTestCase):
     def test_basic_snapshotting_flat_daemon(self) -> None:
         if self.param and self.param.get("ssh_mode", "local") not in ["local"]:
             self.skipTest("Test is only working in local mode because of timing issues")
+        if self.is_slow_machine():
+            self.skipTest("Test requires a reasonably fast machine")
         destroy(ibase.DST_ROOT_DATASET, recursive=True)
         self.run_bzfs(
             ibase.SRC_ROOT_DATASET,

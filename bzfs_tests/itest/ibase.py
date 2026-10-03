@@ -81,6 +81,7 @@ from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
 from bzfs_tests.tools import (
+    is_qemu_software_emulation,
     temporary_env_var,
 )
 from bzfs_tests.zfs_util import (
@@ -535,6 +536,9 @@ class IntegrationTestCase(ParametrizedTestCase):
 
     def is_encryption_mode(self) -> bool:
         return bool(self.param and self.param.get("encrypted_dataset", False))
+
+    def is_slow_machine(self) -> bool:
+        return getenv_bool("test_is_slow_machine", default=is_qemu_software_emulation())
 
     @staticmethod
     def properties_with_special_characters() -> dict[str, str]:

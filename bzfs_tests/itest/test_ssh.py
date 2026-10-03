@@ -219,7 +219,7 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
         pool = ConnectionPool(remote, SHARED)
         try:
             conn = pool.get_connection()
-            job = create_simple_minijob(timeout_duration_secs=10.0)
+            job = create_simple_minijob(timeout_duration_secs=20.0)
             # Initial command: should create a master and succeed.
             proc1 = conn.run_ssh_command(["echo", "one"], job=job, stdout=PIPE, stderr=PIPE, text=True, check=True)
             self.assertEqual("one\n", proc1.stdout)

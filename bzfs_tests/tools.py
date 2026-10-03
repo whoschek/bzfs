@@ -19,11 +19,14 @@ from __future__ import (
     annotations,
 )
 import contextlib
+import functools
 import gc
 import inspect
 import io
 import logging
 import os
+import platform
+import subprocess
 import types
 import unittest
 from collections.abc import (
@@ -120,6 +123,32 @@ def gc_disabled(run_gc_first: bool = False) -> Iterator[None]:
     finally:
         if was_enabled:
             gc.enable()
+
+
+@functools.cache
+def is_qemu_software_emulation() -> bool:
+    """Detects likely QEMU software emulation on Linux x86 aka whether we're running in a QEMU VM without hardware assisted
+    virtualization such as kvm. QEMU software emulation is extremely slow, whereas QEMU on kvm runs at native speed.
+    This function method can be used to skip or adapt flaky tests that fail due too timing issues when the machine is
+    extremely slow.
+    """
+    if platform.system() != "Linux" or platform.machine() != "x86_64":
+        return False
+
+    try:
+        result = subprocess.run(
+            ["systemd-detect-virt", "--vm"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+    return result.returncode == 0 and result.stdout.strip() == "qemu"  # reports "kvm" when running QEMU with kvm
 
 
 #############################################################################
