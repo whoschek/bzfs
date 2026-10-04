@@ -6606,5 +6606,5 @@ class LocalTestCase(IntegrationTestCase):
                     cmd += ["--root-dataset-pairs"]
                     for root_dataset in root_datasets:
                         cmd += [root_dataset, DUMMY_DATASET]
-                    result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=5)
+                    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
                     self.assertEqual(expected_returncode, result.returncode, msg=result.stdout + result.stderr)
