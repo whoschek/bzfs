@@ -109,6 +109,7 @@ if ! grep -Fqx -- "$LIMA_VM_NAME" <<< "$lima_vm_names"; then
         --set=".mounts = ${LIMA_VM_MOUNTS:-[]}" \
         --set=".mounts += [{\"location\":\"$LIMA_HOST_WORKDIR\",\"mountPoint\":\"$LIMA_WORKDIR\",\"writable\":$LIMA_WORKDIR_WRITABLE}]" \
         "${shadow_mount_args[@]}" \
+        --set='.mounts[].9p.cache="mmap"' \
         --containerd="${LIMA_VM_CONTAINERD:-none}" \
         "${limactl_mount_type_arg[@]}" \
         "${limactl_image_variant_arg[@]}" \
