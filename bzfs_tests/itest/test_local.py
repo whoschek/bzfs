@@ -6535,7 +6535,7 @@ class LocalTestCase(IntegrationTestCase):
         run_cmd(SUDO_CMD + ["zfs", "hold", hold_tag, held_snapshot])
         self.assertEqual("1", snapshot_property(held_snapshot, "userrefs"))
         try:
-            time.sleep(3.0)  # ensure the held snapshot becomes older than the critical threshold
+            time.sleep(4.0)  # ensure the held snapshot becomes older than the critical threshold
             nonheld_snapshot = take_snapshot(ibase.SRC_ROOT_DATASET, "z_onsite_20000101_000001_millisecondly")
             self.assertEqual("0", snapshot_property(nonheld_snapshot, "userrefs"))
 
@@ -6544,7 +6544,7 @@ class LocalTestCase(IntegrationTestCase):
                     "z": {
                         "onsite": {
                             "millisecondly": {
-                                "critical": "2 seconds",
+                                "critical": "3 seconds",
                                 "src_snapshot_cycles": 0,  # do not extend threshold by period duration
                                 "oldest_skip_holds": oldest_skip_holds,
                             }
