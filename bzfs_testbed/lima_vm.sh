@@ -201,7 +201,7 @@ elif command -v apt-get > /dev/null 2>&1; then  # Ubuntu
         if [[ "${VERSION_ID:-}" == "26.04" ]]; then  # ubuntu-26.04
             # see https://launchpad.net/~arter97/+archive/ubuntu/zfs
             ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:arter97/zfs
-            sudo apt-get -y install zfs-dkms
+            sudo apt-get -y install zfs-dkms=2.4.4-1arter97~ubuntu26.04.1
         else  # ubuntu-24.04
             # see https://launchpad.net/~patrickdk/+archive/ubuntu/zfs/+packages
             .github-workflow-scripts/add-apt-repository-with-retries.sh ppa:patrickdk/zfs
