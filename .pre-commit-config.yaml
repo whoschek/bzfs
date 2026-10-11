@@ -103,14 +103,14 @@ repos:
         language: golang
         entry: shfmt
         types: [shell]
-        args: [                         # See https://github.com/mvdan/sh/blob/v3.13.1/cmd/shfmt/shfmt.1.scd
+        args: [                         # See https://github.com/mvdan/sh/blob/v3.14.1/cmd/shfmt/shfmt.1.scd
           --write,                      # Change files instead of printing to stdout
           --indent=4,                   # Use 4-space indentation for shell scripts
           --keep-padding,               # Preserve comment padding
           --space-redirects,            # Keep space after redirection operators
           --case-indent,                # Indent switch cases
         ]
-        additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@2f3f5e36d9b0f8f14c998d50aa20a28832205ae8]  # aka v3.13.1
+        additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@a3f0c75d21d918756fa38de8b5d3429efde7948b]  # aka v3.14.1
   - repo: local
     hooks:
       - id: shellcheck                  # Validate syntax of shell scripts via https://github.com/koalaman/shellcheck
