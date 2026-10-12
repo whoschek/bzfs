@@ -167,7 +167,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.14"]
+        python-version: ["3.14", "3.15"]
       fail-fast: false
     timeout-minutes: 200
     steps:
@@ -181,6 +181,7 @@ jobs:
       - name: Display ZFS version and Python version
         uses: $/.github/actions/print-versions
       - name: Run pre-commit
+        if: ${{ matrix.python-version != '3.15' }} # PyYAML-6.0.3 lacks a 3.15 wheel but preinstall_dev.sh requires wheels
         uses: $/.github/actions/pre-commit
         with:
           python-version: ${{ matrix.python-version }}
@@ -192,7 +193,7 @@ jobs:
           ./coverage.sh
           echo "bzfs-testrun-success"
       - name: Upload code coverage report to workflow run page
-        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+        if: ${{ matrix.python-version == '3.15' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
         uses: $/.github/actions/coverage-upload
 
   test_ubuntu_26_04_hpnssh: # currently uses zfs-2.4.1
@@ -279,7 +280,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.15-dev"]
+        python-version: ["3.15t"]
       fail-fast: false
     timeout-minutes: 200
     steps:
@@ -313,7 +314,7 @@ jobs:
         uses: $/.github/actions/print-versions
       - name: Run tests
         run: |
-          if [ "${{ matrix.python-version }}" == "3.15-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
+          export bzfs_test_ssh_program=hpnssh
           echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
           export LC_ALL=fr_FR.UTF-8
           dd if=/dev/zero bs=1k count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
@@ -325,7 +326,7 @@ jobs:
           ./coverage.sh
           echo "bzfs-testrun-success"
       - name: Upload code coverage report to workflow run page
-        if: ${{ matrix.python-version == '3.15-dev' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
+        if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
         uses: $/.github/actions/coverage-upload
 
   test_ubuntu_24_04_zfs_2_4: # currently uses zfs-2.4.4
