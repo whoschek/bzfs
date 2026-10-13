@@ -664,6 +664,9 @@ class Retry(NamedTuple):
     def __eq__(self, other: object) -> bool:
         return self is other
 
+    def __ne__(self, other: object) -> bool:
+        return self is not other
+
     def __hash__(self) -> int:
         return object.__hash__(self)
 
@@ -720,6 +723,9 @@ class AttemptOutcome(NamedTuple):
     def __eq__(self, other: object) -> bool:
         return self is other
 
+    def __ne__(self, other: object) -> bool:
+        return self is not other
+
     def __hash__(self) -> int:
         return object.__hash__(self)
 
@@ -759,6 +765,9 @@ class BackoffContext(NamedTuple):
 
     def __eq__(self, other: object) -> bool:
         return self is other
+
+    def __ne__(self, other: object) -> bool:
+        return self is not other
 
     def __hash__(self) -> int:
         return object.__hash__(self)

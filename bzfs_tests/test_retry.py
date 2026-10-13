@@ -1614,7 +1614,7 @@ class TestCallWithRetries(unittest.TestCase):
             threadlocal.rng = original_rng
 
     def test_repr_eq_hash(self) -> None:
-        """Validates Retry/AttemptOutcome semantics for __repr__, __eq__ and __hash__."""
+        """Validates Retry/AttemptOutcome semantics for __repr__, __eq__, __ne__  and __hash__."""
         retry_a = Retry(
             count=0,
             call_start_time_nanos=123,
@@ -1651,6 +1651,11 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertNotIn("policy", retry_repr)
         self.assertNotIn("config", retry_repr)
         self.assertEqual(retry_a, retry_a)
+        self.assertFalse(retry_a != retry_a)
+        retry_copy = retry_a.copy()
+        self.assertFalse(retry_a == retry_copy)
+        self.assertNotEqual(retry_a, retry_copy)
+        self.assertNotEqual(retry_copy, retry_a)
         self.assertNotEqual(retry_a, retry_b)
         self.assertNotEqual(retry_a, retry_c)
         self.assertEqual(3, len({retry_a, retry_b, retry_c}))
@@ -1676,6 +1681,11 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertNotIn("result", outcome_repr)
         self.assertNotIn("log", outcome_repr)
         self.assertEqual(outcome_a, outcome_a)
+        self.assertFalse(outcome_a != outcome_a)
+        outcome_copy = outcome_a.copy()
+        self.assertFalse(outcome_a == outcome_copy)
+        self.assertNotEqual(outcome_a, outcome_copy)
+        self.assertNotEqual(outcome_copy, outcome_a)
         self.assertNotEqual(outcome_a, outcome_b)
         self.assertNotEqual(outcome_a, outcome_c)
         self.assertNotEqual(outcome_a, outcome_d)
@@ -1841,7 +1851,7 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertEqual(["h1", "h2"], calls)
 
     def test_backoff_context_repr_eq_hash(self) -> None:
-        """Validates BackoffContext semantics for __repr__, __eq__ and __hash__."""
+        """Validates BackoffContext semantics for __repr__, __eq__, __ne__ and __hash__."""
         retry = Retry(
             count=0,
             call_start_time_nanos=123,
@@ -1868,8 +1878,15 @@ class TestCallWithRetries(unittest.TestCase):
 
         self.assertTrue(context_a is context_a)
         self.assertTrue(context_a == context_a)
+        self.assertFalse(context_a != context_a)
+        context_copy = context_a.copy()
+        self.assertFalse(context_a == context_copy)
+        self.assertNotEqual(context_a, context_copy)
+        self.assertNotEqual(context_copy, context_a)
         self.assertFalse(context_a == context_b)
         self.assertFalse(context_a == context_c)
+        self.assertNotEqual(context_a, context_b)
+        self.assertNotEqual(context_a, context_c)
         self.assertEqual(3, len({context_a, context_b, context_c}))
         self.assertNotEqual(context_a, object())
         self.assertFalse(context_a == (context_a.retry, context_a.curr_max_sleep_nanos, context_a.elapsed_nanos))
