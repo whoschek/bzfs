@@ -135,8 +135,10 @@ import functools
 import inspect
 import logging
 import random
+import sys
 import threading
 import time
+import traceback
 from collections.abc import (
     Awaitable,
     Iterable,
@@ -162,6 +164,11 @@ from typing import (
 
 if TYPE_CHECKING:
     import asyncio
+
+if sys.version_info >= (3, 11):
+    from builtins import (
+        BaseExceptionGroup,
+    )
 
 from bzfs_main.util.utils import (
     human_readable_duration,
@@ -273,8 +280,32 @@ def _update_previous_outcomes(
     if n > 0:  # outcome will be passed to next attempt via Retry.previous_outcomes
         if previous_outcomes:  # detach to reduce memory footprint
             outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))
-        previous_outcomes = (previous_outcomes + (outcome,))[-n:]  # immutable deque
+        if len(previous_outcomes) >= n:
+            evicted: AttemptOutcome = previous_outcomes[0]
+            assert isinstance(evicted.result, RetryableError)
+            _clear_exception_frames(evicted.result)  # eviction: drop references to local variables to bound memory footprint
+            previous_outcomes = previous_outcomes[1:]
+        previous_outcomes = previous_outcomes + (outcome,)
     return previous_outcomes
+
+
+def _clear_exception_frames(error: BaseException) -> None:
+    """Clear traceback references to local variables throughout the exception graph of causes, contexts, exception-groups."""
+    # on Python < 3.13 traceback.clear_frames() closes live generators and coroutines, which would be a bug.
+    if sys.version_info >= (3, 13):
+        pending: list[BaseException] = [error]
+        seen: set[int] = set()
+        while pending:
+            current: BaseException = pending.pop()
+            if id(current) in seen:
+                continue  # graph cycle protection
+            seen.add(id(current))
+            for linked in (current.__cause__, current.__context__):
+                if linked is not None:
+                    pending.append(linked)
+            if isinstance(current, BaseExceptionGroup):
+                pending.extend(current.exceptions)
+            traceback.clear_frames(current.__traceback__)
 
 
 #############################################################################

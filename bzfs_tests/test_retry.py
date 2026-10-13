@@ -18,11 +18,18 @@ from __future__ import (
     annotations,
 )
 import argparse
+import gc
 import logging
 import pickle
 import random
+import sys
 import threading
+import traceback
 import unittest
+import weakref
+from collections.abc import (
+    Generator,
+)
 from logging import (
     Logger,
 )
@@ -33,6 +40,11 @@ from unittest.mock import (
     MagicMock,
     patch,
 )
+
+if sys.version_info >= (3, 11):
+    from builtins import (
+        BaseExceptionGroup,
+    )
 
 from bzfs_main.util.retry import (
     INFINITY_MAX_RETRIES,
@@ -1212,6 +1224,153 @@ class TestCallWithRetries(unittest.TestCase):
 
         self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, log=None))
         self.assertEqual([[], [0], [0, 0], [0, 0], [0, 0]], nested_history_sizes_per_attempt)
+
+    @unittest.skipIf(sys.version_info < (3, 13), "traceback cleanup requires Python >= 3.13")
+    def test_call_with_retries_previous_outcomes_bounds_traceback_retention(self) -> None:
+        """Checks that evicted traceback locals stop retaining arbitrarily old attachments, including through aliases."""
+
+        def check_history(n: int) -> None:
+            with self.subTest(max_previous_outcomes=n):
+                attachments: list[weakref.ReferenceType[RetryableError]] = []
+                policy = RetryPolicy(
+                    max_retries=20,
+                    initial_max_sleep_secs=0,
+                    max_sleep_secs=0,
+                    max_previous_outcomes=n,
+                    timing=RetryTiming(monotonic_ns=lambda: 0, sleep=lambda _nanos, _retry: None),
+                )
+
+                def fn(retry: Retry) -> str:
+                    history = retry.previous_outcomes
+                    saved = [retry]
+                    self.assertEqual(min(n, retry.count), len(history))
+                    self.assertIs(retry, saved[0])
+                    if retry.count < policy.max_retries:
+                        attachment = RetryableError("payload")
+                        attachments.append(weakref.ref(attachment))
+                        raise RetryableError("fail", attachment=attachment)
+                    gc.collect()
+                    self.assertEqual(
+                        list(range(retry.count - 2 * n, retry.count)),
+                        [i for i, ref in enumerate(attachments) if ref() is not None],
+                    )
+                    return "ok"
+
+                self.assertEqual("ok", call_with_retries(fn, policy=policy))
+
+        for n in (0, 1, 4):
+            check_history(n)
+
+    @unittest.skipIf(sys.version_info < (3, 13), "traceback cleanup requires Python >= 3.13")
+    def test_call_with_retries_previous_outcomes_clears_exception_graph_only_on_eviction(self) -> None:
+        """Checks eviction timing, chained/grouped/cyclic exceptions, preserved attributes and final failure diagnostics."""
+
+        def check_history(n: int) -> None:
+            with self.subTest(max_previous_outcomes=n):
+                attachment = object()
+                failures: list[list[BaseException]] = []
+                traces: list[list[traceback.StackSummary]] = []
+                policy = RetryPolicy(
+                    max_retries=6,
+                    initial_max_sleep_secs=0,
+                    max_sleep_secs=0,
+                    max_previous_outcomes=n,
+                    timing=RetryTiming(monotonic_ns=lambda: 0, sleep=lambda _nanos, _retry: None),
+                )
+
+                def capture(retry: Retry, error: BaseException) -> BaseException:
+                    try:
+                        raise error
+                    except BaseException as caught:
+                        return caught
+
+                def check_frames(attempt: int) -> None:
+                    for i, nodes in enumerate(failures):
+                        evicted = n > 0 and i < attempt - n
+                        for j, error in enumerate(nodes):
+                            frames = [frame for frame, _ in traceback.walk_tb(error.__traceback__)]
+                            frames = [frame for frame in frames if frame.f_code is capture.__code__]
+                            self.assertEqual(1, len(frames))
+                            self.assertEqual(not evicted, "retry" in frames[0].f_locals)
+                            self.assertEqual(traces[i][j], traceback.extract_tb(error.__traceback__))
+                            if isinstance(error, RetryableError):
+                                self.assertIs(attachment, error.attachment)
+                                self.assertEqual("test", error.category)
+                        root, cause, context = nodes[:3]
+                        self.assertIs(root, cause.__context__)
+                        self.assertIs(context, root.__context__)
+                        self.assertTrue(root.__suppress_context__)
+                        self.assertIs(nodes[-1] if len(nodes) > 3 else cause, root.__cause__)
+
+                def fn(retry: Retry) -> None:
+                    check_frames(retry.count)
+                    nodes = [
+                        capture(retry, RetryableError("fail", category="test", attachment=attachment)) for _ in range(3)
+                    ]
+                    root, cause, context = nodes
+                    root.__cause__ = cause
+                    root.__context__ = context
+                    cause.__context__ = root  # Cycles must not prevent cleanup from finishing.
+                    if sys.version_info >= (3, 11):
+                        leaf = capture(retry, RetryableError("member", category="test", attachment=attachment))
+                        group = capture(retry, BaseExceptionGroup("group", [BaseExceptionGroup("nested", [leaf]), cause]))
+                        nodes.extend((leaf, group))
+                        root.__cause__ = group
+                    failures.append(nodes)
+                    raise root
+
+                def after_attempt(outcome: AttemptOutcome) -> None:
+                    traces.append([traceback.extract_tb(error.__traceback__) for error in failures[-1]])
+                    check_frames(outcome.retry.count)
+
+                self.assertEqual(
+                    "exhausted",
+                    call_with_retries(
+                        fn, policy=policy, after_attempt=after_attempt, on_exhaustion=lambda _outcome: "exhausted"
+                    ),
+                )
+                check_frames(policy.max_retries)
+
+        for n in (0, 1, 4):
+            check_history(n)
+
+    def test_call_with_retries_previous_outcomes_preserves_live_generator(self) -> None:
+        """Checks that eviction preserves a suspended exception-producing generator and defers cleanup until explicitly closed."""
+        closed = False
+
+        def results() -> Generator[ConnectionError | str, None, None]:
+            nonlocal closed
+            try:
+                for _ in range(2):
+                    try:
+                        raise ConnectionError("transient")
+                    except ConnectionError as error:
+                        yield error
+                yield "ok"
+            finally:
+                closed = True
+
+        pending = results()
+
+        def fn(_retry: Retry) -> str:
+            result = next(pending)
+            if isinstance(result, ConnectionError):
+                raise RetryableError("retry operation") from result
+            return result
+
+        policy = RetryPolicy(
+            max_retries=2,
+            initial_max_sleep_secs=0,
+            max_sleep_secs=0,
+            max_previous_outcomes=1,
+            timing=RetryTiming(monotonic_ns=lambda: 0, sleep=lambda _nanos, _retry: None),
+        )
+        try:
+            self.assertEqual("ok", call_with_retries(fn, policy=policy))
+            self.assertFalse(closed)
+        finally:
+            pending.close()
+        self.assertTrue(closed)
 
     def test_retry_policy_invalid_max_retries_raises_value_error(self) -> None:
         """Ensures RetryPolicy rejects invalid values via _validate()."""
