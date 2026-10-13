@@ -273,7 +273,7 @@ def _update_previous_outcomes(
     if n > 0:  # outcome will be passed to next attempt via Retry.previous_outcomes
         if previous_outcomes:  # detach to reduce memory footprint
             outcome = outcome.copy(retry=retry.copy(previous_outcomes=()))
-        previous_outcomes = previous_outcomes[len(previous_outcomes) - n + 1 :] + (outcome,)  # immutable deque
+        previous_outcomes = (previous_outcomes + (outcome,))[-n:]  # immutable deque
     return previous_outcomes
 
 

@@ -1164,6 +1164,30 @@ class TestCallWithRetries(unittest.TestCase):
         self.assertEqual("ok", call_with_retries(fn, policy=retry_policy, log=None))
         self.assertEqual([[], [0], [0, 1], [1, 2]], history_counts_per_attempt)
 
+    def test_call_with_retries_previous_outcomes_window(self) -> None:
+        """Checks disabled, filling and sliding history windows with a fixed clock to avoid timing-dependent failures."""
+
+        def fn(retry: Retry) -> str:
+            n = retry.policy.max_previous_outcomes
+            self.assertEqual(
+                list(range(max(0, retry.count - n), retry.count)),
+                [outcome.retry.count for outcome in retry.previous_outcomes],
+            )
+            if retry.count < retry.policy.max_retries:
+                raise RetryableError("fail") from ValueError("boom")
+            return "ok"
+
+        for n in (0, 1, 2, 3, 4, 5, 8):
+            with self.subTest(max_previous_outcomes=n):
+                retry_policy = RetryPolicy(
+                    max_retries=n + 3,
+                    initial_max_sleep_secs=0,
+                    max_sleep_secs=0,
+                    max_previous_outcomes=n,
+                    timing=RetryTiming(monotonic_ns=lambda: 0, sleep=lambda _nanos, _retry: None),
+                )
+                self.assertEqual("ok", call_with_retries(fn, policy=retry_policy))
+
     def test_call_with_retries_previous_outcomes_are_detached(self) -> None:
         """Ensures Retry.previous_outcomes entries do not retain their own previous_outcomes history."""
         retry_policy = RetryPolicy(
