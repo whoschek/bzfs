@@ -3382,7 +3382,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Configure a 100-char cache namespace using a 98-char random ssh_user_host plus two separators
             remote.ssh_user_host = "".join(rng.choice(letters) for _ in range(98))
             remote.ssh_port = 22  # type: ignore[misc]  # cannot assign to final attribute
-            remote.ssh_config_file_hash = ""  # type: ignore[misc]  # cannot assign to final attribute
+            remote._ssh_config_file_hash_cache[remote.ssh_user_host] = ""
             self.assertEqual(100 + 2, len(remote.cache_namespace()))
 
             # Warmup to let Python/CPU settle and populate caches

@@ -60,6 +60,7 @@ from __future__ import (
 )
 import contextlib
 import copy
+import functools
 import logging
 import os
 import shlex
@@ -104,6 +105,7 @@ from bzfs_main.util.utils import (
     list_formatter,
     sha256_urlsafe_base64,
     stderr_to_str,
+    subprocess_run,
 )
 
 # constants:
@@ -199,7 +201,6 @@ def create_simple_miniremote(
         ssh_socket_dir: str
         ssh_port: int | None
         ssh_config_file: str
-        ssh_config_file_hash: str
 
         def is_ssh_available(self) -> bool:
             return True
@@ -218,9 +219,14 @@ def create_simple_miniremote(
             return tuple(ssh_cmd), socket_path
 
         def cache_namespace(self) -> str:
+            return self._cache_namespace
+
+        @functools.cached_property
+        def _cache_namespace(self) -> str:
             if not self.ssh_user_host:
                 return "-"  # local mode
-            return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"
+            ssh_config_file_hash: str = get_ssh_config_file_hash(self, self.ssh_config_file)
+            return f"{self.ssh_user_host}#{self.ssh_port or ''}#{ssh_config_file_hash}"
 
     def validate_userhost(userhost: str) -> None:
         invalid_chars: str = SHELL_CHARS_AND_SLASH
@@ -248,7 +254,6 @@ def create_simple_miniremote(
     ssh_extra_opts += ["-c", ssh_cipher] if ssh_cipher else []
     ssh_extra_opts += ["-p", str(ssh_port)] if ssh_port is not None else []
     ssh_extra_opts += [] if ssh_connect_timeout_secs is None else [f"-oConnectTimeout={max(0, ssh_connect_timeout_secs)}s"]
-    ssh_config_file_hash = sha256_urlsafe_base64(os.path.abspath(ssh_config_file), padding=False) if ssh_config_file else ""
     return SimpleMiniRemote(
         params=params,
         location=location,
@@ -261,8 +266,25 @@ def create_simple_miniremote(
         ssh_socket_dir=ssh_socket_dir,
         ssh_port=ssh_port,
         ssh_config_file=ssh_config_file,
-        ssh_config_file_hash=ssh_config_file_hash,
     )
+
+
+def get_ssh_config_file_hash(remote: MiniRemote, ssh_config_file: str | None) -> str:
+    """Hashes the explicit ssh config path and effective SSH settings, including nested and wildcard `includes`, using
+    `ssh -G` as fingerprint."""
+    p = remote.params
+    ssh_cmd, _ = remote.local_ssh_command("none")
+    if not ssh_cmd:
+        return ""  # local mode
+    cmd: list[str] = [ssh_cmd[0], "-G", *ssh_cmd[1:], "exit"]
+    try:
+        config: str = subprocess_run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True, log=p.log).stdout
+    except subprocess.CalledProcessError as e:
+        die(f"Cannot evaluate SSH configuration: {e}\n{stderr_to_str(e.stderr or '')}".rstrip())
+    except OSError as e:
+        die(f"Cannot evaluate SSH configuration: {e}")
+    path: str = os.path.abspath(ssh_config_file) if ssh_config_file else ""
+    return sha256_urlsafe_base64(path + "\x00" + config, padding=False)  # "\x00" ASCII NUL char is unambiguous separator
 
 
 def create_simple_minijob(

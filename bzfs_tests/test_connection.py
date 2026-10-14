@@ -37,6 +37,9 @@ from collections import (
 from collections.abc import (
     Iterator,
 )
+from pathlib import (
+    Path,
+)
 from types import (
     SimpleNamespace,
 )
@@ -72,6 +75,7 @@ from bzfs_main.util.retry import (
     RetryableError,
 )
 from bzfs_main.util.utils import (
+    DIE_STATUS,
     LOG_TRACE,
     sha256_urlsafe_base64,
 )
@@ -87,6 +91,7 @@ from bzfs_tests.tools import (
 def suite() -> unittest.TestSuite:
     test_cases = [
         TestSimpleMiniRemote,
+        TestSshConfigFileHash,
         TestSimpleMiniJob,
         TestQuoting,
         TestConnectionPool,
@@ -419,7 +424,9 @@ class TestSimpleMiniRemote(AbstractTestCase):
     def setUp(self) -> None:
         self.log = MagicMock(logging.Logger)
 
-    def test_init_builds_expected_options_defaults(self) -> None:
+    @patch("bzfs_main.util.connection.subprocess_run")
+    def test_init_builds_expected_options_defaults(self, run: MagicMock) -> None:
+        """Local mode skips SSH even when the fingerprint helper is called directly."""
         r = connection.create_simple_miniremote(log=self.log, ssh_user_host="")
         self.assertEqual(
             ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T", "-c", "^aes256-gcm@openssh.com"],
@@ -429,13 +436,19 @@ class TestSimpleMiniRemote(AbstractTestCase):
         self.assertFalse(r.ssh_exit_on_shutdown)
         self.assertEqual("-", r.cache_namespace())  # local mode
         self.assertEqual(((), None), r.local_ssh_command(socket_file=None))
+        self.assertEqual("", connection.get_ssh_config_file_hash(r, None))
+        run.assert_not_called()
 
-    def test_init_with_all_extras_and_port(self) -> None:
+    @patch("bzfs_main.util.connection.subprocess_run")
+    def test_init_with_all_extras_and_port(self, run: MagicMock) -> None:
+        """Fingerprints use the configured SSH executable, options and logger and are cached per instance."""
+        run.return_value = subprocess.CompletedProcess([], 0, stdout="user configured\n")
         with get_tmpdir() as tmpdir:
             with tempfile.NamedTemporaryFile(dir=tmpdir, delete=False) as cfg:
                 cfg_path = cfg.name
             r = connection.create_simple_miniremote(
                 log=self.log,
+                ssh_program="hpnssh",
                 ssh_user_host="user@host",
                 ssh_port=2222,
                 ssh_verbose=True,
@@ -461,8 +474,19 @@ class TestSimpleMiniRemote(AbstractTestCase):
             ]
             self.assertEqual(expected_prefix, list(r.ssh_extra_opts))
             # cache namespace includes user@host, port and cfg hash
-            expected_hash = sha256_urlsafe_base64(os.path.abspath(cfg_path), padding=False)
-            self.assertEqual(f"user@host#2222#{expected_hash}", r.cache_namespace())
+            expected_hash = sha256_urlsafe_base64(os.path.abspath(cfg_path) + "\x00user configured\n", padding=False)
+            namespace = r.cache_namespace()
+            self.assertEqual(f"user@host#2222#{expected_hash}", namespace)
+            self.assertEqual(namespace, r.cache_namespace())
+            run.assert_called_once_with(
+                ["hpnssh", "-G", *expected_prefix, "-S", "none", "user@host", "exit"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+                log=self.log,
+            )
             # local_ssh_command includes -S only when socket provided
             cmd_no_sock, socket_path = r.local_ssh_command(socket_file=None)
             self.assertEqual(tuple([r.params.ssh_program] + expected_prefix + ["user@host"]), cmd_no_sock)
@@ -488,19 +512,27 @@ class TestSimpleMiniRemote(AbstractTestCase):
         self.assertEqual(["-K", "-v", "-c", "^aes256-gcm@openssh.com"], list(r.ssh_extra_opts))
         self.assertListEqual(["-K"], custom)
 
-    def test_no_cipher_no_config_no_port(self) -> None:
+    @patch("bzfs_main.util.connection.subprocess_run")
+    def test_no_cipher_no_config_no_port(self, run: MagicMock) -> None:
+        """Optional SSH flags remain absent when fingerprinting a remote with connection reuse disabled."""
+        run.return_value = subprocess.CompletedProcess([], 0, stdout="hostname h\n")
         r = connection.create_simple_miniremote(
             log=self.log,
             ssh_user_host="user@h",
             ssh_cipher="",  # do not include -c
             ssh_config_file="",  # do not include -F
             ssh_port=None,  # do not include -p
+            reuse_ssh_connection=False,
         )
         opts = r.ssh_extra_opts
         self.assertNotIn("-c", opts)
         self.assertNotIn("-F", opts)
         self.assertNotIn("-p", opts)
-        self.assertEqual("user@h##", r.cache_namespace())
+        expected_hash = sha256_urlsafe_base64("\x00hostname h\n", padding=False)
+        self.assertEqual(f"user@h##{expected_hash}", r.cache_namespace())
+        self.assertNotIn("-F", run.call_args.args[0])
+        self.assertNotIn("-S", run.call_args.args[0])
+        self.assertIs(self.log, run.call_args.kwargs["log"])
 
     def test_invalid_parameters_raise_valueerror(self) -> None:
         # ssh_control_persist_secs must be >= 1
@@ -542,6 +574,100 @@ class TestSimpleMiniRemote(AbstractTestCase):
         """Ensure SimpleMiniRemote.is_ssh_available always reports True."""
         r = connection.create_simple_miniremote(log=self.log, ssh_user_host="user@host")
         self.assertTrue(r.is_ssh_available())
+
+
+#############################################################################
+class TestSshConfigFileHash(AbstractTestCase):
+    """Checks effective configuration fingerprints without opening SSH network connections."""
+
+    def test_nested_and_wildcard_includes_change_namespace(self) -> None:
+        """Both remote implementations distinguish effective include edits while ignoring comments and masked values."""
+        with get_tmpdir() as root:
+            config = Path(root, "bzfs_ssh_config")
+            nested = Path(root, "nested")
+            fragments = Path(root, "conf.d")
+            fragments.mkdir()
+            config.write_text(f'Include "{nested}"\n', encoding="utf-8")
+            nested.write_text(f'Include "{fragments}/*.conf"\n', encoding="utf-8")
+            leaf = fragments / "20-host.conf"
+            args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", str(config)])
+
+            for simple in [True, False]:
+                with self.subTest(simple=simple):
+
+                    def namespace(simple_remote: bool = simple) -> str:
+                        if simple_remote:
+                            remote = connection.create_simple_miniremote(
+                                log=logging.getLogger(__name__),
+                                ssh_user_host="fixed@config-test",
+                                ssh_config_file=str(config),
+                            )
+                        else:
+                            remote = self.make_params(args=args).src
+                            remote.ssh_user_host = "fixed@config-test"
+                        return remote.cache_namespace()
+
+                    leaf.write_text("Host config-test\n HostName 127.0.0.1\n User first\n", encoding="utf-8")
+                    first = namespace()
+                    self.assertEqual(first, namespace())
+                    leaf.write_text("Host config-test\n HostName 127.0.0.1\n User second\n# comment\n", encoding="utf-8")
+                    self.assertEqual(first, namespace())  # CLI username overrides the included username
+                    leaf.write_text("Host config-test\n HostName 127.0.0.2\n", encoding="utf-8")
+                    second = namespace()
+                    self.assertNotEqual(first, second)
+                    override = fragments / "10-host.conf"
+                    override.write_text("Host config-test\n HostName 127.0.0.3\n", encoding="utf-8")
+                    self.assertNotEqual(second, namespace())
+                    override.unlink()
+                    self.assertEqual(second, namespace())
+                    leaf.write_text("NotAnSshOption yes\n", encoding="utf-8")
+                    with self.assertRaises(SystemExit) as cm:
+                        namespace()
+                    self.assertEqual(DIE_STATUS, cm.exception.code)
+                    self.assertIn("Bad configuration option", str(cm.exception))
+
+    @patch("bzfs_main.util.connection.subprocess_run")
+    def test_ssh_errors_are_setup_failures(self, run: MagicMock) -> None:
+        """Unavailable SSH and failed configuration evaluation abort setup and retain their diagnostics."""
+        remote = connection.create_simple_miniremote(log=logging.getLogger(__name__), ssh_user_host="host")
+        errors = [
+            FileNotFoundError(2, "No such file or directory", "ssh"),
+            PermissionError(13, "Permission denied", "ssh"),
+            subprocess.CalledProcessError(1, ["ssh", "-G", "host"], output="partial config", stderr="invalid config"),
+        ]
+        for error in errors:
+            with self.subTest(error=error):
+                run.side_effect = error
+                with self.assertRaises(SystemExit) as cm:
+                    remote.cache_namespace()
+                self.assertEqual(DIE_STATUS, cm.exception.code)
+                self.assertIn(str(error), str(cm.exception))
+                if isinstance(error, subprocess.CalledProcessError):
+                    self.assertIn(error.stderr, str(cm.exception))
+
+    @patch("bzfs_main.util.connection.subprocess_run")
+    def test_main_remote_evaluates_once_per_resolved_endpoint(self, run: MagicMock) -> None:
+        """Deferred evaluation handles multiple dataset-pair hosts without rerunning SSH on repeated namespace lookups."""
+        run.side_effect = [
+            subprocess.CompletedProcess([], 0, stdout="hostname first\n"),
+            subprocess.CompletedProcess([], 0, stdout="hostname second\n"),
+        ]
+        remote = self.make_params(args=self.argparser_parse_args(["src", "dst"])).src
+        self.assertEqual("-", remote.cache_namespace())
+        connection.create_simple_miniremote(log=logging.getLogger(__name__))
+        run.assert_not_called()
+        remote.ssh_user_host = "first"
+        first = remote.cache_namespace()
+        remote.ssh_user_host = "second"
+        self.assertNotEqual(first, remote.cache_namespace())
+        remote.ssh_user_host = "first"
+        self.assertEqual(first, remote.cache_namespace())
+        self.assertEqual(2, run.call_count)
+        self.assertIs(remote.params.log, run.call_args.kwargs["log"])
+        self.assertEqual("none", run.call_args.args[0][run.call_args.args[0].index("-S") + 1])
+        self.assertEqual(["second", "exit"], run.call_args.args[0][-2:])
+        expected_hash = sha256_urlsafe_base64("\x00hostname first\n", padding=False)
+        self.assertEqual(f"first##{expected_hash}", first)
 
 
 #############################################################################

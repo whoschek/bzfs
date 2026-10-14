@@ -77,6 +77,7 @@ from bzfs_main.util.connection import (
     ConnectionPools,
     MiniParams,
     MiniRemote,
+    get_ssh_config_file_hash,
 )
 from bzfs_main.util.retry import (
     RetryPolicy,
@@ -91,6 +92,7 @@ from bzfs_main.util.utils import (
     RegexList,
     SnapshotPeriods,
     SynchronizedBool,
+    SynchronizedDict,
     append_if_absent,
     compile_regexes,
     current_datetime,
@@ -107,7 +109,6 @@ from bzfs_main.util.utils import (
     parse_duration_to_milliseconds,
     pid_exists,
     sha256_hex,
-    sha256_urlsafe_base64,
     urlsafe_base64,
     validate_dataset_name,
     validate_file_permissions,
@@ -533,9 +534,7 @@ class Remote(MiniRemote):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
             with open_nofollow(self.ssh_config_file, "rb"):
                 pass  # validate
-        self.ssh_config_file_hash: Final[str] = (
-            sha256_urlsafe_base64(os.path.abspath(self.ssh_config_file), padding=False) if self.ssh_config_file else ""
-        )
+        self._ssh_config_file_hash_cache: Final[SynchronizedDict[str, str]] = SynchronizedDict({})
         self.ssh_cipher: Final[str] = p.validate_arg_str(args.ssh_cipher)
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         ssh_extra_opts: list[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
@@ -630,7 +629,11 @@ class Remote(MiniRemote):
         mode)."""
         if not self.ssh_user_host:
             return "-"  # local mode
-        return f"{self.ssh_user_host}#{self.ssh_port or ''}#{self.ssh_config_file_hash}"
+        config_hash: str | None = self._ssh_config_file_hash_cache.get(self.ssh_user_host)
+        if config_hash is None:
+            config_hash = get_ssh_config_file_hash(self, self.ssh_config_file)
+            self._ssh_config_file_hash_cache[self.ssh_user_host] = config_hash
+        return f"{self.ssh_user_host}#{self.ssh_port or ''}#{config_hash}"
 
     def is_ssh_available(self) -> bool:
         """Return True if the ssh client program required for this remote is available on the local host."""
