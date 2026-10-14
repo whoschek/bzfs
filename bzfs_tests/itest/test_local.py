@@ -30,6 +30,7 @@ import stat
 import subprocess
 import sys
 import time
+import uuid
 from collections import (
     Counter,
 )
@@ -5841,7 +5842,7 @@ class LocalTestCase(IntegrationTestCase):
             if i > 0:
                 self.tearDownAndSetup()
             with stop_on_failure_subtest(i=i):
-                syslog_prefix = "bzfs_backup"
+                syslog_prefix = f"bzfs_test_{uuid.uuid4().hex}"  # unique prefixes isolate delayed records
                 verbose = ["-v"] if i == 0 else []
                 self.run_bzfs(
                     ibase.SRC_ROOT_DATASET,
