@@ -17,7 +17,11 @@
 from __future__ import (
     annotations,
 )
+import errno
+import os
+import platform
 import subprocess
+import tempfile
 import threading
 import time
 import unittest
@@ -48,6 +52,9 @@ from bzfs_main.util.connection import (
     SHARED,
     ConnectionPools,
 )
+from bzfs_main.util.connection_lease import (
+    ConnectionLease,
+)
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
@@ -62,6 +69,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestVersionComparison,
         TestRemoteConfCache,
+        TestDetectionConnectionCleanup,
         TestDisableAndHelpers,
         TestDetectAvailablePrograms,
         TestDetectAvailableProgramsRemote,
@@ -227,6 +235,170 @@ class TestRemoteConfCache(AbstractTestCase):
         )
         self.assertNotIn(bzfs_main.detect.POOL_GUID, p.available_programs["dst"])
         fallback.assert_not_called()
+
+
+#############################################################################
+class TestDetectionConnectionCleanup(AbstractTestCase):
+    """Exercises detection failures with real leases and mocked remote probes to verify deterministic pool ownership."""
+
+    def setUp(self) -> None:
+        """Isolates SSH leases and caches the destination so most tests exercise one detection worker."""
+        tmpdir = tempfile.TemporaryDirectory(dir="/tmp" if platform.system() == "Darwin" else None)
+        self.addCleanup(tmpdir.cleanup)
+        args = self.argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--ssh-src-config-file=none",
+                "--ssh-dst-config-file=none",
+                "--daemon-remote-conf-cache-ttl=1 days",
+            ]
+        )
+        self.job = bzfs.Job()
+        self.job.params = p = self.make_params(args=args)
+        p.available_programs["local"] = {"ssh": ""}
+        for remote in (p.src, p.dst):
+            remote.ssh_user_host = f"{remote.location}-host"
+            remote.pool = "tank"
+            remote.basis_root_dataset = "tank/data"
+            remote.ssh_socket_dir = tmpdir.name
+        dst_pools = ConnectionPools(p.dst, capacities={SHARED: 1, DEDICATED: 1})
+        self.job.remote_conf_cache[p.dst.cache_key()] = RemoteConfCacheItem(dst_pools, {}, {p.dst.pool: {}})
+        self.pools: list[ConnectionPools] = [dst_pools]
+        self.leases: dict[str, ConnectionLease] = {}
+        self.error: BaseException | None = None
+        self.fail_phase = "programs"
+        self.barrier: threading.Barrier | None = None
+        self.lock = threading.Lock()
+        self.addCleanup(self._cleanup_pools)
+        for name, probe in (
+            ("_detect_available_programs_remote", self._detect_programs),
+            ("_detect_zpool_features", self._detect_features),
+        ):
+            patcher = patch.object(bzfs_main.detect, name, new=probe)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _cleanup_pools(self) -> None:
+        for pools in self.pools:
+            pools.shutdown()
+
+    def _detect_programs(self, job: bzfs.Job, remote: Remote, _ssh_user_host: str) -> dict[str, str]:
+        pools = job.params.connection_pools[remote.location]
+        with self.lock:
+            self.pools.append(pools)
+        with pools.pool(SHARED).connection() as conn:
+            lease = conn._connection_lease
+            assert lease is not None
+            with self.lock:
+                self.leases[remote.location] = lease
+            if self.barrier is not None:
+                self.barrier.wait(timeout=10)
+            if remote.location == "src" and self.fail_phase == "programs" and self.error is not None:
+                raise self.error
+        return {"zfs": "2.2.0"}
+
+    def _detect_features(self, _job: bzfs.Job, remote: Remote, _available_programs: dict[str, str]) -> dict[str, str]:
+        if remote.location == "src" and self.fail_phase == "features" and self.error is not None:
+            raise self.error
+        return {"delegation": "on"}
+
+    def _assert_released(self, lease: ConnectionLease) -> None:
+        self.assertFalse(os.path.exists(lease.used_path))
+        self.assertTrue(os.path.isfile(lease.free_path))
+        with self.assertRaises(OSError) as cm:
+            os.fstat(lease.fd)
+        self.assertEqual(errno.EBADF, cm.exception.errno)
+
+    def test_initial_failures_release_leases_and_allow_recovery(self) -> None:
+        """Repeated transport and missing-pool failures must close leases; a later successful attempt remains reusable."""
+        src = self.job.params.src
+        failures = [
+            ("programs", subprocess.TimeoutExpired("ssh", 1)),
+            ("features", SystemExit("Pool does not exist")),
+            ("programs", SystemExit("ssh exit code 255")),
+        ]
+        for self.fail_phase, self.error in failures:
+            with stop_on_failure_subtest(phase=self.fail_phase, error=type(self.error).__name__):
+                with self.assertRaises(type(self.error)) as cm:
+                    detect_available_programs(self.job)
+                self.assertIs(self.error, cm.exception)
+                self.assertNotIn(src.cache_key(), self.job.remote_conf_cache)
+                self._assert_released(self.leases["src"])
+
+        self.error = None
+        detect_available_programs(self.job)
+        pools = self.job.params.connection_pools["src"]
+        self.assertIs(pools, self.job.remote_conf_cache[src.cache_key()].connection_pools)
+        with patch.object(bzfs_main.detect, "_detect_available_programs_remote", side_effect=AssertionError("cache miss")):
+            detect_available_programs(self.job)
+        with pools.pool(SHARED).connection() as conn:
+            self.assertIs(self.leases["src"], conn._connection_lease)
+        os.fstat(self.leases["src"].fd)
+
+    def test_failed_refresh_preserves_cached_pool(self) -> None:
+        """Failure while detecting another zpool on a cached endpoint must preserve its connection for subsequent retries."""
+        detect_available_programs(self.job)
+        src = self.job.params.src
+        pools = self.job.params.connection_pools["src"]
+        lease = self.leases["src"]
+        src.pool = "missingpool"
+        self.fail_phase = "features"
+        self.error = SystemExit("Pool does not exist")
+        with self.assertRaises(SystemExit):
+            detect_available_programs(self.job)
+        self.assertIs(pools, self.job.remote_conf_cache[src.cache_key()].connection_pools)
+        self.assertIs(lease, self.leases["src"])
+        os.fstat(lease.fd)
+
+        self.error = None
+        detect_available_programs(self.job)
+        self.assertIs(lease, self.leases["src"])
+        os.fstat(lease.fd)
+
+    def test_failure_after_cache_publication_preserves_pool(self) -> None:
+        """A delegation error after cache insertion leaves the pool owned by the cache and available for normal shutdown."""
+        src = self.job.params.src
+        src.use_zfs_delegation = True
+        with (
+            patch.object(bzfs_main.detect, "_detect_zpool_features", return_value={"delegation": "off"}),
+            self.assertRaises(SystemExit),
+            suppress_output(),
+        ):
+            detect_available_programs(self.job)
+        self.assertIs(self.job.params.connection_pools["src"], self.job.remote_conf_cache[src.cache_key()].connection_pools)
+        lease = self.leases["src"]
+        os.fstat(lease.fd)
+        self.job.shutdown()
+        self._assert_released(lease)
+
+    def test_cleanup_failure_preserves_detection_error(self) -> None:
+        """Keep the detection failure primary when lease cleanup also raises, while retaining cleanup diagnostics."""
+        self.error = SystemExit("ssh exit code 255")
+        cleanup_error = OSError("lease cleanup failed")
+        release = ConnectionLease.release
+
+        def failing_release(lease: ConnectionLease) -> None:
+            release(lease)
+            raise cleanup_error
+
+        with patch.object(ConnectionLease, "release", new=failing_release), self.assertRaises(SystemExit) as cm:
+            detect_available_programs(self.job)
+        self.assertIs(self.error, cm.exception)
+        self.assertIs(cleanup_error, cm.exception.__context__)
+        self._assert_released(self.leases["src"])
+
+    def test_parallel_failure_preserves_successful_peer(self) -> None:
+        """Synchronize both workers with live leases, then fail one and verify that only its lease is released."""
+        dst = self.job.params.dst
+        del self.job.remote_conf_cache[dst.cache_key()]
+        self.barrier = threading.Barrier(2)
+        self.error = SystemExit("ssh exit code 255")
+        with self.assertRaises(SystemExit):
+            detect_available_programs(self.job)
+        self._assert_released(self.leases["src"])
+        self.assertIs(self.job.params.connection_pools["dst"], self.job.remote_conf_cache[dst.cache_key()].connection_pools)
+        os.fstat(self.leases["dst"].fd)
 
 
 #############################################################################

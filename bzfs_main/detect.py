@@ -49,6 +49,7 @@ from bzfs_main.util.utils import (
     drain,
     list_formatter,
     stderr_to_str,
+    xfinally,
     xprint,
 )
 
@@ -125,14 +126,21 @@ def detect_available_programs(job: Job) -> None:
     def run_detect(r: Remote) -> None:  # thread-safe
         loc: str = r.location
         remote_conf_cache_key: tuple = r.cache_key()
-        available_programs: dict[str, str] = _detect_available_programs_remote(job, r, r.ssh_user_host)
-        zpool_features: dict[str, str] = _detect_zpool_features(job, r, available_programs)
-        with lock:
-            r.params.available_programs[loc] = available_programs
-            r.params.zpool_features[loc][r.pool] = zpool_features
-            job.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
-                p.connection_pools[loc], available_programs, r.params.zpool_features[loc]
-            )
+        connection_pools: ConnectionPools = p.connection_pools[loc]
+
+        def _cleanup_uncached_pools() -> None:
+            if remote_conf_cache_key not in job.remote_conf_cache:
+                connection_pools.shutdown()
+
+        with xfinally(_cleanup_uncached_pools):
+            available_programs: dict[str, str] = _detect_available_programs_remote(job, r, r.ssh_user_host)
+            zpool_features: dict[str, str] = _detect_zpool_features(job, r, available_programs)
+            with lock:
+                r.params.available_programs[loc] = available_programs
+                r.params.zpool_features[loc][r.pool] = zpool_features
+                job.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
+                    connection_pools, available_programs, r.params.zpool_features[loc]
+                )
         if r.use_zfs_delegation and zpool_features.get("delegation") == "off":
             die(
                 f"Permission denied as ZFS delegation is disabled for {r.location} "
