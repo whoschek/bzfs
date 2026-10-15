@@ -49,6 +49,7 @@ from bzfs_main.configuration import (
     resolve_r2r_mode,
 )
 from bzfs_main.util.utils import (
+    DIE_STATUS,
     UNIX_TIME_INFINITY_SECS,
 )
 from bzfs_tests.abstract_testcase import (
@@ -76,17 +77,17 @@ class TestSnapshotLabel(AbstractTestCase):
         double underscore at the junction.
         """
         label = SnapshotLabel(prefix="bzfs_", infix="us-west-1_", timestamp="2025-01-01_12-00-00", suffix="_hourly")
-        self.assertEqual("bzfs_us-west-1__hourly", label.notimestamp_str())
+        self.assertEqual("bzfs_,us-west-1_,_hourly", label.notimestamp_str())
 
     def test_notimestamp_str_empty_infix(self) -> None:
         """Empty infix still yields valid concatenation of prefix and suffix."""
         label = SnapshotLabel(prefix="bzfs_", infix="", timestamp="2025-01-01_12-00-00", suffix="_daily")
-        self.assertEqual("bzfs__daily", label.notimestamp_str())
+        self.assertEqual("bzfs_,,_daily", label.notimestamp_str())
 
     def test_notimestamp_str_empty_suffix(self) -> None:
         """Empty suffix preserves trailing underscore from prefix/infix."""
         label = SnapshotLabel(prefix="bzfs_", infix="us_", timestamp="2025-01-01_12-00-00", suffix="")
-        self.assertEqual("bzfs_us_", label.notimestamp_str())
+        self.assertEqual("bzfs_,us_,", label.notimestamp_str())
 
     def test_notimestamp_str_hash_stability_across_timestamps(self) -> None:
         """Hash over notimestamp_str() must be identical for labels differing only in timestamp."""
@@ -692,6 +693,52 @@ class TestHelperFunctions(AbstractTestCase):
         )
         with self.assertRaisesRegex(SystemExit, "--create-src-snapshots-timeformat: Must start with '%Y'"):
             configuration.CreateSrcSnapshotConfig(args, params)
+
+    def test_snapshot_label_attributes_parse_preserves_written_threshold(self) -> None:
+        """Parse zero and positive integer thresholds directly to verify accepted values survive validation."""
+        for value in (0, 1, 1234):
+            with self.subTest(value=value):
+                attributes = configuration.SnapshotLabelAttributes.parse({"written_threshold": value})
+                self.assertEqual(value, attributes.written_threshold)
+
+    def test_create_src_snapshots_plan_attributes_rejects_invalid_written_threshold(self) -> None:
+        """Reject non-integer and negative thresholds in valid CLI plans, checking the diagnostic and exit status."""
+        for value in ("1", -1):
+            with self.subTest(value=value):
+                args = self.argparser_parse_args(
+                    [
+                        "src",
+                        "dst",
+                        "--create-src-snapshots",
+                        "--create-src-snapshots-plan=" + str({"prod": {"onsite": {"secondly": 1}}}),
+                        "--create-src-snapshots-plan-attributes="
+                        + str({"prod": {"onsite": {"secondly": {"written_threshold": value}}}}),
+                    ]
+                )
+                with self.assertRaisesRegex(
+                    SystemExit,
+                    f"^--create-src-snapshots-plan-attributes: written_threshold must be a non-negative int: {value}$",
+                ) as context:
+                    self.make_params(args=args)
+                self.assertEqual(DIE_STATUS, context.exception.code)
+
+    def test_create_src_snapshots_plan_attributes_rejects_unknown_attribute(self) -> None:
+        """Reject an unknown attribute in an otherwise valid CLI plan, checking its diagnostic and exit status."""
+        args = self.argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--create-src-snapshots",
+                "--create-src-snapshots-plan=" + str({"prod": {"onsite": {"secondly": 1}}}),
+                "--create-src-snapshots-plan-attributes="
+                + str({"prod": {"onsite": {"secondly": {"unknown_attribute": 1}}}}),
+            ]
+        )
+        with self.assertRaisesRegex(
+            SystemExit, "^--create-src-snapshots-plan-attributes: Invalid attribute name: 'unknown_attribute'$"
+        ) as context:
+            self.make_params(args=args)
+        self.assertEqual(DIE_STATUS, context.exception.code)
 
     def test_MonitorSnapshotsConfig(self) -> None:  # noqa: N802
         def plan(alerts: dict[str, Any]) -> str:

@@ -393,7 +393,7 @@ class TestSnapshotCache(AbstractTestCase):
                 fn_latest(0, creation, SRC_DATASET, "s")
                 return []
 
-            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=changed)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=changed, written=0)
             with (
                 patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
                 patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
@@ -510,7 +510,7 @@ class TestSnapshotCache(AbstractTestCase):
         with self.job_context(["--monitor-snapshots", str(plan), SRC_DATASET, DST_DATASET]) as (job, _):
             job.params.dst.root_dataset = DST_DATASET
             job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(1000, tz=timezone.utc)
-            job.dst_properties[DST_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=999)
+            job.dst_properties[DST_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=999, written=0)
             alerts = job.params.monitor_snapshots_config.alerts
             alert = alerts[0]
             for kind, creation in [("Latest", 999), ("Oldest", 0)]:
@@ -561,7 +561,7 @@ class TestSnapshotCache(AbstractTestCase):
                 with self.job_context(["--monitor-snapshots", str(plan), *opts, SRC_DATASET, DST_DATASET]) as (job, _):
                     job.params.dst.root_dataset = DST_DATASET
                     job.params.create_src_snapshots_config.current_datetime = datetime.fromtimestamp(1000, tz=timezone.utc)
-                    job.dst_properties[DST_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=999)
+                    job.dst_properties[DST_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=999, written=0)
                     alerts = job.params.monitor_snapshots_config.alerts
                     for kind, creation in [("Latest", 999), ("Oldest", 900)]:
                         label = self.monitor_cache_label(kind, alerts[0].label, alerts)
@@ -630,11 +630,11 @@ class TestSnapshotCache(AbstractTestCase):
             ):
 
                 # First replication with newer snapshots_changed
-                job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_000)
+                job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_000, written=0)
                 job.replicate_datasets([SRC_DATASET], task_description="t", max_workers=1)
 
                 # Second replication with older snapshots_changed (simulates a slower, older run finishing last)
-                job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=1_900_000_000)
+                job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=1_900_000_000, written=0)
                 job.replicate_datasets([SRC_DATASET], task_description="t", max_workers=1)
 
             # Assert: cache must remain at the newer timestamp (monotonic)
@@ -681,10 +681,10 @@ class TestSnapshotCache(AbstractTestCase):
                 patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed),
             ):
 
-                job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_000)
+                job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_000, written=0)
                 job.replicate_datasets([SRC_DATASET], task_description="t", max_workers=1)
 
-                job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=1_900_000_000)
+                job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=1_900_000_000, written=0)
                 job.replicate_datasets([SRC_DATASET], task_description="t", max_workers=1)
 
             self.assertEqual(2_000_000_050, SnapshotCache(job).get_snapshots_changed(dst_cache_file))
@@ -712,7 +712,7 @@ class TestSnapshotCache(AbstractTestCase):
 
         with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
             snapshots_changed = 2_000_000_000  # arbitrary recent unix time
-            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed, written=0)
 
             # Prepare a label representing, e.g., a daily snapshot naming scheme
             label = SnapshotLabel(prefix="org_", infix="target_", timestamp="", suffix="_daily")
@@ -764,7 +764,7 @@ class TestSnapshotCache(AbstractTestCase):
 
         with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
             snapshots_changed = 0  # Simulate property unavailable
-            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed, written=0)
 
             # Prepare a label whose cache file encodes latest snapshot creation time
             label = SnapshotLabel(prefix="org_", infix="target_", timestamp="", suffix="_daily")
@@ -820,7 +820,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Fix current time and dataset
             job.params.create_src_snapshots_config.current_datetime = datetime(2024, 1, 1, 0, 0, 10, tzinfo=timezone.utc)
             job.params.src.root_dataset = SRC_DATASET
-            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_050)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_050, written=0)
 
             # Compute identical cache path as monitor_snapshots()
             alerts = job.params.monitor_snapshots_config.alerts
@@ -857,7 +857,7 @@ class TestSnapshotCache(AbstractTestCase):
                 job.monitor_snapshots(job.params.src, [SRC_DATASET])
 
             # Second run (older)
-            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=1_900_000_050)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=1_900_000_050, written=0)
             with (
                 patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
                 patch.object(Job, "handle_minmax_snapshots", new=fake_handle_minmax_snapshots),
@@ -913,7 +913,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Prepare cached tuple (creation, snapshots_changed)
             creation = 2_000_000_000
             snapshots_changed = 2_000_000_050
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed, written=0)
 
             cache_label = self.monitor_cache_label(cfg.kind, label, alerts)
             cache_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset, cache_label)
@@ -1004,7 +1004,7 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Case 1: too recent on src -> no skip
             t0 = 2_000_000_000
-            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t0)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t0, written=0)
             set_last_modification_time_safe(src_repl_file, unixtime_in_secs=t0, if_more_recent=True)
             job.num_cache_hits = job.num_cache_misses = 0
             called.clear()
@@ -1080,8 +1080,8 @@ class TestSnapshotCache(AbstractTestCase):
             a_dst_changed = 2_000_000_100
             b_src_changed = 1_900_000_000
             b_dst_changed = 1_900_000_100
-            job_a.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=a_src_changed)
-            job_b.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=b_src_changed)
+            job_a.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=a_src_changed, written=0)
+            job_b.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=b_src_changed, written=0)
 
             # Prepopulate to deterministically exercise find-stale (src '==' equality, matured) and force refresh
             # (dst '=' mismatch):
@@ -1222,7 +1222,9 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Setup monitor job properties and behavior
             job_m.params.create_src_snapshots_config.current_datetime = datetime(2024, 1, 1, 0, 0, 12, tzinfo=timezone.utc)
-            job_m.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=mon_snap_changed)
+            job_m.src_properties[SRC_DATASET] = DatasetProperties(
+                recordsize=0, snapshots_changed=mon_snap_changed, written=0
+            )
 
             def fake_handle_minmax_snapshots(
                 remote: Remote,
@@ -1238,7 +1240,9 @@ class TestSnapshotCache(AbstractTestCase):
                 return []
 
             # Setup replicate job behavior
-            job_r.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=repl_src_changed_a)
+            job_r.src_properties[SRC_DATASET] = DatasetProperties(
+                recordsize=0, snapshots_changed=repl_src_changed_a, written=0
+            )
             event_monitoring_written = threading.Event()
             r_repl_done = threading.Event()
             r_counts = {"find": 0, "refresh": 0}
@@ -1358,8 +1362,12 @@ class TestSnapshotCache(AbstractTestCase):
             repl_src_changed = 1_900_000_000
             repl_dst_changed = 1_900_000_070
 
-            job_s.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=snap_src_changed)
-            job_r.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=repl_src_changed)
+            job_s.src_properties[SRC_DATASET] = DatasetProperties(
+                recordsize=0, snapshots_changed=snap_src_changed, written=0
+            )
+            job_r.src_properties[SRC_DATASET] = DatasetProperties(
+                recordsize=0, snapshots_changed=repl_src_changed, written=0
+            )
 
             # Patch handle_minmax to provide creation time; ensure caching path is taken
             def fake_handle_minmax_snapshots(
@@ -1524,9 +1532,9 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Configure jobs
             job_m.params.create_src_snapshots_config.current_datetime = datetime(2024, 1, 1, 0, 0, 20, tzinfo=timezone.utc)
-            job_m.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=m_sc)
-            job_s.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=s_sc)
-            job_r.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=r_src_sc)
+            job_m.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=m_sc, written=0)
+            job_s.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=s_sc, written=0)
+            job_r.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=r_src_sc, written=0)
 
             # Event sequencing
             event_monitoring_written = threading.Event()
@@ -1621,9 +1629,9 @@ class TestSnapshotCache(AbstractTestCase):
                 t_r.join()
 
             # Second phase: older attempts shall not regress
-            job_m.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=m_sc_old)
-            job_s.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=s_sc)
-            job_r.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=r_src_old)
+            job_m.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=m_sc_old, written=0)
+            job_s.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=s_sc, written=0)
+            job_r.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=r_src_old, written=0)
 
             def fake_handle_minmax_snapshots_monitor_old(
                 remote: Remote,
@@ -1761,7 +1769,7 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Prepopulate with mismatching values to trigger invalidation
             s_sc = 2_000_000_090
-            job_s.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=s_sc)
+            job_s.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=s_sc, written=0)
             set_last_modification_time_safe(src_cache_file, unixtime_in_secs=1_700_000_010, if_more_recent=True)
             set_last_modification_time_safe(label_cache_file, unixtime_in_secs=1_700_000_000, if_more_recent=True)
 
@@ -1792,7 +1800,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Phase B: repopulate via monitor, snapshot, replicate and assert monotonic
             # Monitor
             job_m.params.create_src_snapshots_config.current_datetime = datetime(2024, 1, 1, 0, 0, 30, tzinfo=timezone.utc)
-            job_m.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_120)
+            job_m.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_120, written=0)
             alerts = job_m.params.monitor_snapshots_config.alerts
             alert = alerts[0]
             lbl_mon = alert.label
@@ -1826,7 +1834,7 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(2_000_000_120, mt)
 
             # Snapshot scheduling repopulates src '=' and per-label
-            job_s.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=s_sc)
+            job_s.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=s_sc, written=0)
 
             def fake_handle_minmax_snapshots_snap(
                 self: Job,
@@ -1857,7 +1865,7 @@ class TestSnapshotCache(AbstractTestCase):
             self.assertEqual(s_sc, SnapshotCache(job_s).get_snapshots_changed(src_cache_file))
 
             # Replicate repopulates last replicated and dst '='
-            job_r.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_130)
+            job_r.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_130, written=0)
 
             fake_zfs_get_snapshots_changed_r_state4 = {"i": 0}
 
@@ -1913,7 +1921,7 @@ class TestSnapshotCache(AbstractTestCase):
             # Label under test
             label = job.params.create_src_snapshots_config.snapshot_labels()[0]
             dataset = SRC_DATASET
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed_new)
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed_new, written=0)
 
             # Populate dataset-level '=' cache to match live property so the caching branch is taken
             dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
@@ -1981,7 +1989,7 @@ class TestSnapshotCache(AbstractTestCase):
             label_hash = self.snapshot_cache_label(label)
             t0 = 2_000_000_000
             creation_after = t0 + 1
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t0)
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t0, written=0)
 
             # Seed dataset '=' with matured t0
             dataset_eq = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
@@ -2036,7 +2044,7 @@ class TestSnapshotCache(AbstractTestCase):
             dataset = SRC_DATASET
             creation = 2_000_000_000
             snapshots_changed = 2_000_000_050
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed, written=0)
 
             # First run: force fallback (dataset '=' missing); supply creation and mark dataset '=' via on_finish
             fallback1: list[str] = []
@@ -2139,7 +2147,7 @@ class TestSnapshotCache(AbstractTestCase):
             creation = 2_000_000_000
             snapshots_changed = 2_000_003_600
             dataset = SRC_DATASET
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed)
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed, written=0)
 
             label = job.params.create_src_snapshots_config.snapshot_labels()[0]
             label_str = self.snapshot_cache_label(label)
@@ -2217,7 +2225,7 @@ class TestSnapshotCache(AbstractTestCase):
             label = job.params.create_src_snapshots_config.snapshot_labels()[0]
             t0 = 2_000_000_000
             creation_old = t0 - 120  # creation is older than schedule
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t0)
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t0, written=0)
 
             dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
             set_last_modification_time_safe(dataset_eq_file, unixtime_in_secs=t0, if_more_recent=True)
@@ -2312,7 +2320,7 @@ class TestSnapshotCache(AbstractTestCase):
             label = job.params.create_src_snapshots_config.snapshot_labels()[0]
             t0 = 2_000_000_000
             creation_old = t0 - 3600
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t0)
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t0, written=0)
 
             # Seed dataset '=' with matured t0
             dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
@@ -2396,7 +2404,7 @@ class TestSnapshotCache(AbstractTestCase):
             creation_old = 2_000_000_000
             t0 = 2_000_000_050
             t1 = 2_000_000_100
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t1)
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t1, written=0)
 
             # dataset '=' cache reflects t1
             dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
@@ -2453,7 +2461,9 @@ class TestSnapshotCache(AbstractTestCase):
             # Pre-populate properties and existence for both datasets
             snapshots_changed_value = 2_000_000_000
             for ds in datasets:
-                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=snapshots_changed_value)
+                job.src_properties[ds] = DatasetProperties(
+                    recordsize=0, snapshots_changed=snapshots_changed_value, written=0
+                )
                 job.dst_dataset_exists[ds.replace("src", "dst")] = True
 
             def fake_replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry, **_kwargs: object) -> bool:
@@ -2615,7 +2625,7 @@ class TestSnapshotCache(AbstractTestCase):
             set_last_modification_time_safe(dst_eq_file, unixtime_in_secs=t_dst, if_more_recent=True)
 
             # Job B observed live properties (simulate via stubs)
-            job_b.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_src)
+            job_b.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_src, written=0)
 
             called: list[str] = []
 
@@ -2671,7 +2681,7 @@ class TestSnapshotCache(AbstractTestCase):
 
             # Populate src properties with unchanged snapshots_changed
             for ds in src_datasets:
-                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc)
+                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc, written=0)
 
             # Stub out remote queries; caching is enabled and dst snapshots_changed remains unchanged
             def fake_zfs_get_snapshots_changed(_remote: Remote, datasets: list[str]) -> dict[str, int]:
@@ -2760,7 +2770,7 @@ class TestSnapshotCache(AbstractTestCase):
 
             src_datasets = [f"{SRC_DATASET}/d{i:04d}" for i in range(n)]
             for ds in src_datasets:
-                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc)
+                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc, written=0)
 
             # First run: populate monitor caches via handle_minmax
             def fake_handle_minmax_snapshots1(
@@ -2868,7 +2878,7 @@ class TestSnapshotCache(AbstractTestCase):
             src_datasets = [f"{SRC_DATASET}/d{i:04d}" for i in range(n)]
             src_datasets.sort()
             for ds in src_datasets:
-                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc)
+                job.src_properties[ds] = DatasetProperties(recordsize=0, snapshots_changed=sc, written=0)
 
             # Prepare caches: dataset-level '=' and per-label caches with matching mtime=sc and atime=creation
             labels = job.params.create_src_snapshots_config.snapshot_labels()
@@ -2971,7 +2981,7 @@ class TestSnapshotCache(AbstractTestCase):
             creation_old = now_i - 3_600
 
             # Live property and caches
-            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t_src_future)
+            job.src_properties[dataset] = DatasetProperties(recordsize=0, snapshots_changed=t_src_future, written=0)
             dataset_eq_file = SnapshotCache(job).last_modified_cache_file(job.params.src, dataset)
             set_last_modification_time_safe(dataset_eq_file, t_src_future, if_more_recent=True)
             label = job.params.create_src_snapshots_config.snapshot_labels()[0]
@@ -3064,7 +3074,7 @@ class TestSnapshotCache(AbstractTestCase):
             t_src_future = now_i + 20_000
             t_dst_past = now_i - 30_000
 
-            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_src_future)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_src_future, written=0)
 
             # Prepare replication-scoped caches
             repl_cache_label = self.replication_cache_label(job, DST_DATASET)
@@ -3176,8 +3186,8 @@ class TestSnapshotCache(AbstractTestCase):
             creation_dst = t_dst_past - 100  # ensure creation <= snapshots_changed for dst
 
             # Seed live properties and caches for equality checks
-            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_src_future)
-            job.dst_properties[DST_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_dst_past)
+            job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_src_future, written=0)
+            job.dst_properties[DST_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=t_dst_past, written=0)
 
             alerts = job.params.monitor_snapshots_config.alerts
             self.assertGreaterEqual(len(alerts), 1)

@@ -60,6 +60,7 @@ EXCLUDE_DATASET_REGEXES_DEFAULT: Final[str] = r"(?:.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0
 LOG_DIR_DEFAULT: Final[str] = PROG_NAME + "-logs"
 SKIP_ON_ERROR_DEFAULT: Final[str] = "dataset"
 CMP_CHOICES_ITEMS: Final[tuple[str, str, str]] = ("src", "dst", "all")
+WRITTEN_THRESHOLD: Final[str] = "written_threshold"
 ZFS_RECV_O: Final[str] = "zfs_recv_o"
 ZFS_RECV_X: Final[str] = "zfs_recv_x"
 ZFS_RECV_GROUPS: Final[dict[str, str]] = {ZFS_RECV_O: "-o", ZFS_RECV_X: "-x", "zfs_set": ""}
@@ -595,6 +596,11 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
             "onsite": {"100millisecondly": 42},
         },
     }
+    src_snapshot_plan_attributes_example = {
+        "prod": {
+            "onsite": {"secondly": {WRITTEN_THRESHOLD: 1}},
+        },
+    }
     parser.add_argument(
         "--include-snapshot-plan", action=IncludeSnapshotPlanAction, default=None, metavar="DICT_STRING",
         help="Replication periods to be used if replicating snapshots within the selected destination datasets. "
@@ -674,6 +680,16 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
              "The period name can contain an optional positive integer immediately preceding the time period unit, for "
              "example `_2secondly` or `_10minutely` or `_100millisecondly` to indicate that snapshots are taken every 2 "
              "seconds, or every 10 minutes, or every 100 milliseconds, respectively.\n\n")
+    parser.add_argument(
+        "--create-src-snapshots-plan-attributes", default=None, type=str, metavar="DICT_STRING",
+        help=f"Default is `{format_dict({})}`. Optional additional parameters that specify how to create snapshots on a "
+             "per-period basis. Has the same format as --create-src-snapshots-plan except nested values are dicts instead "
+             "of integers.\n\n"
+             f"Example: `{format_dict(src_snapshot_plan_attributes_example)}`. This example will, for the organization "
+             "'prod' and the intended logical target 'onsite', create a 'secondly' snapshot every second if ZFS has written "
+             "at least 1 byte to the dataset since its latest snapshot per the standard 'written' ZFS dataset property. "
+             f"The default for each period is `{format_dict({WRITTEN_THRESHOLD: 0})}`, i.e. take a snapshot even if nothing "
+             "has been written. See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written\n\n")
 
     def argparser_escape(text: str) -> str:
         return text.replace("%", "%%")
@@ -701,7 +717,7 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
     parser.add_argument(
         "--create-src-snapshots-even-if-not-due", action="store_true",
         help="Take snapshots immediately regardless of the creation time of any existing snapshot, even if snapshots "
-             "are periodic and not actually due per the schedule.\n\n")
+             "are periodic and not actually due per the schedule and nothing has been written.\n\n")
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default="--raw --compressed", metavar="STRING",
         help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "

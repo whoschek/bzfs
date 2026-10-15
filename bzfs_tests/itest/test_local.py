@@ -447,6 +447,28 @@ class LocalTestCase(IntegrationTestCase):
         )
         self.assert_snapshot_name_regexes(ibase.SRC_ROOT_DATASET, ["s1.*_hourly", "s1.*_daily", "s1.*_hourly"])
 
+    def test_basic_snapshotting_written_threshold_without_writes(self) -> None:
+        """Check written_threshold zero and one against real ZFS with no writes since a baseline snapshot."""
+        dataset = ibase.SRC_ROOT_DATASET
+        take_snapshot(dataset, fix("baseline"))
+        for written_threshold, expected_names in [
+            (1, ["baseline"]),
+            (0, ["baseline", "s1_onsite_test_millisecondly"]),
+        ]:
+            with stop_on_failure_subtest(written_threshold=written_threshold):
+                self.assertEqual("0", dataset_property(dataset, "written"))
+                self.run_bzfs(
+                    dataset,
+                    DUMMY_DATASET,
+                    "--skip-replication",
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-plan=" + str({"s1": {"onsite": {"millisecondly": 1}}}),
+                    "--create-src-snapshots-plan-attributes="
+                    + str({"s1": {"onsite": {"millisecondly": {"written_threshold": written_threshold}}}}),
+                    "--create-src-snapshots-timeformat=test",
+                )
+                self.assert_snapshot_names(dataset, expected_names)
+
     def test_basic_snapshotting_flat_daemon(self) -> None:
         if self.param and self.param.get("ssh_mode", "local") not in ["local"]:
             self.skipTest("Test is only working in local mode because of timing issues")

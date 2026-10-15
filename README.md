@@ -513,6 +513,7 @@ usage: bzfs [-h]
             [--new-snapshot-filter-group]
             [--create-src-snapshots]
             [--create-src-snapshots-plan DICT_STRING]
+            [--create-src-snapshots-plan-attributes DICT_STRING]
             [--create-src-snapshots-timeformat STRFTIME_SPEC]
             [--create-src-snapshots-timezone TZ_SPEC]
             [--create-src-snapshots-even-if-not-due]
@@ -979,6 +980,19 @@ usage: bzfs [-h]
 
 <!-- -->
 
+<span id="--create-src-snapshots-plan-attributes" class="man-option-title">**--create-src-snapshots-plan-attributes** *DICT_STRING*</span> <a href="#--create-src-snapshots-plan-attributes" title="Permalink to --create-src-snapshots-plan-attributes" aria-label="Permalink to --create-src-snapshots-plan-attributes" class="man-option-permalink">&#x1F517;</a>
+
+- Default is `"{}"`. Optional additional parameters that specify how to create snapshots on a per-period basis. Has the same
+  format as --create-src-snapshots-plan except nested values are dicts instead of integers.
+
+  Example: `"{'prod': {'onsite': {'secondly': {'written_threshold': 1}}}}"`. This example will, for the organization 'prod'
+  and the intended logical target 'onsite', create a 'secondly' snapshot every second if ZFS has written at least 1 byte to
+  the dataset since its latest snapshot per the standard 'written' ZFS dataset property. The default for each period is
+  `"{'written_threshold': 0}"`, i.e. take a snapshot even if nothing has been written. See
+  https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
+
+<!-- -->
+
 <span id="--create-src-snapshots-timeformat" class="man-option-title">**--create-src-snapshots-timeformat** *STRFTIME_SPEC*</span> <a href="#--create-src-snapshots-timeformat" title="Permalink to --create-src-snapshots-timeformat" aria-label="Permalink to --create-src-snapshots-timeformat" class="man-option-permalink">&#x1F517;</a>
 
 - Default is `%Y-%m-%d_%H:%M:%S`. For the strftime format, see
@@ -1008,7 +1022,7 @@ usage: bzfs [-h]
 <span id="--create-src-snapshots-even-if-not-due" class="man-option-title">**--create-src-snapshots-even-if-not-due**</span> <a href="#--create-src-snapshots-even-if-not-due" title="Permalink to --create-src-snapshots-even-if-not-due" aria-label="Permalink to --create-src-snapshots-even-if-not-due" class="man-option-permalink">&#x1F517;</a>
 
 - Take snapshots immediately regardless of the creation time of any existing snapshot, even if snapshots are periodic and not
-  actually due per the schedule.
+  actually due per the schedule and nothing has been written.
 
 <!-- -->
 

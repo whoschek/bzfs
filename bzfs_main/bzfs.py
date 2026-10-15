@@ -762,17 +762,18 @@ class Job(MiniJob):
         src = p.src
         basis_src_datasets: list[str] = []
         is_caching: bool = is_caching_snapshots(p, src)
-        props: str = "volblocksize,recordsize,name"
+        props: str = "volblocksize,recordsize,written,name"
         props = "snapshots_changed," + props if is_caching else props
         cmd: list[str] = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
         )
         for line in (self.try_ssh_command_with_retries(src, LOG_DEBUG, cmd=cmd) or "").splitlines():
             cols: list[str] = line.split("\t")
-            snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
+            snapshots_changed, volblocksize, recordsize, written, src_dataset = cols if is_caching else ["-"] + cols
             self.src_properties[src_dataset] = DatasetProperties(
                 recordsize=int(recordsize) if recordsize != "-" else -int(volblocksize),
                 snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
+                written=int(written) if written != "-" else 0,
             )
             basis_src_datasets.append(src_dataset)
         assert (not self.is_test_mode) or basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
@@ -799,6 +800,7 @@ class Job(MiniJob):
                 self.dst_properties[dst_dataset] = DatasetProperties(
                     recordsize=0,
                     snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
+                    written=0,
                 )
                 basis_dst_datasets.append(dst_dataset)
         assert (not self.is_test_mode) or basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
@@ -1516,8 +1518,10 @@ class Job(MiniJob):
             )
             msg: str = ""
             if config.current_datetime >= next_event_dt:
-                datasets_to_snapshot[label].append(dataset)  # mark it as scheduled for snapshot creation
-                msg = " has passed"
+                written_threshold: int = config.snapshot_label_attributes[label.notimestamp_str()].written_threshold
+                if self.src_properties[dataset].written >= written_threshold:
+                    datasets_to_snapshot[label].append(dataset)  # mark it as scheduled for snapshot creation
+                    msg = " has passed"
             next_event_dt = interner.intern(next_event_dt)
             msgs.append((next_event_dt, dataset, label, msg))
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
@@ -1825,11 +1829,12 @@ class Job(MiniJob):
 class DatasetProperties:
     """Properties of a ZFS dataset."""
 
-    __slots__ = ("recordsize", "snapshots_changed")  # uses more compact memory layout than __dict__
+    __slots__ = ("recordsize", "snapshots_changed", "written")  # uses more compact memory layout than __dict__
 
-    def __init__(self, recordsize: int, snapshots_changed: int) -> None:
+    def __init__(self, recordsize: int, snapshots_changed: int, written: int) -> None:
         # immutable variables:
         self.recordsize: Final[int] = recordsize
+        self.written: Final[int] = written
 
         # mutable variables:
         self.snapshots_changed: int = snapshots_changed

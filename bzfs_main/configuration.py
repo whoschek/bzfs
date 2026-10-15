@@ -31,6 +31,7 @@ import threading
 import time
 from collections.abc import (
     Iterable,
+    Mapping,
 )
 from dataclasses import (
     dataclass,
@@ -682,9 +683,9 @@ class SnapshotLabel(NamedTuple):
     def __str__(self) -> str:  # bzfs_us-west_2024-11-06_08:30:05_hourly
         return f"{self.prefix}{self.infix}{self.timestamp}{self.suffix}"
 
-    def notimestamp_str(self) -> str:  # bzfs_us-west_hourly
-        """Returns the concatenation of all parts except for the timestamp part."""
-        return f"{self.prefix}{self.infix}{self.suffix}"
+    def notimestamp_str(self) -> str:  # bzfs_,us-west_,_hourly
+        """Returns the concatenation of all parts except for the timestamp part, with parts separated by a comma."""
+        return f"{self.prefix},{self.infix},{self.suffix}"
 
     def validate_label(self, input_text: str) -> None:
         """Validates that the composed snapshot label forms a legal name."""
@@ -712,6 +713,31 @@ class SnapshotLabel(NamedTuple):
 
 
 #############################################################################
+WRITTEN_THRESHOLD: Final[str] = "written_threshold"
+
+
+@dataclass(frozen=True)
+@final
+class SnapshotLabelAttributes:
+    """Configuration parameters for a SnapshotLabel, with shared attribute names excluded from dataclass fields."""
+
+    written_threshold: int
+
+    @classmethod
+    def parse(cls, attributes: dict) -> SnapshotLabelAttributes:
+        """Parses the given configuration dict into a typed object."""
+        written_threshold: int = 0
+        for name, value in attributes.items():
+            if name == WRITTEN_THRESHOLD:
+                if not isinstance(value, int) or value < 0:
+                    die(f"--create-src-snapshots-plan-attributes: {WRITTEN_THRESHOLD} must be a non-negative int: {value}")
+                written_threshold = value
+            else:
+                die(f"--create-src-snapshots-plan-attributes: Invalid attribute name: '{name}'")
+        return SnapshotLabelAttributes(written_threshold=written_threshold)
+
+
+#############################################################################
 @final
 class CreateSrcSnapshotConfig:
     """Option values for --create-src-snapshots, that is, for automatically creating source snapshots."""
@@ -730,19 +756,28 @@ class CreateSrcSnapshotConfig:
         # Compute the schedule for upcoming periodic time events (suffix_durations). This event schedule is also used in
         # daemon mode via sleep_until_next_daemon_iteration()
         labels: list[SnapshotLabel] = []
+        snapshot_label_attributes: dict[str, SnapshotLabelAttributes] = {}
         create_src_snapshots_plan: str = args.create_src_snapshots_plan or str({"bzfs": {"onsite": {"adhoc": 1}}})
         for org, target_periods in ast.literal_eval(create_src_snapshots_plan).items():
             for target, periods in target_periods.items():
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     if not isinstance(period_amount, int) or period_amount < 0:
                         die(f"--create-src-snapshots-plan: Period amount must be a non-negative integer: {period_amount}")
+                    lbl = SnapshotLabel(prefix=nprefix(org), infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
                     if period_amount > 0:
-                        suffix: str = nsuffix(period_unit)
-                        labels.append(SnapshotLabel(prefix=nprefix(org), infix=ninfix(target), timestamp="", suffix=suffix))
+                        labels.append(lbl)
+                        snapshot_label_attributes[lbl.notimestamp_str()] = SnapshotLabelAttributes.parse({})
+        create_src_snapshots_plan_attributes: str = args.create_src_snapshots_plan_attributes or str({})
+        for org, target_periods in ast.literal_eval(create_src_snapshots_plan_attributes).items():
+            for target, periods in target_periods.items():
+                for period_unit, period_attributes in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
+                    lbl = SnapshotLabel(prefix=nprefix(org), infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
+                    snapshot_label_attributes[lbl.notimestamp_str()] = SnapshotLabelAttributes.parse(period_attributes)
+        self.snapshot_label_attributes: Final[Mapping[str, SnapshotLabelAttributes]] = snapshot_label_attributes
         suffixes: list[str] = list({label.suffix for label in labels})  # dedupe
         xperiods: SnapshotPeriods = p.xperiods
         if self.skip_create_src_snapshots:
-            duration_amount, duration_unit = p.xperiods.suffix_to_duration0(p.daemon_frequency)
+            duration_amount, duration_unit = xperiods.suffix_to_duration0(p.daemon_frequency)
             if duration_amount <= 0 or not duration_unit:
                 die(f"Invalid --daemon-frequency: {p.daemon_frequency}")
             suffixes = [nsuffix(p.daemon_frequency)]

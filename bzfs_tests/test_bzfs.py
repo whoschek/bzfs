@@ -981,7 +981,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
         self.p.zfs_recv_ox_names = {"existing"}
         self.job = bzfs.Job()
         self.job.params = self.p
-        self.job.src_properties = {"ds": bzfs.DatasetProperties(1, 0)}
+        self.job.src_properties = {"ds": bzfs.DatasetProperties(1, 0, written=0)}
 
     def test_appends_x_options_when_supported(self) -> None:
         recv_opts: list[str] = []
@@ -1015,7 +1015,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
     def test_keeps_only_recv_opts_supported_for_filesystem(self) -> None:
         self.p.zfs_recv_x_names = []  # type: ignore[misc]  # cannot assign to final attribute
         self.p.zfs_recv_ox_names = set()
-        self.job.src_properties = {"ds": bzfs.DatasetProperties(1024, 0)}  # >= 0 int indicates fs
+        self.job.src_properties = {"ds": bzfs.DatasetProperties(1024, 0, written=0)}  # >= 0 int indicates fs
         recv_opts = ["-u", "-o", "canmount=noauto", "-x", "mountpoint", "-o", "volmode=none", "-x", "volsize"]
         with (
             patch.object(self.p, "is_program_available", return_value=False),
@@ -1028,7 +1028,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
     def test_keeps_only_recv_opts_supported_for_volume(self) -> None:
         self.p.zfs_recv_x_names = []  # type: ignore[misc]  # cannot assign to final attribute
         self.p.zfs_recv_ox_names = set()
-        self.job.src_properties = {"ds": bzfs.DatasetProperties(-4096, 0)}  # < 0 indicates zvol
+        self.job.src_properties = {"ds": bzfs.DatasetProperties(-4096, 0, written=0)}  # < 0 indicates zvol
         recv_opts = [
             "-u",
             "-o",
@@ -1435,7 +1435,7 @@ class TestJobMethods(AbstractTestCase):
         job.validate_once()
         job.max_workers.setdefault("src", 1)
         job.max_workers.setdefault("dst", 1)
-        job.src_properties = {"pool/src": bzfs.DatasetProperties(1, 0)}
+        job.src_properties = {"pool/src": bzfs.DatasetProperties(1, 0, written=0)}
 
         # Craft synthetic zfs list outputs (guid\tname) for src and dst
         src_dataset = "pool/src"
@@ -2044,6 +2044,7 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
         """
 
         job = self._job()
+        job.src_properties = {ds: bzfs.DatasetProperties(131072, 0, written=0) for ds in ("tank/a", "tank/b")}
         config = job.params.create_src_snapshots_config
         config.current_datetime = datetime(2024, 1, 1, 5, 30, tzinfo=timezone.utc)
         config.tz = timezone.utc  # type: ignore[misc]  # cannot assign to final attribute
@@ -2122,8 +2123,8 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
 
         job.cache = cast(SnapshotCache, FakeCache())
         job.src_properties = {
-            "tank/a": bzfs.DatasetProperties(0, creation_time_a),
-            "tank/b": bzfs.DatasetProperties(0, 456),
+            "tank/a": bzfs.DatasetProperties(0, creation_time_a, written=0),
+            "tank/b": bzfs.DatasetProperties(0, 456, written=0),
         }
 
         received: list[str] = []
