@@ -36,6 +36,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
@@ -94,7 +95,7 @@ omit = ["bzfs_tests/**/*.py", "**/__init__.py"]
 
 [tool.black]
 line_length = 125
-target_version = ["py39", "py310", "py311", "py312", "py313", "py314"]
+target_version = ["py39", "py310", "py311", "py312", "py313", "py314", "py315"]
 
 [tool.ruff]
 target-version = "py39"

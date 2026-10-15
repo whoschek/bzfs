@@ -80,7 +80,7 @@ destination; only the `zfs` CLI is required there. bzfs can run as root or as a 
 allow` permissions.
 
 bzfs is written in Python and continuously tested with unit and integration tests on old and new ZFS versions, on multiple
-Linux and FreeBSD versions, and on all Python versions >= 3.9 (including latest stable, currently python-3.14).
+Linux and FreeBSD versions, and on all Python versions >= 3.9 (including latest stable, currently python-3.15).
 
 bzfs is a stand-alone program with zero required dependencies. It is meant to run in restricted barebones server
 environments. No external Python packages are required; indeed no Python package management at all is required. You can
