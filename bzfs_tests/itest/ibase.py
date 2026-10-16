@@ -371,6 +371,9 @@ class IntegrationTestCase(ParametrizedTestCase):
 
         if SSH_PROGRAM != "ssh" and "--ssh-program" not in args and "--ssh-program=" not in args:
             args += ["--ssh-program=" + SSH_PROGRAM]
+        if SSH_PROGRAM == "hpnssh" and os.path.exists("/etc/redhat-release"):
+            # Workaround to bound the server's per-command FD leak across jobs: https://github.com/rapier1/hpn-ssh/issues/158
+            args += ["--ssh-exit-on-shutdown"]
 
         if params and params.get("verbose", None):
             args += ["--verbose"]
