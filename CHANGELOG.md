@@ -2,6 +2,18 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.0] - Not yet released
+
+- [bzfs] feat: Add
+  [--create-src-snapshots-plan-attributes](https://github.com/whoschek/bzfs#https://github.com/whoschek/bzfs#--create-src-snapshots-plan-attributes)
+  CLI option.
+- [bzfs] feat: when reusing SSH connections use the contents of the ssh config file instead of its path name as cache
+  key.
+- [bzfs] fix: in daemon mode, don't leak connection lease file descriptors if feature detection fails.
+- [bzfs] Also run nightly CI tests on FreeBSD-14.5 and Python-3.15 final.
+- [bzfs] Nomore run nightly tests on FreeBSD-13.
+- [bzfs] Various small improvements to the test VM and test infra.
+
 ## [1.25.0] - September 20, 2026
 
 - [bzfs_jobrunner] feat: Monitor source and destination snapshots independently.
