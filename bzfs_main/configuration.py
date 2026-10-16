@@ -76,8 +76,6 @@ from bzfs_main.util import (
 )
 from bzfs_main.util.connection import (
     ConnectionPools,
-    MiniParams,
-    MiniRemote,
     get_ssh_config_file_hash,
 )
 from bzfs_main.util.retry import (
@@ -208,7 +206,7 @@ class LogParams:
 
 #############################################################################
 @final
-class Params(MiniParams):
+class Params:
     """All parsed CLI options combined into a single bundle; simplifies passing around numerous settings and defaults."""
 
     def __init__(
@@ -516,7 +514,7 @@ class Params(MiniParams):
 
 #############################################################################
 @final
-class Remote(MiniRemote):
+class Remote:
     """Connection settings for either source or destination host."""
 
     def __init__(self, loc: str, args: argparse.Namespace, p: Params) -> None:

@@ -150,7 +150,6 @@ from bzfs_main.snapshot_cache import (
 from bzfs_main.util.connection import (
     SHARED,
     ConnectionPool,
-    MiniJob,
     MiniRemote,
     timeout,
 )
@@ -254,14 +253,18 @@ def run_main(
 
 #############################################################################
 @final
-class Job(MiniJob):
+class Job:
     """Executes one bzfs run, coordinating snapshot replication tasks."""
 
     def __init__(self, termination_event: threading.Event | None = None) -> None:
         self.params: Params
         self.termination_event: Final[threading.Event] = termination_event or threading.Event()
+
+        def _on_before_attempt(_retry: Retry) -> None:
+            pass
+
         self.retry_timing: Final[RetryTiming] = RetryTiming.make_from(self.termination_event).copy(
-            on_before_attempt=lambda retry: None
+            on_before_attempt=_on_before_attempt
         )
         self.task_timing: Final[TaskTiming] = TaskTiming.make_from(self.termination_event)
         self.subprocesses: Subprocesses = Subprocesses(self.termination_event.is_set)
@@ -1311,6 +1314,7 @@ class Job(MiniJob):
             assert (not self.is_test_mode) or not has_duplicates(stale_src_datasets), "List contains duplicates"
             return stale_src_datasets, cache_files
 
+        cache_files: dict[str, str]
         if is_caching_snapshots(p, src):
             stale_src_datasets, cache_files = find_stale_datasets()
             num_cache_misses = len(stale_src_datasets)

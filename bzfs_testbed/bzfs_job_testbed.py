@@ -275,7 +275,7 @@ worker_timeout_seconds = None
 
 home_dir = pwd.getpwuid(os.getuid()).pw_dir  # returns the user's home directory without reading the $HOME Unix env var
 basename_stem = pathlib.Path(sys.argv[0]).stem  # the file's stem is the basename without file extension ("bzfs_job_testbed")
-extra_args = []
+extra_args: list[str] = []
 extra_args += [f"--job-id={basename_stem}"]
 extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-' + basename_stem)}"]
 # extra_args += ["--ssh-src-port=2222"]  # for hpnssh

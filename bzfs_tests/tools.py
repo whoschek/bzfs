@@ -30,8 +30,8 @@ import subprocess
 import types
 import unittest
 from collections.abc import (
+    Generator,
     Iterable,
-    Iterator,
 )
 from typing import (
     Any,
@@ -41,7 +41,7 @@ from typing import (
 
 
 @contextlib.contextmanager
-def temporary_env_var(name: str, value: str | bool | float | None, unset: bool = False) -> Iterator[None]:
+def temporary_env_var(name: str, value: str | bool | float | None, unset: bool = False) -> Generator[None]:
     """Temporarily override one environment variable and restore it on exit."""
     old_value = os.environ.get(name)
     try:
@@ -58,7 +58,7 @@ def temporary_env_var(name: str, value: str | bool | float | None, unset: bool =
 
 
 @contextlib.contextmanager
-def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
+def stop_on_failure_subtest(**params: Any) -> Generator[None]:
     """Context manager to mimic UnitTest.subTest() but stop on first failure."""
     try:
         yield
@@ -67,7 +67,7 @@ def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def suppress_output() -> Iterator[None]:
+def suppress_output() -> Generator[None]:
     """Silence stdout/stderr and temporarily disable logging to keep test output clean."""
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         old_disable = logging.root.manager.disable
@@ -79,7 +79,7 @@ def suppress_output() -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def suppress_logger(log: logging.Logger) -> Iterator[None]:
+def suppress_logger(log: logging.Logger) -> Generator[None]:
     """Temporarily remove handlers from the given logger to prevent console output to keep test output clean."""
     previous_handlers: list[logging.Handler] = log.handlers.copy()
     previous_level: int = log.level
@@ -96,7 +96,7 @@ def suppress_logger(log: logging.Logger) -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def capture_stderr() -> Iterator[io.StringIO]:
+def capture_stderr() -> Generator[io.StringIO]:
     """Capture stderr output for later inspection within a test."""
     buf = io.StringIO()
     with contextlib.redirect_stderr(buf):
@@ -104,7 +104,7 @@ def capture_stderr() -> Iterator[io.StringIO]:
 
 
 @contextlib.contextmanager
-def capture_stdout() -> Iterator[io.StringIO]:
+def capture_stdout() -> Generator[io.StringIO]:
     """Capture stdout output for later inspection within a test."""
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
@@ -112,7 +112,7 @@ def capture_stdout() -> Iterator[io.StringIO]:
 
 
 @contextlib.contextmanager
-def gc_disabled(run_gc_first: bool = False) -> Iterator[None]:
+def gc_disabled(run_gc_first: bool = False) -> Generator[None]:
     """Temporarily disables Python's automatic cyclic GC within a with-block; for more accurate benchmarking."""
     if run_gc_first:
         gc.collect()

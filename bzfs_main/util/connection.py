@@ -70,7 +70,7 @@ import subprocess
 import threading
 import time
 from collections.abc import (
-    Iterator,
+    Generator,
     Sequence,
 )
 from dataclasses import (
@@ -118,9 +118,17 @@ DEDICATED: Final[str] = "dedicated"
 class MiniJob(Protocol):
     """Minimal Job interface required by the connections module; for loose coupling."""
 
-    timeout_nanos: int | None  # timestamp aka instant in time
-    timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
-    subprocesses: Subprocesses
+    @property
+    def timeout_nanos(self) -> int | None:
+        """Timeout timestamp aka instant in time, in monotonic nanoseconds, or None when no timeout applies."""
+
+    @property
+    def timeout_duration_nanos(self) -> int | None:
+        """Timeout duration (not a timestamp), in nanoseconds; used only for logging."""
+
+    @property
+    def subprocesses(self) -> Subprocesses:
+        """Subprocess manager used to run and track connection commands."""
 
 
 #############################################################################
@@ -128,8 +136,13 @@ class MiniJob(Protocol):
 class MiniParams(Protocol):
     """Minimal Params interface used by the connections module; for loose coupling."""
 
-    log: logging.Logger
-    ssh_program: str  # name or path of executable; "hpnssh" is also valid
+    @property
+    def log(self) -> logging.Logger:
+        """Logger used for connection diagnostics."""
+
+    @property
+    def ssh_program(self) -> str:
+        """Name or path of the SSH executable; 'hpnssh' is also valid."""
 
 
 #############################################################################
@@ -137,15 +150,41 @@ class MiniParams(Protocol):
 class MiniRemote(Protocol):
     """Minimal Remote interface used by the connections module; for loose coupling."""
 
-    params: MiniParams
-    location: str  # "src" or "dst"
-    ssh_user_host: str  # use the empty string to indicate local mode (no ssh)
-    ssh_extra_opts: tuple[str, ...]
-    reuse_ssh_connection: bool
-    ssh_control_persist_secs: int
-    ssh_control_persist_margin_secs: int
-    ssh_exit_on_shutdown: bool
-    ssh_socket_dir: str
+    @property
+    def params(self) -> MiniParams:
+        """Settings read by connection operations."""
+
+    @property
+    def location(self) -> str:
+        """Endpoint role: 'src' or 'dst'."""
+
+    @property
+    def ssh_user_host(self) -> str:
+        """SSH destination, or the empty string to indicate local mode without SSH."""
+
+    @property
+    def ssh_extra_opts(self) -> tuple[str, ...]:
+        """Additional SSH command-line options used by connections to this endpoint."""
+
+    @property
+    def reuse_ssh_connection(self) -> bool:
+        """Whether connections should reuse SSH multiplexing masters."""
+
+    @property
+    def ssh_control_persist_secs(self) -> int:
+        """Idle lifetime (in seconds) requested for SSH multiplexing masters."""
+
+    @property
+    def ssh_control_persist_margin_secs(self) -> int:
+        """Safety margin (in seconds) for refreshing a master before its idle timeout."""
+
+    @property
+    def ssh_exit_on_shutdown(self) -> bool:
+        """Whether shutdown should close this endpoint's SSH multiplexing masters."""
+
+    @property
+    def ssh_socket_dir(self) -> str:
+        """Directory containing SSH multiplexing sockets for this endpoint."""
 
     def is_ssh_available(self) -> bool:
         """Return True if the ssh client program required for this remote is available on the local host."""
@@ -183,13 +222,13 @@ def create_simple_miniremote(
 
     @dataclass(frozen=True)  # aka immutable
     @final
-    class SimpleMiniParams(MiniParams):
+    class SimpleMiniParams:
         log: logging.Logger
         ssh_program: str
 
     @dataclass(frozen=True)  # aka immutable
     @final
-    class SimpleMiniRemote(MiniRemote):
+    class SimpleMiniRemote:
         params: MiniParams
         location: str  # "src" or "dst"
         ssh_user_host: str
@@ -294,7 +333,7 @@ def create_simple_minijob(
 
     @dataclass(frozen=True)  # aka immutable
     @final
-    class SimpleMiniJob(MiniJob):
+    class SimpleMiniJob:
         timeout_nanos: int | None  # timestamp aka instant in time
         timeout_duration_nanos: int | None  # duration (not a timestamp); for logging only
         subprocesses: Subprocesses
@@ -539,7 +578,7 @@ class ConnectionPool:
         self._lease_mgr: Final[ConnectionLeaseManager | None] = lease_mgr
 
     @contextlib.contextmanager
-    def connection(self) -> Iterator[Connection]:
+    def connection(self) -> Generator[Connection]:
         """Context manager that yields a connection from the pool and automatically returns it on __exit__."""
         conn: Connection = self.get_connection()
         try:

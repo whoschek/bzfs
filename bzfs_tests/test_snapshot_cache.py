@@ -61,7 +61,7 @@ import threading
 import time
 import unittest
 from collections.abc import (
-    Iterator,
+    Generator,
 )
 from contextlib import (
     contextmanager,
@@ -133,7 +133,7 @@ DST_DATASET: str = "pool/dst"
 class TestSnapshotCache(AbstractTestCase):
 
     @contextmanager
-    def job_context(self, args: list[str]) -> Iterator[tuple[Job, str]]:
+    def job_context(self, args: list[str]) -> Generator[tuple[Job, str]]:
         """Context manager yielding (job, tmpdir) with patched homedir.
 
         Purpose: Provide a ready-to-use Job whose cache directory lives under

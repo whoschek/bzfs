@@ -224,8 +224,13 @@ class ProgressReporter:
         )
         update_interval_nanos: int = round(update_interval_secs * 1_000_000_000)
         sliding_window_nanos: int = round(sliding_window_secs * 1_000_000_000)
-        sleep_nanos: int = 0
         etas: list[ProgressReporter.TransferStat.ETA] = []
+        sent_bytes, last_status_len = 0, 0
+        num_lines, num_readables = 0, 0
+        start_time_nanos: int = time.monotonic_ns()
+        next_update_nanos: int = start_time_nanos + update_interval_nanos
+        latest_samples: deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measures
+        sleep_nanos: int = 0
         while True:
             empty_file_name_queue: set[str] = set()
             empty_states: list[State] = []
@@ -243,7 +248,7 @@ class ProgressReporter:
                 self._states = empty_states  # exchange buffers
             for state in states:
                 if state is State.IS_PAUSING:
-                    next_update_nanos: int = time.monotonic_ns() + 10 * 365 * 86400 * 1_000_000_000  # infinity
+                    next_update_nanos = time.monotonic_ns() + 10 * 365 * 86400 * 1_000_000_000  # infinity
                     sleep_nanos = next_update_nanos
                 else:
                     assert state is State.IS_RESETTING
@@ -251,8 +256,8 @@ class ProgressReporter:
                     num_lines, num_readables = 0, 0
                     start_time_nanos = time.monotonic_ns()
                     next_update_nanos = start_time_nanos + update_interval_nanos
+                    latest_samples = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measures
                     sleep_nanos = round(update_interval_nanos / 2.5)
-                    latest_samples: deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measures
             for pv_log_file in local_file_name_queue:
                 try:
                     Path(pv_log_file).touch(mode=FILE_PERMISSIONS)

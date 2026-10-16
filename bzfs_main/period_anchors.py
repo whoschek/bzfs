@@ -130,7 +130,7 @@ class PeriodAnchors:
             return dt
 
         assert duration_amount > 0
-        period: timedelta | None = None
+        period: timedelta
         anchor: datetime
         if duration_unit == "millisecondly":
             anchor = dt.replace(hour=0, minute=0, second=0, microsecond=self.millisecondly_microsecond)
@@ -176,15 +176,6 @@ class PeriodAnchors:
             anchor = anchor + timedelta(days=diff_days)
             period = timedelta(weeks=duration_amount)
 
-        if period is not None:  # "millisecondly", "secondly", "minutely", "hourly", "daily", "weekly"
-            delta: timedelta = dt - anchor
-            period_micros: int = (period.days * 86400 + period.seconds) * 1_000_000 + period.microseconds
-            delta_micros: int = (delta.days * 86400 + delta.seconds) * 1_000_000 + delta.microseconds
-            remainder: int = delta_micros % period_micros
-            if remainder == 0:
-                return dt
-            return dt + timedelta(microseconds=period_micros - remainder)
-
         elif duration_unit == "monthly":
             months_since_anchor: int = (dt.year - self.monthly_year) * 12 + dt.month - self.monthly_month
             offset_months: int = -months_since_anchor % duration_amount
@@ -202,6 +193,15 @@ class PeriodAnchors:
 
         else:
             raise ValueError(f"Unsupported duration unit: {duration_unit}")
+
+        # "millisecondly", "secondly", "minutely", "hourly", "daily", "weekly"
+        delta: timedelta = dt - anchor
+        period_micros: int = (period.days * 86400 + period.seconds) * 1_000_000 + period.microseconds
+        delta_micros: int = (delta.days * 86400 + delta.seconds) * 1_000_000 + delta.microseconds
+        remainder: int = delta_micros % period_micros
+        if remainder == 0:
+            return dt
+        return dt + timedelta(microseconds=period_micros - remainder)
 
     def _add_months(self, dt: datetime, months: int) -> datetime:
         """Build a boundary offset from dt's month, clamping the configured day only against the target month's end."""

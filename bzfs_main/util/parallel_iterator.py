@@ -226,14 +226,15 @@ def batch_cmd_iterator(
     assert isinstance(sep, str)
     fsenc: str = sys.getfilesystemencoding()
     seplen: int = len(sep.encode(fsenc))
-    batch: list[str]
-    batch, total_bytes, total_items = [], 0, 0
+    batch: list[str] = []
+    total_bytes, total_items = 0, 0
     for cmd_arg in cmd_args:
         # Include a conservative eight-byte argv pointer
         arg_bytes: int = 8 + seplen + len((shlex.quote(cmd_arg) if quote_args else cmd_arg).encode(fsenc))
         if (total_items >= max_batch_items or total_bytes + arg_bytes > max_batch_bytes) and len(batch) > 0:
             yield fn(batch)
-            batch, total_bytes, total_items = [], 0, 0
+            batch = []
+            total_bytes, total_items = 0, 0
         batch.append(cmd_arg)
         total_bytes += arg_bytes
         total_items += 1

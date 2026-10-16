@@ -35,7 +35,7 @@ from collections import (
     Counter,
 )
 from collections.abc import (
-    Iterator,
+    Generator,
 )
 from pathlib import (
     Path,
@@ -373,10 +373,10 @@ class TestConnectionPool(AbstractTestCase):
                 # dpool = ConnectionPool(self.src2, SHARED, maxsessions)
                 rng = random.Random(12345)
                 conns: list[tuple[Connection, Connection]] = []
+                step, item = -1, -1
                 try:
                     for _ in range(items):
                         conns.append(self.get_connection(cpool, dpool))
-                    item = -1
                     for step in range(num_steps):
                         if is_logging:
                             log.log(loglevel, f"itr maxsessions: {maxsessions}, items: {items}, step: {step}")
@@ -885,12 +885,13 @@ class TestRunSshCommand(AbstractTestCase):
         )
         self.conn_pools = ConnectionPools(remote=self.remote, capacities={SHARED: 1})
         self.conn_pool = self.conn_pools.pool(SHARED)
+        self.pooled_remote = cast(Remote, self.conn_pool._remote)
         self.conn: Connection | None = None
 
         original_connection = self.conn_pool.connection
 
         @contextlib.contextmanager
-        def _connection_cm(original_connection: Any = original_connection) -> Iterator[Connection]:
+        def _connection_cm(original_connection: Any = original_connection) -> Generator[Connection]:
             with original_connection() as conn:
                 self.conn = conn
                 yield conn
@@ -917,7 +918,7 @@ class TestRunSshCommand(AbstractTestCase):
     @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
     def test_remote_calls_refresh_and_executes(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "host"
-        self.conn_pool._remote.ssh_user_host = "host"
+        self.pooled_remote.ssh_user_host = "host"
         mock_run.return_value = MagicMock(stdout="out", stderr="err")
         result = self.job.run_ssh_command(self.remote, cmd=["echo"], print_stdout=True, print_stderr=True)
         self.assertEqual("out", result)
@@ -933,7 +934,7 @@ class TestRunSshCommand(AbstractTestCase):
     )
     def test_calledprocesserror_propagates(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
-        self.conn_pool._remote.ssh_user_host = "h"
+        self.pooled_remote.ssh_user_host = "h"
         with self.assertRaises(subprocess.CalledProcessError):
             self.job.run_ssh_command(self.remote, cmd=["boom"], print_stdout=True)
         mock_run.assert_called_once()
@@ -966,7 +967,7 @@ class TestRunSshCommand(AbstractTestCase):
     )
     def test_timeout_expired_propagates(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
-        self.conn_pool._remote.ssh_user_host = "h"
+        self.pooled_remote.ssh_user_host = "h"
         with self.assertRaises(subprocess.TimeoutExpired):
             self.job.run_ssh_command(self.remote, cmd=["sleep"], print_stdout=True)
         mock_run.assert_called_once()
@@ -979,7 +980,7 @@ class TestRunSshCommand(AbstractTestCase):
     )
     def test_unicode_error_propagates_without_logging(self, mock_run: MagicMock, mock_refresh: MagicMock) -> None:
         self.remote.ssh_user_host = "h"
-        self.conn_pool._remote.ssh_user_host = "h"
+        self.pooled_remote.ssh_user_host = "h"
         with self.assertRaises(UnicodeDecodeError):
             self.job.run_ssh_command(self.remote, cmd=["foo"])
         mock_run.assert_called_once()

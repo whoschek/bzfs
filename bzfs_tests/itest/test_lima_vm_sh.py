@@ -30,7 +30,7 @@ import time
 import unittest
 import uuid
 from collections.abc import (
-    Iterator,
+    Generator,
 )
 from contextlib import (
     contextmanager,
@@ -254,7 +254,7 @@ class TestLimaVmScript(unittest.TestCase):
         return version_stdout
 
     @contextmanager
-    def _cleanup_vms(self, *vm_names: str) -> Iterator[None]:
+    def _cleanup_vms(self, *vm_names: str) -> Generator[None]:
         """Deletes listed test VMs before/after a block for idempotent cleanup."""
         for vm_name in vm_names:
             self._ensure_vm_deleted(vm_name)

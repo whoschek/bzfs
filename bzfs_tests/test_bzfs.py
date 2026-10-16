@@ -25,6 +25,7 @@ import threading
 import time
 import unittest
 from collections.abc import (
+    Generator,
     Iterator,
 )
 from datetime import (
@@ -2168,7 +2169,7 @@ class TestRunTasksErrorPropagation(AbstractTestCase):
         return job
 
     @contextlib.contextmanager
-    def _task_outcomes(self, job: bzfs.Job, outcomes: list[BaseException | None]) -> Iterator[MagicMock]:
+    def _task_outcomes(self, job: bzfs.Job, outcomes: list[BaseException | None]) -> Generator[MagicMock]:
         with (
             patch.object(job, "validate_once"),
             patch.object(job, "validate_task"),

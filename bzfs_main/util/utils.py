@@ -51,6 +51,7 @@ from collections import (
     deque,
 )
 from collections.abc import (
+    Generator,
     ItemsView,
     Iterable,
     Iterator,
@@ -390,7 +391,7 @@ def close_quietly(fd: int) -> None:
 
 
 @contextlib.contextmanager
-def nonblocking_file_lock(path: str) -> Iterator[bool]:
+def nonblocking_file_lock(path: str) -> Generator[bool]:
     """Context manager that yields whether an exclusive non-blocking flock was acquired, deleting its file before releasing
     a successful acquisition in order to avoid accumulating stale lock files over time."""
 
@@ -802,7 +803,7 @@ def termination_signal_handler(
     termination_events: list[threading.Event],
     *,
     termination_handler: Callable[[], None] = lambda: terminate_process_subtree(),
-) -> Iterator[None]:
+) -> Generator[None]:
     """Context manager that installs SIGINT/SIGTERM handlers that set all ``termination_events`` and, by default, terminate
     all descendant processes."""
     termination_events = list(termination_events)  # shallow copy
@@ -879,7 +880,7 @@ class Subprocesses:
         self._child_pids: Final[dict[int, None]] = {}  # a set that preserves insertion order
 
     @contextlib.contextmanager
-    def popen_and_track(self, *popen_args: Any, **popen_kwargs: Any) -> Iterator[subprocess.Popen]:
+    def popen_and_track(self, *popen_args: Any, **popen_kwargs: Any) -> Generator[subprocess.Popen]:
         """Context manager that calls subprocess.Popen() and tracks the child PID for per-job termination.
 
         Holds a lock across Popen+PID registration to prevent a race when terminate_process_subtrees() is invoked (e.g. from
@@ -1451,6 +1452,7 @@ class SynchronousExecutor(Executor):
     def __init__(self) -> None:
         self._shutdown: bool = False
 
+    # pyrefly: ignore[bad-override]  # Python 3.9-compatible executor signature
     def submit(self, fn: Callable[..., _R_], /, *args: Any, **kwargs: Any) -> Future[_R_]:
         """Executes `fn(*args, **kwargs)` immediately and returns its Future."""
         future: Future[_R_] = Future()
