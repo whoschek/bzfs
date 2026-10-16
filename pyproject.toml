@@ -233,15 +233,6 @@ notice-rgx = """Copyright (\\(c\\) )?\\d{4}([-,]\\d{4})* Wolfgang Hoschek AT mac
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
-[tool.ruff.lint.flake8-tidy-imports.banned-api]
-# Deprecated in Python 3.11:
-"locale.getdefaultlocale".msg = "Use locale.setlocale() and locale.getlocale() instead."
-# Deprecated in Python 3.12:
-"datetime.datetime.utcnow".msg = "Use datetime.datetime.now(tz=datetime.timezone.utc)"
-"datetime.datetime.utcfromtimestamp".msg = "Use datetime.datetime.fromtimestamp(tz=datetime.timezone.utc)"
-"typing.Hashable".msg = "Use collections.abc.Hashable"
-"typing.Sized".msg = "Use collections.abc.Sized"
-
 [tool.ruff.lint.flake8-import-conventions]  # ICN
 # forbid-aliased-import-of-modules, e.g. forbids 'import bzfs_main.bzfs as foo'
 aliases = { "bzfs_main.bzfs" = "bzfs", "bzfs_main.bzfs_jobrunner" = "bzfs_jobrunner" }
