@@ -112,6 +112,7 @@ exclude = [   # toggles to exclude overly strict `ruff` checks of these Python s
 ]
 
 [tool.ruff.lint]
+typing-extensions = false  # retain Python 3.9 compatibility without third-party runtime dependencies
 select = [      # see https://docs.astral.sh/ruff/rules/
     "A",        # builtins
     "ASYNC",    # flake8-async
@@ -134,6 +135,8 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "ISC",      # flake8-implicit-str-concat
     "LOG",      # flake8-logging
     "N",        # pep8-naming, snake_case
+    "NPY",      # NumPy
+    "PD",       # pandas-vet
     "PERF101",  # unnecessary-list-cast
     "PERF102",  # use dict keys() or values() if the other items() part is discarded
     "PERF402",  # use list or list.copy to create a copy of a list
@@ -154,6 +157,7 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "PLR2044",  # pylint-refactor: line with empty comment
     "PLW",      # pylint-warning
     "PTH210",   # flake8-use-pathlib: invalid Path.with_suffix() argument
+    "PYI",      # flake-pyi
     "RET501", "RET502", "RET503",  # flake8-return
     "RUF",      # ruff-specifc rules
     "S",        # bandit
@@ -168,6 +172,7 @@ select = [      # see https://docs.astral.sh/ruff/rules/
     "SIM910",   # flake8-simplify: dict.get(x, None)
     "SIM911",   # flake8-simplify: use dict.items() instead of zip()
     "SLF",      # private member accessed
+    "SLOT",     # flake8-slots
     "T100",     # check for debugger imports and breakpoint() calls
     "TC001", "TC004", "TC005", "TC007","TC008", "TC010",  # flake8-type-checking conditions
     "TID",      # flake8-tidy-imports

@@ -41,17 +41,17 @@ class CheckRange(argparse.Action):
     # fmt: off
     """Argparse action validating numeric ranges like ``(a,b]`` or ``[a,+∞)``."""
     ops: Final = {
-        'inf': operator.gt,
-        'min': operator.ge,
-        'sup': operator.lt,
-        'max': operator.le,
+        "inf": operator.gt,
+        "min": operator.ge,
+        "sup": operator.lt,
+        "max": operator.le,
     }
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        if 'min' in kwargs and 'inf' in kwargs:
-            raise ValueError('either min or inf, but not both')
-        if 'max' in kwargs and 'sup' in kwargs:
-            raise ValueError('either max or sup, but not both')
+        if "min" in kwargs and "inf" in kwargs:
+            raise ValueError("either min or inf, but not both")
+        if "max" in kwargs and "sup" in kwargs:
+            raise ValueError("either max or sup, but not both")
 
         for name in self.ops:
             if name in kwargs:
@@ -61,21 +61,21 @@ class CheckRange(argparse.Action):
 
     def interval(self) -> str:
         """Returns a human-readable description of the allowed range."""
-        if hasattr(self, 'min'):
-            lo = f'[{self.min}'
-        elif hasattr(self, 'inf'):
-            lo = f'({self.inf}'
+        if hasattr(self, "min"):
+            lo = f"[{self.min}"
+        elif hasattr(self, "inf"):
+            lo = f"({self.inf}"
         else:
-            lo = '(-infinity'
+            lo = "(-infinity"
 
-        if hasattr(self, 'max'):
-            up = f'{self.max}]'
-        elif hasattr(self, 'sup'):
-            up = f'{self.sup})'
+        if hasattr(self, "max"):
+            up = f"{self.max}]"
+        elif hasattr(self, "sup"):
+            up = f"{self.sup})"
         else:
-            up = '+infinity)'
+            up = "+infinity)"
 
-        return f'valid range: {lo}, {up}'
+        return f"valid range: {lo}, {up}"
 
     def __call__(
         self,
