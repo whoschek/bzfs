@@ -250,7 +250,7 @@ repos:
           --prose-wrap=always,                  # Wrap prose if it exceeds the print width
           --embedded-language-formatting=auto,  # Keep Prettier's default embedded formatting
         ]
-        exclude: '^(README.*|prd)\.md$'
+        exclude: '^README.*\.md$'
       - id: prettier-yaml                       # Auto-format YAML files
         name: prettier (yaml)
         language: unsupported
