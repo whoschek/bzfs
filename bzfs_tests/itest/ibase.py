@@ -340,6 +340,10 @@ class IntegrationTestCase(ParametrizedTestCase):
         if not has_dst_cfg:
             args += ["--ssh-dst-config-file=" + SSH_CONFIG_FILE]
 
+        if platform.system() == "FreeBSD" and retries == 0 and ssh_mode != "local":
+            # workaround to prevent deadlock due to spurious mbuffer race on FreeBSD's bidirectional stderr pipe.
+            # see replication.py#_mbuffer_cmd()
+            retries = 1
         for arg in args:
             assert "--retries" not in arg
         args += [f"--retries={retries}"]

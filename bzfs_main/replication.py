@@ -24,6 +24,7 @@ from __future__ import (
 import base64
 import logging
 import os
+import platform
 import re
 import shlex
 import subprocess
@@ -1022,6 +1023,11 @@ def _mbuffer_cmd(p: Params, loc: str, recordsize: int) -> str:
     bottlenecks caused by network latency or speed fluctuation."""
     recordsize = max(recordsize, 2 * 1024 * 1024)
     mbuffer_program_opts: list[str] = [p.mbuffer_program, "-s", str(recordsize)] + p.mbuffer_program_opts
+    if (
+        platform.system() == "FreeBSD" or p.available_programs.get(loc, {}).get("os") == "FreeBSD"
+    ) and "-W" not in mbuffer_program_opts:
+        # workaround to prevent deadlock due to spurious mbuffer race on FreeBSD's bidirectional stderr pipe
+        mbuffer_program_opts += ["-W", "300"]  # trigger timeout when I/O activity has stalled for > N seconds, then retry
     if p.bwlimit:
         mbuffer_program_opts += ["-R" if loc == "src" else "-r", p.bwlimit.upper()]
     return shlex.join(mbuffer_program_opts)

@@ -18,6 +18,7 @@ from __future__ import (
     annotations,
 )
 import json
+import platform
 import shlex
 import subprocess
 import threading
@@ -788,7 +789,8 @@ class TestReplication(AbstractTestCase):
             mbuffer_program_opts=["-O", "localhost:0"],
             no_estimate_send_size=False,
         )
-        self.assertEqual("mbuffer -s 2097152 -O localhost:0", _mbuffer_cmd(p, "src", 1024))
+        watchdog = " -W 300" if platform.system() == "FreeBSD" else ""
+        self.assertEqual(f"mbuffer -s 2097152 -O localhost:0{watchdog}", _mbuffer_cmd(p, "src", 1024))
 
     def test_mbuffer_cmd_uses_bwlimit_for_send_and_receive(self) -> None:
         """Verifies mbuffer uses the correct bwlimit flag for src and dst legs."""
@@ -797,6 +799,7 @@ class TestReplication(AbstractTestCase):
             ("dst", False, True, "-r"),
             ("local", True, True, "-r"),
         ]
+        watchdog = " -W 300" if platform.system() == "FreeBSD" else ""
         for loc, src_is_nonlocal, dst_is_nonlocal, rate_flag in cases:
             with self.subTest(loc=loc):
                 p = _make_params(
@@ -809,7 +812,7 @@ class TestReplication(AbstractTestCase):
                     bwlimit="20m",
                     no_estimate_send_size=False,
                 )
-                self.assertEqual(f"mbuffer -s 2097152 -m 8M {rate_flag} 20M", _mbuffer_cmd(p, loc, 4096))
+                self.assertEqual(f"mbuffer -s 2097152 -m 8M{watchdog} {rate_flag} 20M", _mbuffer_cmd(p, loc, 4096))
 
     def test_compress_cmd_formats_command_even_if_unavailable(self) -> None:
         """Verifies compression command formatting is independent of feature-selection policy."""
