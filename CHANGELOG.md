@@ -9,6 +9,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   option.
 - [bzfs] feat: when reusing SSH connections use the contents of the ssh config file in addition to the path name as
   cache key.
+- [bzfs] fix: FreeBSD: add workaround to prevent deadlock due to spurious mbuffer startup race on FreeBSD's
+  bidirectional stderr pipe.
 - [bzfs] fix: in daemon mode, don't leak connection lease file descriptors if feature detection fails.
 - [bzfs] Also run nightly CI tests on FreeBSD-14.5 and Python-3.15 final.
 - [bzfs] Nomore run nightly tests on FreeBSD-13.
