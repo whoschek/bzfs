@@ -282,9 +282,9 @@ dill==0.4.1 ; python_full_version >= '3.10' \
     --hash=sha256:1e1ce33e978ae97fcfcff5638477032b801c46c7c65cf717f95fbc2248f79a9d \
     --hash=sha256:423092df4182177d4d8ba8290c8a5b640c66ab35ec7da59ccfa00f6fa3eea5fa
     # via pylint
-distlib==0.4.3 ; python_full_version >= '3.10' \
-    --hash=sha256:4b0ce306c966eb73bc3a7b6abad017c556dadd92c44701562cd528ac7fde4d5b \
-    --hash=sha256:f152097224a0ae24be5a0f6bae1b9359af82133bce63f98a95f86cae1aede9ed
+distlib==0.4.4 ; python_full_version >= '3.10' \
+    --hash=sha256:ca4175b4ac7f71223cc30ed7248c45d2b38c2439d8ee6e498ab67ed63cf3508d \
+    --hash=sha256:cf09d55b1e85a89576b036aeb71550bfd68320f3f21761ca329eadadad918638
     # via virtualenv
 filelock==4.1.0 ; python_full_version == '3.10.*' \
     --hash=sha256:2ce9818e3e2d8f284c1a964414447ef148d42a5fd5e2a477a7118e574b293ec1 \
@@ -292,9 +292,9 @@ filelock==4.1.0 ; python_full_version == '3.10.*' \
     # via
     #   python-discovery
     #   virtualenv
-filelock==4.2.0 ; python_full_version >= '3.11' \
-    --hash=sha256:2ff5690882e8cdb00ef31fb3d01a3094c29f30985426c59495afb1733f3b7238 \
-    --hash=sha256:7a60906c75227cf04d0c273afadc8219400f11aeb13cc69591d4f6cdc6c8036e
+filelock==4.2.2 ; python_full_version >= '3.11' \
+    --hash=sha256:1851d2f14ca2901e98069d68333b33ad7409f56904e17b48cc0c32a0db8ed73a \
+    --hash=sha256:b29ff2ae9140bb17b3bc77c648dc4f010d9ac0955eccabff4f2b01dde859f787
     # via
     #   python-discovery
     #   virtualenv
@@ -562,9 +562,9 @@ platformdirs==4.12.4 ; python_full_version == '3.10.*' \
     #   black
     #   pylint
     #   virtualenv
-platformdirs==4.13.0 ; python_full_version >= '3.11' \
-    --hash=sha256:1aa0b0d3f224c1f07c295121e312a5a24a180d6ae5a8425ea1784b3e3863e9c0 \
-    --hash=sha256:3dbcf4cd708f21cf876c4eaa90e58412bc4f033d87143f41b1493ff77c25b7e1
+platformdirs==4.13.4 ; python_full_version >= '3.11' \
+    --hash=sha256:502ce08e9d36cf90579ee44e1e764838842fa658e4975ef47344fd053011d2c8 \
+    --hash=sha256:dd96496961684a7f42041923f842ec7494e09f5e87aded99117e1109cd40570e
     # via
     #   black
     #   pylint
@@ -599,9 +599,9 @@ pyrefly==1.4.0 \
     --hash=sha256:bb57c004a4842cfe93f93aebb5203ca6209a5f0c8bda47e8bc289e70940fd910 \
     --hash=sha256:f5f3c9dddb6f3128beb49cf4e0f5cb88d4d17f039008d8e0c2be653966acd234
     # via bzfs (pyproject.toml)
-python-discovery==1.6.2 ; python_full_version >= '3.10' \
-    --hash=sha256:cd1738ca1d37c86ef9d0b654dd46fcee1e41c97c6add12575e8501ced39afdb4 \
-    --hash=sha256:f0c697f95a3aaec4174a6e5e58f5885e25768684bafc76f1afde384709ebdcf2
+python-discovery==1.6.3 ; python_full_version >= '3.10' \
+    --hash=sha256:a62b301d96cf5489cb96ab023b32e068421867fdd5df2e42eece877869047fa2 \
+    --hash=sha256:cb7654125e3dcb594269a6feb56ac693f1f13b7c654493a93eba72dc22d18034
     # via virtualenv
 pytokens==0.4.1 ; python_full_version >= '3.10' \
     --hash=sha256:0fc71786e629cef478cbf29d7ea1923299181d0699dbe7c3c0f4a583811d9fc1 \
@@ -817,9 +817,9 @@ tomli==2.5.0 ; python_full_version == '3.10.*' \
     #   mypy
     #   pre-commit-hooks
     #   pylint
-tomlkit==0.15.1 ; python_full_version >= '3.10' \
-    --hash=sha256:177a05aece5a8ca5266fd3c448abb47b8d352f09d477d3ca8332db4d89b24304 \
-    --hash=sha256:e25bbf38843005246210a12982776f27f99cb9be67160e14434d0c0d21ee1e97
+tomlkit==0.15.2 ; python_full_version >= '3.10' \
+    --hash=sha256:05562412163a3037b94497385fb7f9204c637bc605af7a48199e41cf2272f437 \
+    --hash=sha256:83e32755ba1d20d9340bd069ee97e9f6232ba2346b63ffcba425de01f7e327a6
     # via pylint
 typing-extensions==4.16.0 ; python_full_version >= '3.10' \
     --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8 \
@@ -829,7 +829,7 @@ typing-extensions==4.16.0 ; python_full_version >= '3.10' \
     #   black
     #   mypy
     #   virtualenv
-virtualenv==21.14.7 ; python_full_version >= '3.10' \
-    --hash=sha256:3769219a308c5d2f093e7729621ad12a6346b5767a7ec4338414e2a0fb0c526b \
-    --hash=sha256:5f427d56f39eb7e7447d641dd4b7ab1e9c92793f498f35f26da2e4972c5546ae
+virtualenv==21.14.11 ; python_full_version >= '3.10' \
+    --hash=sha256:593052d8477ea8c55a842387ce111bd08c72618f0c1133c302cafe335e570a57 \
+    --hash=sha256:b319f8590a84e5de5f8f2c803ecd2237e9bc0ffa7c1e875e3169c107cecb7454
     # via pre-commit
