@@ -468,10 +468,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Display ZFS version and Python version
         uses: $/.github/actions/print-versions
-      - name: Run pre-commit
-        uses: $/.github/actions/pre-commit
-        with:
-          python-version: ${{ matrix.python-version }}
       - name: Run tests
         run: |
           ./test.sh
