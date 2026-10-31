@@ -19,8 +19,8 @@ set -e
 script_dir="$(dirname "$(realpath "$0")")"
 repo_root="$(dirname "$script_dir")"
 package_name='prettier'
-package_version='3.9.6'
-package_sha256='997da95cf2ae81053cafc79ef122a6e8dc12e3f2c619d57eb1f2e19525fb212f'
+package_version='3.9.10'
+package_sha256='9dc72045591793dff972432fb78722f7ab91aaa90a7fa8c1261ede55969246b7'
 package_tarball_url="https://registry.npmjs.org/${package_name}/-/${package_name}-${package_version}.tgz"
 # curl -fsSL "$package_tarball_url" | sha256sum -b | sed 's/[[:blank:]].*//'  # actual value of package_sha256
 package_cli="$repo_root/.venv/${package_name}/${package_name}-${package_version}/package/bin/${package_name}.cjs"
