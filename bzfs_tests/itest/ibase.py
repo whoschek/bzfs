@@ -37,6 +37,7 @@ from collections import (
     Counter,
 )
 from collections.abc import (
+    Callable,
     Iterable,
 )
 from contextlib import (
@@ -50,7 +51,6 @@ from subprocess import (
 )
 from typing import (
     Any,
-    Callable,
     Final,
     cast,
 )

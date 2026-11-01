@@ -58,6 +58,7 @@ from collections import (
     defaultdict,
 )
 from collections.abc import (
+    Callable,
     Collection,
     Sequence,
 )
@@ -76,7 +77,6 @@ from subprocess import (
 )
 from typing import (
     Any,
-    Callable,
     Final,
     cast,
     final,

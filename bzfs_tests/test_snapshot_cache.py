@@ -61,6 +61,7 @@ import threading
 import time
 import unittest
 from collections.abc import (
+    Callable,
     Generator,
 )
 from contextlib import (
@@ -72,9 +73,6 @@ from datetime import (
 )
 from pathlib import (
     Path,
-)
-from typing import (
-    Callable,
 )
 from unittest.mock import (
     MagicMock,

@@ -24,6 +24,7 @@ from collections import (
     defaultdict,
 )
 from collections.abc import (
+    Callable,
     Iterable,
     Iterator,
     Sequence,
@@ -34,7 +35,6 @@ from dataclasses import (
 )
 from typing import (
     TYPE_CHECKING,
-    Callable,
     final,
 )
 

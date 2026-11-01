@@ -51,6 +51,7 @@ from collections import (
     deque,
 )
 from collections.abc import (
+    Callable,
     Generator,
     ItemsView,
     Iterable,
@@ -84,7 +85,6 @@ from subprocess import (
 from typing import (
     IO,
     Any,
-    Callable,
     Final,
     Generic,
     Literal,

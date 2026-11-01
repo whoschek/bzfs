@@ -18,8 +18,10 @@ from __future__ import (
     annotations,
 )
 import unittest
-from typing import (
+from collections.abc import (
     Callable,
+)
+from typing import (
     ClassVar,
     Protocol,
 )

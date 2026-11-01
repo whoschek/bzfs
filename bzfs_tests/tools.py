@@ -30,12 +30,12 @@ import subprocess
 import types
 import unittest
 from collections.abc import (
+    Callable,
     Generator,
     Iterable,
 )
 from typing import (
     Any,
-    Callable,
     final,
 )
 

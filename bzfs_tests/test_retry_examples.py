@@ -26,6 +26,7 @@ from collections import (
     defaultdict,
 )
 from collections.abc import (
+    Callable,
     Iterable,
     Mapping,
 )
@@ -35,7 +36,6 @@ from enum import (
 )
 from typing import (
     Any,
-    Callable,
     Final,
     TypeVar,
     cast,

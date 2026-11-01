@@ -30,11 +30,11 @@ from __future__ import (
 import logging
 import os
 import subprocess
+from collections.abc import (
+    Callable,
+)
 from concurrent.futures import (
     Future,
-)
-from typing import (
-    Callable,
 )
 
 from bzfs_main.util.parallel_tasktree import (

@@ -38,6 +38,7 @@ import threading
 import time
 import unittest
 from collections.abc import (
+    Callable,
     Sequence,
 )
 from concurrent.futures import (
@@ -70,7 +71,6 @@ from subprocess import (
 )
 from typing import (
     Any,
-    Callable,
     SupportsIndex,
     Union,
     cast,

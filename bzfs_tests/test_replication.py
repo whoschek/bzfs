@@ -26,9 +26,11 @@ import unittest
 from collections import (
     defaultdict,
 )
+from collections.abc import (
+    Callable,
+)
 from typing import (
     TYPE_CHECKING,
-    Callable,
     Final,
 )
 from unittest.mock import (

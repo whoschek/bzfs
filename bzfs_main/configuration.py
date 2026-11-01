@@ -1009,8 +1009,8 @@ def _delete_stale_files(
             if entry.name == exclude or not entry.name.startswith(prefix):
                 continue
             try:
-                stats = entry.stat(follow_symlinks=False)
-                is_dir = entry.is_dir(follow_symlinks=False)
+                stats: os.stat_result = entry.stat(follow_symlinks=False)
+                is_dir: bool = entry.is_dir(follow_symlinks=False)
                 if ((dirs and is_dir) or (not dirs and not is_dir)) and now - stats.st_mtime >= seconds:
                     if dirs:
                         shutil.rmtree(entry.path, ignore_errors=True)

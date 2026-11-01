@@ -26,6 +26,7 @@ import threading
 import time
 import unittest
 from collections.abc import (
+    Callable,
     Iterator,
 )
 from concurrent.futures import (
@@ -39,7 +40,6 @@ from functools import (
 )
 from typing import (
     Any,
-    Callable,
 )
 from unittest.mock import (
     MagicMock,

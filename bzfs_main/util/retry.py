@@ -141,6 +141,7 @@ import time
 import traceback
 from collections.abc import (
     Awaitable,
+    Callable,
     Iterable,
     Mapping,
     Sequence,
@@ -151,7 +152,6 @@ from dataclasses import (
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Final,
     Generic,
     NamedTuple,

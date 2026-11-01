@@ -25,6 +25,7 @@ import threading
 import time
 import unittest
 from collections.abc import (
+    Callable,
     Generator,
     Iterator,
 )
@@ -36,7 +37,6 @@ from itertools import (
     combinations,
 )
 from typing import (
-    Callable,
     cast,
     final,
 )

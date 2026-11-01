@@ -60,6 +60,9 @@ import concurrent
 import heapq
 import logging
 import os
+from collections.abc import (
+    Callable,
+)
 from concurrent.futures import (
     FIRST_COMPLETED,
     Executor,
@@ -69,7 +72,6 @@ from concurrent.futures.thread import (
     ThreadPoolExecutor,
 )
 from typing import (
-    Callable,
     Final,
     NamedTuple,
     final,

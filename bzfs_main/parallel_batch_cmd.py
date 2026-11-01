@@ -51,13 +51,13 @@ from __future__ import (
 import shlex
 import sys
 from collections.abc import (
+    Callable,
     Iterable,
     Iterator,
     Sequence,
 )
 from typing import (
     TYPE_CHECKING,
-    Callable,
     TypeVar,
 )
 

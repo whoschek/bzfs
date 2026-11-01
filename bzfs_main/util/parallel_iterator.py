@@ -26,6 +26,7 @@ from collections import (
     deque,
 )
 from collections.abc import (
+    Callable,
     Iterable,
     Iterator,
 )
@@ -38,7 +39,6 @@ from concurrent.futures.thread import (
     ThreadPoolExecutor,
 )
 from typing import (
-    Callable,
     Final,
     TypeVar,
 )

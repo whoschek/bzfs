@@ -28,13 +28,11 @@ import traceback
 import unittest
 import weakref
 from collections.abc import (
+    Callable,
     Generator,
 )
 from logging import (
     Logger,
-)
-from typing import (
-    Callable,
 )
 from unittest.mock import (
     MagicMock,

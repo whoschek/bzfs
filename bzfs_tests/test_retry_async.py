@@ -25,9 +25,9 @@ import sys
 import unittest
 from collections.abc import (
     Awaitable,
+    Callable,
 )
 from typing import (
-    Callable,
     NoReturn,
     TypeVar,
 )
