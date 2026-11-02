@@ -221,6 +221,8 @@ jobs:
           sudo sed -i '/^Components: /a Architectures: amd64' /etc/apt/sources.list.d/rapier1-ubuntu-hpnssh-*.sources
 
           ./.github-workflow-scripts/apt-get-update-with-retries.sh
+          # force disable hpnsshd's systemd generator because it races with OpenSSH's generator over ssh.socket configuration
+          sudo install -D -m 0644 /dev/null /etc/systemd/system-generators/hpnsshd-socket-generator
           sudo apt-get -y install hpnssh-client hpnssh-server
           hpnssh -V
       - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -298,6 +300,8 @@ jobs:
 
           # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
           ./.github-workflow-scripts/add-apt-repository-with-retries.sh ppa:rapier1/hpnssh
+          # force disable hpnsshd's systemd generator because it races with OpenSSH's generator over ssh.socket configuration
+          sudo install -D -m 0644 /dev/null /etc/systemd/system-generators/hpnsshd-socket-generator
           sudo apt-get -y install hpnssh-client hpnssh-server
           hpnssh -V
 
