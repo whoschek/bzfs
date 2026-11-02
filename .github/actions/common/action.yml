@@ -61,3 +61,11 @@ runs:
       shell: bash
       run: |
         sudo apt-get -y install zfsutils-linux
+    - name: Prepare ZFS device access
+      shell: bash
+      run: |
+        if [[ -c /dev/zfs && ! -w /dev/zfs ]]; then
+          # Apply the packaged ZFS udev rule when the test user lacks device access.
+          sudo udevadm control --reload
+          sudo udevadm trigger --action=add --sysname-match=zfs --settle
+        fi
