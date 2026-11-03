@@ -1,8 +1,6 @@
 # Changelog
 
-This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [1.26.0] - Not yet released
+## [1.26.0] - November 3, 2026
 
 - [bzfs] feat: Add
   [--create-src-snapshots-plan-attributes](https://github.com/whoschek/bzfs#--create-src-snapshots-plan-attributes) CLI
@@ -15,6 +13,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] Also run nightly CI tests on FreeBSD-14.5 and Python-3.15 final.
 - [bzfs] Nomore run nightly tests on FreeBSD-13.
 - [bzfs] Various small improvements to the test VM and test infra.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.25.0...v1.26.0
 
 ## [1.25.0] - September 20, 2026
 
