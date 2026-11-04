@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.26.1] - November 4, 2026
+
+- [bzfs] fix: `--zfs-recv-o-include-regex`: Handle native ZFS properties that contain a newline.
+- [bzfs] fix: Keep cached ZFS property queries isolated.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.26.0...v1.26.1
+
 ## [1.26.0] - November 3, 2026
 
 - [bzfs] feat: Add
