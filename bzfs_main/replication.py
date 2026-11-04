@@ -1377,6 +1377,16 @@ def _add_recv_property_options(
 ) -> tuple[list[str], list[str]]:
     """Reads the ZFS properties of the given src dataset; Appends zfs recv -o and -x values to a recv_opts copy according to
     CLI params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""
+    multiline_props: set[str] = {  # native ZFS properties whose value can contain a newline
+        "context",
+        "defcontext",
+        "fscontext",
+        "keylocation",
+        "mountpoint",
+        "rootcontext",
+        "sharenfs",
+        "sharesmb",
+    }
     is_volume: bool = job.src_properties[dataset].recordsize < 0
     p = job.params
     recv_opts = recv_opts.copy()
@@ -1396,15 +1406,16 @@ def _add_recv_property_options(
             continue  # this is the default - it's an instant noop
         if (full_send and "full" in config.targets) or (not full_send and "incremental" in config.targets):
             # 'zfs get' uses newline as record separator and tab as separator between output columns. A ZFS user property
-            # may contain newline and tab characters (indeed anything). Together, this means that there is no reliable
-            # way to determine where a record ends and the next record starts when listing multiple arbitrary records in
-            # a single 'zfs get' call. Therefore, here we use a separate 'zfs get' call for each ZFS user property.
+            # (or known multiline native ZFS property) may contain newline and tab characters (indeed anything). Together,
+            # this means that there is no reliable way to determine where a record ends and the next record starts when
+            # listing multiple arbitrary records in a single 'zfs get' call. Therefore, here we use a separate 'zfs get'
+            # call for each ZFS user property and each known multiline native property.
             # TODO: perf: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
             try:
                 props_any: dict = _zfs_get(job, p.src, dataset, config.sources, "property", "all", True, cache)
                 props_filtered: dict = filter_properties(p, props_any, config.include_regexes, config.exclude_regexes)
-                user_propnames: list[str] = [name for name in props_filtered if ":" in name]
-                sys_propnames: str = ",".join(name for name in props_filtered if ":" not in name)
+                user_propnames: list[str] = [name for name in props_filtered if ":" in name or name in multiline_props]
+                sys_propnames = ",".join(name for name in props_filtered if not (":" in name or name in multiline_props))
                 props = dict(_zfs_get(job, p.src, dataset, config.sources, "property,value", sys_propnames, True, cache))
                 for propnames in user_propnames:
                     props.update(_zfs_get(job, p.src, dataset, config.sources, "property,value", propnames, False, cache))

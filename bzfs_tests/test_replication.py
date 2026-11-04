@@ -53,6 +53,7 @@ from bzfs_main.filter import (
 )
 from bzfs_main.replication import (
     INJECT_DST_PIPE_FAIL_KBYTES,
+    _add_recv_property_options,
     _check_zfs_dataset_busy,
     _clear_resumable_recv_state_if_necessary,
     _compress_cmd,
@@ -1132,6 +1133,72 @@ class TestReplication(AbstractTestCase):
         self.assertEqual({"prop": "val"}, result1)
         self.assertEqual(result1, result2)
         mock_run_ssh_command.assert_called_once()
+
+    def test_add_recv_property_options_preserves_multiline_values(self) -> None:
+        """Exercise all property-copy modes with ZFS-style output, preserving values and caching while batching safe
+        native properties. Include property-like text to detect silent record injection as well as parse failures."""
+        for group in ("zfs-recv-o", "zfs-recv-x", "zfs-set"):
+            for full_send in (False, True):
+                for value in ("first\nsecond\t \n\n", "first\ncompression\toff"):
+                    with self.subTest(group=group, full_send=full_send, value=value):
+                        props = {
+                            "compression": "lz4",
+                            "recordsize": "131072",
+                            "mountpoint": "/mnt/" + value,
+                            "keylocation": "file:///keys/" + value,
+                            "sharenfs": "rw=" + value,
+                            "sharesmb": "description=" + value,
+                            "context": value,
+                            "fscontext": value,
+                            "defcontext": value,
+                            "rootcontext": value,
+                            "org.test:multiline": value,
+                            "org.test:excluded": value,
+                        }
+                        params = self.make_params(
+                            args=self.argparser_parse_args(
+                                [
+                                    "pool/src",
+                                    "pool/dst",
+                                    "--zfs-recv-o-include-regex",
+                                    f"--{group}-include-regex=.*",
+                                    f"--{group}-exclude-regex=org.test:excluded",
+                                    f"--{group}-targets=full+incremental",
+                                ]
+                            )
+                        )
+                        job = MagicMock(params=params)
+                        job.src_properties = {"pool/src": MagicMock(recordsize=131072)}
+
+                        def zfs_get_output(
+                            _remote: Remote, _loglevel: int, *, cmd: list[str], properties: dict[str, str] = props
+                        ) -> str:
+                            if cmd[4] == "property":
+                                return "".join(f"{name}\n" for name in properties)
+                            return "".join(f"{name}\t{properties[name]}\n" for name in cmd[-2].split(","))
+
+                        job.run_ssh_command.side_effect = zfs_get_output
+                        recv_opts = ["-u"]
+                        cache: dict[tuple[str, ...], dict[str, str | None]] = {}
+                        expected_recv = recv_opts.copy()
+                        expected_set = []
+                        for name in sorted(props):
+                            if name == "org.test:excluded":
+                                continue
+                            if group == "zfs-recv-o":
+                                expected_recv.extend(["-o", f"{name}={props[name]}"])
+                            elif group == "zfs-recv-x":
+                                expected_recv.extend(["-x", name])
+                            else:
+                                expected_set.append(f"{name}={props[name]}")
+                        expected = expected_recv, expected_set
+                        self.assertEqual(expected, _add_recv_property_options(job, full_send, recv_opts, "pool/src", cache))
+                        self.assertEqual(["-u"], recv_opts)
+                        reads = [entry.kwargs["cmd"][-2] for entry in job.run_ssh_command.call_args_list]
+                        self.assertEqual(["all", "compression,recordsize"] + list(props)[2:-1], reads)
+                        job.run_ssh_command.reset_mock()
+                        self.assertEqual(expected, _add_recv_property_options(job, full_send, recv_opts, "pool/src", cache))
+                        job.run_ssh_command.assert_not_called()
 
     def test_zfs_get_cache_is_scoped_by_remote_and_dataset(self) -> None:
         job = _make_job(zfs_program="zfs", log=MagicMock())
