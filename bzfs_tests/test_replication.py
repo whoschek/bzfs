@@ -86,6 +86,7 @@ from bzfs_main.util.retry import (
 from bzfs_main.util.utils import (
     DIE_STATUS,
     LOG_DEBUG,
+    POSIX_END_OF_OPTIONS_MARKER,
     SynchronizedBool,
     compile_regexes,
     sha256_urlsafe_base64,
@@ -1112,15 +1113,18 @@ class TestReplication(AbstractTestCase):
 
     @patch("bzfs_main.replication.run_ssh_cmd_batched")
     def test_zfs_set_batches_properties(self, batched: MagicMock) -> None:
+        """Keep property operands after the option terminator, preserving option-like names and multiline values."""
         remote = MagicMock(sudo="sudo")
         job = _make_job(zfs_program="zfs", dry_run=False)
-        _zfs_set(job, ["foo=bar", "baz=qux"], remote, "pool/ds")
+        properties = ["foo=bar", "baz=qux", "-org.test:single=first\nsecond\t \n", "--org.test:double=value"]
+        _zfs_set(job, properties, remote, "pool/ds")
         batched.assert_called_once()
-        self.assertEqual(["sudo", "zfs", "set", "pool/ds"], batched.call_args[0][2])
-        self.assertEqual(["foo=bar", "baz=qux"], batched.call_args[0][3])
-        batched.call_args[0][4](["foo=bar", "baz=qux"])
+        self.assertEqual(["sudo", "zfs", "set", POSIX_END_OF_OPTIONS_MARKER, "pool/ds"], batched.call_args[0][2])
+        self.assertEqual(properties, batched.call_args[0][3])
+        batched.call_args[0][4](properties)
         self.assertEqual(
-            ["sudo", "zfs", "set", "foo=bar", "baz=qux", "pool/ds"], job.run_ssh_command.call_args.kwargs["cmd"]
+            ["sudo", "zfs", "set", POSIX_END_OF_OPTIONS_MARKER] + properties + ["pool/ds"],
+            job.run_ssh_command.call_args.kwargs["cmd"],
         )
 
     def test_zfs_get_uses_cache(self) -> None:
@@ -1136,7 +1140,8 @@ class TestReplication(AbstractTestCase):
 
     def test_add_recv_property_options_preserves_multiline_values(self) -> None:
         """Exercise all property-copy modes with ZFS-style output, preserving values and caching while batching safe
-        native properties. Include property-like text to detect silent record injection as well as parse failures."""
+        native properties. Include option-like user property names and property-like value text to detect option
+        confusion, silent record injection and parse failures."""
         for group in ("zfs-recv-o", "zfs-recv-x", "zfs-set"):
             for full_send in (False, True):
                 for value in ("first\nsecond\t \n\n", "first\ncompression\toff"):
@@ -1153,6 +1158,8 @@ class TestReplication(AbstractTestCase):
                             "defcontext": value,
                             "rootcontext": value,
                             "org.test:multiline": value,
+                            "-org.test:single": value,
+                            "--org.test:double": value,
                             "org.test:excluded": value,
                         }
                         params = self.make_params(
@@ -1196,6 +1203,8 @@ class TestReplication(AbstractTestCase):
                         self.assertEqual(["-u"], recv_opts)
                         reads = [entry.kwargs["cmd"][-2] for entry in job.run_ssh_command.call_args_list]
                         self.assertEqual(["all", "compression,recordsize"] + list(props)[2:-1], reads)
+                        for entry in job.run_ssh_command.call_args_list:
+                            self.assertEqual(POSIX_END_OF_OPTIONS_MARKER, entry.kwargs["cmd"][-3])
                         job.run_ssh_command.reset_mock()
                         self.assertEqual(expected, _add_recv_property_options(job, full_send, recv_opts, "pool/src", cache))
                         job.run_ssh_command.assert_not_called()

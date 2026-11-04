@@ -98,6 +98,7 @@ from bzfs_main.util.utils import (
     FILE_PERMISSIONS,
     LOG_DEBUG,
     LOG_TRACE,
+    POSIX_END_OF_OPTIONS_MARKER,
     Subprocesses,
     append_if_absent,
     cut,
@@ -1310,6 +1311,8 @@ def _zfs_set(job: Job, properties: list[str], remote: Remote, dataset: str) -> N
         return
     # set properties in batches without creating a command line that's too big for the OS to handle
     cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} set")
+    if p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, remote.location):
+        cmd.append(POSIX_END_OF_OPTIONS_MARKER)
     run_ssh_cmd_batched(
         job,
         remote,
@@ -1345,7 +1348,9 @@ def _zfs_get(
         props_cache.pop(cache_key, None)
     props: dict[str, str | None] | None = props_cache.get(cache_key)
     if props is None:
-        cmd: list[str] = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
+        cmd: list[str] = p.split_args(
+            f"{p.zfs_program} get -Hp -o", output_columns, "-s", sources, POSIX_END_OF_OPTIONS_MARKER, propnames, dataset
+        )
         lines: str = job.run_ssh_command(remote, LOG_TRACE, cmd=cmd)
         is_name_value_pair: bool = "," in output_columns
         props = {}

@@ -98,6 +98,7 @@ from bzfs_main.util.parallel_tasktree_policy import (
 from bzfs_main.util.utils import (
     DIE_STATUS,
     LOG_TRACE,
+    POSIX_END_OF_OPTIONS_MARKER,
     UMASK,
     UNIX_TIME_INFINITY_SECS,
     JobStats,
@@ -121,7 +122,6 @@ PROG_NAME: Final[str] = "bzfs_jobrunner"
 SRC_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^SRC_HOST"  # noqa: S105
 DST_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^DST_HOST"  # noqa: S105
 SEP: Final[str] = ","
-POSIX_END_OF_OPTIONS_MARKER: Final[str] = "--"  # args following -- are treated as operands, even if they begin with a hyphen
 
 
 def argument_parser() -> argparse.ArgumentParser:

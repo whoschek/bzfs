@@ -117,6 +117,7 @@ FILE_PERMISSIONS: Final[int] = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user re
 DIR_PERMISSIONS: Final[int] = stat.S_IRWXU  # rwx------ (user read + write + execute)
 UMASK: Final[int] = (~DIR_PERMISSIONS) & 0o777  # so intermediate dirs created by os.makedirs() have stricter permissions
 UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH: Final[int] = 107 if platform.system() == "Linux" else 103  # see Google for 'sun_path'
+POSIX_END_OF_OPTIONS_MARKER: Final[str] = "--"  # args following -- are treated as operands, even if they begin with a hyphen
 
 RegexList = list[tuple[re.Pattern[str], bool]]  # Type alias
 
