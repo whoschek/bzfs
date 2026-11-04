@@ -1405,7 +1405,7 @@ def _add_recv_property_options(
                 props_filtered: dict = filter_properties(p, props_any, config.include_regexes, config.exclude_regexes)
                 user_propnames: list[str] = [name for name in props_filtered if ":" in name]
                 sys_propnames: str = ",".join(name for name in props_filtered if ":" not in name)
-                props: dict = _zfs_get(job, p.src, dataset, config.sources, "property,value", sys_propnames, True, cache)
+                props = dict(_zfs_get(job, p.src, dataset, config.sources, "property,value", sys_propnames, True, cache))
                 for propnames in user_propnames:
                     props.update(_zfs_get(job, p.src, dataset, config.sources, "property,value", propnames, False, cache))
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
