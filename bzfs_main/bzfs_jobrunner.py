@@ -545,6 +545,8 @@ class Job:
         log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
         assert len(args.root_dataset_pairs) > 0
+        for src_dataset, _ in args.root_dataset_pairs:
+            validate_dataset_name(src_dataset, "--root-dataset-pairs source")
         src_snapshot_plan: dict = self.validate_snapshot_plan(literal_eval(args.src_snapshot_plan), "--src-snapshot-plan")
         src_bookmark_plan: dict = self.validate_snapshot_plan(literal_eval(args.src_bookmark_plan), "--src-bookmark-plan")
         dst_snapshot_plan: dict = self.validate_snapshot_plan(literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
