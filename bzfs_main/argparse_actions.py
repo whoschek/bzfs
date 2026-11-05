@@ -408,6 +408,8 @@ class IncludeSnapshotPlanAction(argparse.Action):
         xperiods: SnapshotPeriods = SnapshotPeriods()
         has_at_least_one_filter_clause: bool = False
         for org, target_periods in ast.literal_eval(values).items():
+            if org.startswith("!"):
+                parser.error(f"{option_string}: Organization name must not start with '!': {org!r}")
             prefix: str = re.escape(nprefix(org))
             for target, periods in target_periods.items():
                 infix: str = re.escape(ninfix(target)) if target else YEAR_WITH_FOUR_DIGITS_REGEX.pattern
