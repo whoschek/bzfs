@@ -250,8 +250,10 @@ class Params:
         zfs_recv_program_opts: list[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             zfs_recv_program_opts.append(self.validate_arg_str(extra_opt, allow_all=True))
-        preserve_properties = [validate_property_name(name, "--preserve-properties") for name in args.preserve_properties]
-        zfs_recv_program_opts, zfs_recv_x_names = self._fix_recv_opts(zfs_recv_program_opts, frozenset(preserve_properties))
+        self.preserve_properties: Final[frozenset[str]] = frozenset(
+            validate_property_name(name, "--preserve-properties") for name in args.preserve_properties
+        )
+        zfs_recv_program_opts, zfs_recv_x_names = self._fix_recv_opts(zfs_recv_program_opts, self.preserve_properties)
         self.zfs_recv_program_opts: Final[list[str]] = zfs_recv_program_opts
         self.zfs_recv_x_names: Final[list[str]] = zfs_recv_x_names
         if self.verbose_zfs:

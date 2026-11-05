@@ -1439,7 +1439,8 @@ def _add_recv_property_options(
                         ox_names.add(propname)
                 else:
                     assert config is p.zfs_set_config
-                    set_opts.append(f"{propname}={props[propname]}")
+                    if propname not in p.preserve_properties:
+                        set_opts.append(f"{propname}={props[propname]}")
     recv_opts = _sanitize_recv_opts_for_dataset_type(recv_opts, is_volume=is_volume)
     return recv_opts, set_opts
 

@@ -1209,6 +1209,37 @@ class TestReplication(AbstractTestCase):
                         self.assertEqual(expected, _add_recv_property_options(job, full_send, recv_opts, "pool/src", cache))
                         job.run_ssh_command.assert_not_called()
 
+    def test_add_recv_property_options_respects_preserve_properties(self) -> None:
+        """Use parsed CLI settings to verify protected native and user properties stay excluded from post-receive copying,
+        even when explicit receive exclusions consume preservation names. Unprotected properties must still copy."""
+        params = self.make_params(
+            args=self.argparser_parse_args(
+                [
+                    "pool/src",
+                    "pool/dst",
+                    "--preserve-properties",
+                    "readonly",
+                    "org.test:policy",
+                    "--zfs-recv-program-opts=-u -x readonly -x atime",
+                    "--zfs-recv-o-include-regex",
+                    "--zfs-set-include-regex=.*",
+                    "--zfs-set-targets=full+incremental",
+                ]
+            )
+        )
+        params.zfs_recv_ox_names = Job.recv_option_property_names(params.zfs_recv_program_opts)
+        job = MagicMock(params=params)
+        job.src_properties = {"pool/src": MagicMock(recordsize=131072)}
+        for full_send in (False, True):
+            with self.subTest(full_send=full_send):
+                job.run_ssh_command.side_effect = [
+                    "atime\nreadonly\norg.test:policy\n",
+                    "atime\toff\nreadonly\toff\n",
+                    "org.test:policy\tsource\n",
+                ]
+                _, set_opts = _add_recv_property_options(job, full_send, params.zfs_recv_program_opts, "pool/src", {})
+                self.assertEqual(["atime=off"], set_opts)
+
     def test_zfs_get_cache_is_scoped_by_remote_and_dataset(self) -> None:
         job = _make_job(zfs_program="zfs", log=MagicMock())
         src = MagicMock(location="src")
