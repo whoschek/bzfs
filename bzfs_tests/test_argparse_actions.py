@@ -226,6 +226,15 @@ class TestIncludeSnapshotPlanAction(AbstractTestCase):
         with self.assertRaises(SystemExit), suppress_output():
             self.parser.parse_args(["--plan", "{'org': {'tgt': {'daily': -1}}}"])
 
+    def test_plan_options_reject_leading_negation_in_organization(self) -> None:
+        """Both plan options must reject a leading '!' organization, even after a valid entry, to prevent filter negation."""
+        plan = {"prod": {"onsite": {"hourly": 1}}, "!prod": {"onsite": {"hourly": 1}}}
+        for option in ("--include-snapshot-plan", "--delete-dst-snapshots-except-plan"):
+            with self.subTest(option=option):
+                with self.assertRaises(SystemExit) as error, suppress_output():
+                    self.argparser_parse_args(["src", "dst", option, str(plan)])
+                self.assertEqual(2, error.exception.code)
+
 
 ###############################################################################
 class TestDeleteDstSnapshotsExceptPlanAction(AbstractTestCase):
