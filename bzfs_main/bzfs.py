@@ -1073,7 +1073,9 @@ class Job:
         with_bookmarks: bool = p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and are_bookmarks_enabled(p, dst)
         btype: str = "bookmark,snapshot" if with_bookmarks else "snapshot"
         cmd: list[str] = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
-        for snapshots in zfs_list_snapshots_in_parallel(self, dst, cmd, sorted(candidate_orphans), ordered=False):
+        for snapshots in zfs_list_snapshots_in_parallel(
+            self, dst, cmd, sorted(candidate_orphans), ordered=False, exists=False
+        ):
             if with_bookmarks:
                 replace_in_lines(snapshots, old="#", new="@", count=1)  # treat bookmarks as snapshots
             for snapshot in snapshots:
