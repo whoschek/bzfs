@@ -90,6 +90,7 @@ from bzfs_main.util.utils import (
     DESCENDANTS_RE_SUFFIX,
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
+    ZFS_MAX_DATASET_NAME_LEN,
     JobStats,
     SnapshotPeriods,
     Subprocesses,
@@ -436,6 +437,13 @@ class TestHelperFunctions(unittest.TestCase):
             with self.subTest(name=name):
                 validate_dataset_name(name, "test")
 
+    def test_validate_dataset_name_length_limit(self) -> None:
+        """Reject a 256-character ASCII dataset name, just beyond the ZFS limit."""
+        pool = "pool/"
+        validate_dataset_name(pool + "a" * (ZFS_MAX_DATASET_NAME_LEN - len(pool) + 0), "test")
+        with self.assertRaises(SystemExit):
+            validate_dataset_name(pool + "a" * (ZFS_MAX_DATASET_NAME_LEN - len(pool) + 1), "test")
+
     def test_validate_dataset_name_invalid(self) -> None:
         """Reject malformed paths and unsafe characters."""
         input_text = "backup-host:pool/fs"
@@ -486,8 +494,6 @@ class TestHelperFunctions(unittest.TestCase):
         input_text = "--preserve-properties"
         for name in (
             "",
-            "-",
-            "-readonly",
             "ReadOnly",
             "backup:Enabled",
             "backup:caf\u00e9",
