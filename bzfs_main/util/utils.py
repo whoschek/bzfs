@@ -111,6 +111,8 @@ UNIX_TIME_INFINITY_SECS: Final[int] = 2**64  # billions of years and to be extra
 DONT_SKIP_DATASET: Final[str] = ""
 ZFS_DATASET_NAME_REGEX: Final[re.Pattern] = re.compile(r"[a-zA-Z][a-zA-Z0-9 _.:/-]*")  # see zfs_namecheck.c
 ZFS_PROPERTY_NAME_REGEX: Final[re.Pattern] = re.compile(r"[a-z0-9_.:-]+")  # see zfs_prop.c
+ZFS_MAX_PROPERTY_NAME_LEN: Final[int] = 255  # 256 incl. NUL: https://github.com/openzfs/zfs/blob/master/include/sys/fs/zfs.h
+ZFS_MAX_DATASET_NAME_LEN: Final[int] = 255  # 256 incl. NUL: https://github.com/openzfs/zfs/blob/master/include/sys/fs/zfs.h
 SHELL_CHARS: Final[str] = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"  # intentionally not included: -_.:/
 SHELL_CHARS_AND_SLASH: Final[str] = SHELL_CHARS + "/"
 FILE_PERMISSIONS: Final[int] = stat.S_IRUSR | stat.S_IWUSR  # rw------- (user read + write)
@@ -956,7 +958,8 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
     # and https://github.com/openzfs/zfs/issues/8798
     # and (by now no longer accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
     if (
-        dataset in ("", ".", "..")
+        len(dataset) > ZFS_MAX_DATASET_NAME_LEN
+        or dataset in ("", ".", "..")
         or dataset.startswith(("/", "./", "../"))
         or dataset.endswith(("/", "/.", "/.."))
         or any(substring in dataset for substring in ("//", "/./", "/../"))
@@ -967,7 +970,11 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
 
 def validate_property_name(propname: str, input_text: str) -> str:
     """Checks that the ZFS property name contains no spaces or shell chars, etc."""
-    if propname.startswith("-") or not ZFS_PROPERTY_NAME_REGEX.fullmatch(propname):
+    if (
+        len(propname) > ZFS_MAX_PROPERTY_NAME_LEN
+        or propname.startswith("-")
+        or not ZFS_PROPERTY_NAME_REGEX.fullmatch(propname)
+    ):
         die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
     return propname
 
