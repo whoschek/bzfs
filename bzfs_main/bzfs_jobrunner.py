@@ -920,9 +920,12 @@ class Job:
                 self.die(f"Unexpected error {sp.returncode} on checking for existing local dst zpools: {sp.stderr.strip()}")
             cmd = "zpool list -Hp -o name".split(" ") + sorted(existing_pools)  # don't wake up drives of unrelated pools
             sp = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout_secs, check=False)
-            if sp.returncode not in (0, 1):  # 1 means pool not found
+            if sp.returncode not in (0, 1):  # missing pools can yield either status
                 self.die(f"Unexpected error {sp.returncode} on checking for existing local dst pools: {sp.stderr.strip()}")
-            existing_pools = {"-:" + pool for pool in sp.stdout.splitlines() if pool}
+            # A pool exported between lookup and property retrieval can yield "-" instead of its name.
+            listed_pools: set[str] = set(sp.stdout.splitlines()).difference({"-"})
+            assert existing_pools.issuperset(listed_pools)
+            existing_pools = {"-:" + pool for pool in listed_pools}
             self.cache_existing_dst_pools.update(existing_pools)  # union
         unknown_remote_dst_pools = unknown_dst_pools.difference(unknown_local_dst_pools)
         self.cache_existing_dst_pools.update(unknown_remote_dst_pools)  # union

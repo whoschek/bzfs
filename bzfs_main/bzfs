@@ -19,6 +19,7 @@ PYTHONPATH="$(dirname "$(dirname "$(realpath "$0")")")"
 export PYTHONPATH
 export PYTHONSAFEPATH=1
 export PYTHONNOUSERSITE=1
+export PYTHONOPTIMIZE=""
 export PYTHON_LAZY_IMPORTS="${PYTHON_LAZY_IMPORTS:-all}"  # PEP 810
 python_exe=python3
 if [[ "${BZFS_UV_PYTHON:-}" != "" ]]; then  # e.g. '3' or '3.14' or '3.14.5'

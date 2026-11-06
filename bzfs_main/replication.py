@@ -112,6 +112,8 @@ from bzfs_main.util.utils import (
     sha256_urlsafe_base64,
     sort_datasets,
     stderr_to_str,
+    validate_property_name,
+    validate_snapshot_prefix,
     xprint,
 )
 
@@ -270,6 +272,8 @@ def _list_and_filter_src_and_dst_snapshots(
     )
     job.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids_str is not None
     dst_snapshots_with_guids: list[str] = (dst_snapshots_with_guids_str or "").splitlines()
+    for line in dst_snapshots_with_guids:
+        validate_snapshot_prefix(line.split("\t", 1)[1], dst_dataset)
     if src_snapshots_and_bookmarks is None:
         log.warning("Third party deleted source: %s", src_dataset)
         return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
@@ -301,6 +305,7 @@ def _list_and_filter_src_and_dst_snapshots(
         guid, snapshot = line.split("\t", 1)
         assert guid
         assert snapshot
+        validate_snapshot_prefix(snapshot, src_dataset, allow_bookmark=True)
         if "@" in snapshot:
             included_src_guids[guid] = snapshot
             latest_src_snapshot = snapshot
@@ -1340,6 +1345,8 @@ def _zfs_get(
     assert dataset
     assert sources
     assert output_columns
+    if output_columns == "property":
+        assert propnames == "all"
     if not propnames:
         return {}
     p = job.params
@@ -1353,15 +1360,19 @@ def _zfs_get(
         )
         lines: str = job.run_ssh_command(remote, LOG_TRACE, cmd=cmd)
         is_name_value_pair: bool = "," in output_columns
+        requested_propnames: set[str] = set(propnames.split(","))
         props = {}
         # if not splitlines: omit single trailing newline that was appended by 'zfs get' CLI
         assert splitlines or len(lines) == 0 or lines[-1] == "\n"
         for line in lines.splitlines() if splitlines else [lines[0:-1]]:
             if is_name_value_pair:
                 propname, propvalue = line.split("\t", 1)
-                props[propname] = propvalue
+                assert propname in requested_propnames
             else:
-                props[line] = None
+                propname, propvalue = line, None
+                assert propnames == "all"
+            validate_property_name(propname, dataset)
+            props[propname] = propvalue
         props_cache[cache_key] = props
     return props
 

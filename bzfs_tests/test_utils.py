@@ -142,6 +142,7 @@ from bzfs_main.util.utils import (
     validate_dataset_name,
     validate_file_permissions,
     validate_property_name,
+    validate_snapshot_prefix,
     xfinally,
     xprint,
 )
@@ -514,6 +515,28 @@ class TestHelperFunctions(unittest.TestCase):
                     validate_property_name(name, input_text)
                 self.assertEqual(utils.DIE_STATUS, cm.exception.code)
                 self.assertEqual(f"Invalid ZFS property name: '{name}' for: '{input_text}'", str(cm.exception))
+
+    def test_validate_snapshot_prefix(self) -> None:
+        """Check exact dataset membership and type flags using representative ZFS names."""
+        dataset = "pool/fs"
+        validate_snapshot_prefix("pool/fs@snap", dataset)
+        validate_snapshot_prefix("pool/fs@snap", dataset, allow_bookmark=True)
+        validate_snapshot_prefix("pool/fs#snap", dataset, allow_bookmark=True)
+        validate_snapshot_prefix("pool/fs#snap", dataset, allow_snapshot=False, allow_bookmark=True)
+        for name, options in (
+            ("pool/fs#snap", {}),
+            ("pool/fs@snap", {"allow_snapshot": False, "allow_bookmark": True}),
+            ("pool/fs@snap", {"allow_snapshot": False}),
+            ("pool/fs#snap", {"allow_snapshot": False}),
+            ("pool/fs2@snap", {}),
+            ("pool/fs/child#snap", {"allow_bookmark": True}),
+            ("pool/other@snap", {}),
+        ):
+            with self.subTest(name=name, options=options):
+                with self.assertRaises(SystemExit) as cm:
+                    validate_snapshot_prefix(name, dataset, **options)
+                self.assertEqual(utils.DIE_STATUS, cm.exception.code)
+                self.assertEqual(f"Manipulated ZFS snapshot name: {name} for dataset: {dataset}", str(cm.exception))
 
 
 #############################################################################

@@ -60,6 +60,7 @@ from bzfs_main.util.utils import (
     DIR_PERMISSIONS,
     FILE_PERMISSIONS,
     HashedInterner,
+    binary_search,
     human_readable_bytes,
     human_readable_duration,
     isotime_from_unixtime,
@@ -131,13 +132,16 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
                 lines.sort(key=_dataset_name)  # stable sort by dataset name
             yield from lines
 
-    def snapshot_iterator(r: Remote, root_dataset: str, sorted_itr: Iterator[str]) -> Iterator[_ComparableSnapshot]:
+    def snapshot_iterator(
+        r: Remote, sorted_datasets: list[str], root_dataset: str, sorted_itr: Iterator[str]
+    ) -> Iterator[_ComparableSnapshot]:
         """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that any two snapshots
         with the same GUID will lie adjacent to each other during the upcoming phase that merges src snapshots and dst
         snapshots."""
         list_bookmarks: bool = p.use_bookmark and r.location == "src" and are_bookmarks_enabled(p, r)
         # streaming group by dataset name (consumes constant memory only)
         for dataset, group in itertools.groupby(sorted_itr, key=_dataset_name):
+            assert binary_search(sorted_datasets, dataset) >= 0
             snapshots: list[str] = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
             tmp_bookmarks: list[str] = []
             if list_bookmarks:  # temporary bookmarks bypass include/exclude filters, e.g. name and rank filters
@@ -267,8 +271,12 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         log.info("%s", "\n".join(msgs))
 
     # setup streaming pipeline
-    src_snapshot_itr: Iterator = snapshot_iterator(src, src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
-    dst_snapshot_itr: Iterator = snapshot_iterator(dst, dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
+    src_snapshot_itr: Iterator = snapshot_iterator(
+        src, src_datasets, src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets)
+    )
+    dst_snapshot_itr: Iterator = snapshot_iterator(
+        dst, dst_datasets, dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets)
+    )
     merge_itr = _merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snapshot_itr, dst_snapshot_itr)
 
     interner: HashedInterner[str] = HashedInterner()  # reduces memory footprint
