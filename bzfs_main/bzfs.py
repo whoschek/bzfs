@@ -204,6 +204,7 @@ from bzfs_main.util.utils import (
     termination_signal_handler,
     validate_dataset_name,
     validate_property_name,
+    validate_snapshot_prefix,
     xappend,
     xfinally,
     xprint,
@@ -773,13 +774,19 @@ class Job:
         for line in (self.try_ssh_command_with_retries(src, LOG_DEBUG, cmd=cmd) or "").splitlines():
             cols: list[str] = line.split("\t")
             snapshots_changed, volblocksize, recordsize, written, src_dataset = cols if is_caching else ["-"] + cols
+            assert src_dataset == src.root_dataset or (
+                p.recursive
+                and src_dataset.startswith(src.root_dataset + "/")
+                and "@" not in src_dataset
+                and "#" not in src_dataset
+            ), (src_dataset, src.root_dataset)
             self.src_properties[src_dataset] = DatasetProperties(
                 recordsize=int(recordsize) if recordsize != "-" else -int(volblocksize),
                 snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                 written=int(written) if written != "-" else 0,
             )
             basis_src_datasets.append(src_dataset)
-        assert (not self.is_test_mode) or basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
+        assert basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
         return basis_src_datasets
 
     def list_dst_datasets_task(self) -> list[str]:
@@ -800,13 +807,19 @@ class Job:
             for line in basis_dst_datasets_str.splitlines():
                 cols: list[str] = line.split("\t")
                 snapshots_changed, dst_dataset = cols if is_caching else ["-"] + cols
+                assert dst_dataset == dst.root_dataset or (
+                    p.recursive
+                    and dst_dataset.startswith(dst.root_dataset + "/")
+                    and "@" not in dst_dataset
+                    and "#" not in dst_dataset
+                ), (dst_dataset, dst.root_dataset)
                 self.dst_properties[dst_dataset] = DatasetProperties(
                     recordsize=0,
                     snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                     written=0,
                 )
                 basis_dst_datasets.append(dst_dataset)
-        assert (not self.is_test_mode) or basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
+        assert basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
         return basis_dst_datasets
 
     def create_src_snapshots_task(self, basis_src_datasets: list[str], src_datasets: list[str]) -> None:
@@ -899,6 +912,9 @@ class Job:
             for line in dst_snaps_with_guids_str.splitlines():
                 dst_snaps_with_guids.append(line[: line.rindex("\t")])  # strip off trailing userrefs column
                 _, name, userrefs = line.rsplit("\t", 2)
+                validate_snapshot_prefix(
+                    name, dst_dataset, allow_snapshot=not p.delete_dst_bookmarks, allow_bookmark=p.delete_dst_bookmarks
+                )
                 if userrefs not in ("", "-", "0"):  # ZFS snapshot property userrefs > 0 indicates a zfs hold
                     tag: str = name[name.index("@") + 1 :]
                     held_dst_snapshots.add(tag)  # don't attempt to delete snapshots that carry a `zfs hold`
@@ -1060,7 +1076,10 @@ class Job:
         for snapshots in zfs_list_snapshots_in_parallel(self, dst, cmd, sorted(candidate_orphans), ordered=False):
             if with_bookmarks:
                 replace_in_lines(snapshots, old="#", new="@", count=1)  # treat bookmarks as snapshots
-            dst_datasets_having_snapshots.update(snap[: snap.index("@")] for snap in snapshots)  # union
+            for snapshot in snapshots:
+                dst_dataset = snapshot[: snapshot.index("@")]
+                assert dst_dataset in candidate_orphans
+                dst_datasets_having_snapshots.add(dst_dataset)
 
         orphans: set[str] = compute_orphans(dst_datasets_having_snapshots)  # compute the real orphans
         delete_datasets(self, dst, orphans)  # finally, delete the orphan datasets in an efficient way
@@ -1673,6 +1692,7 @@ class Job:
         for lines in zfs_list_snapshots_in_parallel(self, remote, cmd, sorted_datasets, ordered=False):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in itertools.groupby(lines, key=lambda line: line.split("\t", 1)[0].split("@", 1)[0]):
+                assert dataset in interner
                 dataset = interner.interned(dataset)
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
                     extract_fields(line) for line in group

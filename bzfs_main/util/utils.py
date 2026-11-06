@@ -520,8 +520,13 @@ def dataset_paths(dataset: str) -> Iterator[str]:
 
 
 def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
-    """In a string s, replaces a leading old_prefix string with new_prefix; assumes the leading string is present."""
-    assert s.startswith(old_prefix)
+    """In a ZFS dataset s, replaces a leading old_prefix with new_prefix; assumes the leading old_prefix is present as a
+    ZFS dataset."""
+    assert s == old_prefix or s.startswith(old_prefix + "/") or (old_prefix == new_prefix and not old_prefix), (
+        s,
+        old_prefix,
+        new_prefix,
+    )
     return new_prefix + s[len(old_prefix) :]
 
 
@@ -977,6 +982,19 @@ def validate_property_name(propname: str, input_text: str) -> str:
     ):
         die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
     return propname
+
+
+def validate_snapshot_prefix(
+    snapshot: str, dataset: str, *, allow_snapshot: bool = True, allow_bookmark: bool = False
+) -> None:
+    """Checks that the given snapshot belongs to the given dataset."""
+    if snapshot.startswith(dataset):
+        sep = snapshot[len(dataset)]
+        if allow_snapshot and sep == "@":
+            return
+        if allow_bookmark and sep == "#":
+            return
+    die(f"Manipulated ZFS snapshot name: {snapshot} for dataset: {dataset}")
 
 
 def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentParser | None = None) -> None:

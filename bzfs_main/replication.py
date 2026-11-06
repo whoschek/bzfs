@@ -112,6 +112,7 @@ from bzfs_main.util.utils import (
     sha256_urlsafe_base64,
     sort_datasets,
     stderr_to_str,
+    validate_snapshot_prefix,
     xprint,
 )
 
@@ -270,6 +271,8 @@ def _list_and_filter_src_and_dst_snapshots(
     )
     job.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids_str is not None
     dst_snapshots_with_guids: list[str] = (dst_snapshots_with_guids_str or "").splitlines()
+    for line in dst_snapshots_with_guids:
+        validate_snapshot_prefix(line.split("\t", 1)[1], dst_dataset)
     if src_snapshots_and_bookmarks is None:
         log.warning("Third party deleted source: %s", src_dataset)
         return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
@@ -301,6 +304,7 @@ def _list_and_filter_src_and_dst_snapshots(
         guid, snapshot = line.split("\t", 1)
         assert guid
         assert snapshot
+        validate_snapshot_prefix(snapshot, src_dataset, allow_bookmark=True)
         if "@" in snapshot:
             included_src_guids[guid] = snapshot
             latest_src_snapshot = snapshot

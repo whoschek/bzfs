@@ -1732,6 +1732,7 @@ class TestReplication(AbstractTestCase):
         src_dataset = "pool/src"
         dst_dataset = "pool/dst"
         p = self.make_params(args=self.argparser_parse_args([src_dataset, dst_dataset, "--dryrun=send"]))
+        p.src.root_dataset, p.dst.root_dataset = src_dataset, dst_dataset
 
         exclude_regexes = compile_regexes(["h.*"])  # exclude hourlies
         include_regexes = compile_regexes([".*"])  # include everything else
@@ -1754,8 +1755,10 @@ class TestReplication(AbstractTestCase):
             cmd: list[str] = cmd_opt if isinstance(cmd_opt, list) else []
             text = " ".join(cmd)
             if remote is p.src and " list -t " in text and "-o guid,name" in text:
+                self.assertEqual(src_dataset, cmd[-1])
                 return src_list
             if remote is p.dst and " list -t snapshot" in text and "-o guid,name" in text:
+                self.assertEqual(dst_dataset, cmd[-1])
                 return dst_list
             return ""
 
@@ -1806,4 +1809,5 @@ class TestReplication(AbstractTestCase):
 
         self.assertTrue(captured_steps, "No steps captured")
         to_snaps_all = [snap for step in captured_steps[0] for snap in step[3]]
+        self.assertIn(f"{src_dataset}@d2", to_snaps_all)
         self.assertNotIn(f"{src_dataset}@h1", to_snaps_all)
