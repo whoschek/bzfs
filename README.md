@@ -1807,6 +1807,9 @@ usage: bzfs [-h]
 - The options to be passed to the 'pv' program (optional). Default: '--progress --timer --eta --fineta --rate --average-rate
   --bytes --interval=1 --width=120 --buffer-size=2M'.
 
+  Each token must start with '-' and must not be '-' or '--'. Attach option values, e.g. '--interval=1' or '-B2M', instead of
+  '--interval 1' or '-B 2M'.
+
 <!-- -->
 
 <span id="--shell-program" class="man-option-title">**--shell-program** *{sh,-}*</span> <a href="#--shell-program" title="Permalink to --shell-program" aria-label="Permalink to --shell-program" class="man-option-permalink">&#x1F517;</a>

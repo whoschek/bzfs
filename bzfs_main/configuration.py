@@ -31,6 +31,7 @@ import threading
 import time
 from collections.abc import (
     Iterable,
+    Iterator,
     Mapping,
 )
 from dataclasses import (
@@ -309,23 +310,54 @@ class Params:
 
         self.compression_program: Final[str] = self._program_name(args.compression_program)
         self.compression_program_opts: Final[list[str]] = self.split_args(args.compression_program_opts)
-        for opt in {"-o", "--output-file"}.intersection(self.compression_program_opts):
+        compression_short_opts_with_args = {"zstd": "D", "lz4": "D", "pzstd": "p", "pigz": "bpSIJAC", "gzip": "bS"}
+        bad_compression_opts = {"-o", "--output-file"}
+        if self.compression_program in {"zstd", "lz4", "pzstd"}:
+            bad_compression_opts.add("--rm")
+        if self.compression_program == "zstd":
+            bad_compression_opts.update({"--trace", "--filelist"})  # union
+            # zstd matches --trace and --filelist by prefix. In 1.4.9-1.5.2, --trace-file-stat also selects trace-file output
+            bad_compression_opts.update(  # union
+                opt.split("=", 1)[0] for opt in self.compression_program_opts if opt.startswith(("--trace", "--filelist"))
+            )
+        for opt in _validate_posix_opts(
+            bad_compression_opts,
+            self.compression_program_opts,
+            short_opts_with_args=compression_short_opts_with_args.get(self.compression_program, ""),
+            short_opts_require_equals=self.compression_program == "zstd",
+            allow_abbreviations=self.compression_program == "gzip",
+        ):
             die(f"--compression-program-opts: {opt} is disallowed for security reasons.")
+
         self.getconf_program: Final[str] = self._program_name("getconf")  # print number of CPUs on POSIX
         self.mbuffer_program: Final[str] = self._program_name(args.mbuffer_program)
         self.mbuffer_program_opts: Final[list[str]] = self.split_args(args.mbuffer_program_opts)
-        for opt in {"-i", "-I", "-o", "-O", "-l", "-L", "-t", "-T", "-a", "-A"}.intersection(self.mbuffer_program_opts):
+        for opt in _validate_posix_opts(
+            {"-a", "-A", "-i", "-I", "-l", "-L", "-o", "-O", "-t", "-T"},
+            self.mbuffer_program_opts,
+            short_opts_with_args="sbmDPrRpnuvWM",
+        ):
             die(f"--mbuffer-program-opts: {opt} is disallowed for security reasons.")
         self.bwlimit: Final[str] = self.validate_arg_str(args.bwlimit) if args.bwlimit else ""
         self.ps_program: Final[str] = self._program_name(args.ps_program)
         self.pv_program: Final[str] = self._program_name(args.pv_program)
         self.pv_program_opts: Final[list[str]] = self.split_args(args.pv_program_opts)
+        for opt in self.pv_program_opts:
+            if opt in ("-", "--") or not opt.startswith("-"):
+                die(
+                    f"--pv-program-opts: Each token must start with '-' and must not be '-' or '--': {opt!r}. "
+                    "Attach option values, e.g. --interval=1 or -B2M, instead of '--interval 1' or '-B 2M'."
+                )
         bad_pv_opts = {"-o", "--output", "-f", "--log-file", "-S", "--stop-at-size", "-Y", "--sync", "-X", "--discard",
-                       "-U", "--store-and-forward", "-d", "--watchfd", "-R", "--remote", "-P", "--pidfile"}  # fmt: skip
-        for opt in bad_pv_opts.intersection(self.pv_program_opts):
+                       "-U", "--store-and-forward", "-d", "--watchfd", "-R", "--remote", "-P", "--pidfile",
+                       "-M", "--monitor", "-N", "--name", "-c", "--cursor"}  # fmt: skip
+        for opt in _validate_posix_opts(
+            bad_pv_opts, self.pv_program_opts, short_opts_with_args="ADsiwHuFxLBZJQm", allow_abbreviations=True
+        ):
             die(f"--pv-program-opts: {opt} is disallowed for security reasons.")
         if self.bwlimit:
             self.pv_program_opts.append(f"--rate-limit={self.bwlimit}")
+
         self.shell_program_local: Final[str] = "sh"
         self.shell_program: Final[str] = self._program_name(args.shell_program)
         self.ssh_program: str = self._program_name(args.ssh_program)
@@ -926,6 +958,39 @@ class MonitorSnapshotsConfig:
 
 
 #############################################################################
+def _validate_posix_opts(
+    opts: set[str],
+    args: Iterable[str],
+    *,
+    short_opts_with_args: str = "",
+    short_opts_require_equals: bool = False,
+    allow_abbreviations: bool = False,
+) -> Iterator[str]:
+    """Yields the first forbidden CLI option in each argument, including combined short options and attached values.
+
+    short_opts_with_args identifies options that consume the remainder as a value; short_opts_require_equals limits this to
+    values introduced by '='. This models parser differences without mistaking values for options.
+
+    allow_abbreviations rejects nonempty prefixes of forbidden long options, including ambiguous ones, without needing
+    complete program-specific option catalogs.
+    """
+    for arg in args:
+        if arg.startswith("--"):
+            opt = arg.split("=", 1)[0]
+            if opt in opts:
+                yield opt
+            elif allow_abbreviations and len(opt) > 2 and any(forbidden.startswith(opt) for forbidden in opts):
+                yield opt
+        elif arg.startswith("-"):
+            for i, char in enumerate(arg[1:]):
+                opt = f"-{char}"
+                if opt in opts:
+                    yield opt
+                    break
+                if char in short_opts_with_args and (arg[i + 2 : i + 3] == "=" or not short_opts_require_equals):
+                    break  # consume the rest of the arg as a value
+
+
 def _fix_send_recv_opts(
     opts: list[str],
     *,

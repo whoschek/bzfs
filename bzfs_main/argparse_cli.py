@@ -1372,7 +1372,9 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
     parser.add_argument(
         "--pv-program-opts", metavar="STRING",
         default="--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M",
-        help="The options to be passed to the 'pv' program (optional). Default: '%(default)s'.\n\n")
+        help="The options to be passed to the 'pv' program (optional). Default: '%(default)s'.\n\n"
+             "Each token must start with '-' and must not be '-' or '--'. Attach option values, e.g. '--interval=1' "
+             "or '-B2M', instead of '--interval 1' or '-B 2M'.\n\n")
     parser.add_argument(
         "--shell-program", default="sh", choices=["sh", DISABLE_PRG],
         help=hlp("sh") + msg)
