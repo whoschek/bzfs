@@ -166,6 +166,7 @@ def zfs_list_snapshots_in_parallel(
     datasets: list[str],
     *,
     ordered: bool = True,
+    exists: bool = True,
 ) -> Iterator[list[str]]:
     """Runs 'zfs list -t snapshot' on multiple datasets at the same time.
 
@@ -180,11 +181,15 @@ def zfs_list_snapshots_in_parallel(
             4 if r.ssh_user_host else 1,
         ),
     )
+
+    def _list_snapshots(cmd: list[str], batch: list[str]) -> list[str]:
+        return (job.try_ssh_command_with_retries(r, LOG_TRACE, cmd=cmd + batch, exists=exists) or "").splitlines()
+
     return itr_ssh_cmd_parallel(
         job,
         r,
         [(cmd, datasets)],
-        fn=lambda cmd, batch: (job.try_ssh_command_with_retries(r, LOG_TRACE, cmd=cmd + batch) or "").splitlines(),
+        fn=_list_snapshots,
         max_batch_items=max_batch_items,
         ordered=ordered,
     )
