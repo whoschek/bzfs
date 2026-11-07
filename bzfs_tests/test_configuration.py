@@ -23,6 +23,7 @@ import os
 import shutil
 import socket
 import stat
+import sys
 import tempfile
 import time
 import unittest
@@ -1046,16 +1047,284 @@ class TestAdditionalHelpers(AbstractTestCase):
         params_valid = self.make_params(args=args_valid)
         self.assertIn("-9", params_valid.compression_program_opts)
 
-    def test_mbuffer_program_opts_disallows_dangerous_options(self) -> None:
-        malicious_opts = "-o /etc/hosts"
-        args_short = self.argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={malicious_opts}"])
-        with self.assertRaises(SystemExit):
-            self.make_params(args=args_short)
+    def test_pv_program_opts_rejects_operands_and_separate_values(self) -> None:
+        """Rejects input operands and separate values through CLI parsing without executing pv or accessing input files."""
+        for extra_opts in [
+            "/var/tmp/other.zfs",
+            "other.zfs",
+            "output=x",
+            "-",
+            "--",
+            "-- -other.zfs",
+            "--interval 1",
+            "-B 2M",
+            "-F label",
+        ]:
+            with self.subTest(extra_opts=extra_opts):
+                opts = f"--bytes --eta --fineta --average-rate {extra_opts}"
+                args = self.argparser_parse_args(["src", "dst", f"--pv-program-opts={opts}"])
+                with self.assertRaises(SystemExit) as cm:
+                    self.make_params(args=args)
+                self.assertEqual(DIE_STATUS, cm.exception.code)
 
-        valid_opts = "-q"
-        args_valid = self.argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={valid_opts}"])
-        params_valid = self.make_params(args=args_valid)
-        self.assertIn("-q", params_valid.mbuffer_program_opts)
+    def test_pv_program_opts_preserves_defaults_and_attached_values(self) -> None:
+        """Keeps defaults and attached values, including filename-like format text, without invoking the helper."""
+        for extra_opts in [None, "--interval=1 --buffer-size=2M --format=/var/tmp/example.zfs", "-i1 -B2M -F/path"]:
+            with self.subTest(extra_opts=extra_opts):
+                argv = ["src", "dst"]
+                if extra_opts is not None:
+                    argv.append(f"--pv-program-opts=--bytes --eta --fineta --average-rate {extra_opts}")
+                args = self.argparser_parse_args(argv)
+                params = self.make_params(args=args)
+                self.assertEqual(args.pv_program_opts.split(), params.pv_program_opts)
+
+    def test_compression_program_opts_rejects_file_options(self) -> None:
+        """Rejects file-list input, trace output, source removal and output flags after zstd's dictionary flag.
+
+        CLI parsing keeps file operands inert while covering the distinct compressor-specific hazards.
+        """
+        for program, opts in [
+            ("zstd", "--traceextra=unused-trace-file"),
+            ("zstd", "--trace-extra=unused-trace-file"),
+            ("zstd", "--trace-file-stat"),
+            ("zstd", "--traceextra unused-trace-file"),
+            ("zstd", "--trace-extra=ignored unused-trace-file"),
+            ("zstd", "--trace-file-stat unused-trace-file"),  # Selects file tracing in older zstd versions.
+            ("zstd", "--filelist unused-file-list"),
+            ("zstd", "--filelist=unused-file-list"),
+            ("zstd", "--filelistextra=unused-file-list"),
+            ("zstd", "--filelistextra unused-file-list"),
+            ("zstd", "-qDfo"),
+            ("zstd", "-Do=unused-output"),
+            ("zstd", "-qDfo unused-dictionary unused-output"),
+            ("zstd", "-Do=unused-output unused-dictionary"),
+            ("zstd", "--rm"),
+            ("lz4", "--rm"),
+            ("pzstd", "--rm"),
+            ("zstd", "--rm unused-source-file"),
+            ("lz4", "--rm unused-source-file"),
+            ("pzstd", "--rm unused-source-file"),
+        ]:
+            with self.subTest(program=program, opts=opts):
+                args = self.argparser_parse_args(
+                    ["src", "dst", f"--compression-program={program}", f"--compression-program-opts={opts}"]
+                )
+                with self.assertRaises(SystemExit) as cm:
+                    self.make_params(args=args)
+                self.assertEqual(DIE_STATUS, cm.exception.code)
+
+    def test_compression_program_opts_rejects_operands_and_separate_values(self) -> None:
+        """Rejects input operands and separate values for each compressor through CLI parsing, without opening files or
+        executing helpers, so validation cannot substitute a file for the replication stream."""
+        for program in ["zstd", "lz4", "pzstd", "pigz", "gzip"]:
+            for opts in [
+                "/var/tmp/other.zfs",
+                "other.zfs",
+                "output=x",
+                "-",
+                "--",
+                "-- ",
+                "-- -other.zfs",
+                "-1 other.zfs",
+                "-1\tother.zfs",
+                "-1\nother.zfs",
+                "--threads 4",
+                "-p 4",
+                "-D dictionary",
+                "-qD dictionary--trace",
+            ]:
+                with self.subTest(program=program, opts=opts):
+                    if opts == "--" and sys.version_info < (3, 11):
+                        self.skipTest("Python < 3.11 argparse turns '--option=--' into an empty list")
+                    args = self.argparser_parse_args(
+                        ["src", "dst", f"--compression-program={program}", f"--compression-program-opts={opts}"]
+                    )
+                    with self.assertRaises(SystemExit) as cm:
+                        self.make_params(args=args)
+                    self.assertEqual(DIE_STATUS, cm.exception.code)
+
+    def test_compression_program_opts_preserves_defaults_and_empty_options(self) -> None:
+        """Keeps default and explicitly empty tuning options for each compressor using CLI parsing only, since neither
+        supplies a file operand or requires helper execution."""
+        for program in ["zstd", "lz4", "pzstd", "pigz", "gzip"]:
+            for opts in [None, "", " \t\n"]:
+                with self.subTest(program=program, opts=opts):
+                    argv = ["src", "dst", f"--compression-program={program}"]
+                    if opts is not None:
+                        argv.append(f"--compression-program-opts={opts}")
+                    args = self.argparser_parse_args(argv)
+                    params = self.make_params(args=args)
+                    self.assertEqual(["-1"] if opts is None else [], params.compression_program_opts)
+
+    def test_compression_program_opts_preserves_program_specific_options(self) -> None:
+        """Preserves attached zstd dictionary values and FreeBSD gzip's recursive abbreviation through CLI parsing only,
+        so option validation respects compressor-specific syntax without executing helpers."""
+        for program, opts in [("zstd", "-qD=dictionary--trace"), ("gzip", "--r -1")]:
+            with self.subTest(program=program, opts=opts):
+                args = self.argparser_parse_args(
+                    ["src", "dst", f"--compression-program={program}", f"--compression-program-opts={opts}"]
+                )
+                params = self.make_params(args=args)
+                self.assertEqual(opts.split(), params.compression_program_opts)
+
+    def test_program_opts_disallows_forbidden_options_with_option_arguments(self) -> None:
+        """Rejects forbidden options with separate or attached option-arguments through the shared POSIX option validator."""
+        cases = [
+            ("pv", "-o/tmp/output"),
+            ("pv", "-P/tmp/pid"),
+            ("pv", "-Nname"),
+            ("pv", "-o=x"),
+            ("pv", "-o"),
+            ("pv", "--output=x"),
+            ("pv", "--output"),
+            ("compression", "-o/tmp/output"),
+            ("compression", "-o=x"),
+            ("compression", "-o"),
+            ("compression", "--output-file=x"),
+            ("compression", "--output-file"),
+            ("mbuffer", "-M50M -o/tmp/output"),
+        ]
+        mbuffer_forbidden_args = [
+            ("-i", "/tmp/input"),
+            ("-I", "12345"),
+            ("-o", "/tmp/output"),
+            ("-O", "localhost:12345"),
+            ("-l", "/tmp/log"),
+            ("-T", "/tmp/buffer"),
+            ("-a", "1"),
+            ("-A", "/bin/true"),
+        ]
+        mbuffer_opts = [f"{opt}{separator}{value}" for opt, value in mbuffer_forbidden_args for separator in (" ", "", "=")]
+        cases += [("mbuffer", f"-q -m 16M {opt}") for opt in ["-L", "-t"] + mbuffer_opts]
+        for program, opt in cases:
+            with self.subTest(program=program, opt=opt):
+                args = self.argparser_parse_args(["src", "dst", f"--{program}-program-opts={opt}"])
+                with self.assertRaises(SystemExit) as cm:
+                    self.make_params(args=args)
+                self.assertEqual(DIE_STATUS, cm.exception.code)
+
+    def test_program_opts_preserves_option_arguments_and_non_option_arguments(self) -> None:
+        """Preserves safe options, option-arguments and non-option arguments to prevent false positives in POSIX validation."""
+        for program, opts in [
+            ("pv", ["--foo=--output=x", "-Foutput=o", "--format=output=o", "-L20M"]),
+            ("compression", ["-19", "-T2", "--format=zstd"]),
+            ("mbuffer", []),
+            ("mbuffer", ["-q", "-m", "128M"]),
+            ("mbuffer", ["-q", "-m128M", "-M50MiB"]),
+            ("mbuffer", ["-M", "50MiB"]),
+            ("mbuffer", ["-q", "-m128M", "-s2M", "-W300", "-r20M", "-R20M", "--tcpbuffer", "1M"]),
+        ]:
+            with self.subTest(program=program, opts=opts):
+                args = self.argparser_parse_args(["src", "dst", f"--{program}-program-opts={' '.join(opts)}"])
+                params = self.make_params(args=args)
+                self.assertEqual(opts, getattr(params, f"{program}_program_opts"))
+
+    def test_program_opts_disallows_combined_short_posix_options(self) -> None:
+        """Rejects forbidden options among combined short POSIX options through each caller's public CLI options."""
+        for program, forbidden in [("compression", "o"), ("mbuffer", "iIoOlLtTaA"), ("pv", "ofSYXUdRPMNc")]:
+            for option_char in forbidden:
+                for suffix in ("", " /tmp/output", "/tmp/output", "=/tmp/output"):
+                    opts = f"-q{option_char}{suffix}"
+                    with self.subTest(program=program, opts=opts):
+                        args = self.argparser_parse_args(["src", "dst", f"--{program}-program-opts={opts}"])
+                        with self.assertRaises(SystemExit) as cm:
+                            self.make_params(args=args)
+                        self.assertEqual(DIE_STATUS, cm.exception.code)
+
+    def test_compression_program_opts_disallows_options_after_numbers(self) -> None:
+        """Rejects forbidden options in zstd's combined short options, including after compression levels and numeric
+        option-arguments."""
+        for opts in ["-19qo /tmp/output", "-qT2o/tmp/output", "-qSo/tmp/output"]:
+            with self.subTest(opts=opts):
+                args = self.argparser_parse_args(["src", "dst", f"--compression-program-opts={opts}"])
+                with self.assertRaises(SystemExit) as cm:
+                    self.make_params(args=args)
+                self.assertEqual(DIE_STATUS, cm.exception.code)
+
+    def test_program_opts_preserves_combined_short_posix_options_and_option_arguments(self) -> None:
+        """Preserves combined short POSIX options and attached option-arguments containing forbidden option characters."""
+        for program, opts in [
+            ("pv", ["-ptebar", "-pFoutput=o", "-qL20M", "-B2M", "-s1T"]),
+            ("compression", ["-q19T2", "--format=zstd"]),
+            ("mbuffer", ["-q", "-v0", "-s2M", "-m128M", "-D1T"]),
+        ]:
+            with self.subTest(program=program, opts=opts):
+                args = self.argparser_parse_args(["src", "dst", f"--{program}-program-opts={' '.join(opts)}"])
+                params = self.make_params(args=args)
+                self.assertEqual(opts, getattr(params, f"{program}_program_opts"))
+
+    def test_compression_program_opts_preserves_attached_option_arguments(self) -> None:
+        """Respects attached option-arguments through CLI parsing so values remain intact without invoking compressors."""
+        for program, opts in [
+            ("zstd", "-qD=--filelist"),
+            ("zstd", "--threads=4"),
+            ("zstd", "-T4"),
+            ("lz4", "-qDdictionary"),
+            ("pzstd", "-p4"),
+            ("gzip", "-qS.foo"),
+            ("gzip", "-qb15"),
+            ("pigz", "-qAfoo"),
+            ("pigz", "-p4"),
+        ]:
+            with self.subTest(program=program, opts=opts):
+                args = self.argparser_parse_args(
+                    ["src", "dst", f"--compression-program={program}", f"--compression-program-opts={opts}"]
+                )
+                params = self.make_params(args=args)
+                self.assertEqual([opts], params.compression_program_opts)
+
+    def test_validate_posix_opts_reports_forbidden_options(self) -> None:
+        """Reports normalized options once per command-line argument, checking subsequent arguments after an attached
+        option-argument."""
+        args = ["-qof/path", "-pvS", "--trace=/tmp/trace", "--foo=--output=x", "output=o", "-qFoutput=o", "-qL20M", "-qo"]
+        args += ["--", "-", ""]
+        self.assertEqual(
+            ["-o", "-S", "--trace", "-o"],
+            list(configuration._validate_posix_opts({"-o", "-S", "-M", "--trace"}, iter(args), short_opts_with_args="FLo")),
+        )
+
+    def test_program_opts_disallows_abbreviated_long_options(self) -> None:
+        """Rejects forbidden GNU-style long-option abbreviations, including ambiguous prefixes, for pv and gzip."""
+        cases = [
+            ("pv", "--out"),
+            ("pv", "--out /tmp/output"),
+            ("pv", "--out=/tmp/output"),
+            ("pv", "--pidf=/tmp/pid"),
+            ("pv", "--sto"),
+            ("pv", "--s"),
+            ("compression", "--out"),
+            ("compression", "--out /tmp/output"),
+            ("compression", "--out=/tmp/output"),
+        ]
+        for program, opts in cases:
+            with self.subTest(program=program, opts=opts):
+                args = self.argparser_parse_args(
+                    ["src", "dst", "--compression-program=gzip", f"--{program}-program-opts={opts}"]
+                )
+                with self.assertRaises(SystemExit) as cm:
+                    self.make_params(args=args)
+                self.assertEqual(DIE_STATUS, cm.exception.code)
+
+    def test_compression_program_opts_preserves_exact_long_option_matching(self) -> None:
+        """Keeps exact long-option matching for compressors whose parsers do not support GNU-style abbreviations."""
+        for program in ["zstd", "lz4", "pzstd", "pigz"]:
+            with self.subTest(program=program):
+                args = self.argparser_parse_args(
+                    ["src", "dst", f"--compression-program={program}", "--compression-program-opts=--out"]
+                )
+                params = self.make_params(args=args)
+                self.assertEqual(["--out"], params.compression_program_opts)
+
+    def test_validate_posix_opts_abbreviated_long_options(self) -> None:
+        """Checks opt-in conservative prefix matching, preserving unrelated arguments and excluding bare -- from matching."""
+        forbidden = {"-o", "--output", "--stop-at-size", "--store-and-forward"}
+        args = ["--out", "/tmp/output", "--out=/tmp/output", "--o", "--sto", "--output", "-qo/tmp/output"]
+        args += ["--output-extra", "--format=--out", "output", "--", "--=value", "-", ""]
+        self.assertEqual(["--output", "-o"], list(configuration._validate_posix_opts(forbidden, iter(args))))
+        self.assertEqual(
+            ["--out", "--out", "--o", "--sto", "--output", "-o"],
+            list(configuration._validate_posix_opts(forbidden, iter(args), allow_abbreviations=True)),
+        )
 
     def test_logparams_handles_setup_cleanup_race(self) -> None:
         """Simulates a race where another bzfs instance deletes a sibling '.current/<run-id>/' directory while this process

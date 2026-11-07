@@ -1353,7 +1353,10 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
     parser.add_argument(
         "--compression-program-opts", default="-1", metavar="STRING",
         help="The options to be passed to the compression program on the compression step (optional). "
-             "Default is '%(default)s' (fastest).\n\n")
+             "Default is '%(default)s' (fastest).\n\n"
+             "The value is split on whitespace. Each token must start with '-' and must not be '-' or '--'. Attach option "
+             "values using the compression program's syntax, e.g. '--threads=4' or '-T4' for zstd instead of '--threads 4'."
+             "\n\n")
     parser.add_argument(
         "--mbuffer-program", default="mbuffer", choices=["mbuffer", DISABLE_PRG],
         help=hlp("mbuffer") + msg.rstrip() + " The use is auto-disabled if data is transferred locally "
@@ -1372,7 +1375,9 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
     parser.add_argument(
         "--pv-program-opts", metavar="STRING",
         default="--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M",
-        help="The options to be passed to the 'pv' program (optional). Default: '%(default)s'.\n\n")
+        help="The options to be passed to the 'pv' program (optional). Default: '%(default)s'.\n\n"
+             "The value is split on whitespace. Each token must start with '-' and must not be '-' or '--'. Attach option "
+             "values, e.g. '--interval=1' or '-B2M', instead of '--interval 1' or '-B 2M'.\n\n")
     parser.add_argument(
         "--shell-program", default="sh", choices=["sh", DISABLE_PRG],
         help=hlp("sh") + msg)

@@ -1773,6 +1773,9 @@ usage: bzfs [-h]
 
 - The options to be passed to the compression program on the compression step (optional). Default is '-1' (fastest).
 
+  The value is split on whitespace. Each token must start with '-' and must not be '-' or '--'. Attach option values using
+  the compression program's syntax, e.g. '--threads=4' or '-T4' for zstd instead of '--threads 4'.
+
 <!-- -->
 
 <span id="--mbuffer-program" class="man-option-title">**--mbuffer-program** *{mbuffer,-}*</span> <a href="#--mbuffer-program" title="Permalink to --mbuffer-program" aria-label="Permalink to --mbuffer-program" class="man-option-permalink">&#x1F517;</a>
@@ -1806,6 +1809,9 @@ usage: bzfs [-h]
 
 - The options to be passed to the 'pv' program (optional). Default: '--progress --timer --eta --fineta --rate --average-rate
   --bytes --interval=1 --width=120 --buffer-size=2M'.
+
+  The value is split on whitespace. Each token must start with '-' and must not be '-' or '--'. Attach option values, e.g.
+  '--interval=1' or '-B2M', instead of '--interval 1' or '-B 2M'.
 
 <!-- -->
 
