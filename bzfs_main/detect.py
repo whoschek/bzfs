@@ -316,7 +316,15 @@ def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict) -
     if is_dummy(r):
         return {}
     if params.zpool_program != DISABLE_PRG and (params.shell_program == DISABLE_PRG or "zpool" in available_programs):
-        cmd: list[str] = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
+        propnames: list[str] = [
+            POOL_GUID,
+            "delegation",
+            "feature@bookmark_v2",
+            "feature@bookmark_written",
+            "feature@extensible_dataset",
+            "feature@large_blocks",
+        ]
+        cmd: list[str] = params.split_args(f"{params.zpool_program} get -Hp -o property,value", ",".join(propnames), r.pool)
         try:
             lines = job.run_ssh_command_with_retries(remote, LOG_TRACE, cmd=cmd).splitlines()
         except (FileNotFoundError, PermissionError) as e:
@@ -326,8 +334,9 @@ def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict) -
         except (subprocess.CalledProcessError, UnicodeDecodeError):
             log.warning("%s", f"Failed to detect zpool features on {loc}: {r.pool}. Continuing with minimal assumptions ...")
         else:
-            props: dict[str, str] = dict(line.split("\t", 1) for line in lines)
-            features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation" or k == POOL_GUID}
+            features = dict(line.split("\t", 1) for line in lines)
+            assert set(propnames).issuperset(features.keys())
+            assert features[POOL_GUID].isdigit()
     if len(lines) == 0:
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
         if job.try_ssh_command_with_retries(remote, LOG_TRACE, cmd=cmd) is None:
