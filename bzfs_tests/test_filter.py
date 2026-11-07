@@ -172,6 +172,18 @@ class TestHelperFunctions(CommonTest):
         result = dataset_regexes(mock_src, mock_dst, datasets)
         self.assertListEqual([".*", ".*", _NEVER_MATCHES_REGEX, "foo", "bar", "a", "/c", ".*"], result)
 
+    def test_dataset_regexes_keep_exclamation_marks_literal(self) -> None:
+        """Compile relative and absolute selectors to ensure root stripping and escaping preserve literal matching."""
+        mock_src = MagicMock(spec=Remote, root_dataset="tank/src")
+        mock_dst = MagicMock(spec=Remote, root_dataset="tank/dst")
+        cases = [("!foo", "!foo"), ("!!foo", "!!foo"), ("/tank/src/!foo", "!foo"), ("/tank/dst/!foo", "!foo")]
+        for dataset, literal in cases:
+            with self.subTest(dataset=dataset):
+                regex, is_negation = compile_regexes(dataset_regexes(mock_src, mock_dst, [dataset]))[0]
+                self.assertFalse(is_negation)
+                self.assertIsNotNone(regex.fullmatch(literal))
+                self.assertIsNone(regex.fullmatch("other"))
+
     def test_filter_snapshots_by_regex(self) -> None:
         job = MagicMock(spec=Job, params=MagicMock(spec=Params, log=MagicMock()))
         snapshots = ["\tds@a1", "\tds@b2", "\tds@c3", "\tds@keep", "\tds#bookmark"]

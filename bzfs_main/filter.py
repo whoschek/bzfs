@@ -379,6 +379,8 @@ def dataset_regexes(src: Remote, dst: Remote, datasets: list[str]) -> list[str]:
         regex: str
         if dataset:
             regex = re.escape(dataset)
+            if regex.startswith("!"):
+                regex = r"\!" + regex[1:]  # prevent literal dataset being interpreted as a regex negation
         else:
             regex = ".*"
         results.append(regex)
