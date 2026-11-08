@@ -1807,16 +1807,24 @@ class Job:
         except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
             if not isinstance(e, UnicodeDecodeError):
                 stderr: str = stderr_to_str(e.stderr)
-                if exists and (
-                    ": dataset does not exist" in stderr
-                    or ": filesystem does not exist" in stderr  # solaris 11.4.0
-                    or ": no such pool" in stderr
-                    or "does not have any resumable receive state to abort" in stderr  # harmless `zfs receive -A` race
-                    or re.search(r"bookmark '.*' does not exist", stderr)
+                if exists and any(
+                    line.endswith(
+                        (
+                            ": dataset does not exist",
+                            ": filesystem does not exist",  # solaris 11.4.0
+                            "' does not have any resumable receive state to abort",  # harmless `zfs receive -A` race
+                        )
+                    )
+                    or self._NO_SUCH_POOL_REGEX.search(line)
+                    or self._BOOKMARK_DOES_NOT_EXIST_REGEX.fullmatch(line)
+                    for line in stderr.splitlines()
                 ):
                     return None
                 log.warning("%s", stderr.rstrip())
             raise RetryableError("Subprocess failed") from e
+
+    _NO_SUCH_POOL_REGEX: Final[re.Pattern[str]] = re.compile(r": no such pool '[^']+'$")
+    _BOOKMARK_DOES_NOT_EXIST_REGEX: Final[re.Pattern[str]] = re.compile(r"bookmark '[^']+' does not exist\.?")
 
     def try_ssh_command_with_retries(self, *args: Any, **kwargs: Any) -> str | None:
         """Convenience method that auto-retries try_ssh_command() on failure."""
