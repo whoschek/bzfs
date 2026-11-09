@@ -1029,9 +1029,12 @@ usage: bzfs [-h]
 <span id="--zfs-send-program-opts" class="man-option-title">**--zfs-send-program-opts** *STRING*</span> <a href="#--zfs-send-program-opts" title="Permalink to --zfs-send-program-opts" aria-label="Permalink to --zfs-send-program-opts" class="man-option-permalink">&#x1F517;</a>
 
 - Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. The value is split on runs of
-  one or more whitespace characters. Default is '--raw --compressed'. To run `zfs send` without options, specify the empty
-  string: `--zfs-send-program-opts=''`. See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html and
-  https://github.com/openzfs/zfs/issues/13024
+  one or more whitespace characters. Options must be recognized by bzfs; unknown or incompatible options, missing or empty
+  option arguments, and positional operands are rejected as an error. bzfs rejects '-n/--dryrun', '-e/--embed', '-i', '-I',
+  '-S/--saved', and '-t/--resume' here. Use bzfs's native '--dryrun' option for dry runs.
+
+  Default is '--raw --compressed'. To run `zfs send` without options, specify the empty string: `--zfs-send-program-opts=''`.
+  See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html and https://github.com/openzfs/zfs/issues/13024
 
   If these options request a different effective raw or non-raw mode from the one recorded in an existing ZFS receive resume
   token, bzfs aborts the token (clears the incomplete receive state) and then proceeds as usual. ZFS may be unable to change
@@ -1042,9 +1045,13 @@ usage: bzfs [-h]
 <span id="--zfs-recv-program-opts" class="man-option-title">**--zfs-recv-program-opts** *STRING*</span> <a href="#--zfs-recv-program-opts" title="Permalink to --zfs-recv-program-opts" aria-label="Permalink to --zfs-recv-program-opts" class="man-option-permalink">&#x1F517;</a>
 
 - Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. The value is split on
-  runs of one or more whitespace characters. Default is '-u'. To run `zfs receive` without options, specify the empty string:
-  `--zfs-recv-program-opts=''`. Example: '-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption'.
-  See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html and
+  runs of one or more whitespace characters. Options must be recognized by bzfs; unknown or incompatible options, missing or
+  empty option arguments, and positional operands are rejected as an error. Empty ZFS property values such as '-o org:key='
+  are allowed. bzfs rejects '-A', '-F', '-c', '-d', '-e', '-n/--dryrun', and '-s' here.
+
+  Default is '-u'. To run `zfs receive` without options, specify the empty string: `--zfs-recv-program-opts=''`. Example: '-u
+  -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption'. See
+  https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html and
   https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
 
 <!-- -->

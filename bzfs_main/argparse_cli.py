@@ -722,6 +722,10 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
         "--zfs-send-program-opts", type=str, default="--raw --compressed", metavar="STRING",
         help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
              "The value is split on runs of one or more whitespace characters. "
+             "Options must be recognized by bzfs; unknown or incompatible options, missing or empty option arguments, and "
+             "positional operands are rejected as an error. "
+             f"{PROG_NAME} rejects '-n/--dryrun', '-e/--embed', '-i', '-I', '-S/--saved', and '-t/--resume' here. "
+             f"Use {PROG_NAME}'s native '--dryrun' option for dry runs.\n\n"
              "Default is '%(default)s'. To run `zfs send` without options, specify the empty "
              "string: `--zfs-send-program-opts=''`. "
              "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html "
@@ -734,6 +738,9 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
         "--zfs-recv-program-opts", type=str, default="-u", metavar="STRING",
         help="Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
              "The value is split on runs of one or more whitespace characters. "
+             "Options must be recognized by bzfs; unknown or incompatible options, missing or empty option arguments, and "
+             "positional operands are rejected as an error. Empty ZFS property values such as '-o org:key=' are allowed. "
+             f"{PROG_NAME} rejects '-A', '-F', '-c', '-d', '-e', '-n/--dryrun', and '-s' here.\n\n"
              "Default is '%(default)s'. To run `zfs receive` without options, specify the empty "
              "string: `--zfs-recv-program-opts=''`. "
              "Example: '-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption'. "

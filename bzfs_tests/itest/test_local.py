@@ -1531,8 +1531,8 @@ class LocalTestCase(IntegrationTestCase):
                     ibase.DST_ROOT_DATASET + "/foo/a",
                     "-v",
                     "-v",
-                    "--zfs-send-program-opts=-v --dryrun" + extra_opt,
-                    "--zfs-recv-program-opts=-v -n",
+                    "--zfs-send-program-opts=-v" + extra_opt,
+                    "--zfs-recv-program-opts=-v",
                     "--zfs-recv-program-opt=-u",
                     *opts,
                     dry_run=(i == 0),
@@ -1547,16 +1547,17 @@ class LocalTestCase(IntegrationTestCase):
                         self.assertEqual(value, dataset_property(foo_a, name))
 
     def test_zfs_send_program_opts_compact_managed_incremental_option(self) -> None:
-        """Verify compact bzfs-managed zfs send options are removed before replication."""
+        """Rejects compact user-supplied incremental selection before destination snapshots can change."""
         self.setup_basic()
         self.run_bzfs(
             ibase.SRC_ROOT_DATASET,
             ibase.DST_ROOT_DATASET,
             "--no-estimate-send-size",
             f"--zfs-send-program-opts=-i{ibase.SRC_ROOT_DATASET}@{fix('s1')}",
+            expected_status=DIE_STATUS,
         )
 
-        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, ["s1", "s2", "s3"])
+        self.assert_snapshot_names(ibase.DST_ROOT_DATASET, [])
 
     def test_basic_replication_recursive_with_exclude_dataset(self) -> None:
         self.assertTrue(dataset_exists(ibase.DST_ROOT_DATASET))

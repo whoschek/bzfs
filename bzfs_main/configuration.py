@@ -19,6 +19,7 @@ from __future__ import (
 )
 import argparse
 import ast
+import getopt
 import os
 import platform
 import random
@@ -454,21 +455,44 @@ class Params:
         """Returns sanitized ``zfs recv`` options and captured ``-o/-x`` args."""
         return _fix_send_recv_opts(
             opts,
-            exclude_long_opts={"--dryrun"},
-            exclude_short_opts="densFA",
-            include_arg_opts={"-o", "-x"},
+            short_opts="AFMcdehno:suvx:",
+            long_opts={},
+            exclude_short_opts="AFcdens",
             preserve_properties=preserve_properties,
         )
+
+    _ZFS_SEND_SHORT_ONLY_OPTS: Final[str] = "I:i:"  # standard getopt syntax
+    _ZFS_SEND_LONG_OPTS: Final[Mapping[str, str | None]] = {  # see OpenZFS zfs_do_send()
+        # Longopt:shortopt pairs; a key ending in '=' requires a subsequent argument. value=None denotes a long-only option.
+        "--dedup": "-D",
+        "--large-block": "-L",
+        "--parsable": "-P",
+        "--replicate": "-R",
+        "--saved": "-S",
+        "--no-preserve-encryption": "-U",
+        "--proctitle": "-V",
+        "--exclude=": "-X",
+        "--backup": "-b",
+        "--compressed": "-c",
+        "--redact=": "-d",
+        "--embed": "-e",
+        "--holds": "-h",
+        "--dryrun": "-n",
+        "--props": "-p",
+        "--skip-missing": "-s",
+        "--resume=": "-t",
+        "--verbose": "-v",
+        "--raw": "-w",
+    }
 
     @staticmethod
     def _fix_send_opts(opts: list[str]) -> list[str]:
         """Returns sanitized ``zfs send`` options."""
         return _fix_send_recv_opts(
             opts,
-            exclude_long_opts={"--dryrun"},
-            exclude_short_opts="den",
-            include_arg_opts={"-X", "--exclude", "--redact"},
-            exclude_arg_opts=frozenset({"-i", "-I", "-t", "--resume"}),
+            short_opts=Params._ZFS_SEND_SHORT_ONLY_OPTS,
+            long_opts=Params._ZFS_SEND_LONG_OPTS,
+            exclude_short_opts="ISeint",
         )[0]
 
     @staticmethod
@@ -476,10 +500,10 @@ class Params:
         """Returns sanitized CLI options for `zfs send -t` resume sends."""
         return _fix_send_recv_opts(
             opts,
-            exclude_long_opts={"--backup", "--holds", "--props", "--replicate", "--skip-missing"},
-            exclude_short_opts="bhpRsU",
-            include_arg_opts=set(),
-            exclude_arg_opts=frozenset({"-X", "--exclude", "--redact"}),
+            short_opts=Params._ZFS_SEND_SHORT_ONLY_OPTS,
+            long_opts=Params._ZFS_SEND_LONG_OPTS,
+            exclude_short_opts="RUXbdhps",
+            exclude_action="omit",
         )[0]
 
     def _program_name(self, program: str) -> str:
@@ -1003,64 +1027,62 @@ def _validate_posix_opts(
 def _fix_send_recv_opts(
     opts: list[str],
     *,
-    exclude_long_opts: set[str],
-    exclude_short_opts: str,
-    include_arg_opts: set[str],
-    exclude_arg_opts: frozenset[str] = frozenset(),
+    short_opts: str,
+    long_opts: Mapping[str, str | None],
+    exclude_short_opts: str = "",
+    exclude_long_opts: frozenset[str] = frozenset(),
+    exclude_action: Literal["omit", "reject"] = "reject",
     preserve_properties: frozenset[str] = frozenset(),
 ) -> tuple[list[str], list[str]]:
-    """These opts are instead managed via bzfs CLI args --dryrun, etc."""
-    assert "-" not in exclude_short_opts
+    """Parses and sanitizes native `zfs send|recv` CLI options.
+
+    A long_opts key ending in '=' requires an argument. A non-None long_opts value must be a short alias with a '-' prefix.
+    Applies exclusions after abbreviation resolution.
+    Exclusions are rejected by default; exclude_action="omit" discards them. exclude_long_opts uses full names without '='.
+    """
+    long_specs: list[str] = []
+    aliases: dict[str, str] = {}
+    for spec, short in long_opts.items():
+        assert spec.startswith("--")
+        requires_arg: bool = spec.endswith("=")
+        name: str = spec.removesuffix("=")
+        long_specs.append(spec[2:])
+        if short is not None:
+            assert short.startswith("-") and len(short) >= 2 and not short.startswith("--")
+            short_opts += short[1:] + (":" if requires_arg else "")
+            aliases[short] = name
+    excluded_opts: set[str] = set(exclude_long_opts)
+    excluded_opts.update(aliases.get("-" + short, "-" + short) for short in exclude_short_opts)
+
+    try:
+        parsed_opts, operands = getopt.getopt(opts, short_opts, long_specs)  # do the real work
+    except getopt.GetoptError as err:
+        die(f"Invalid ZFS options {opts!r}: {err}")
+    if operands:
+        die(f"Invalid ZFS options {opts!r}: unexpected positional arguments {operands!r}")
+
     results: list[str] = []
     x_names: set[str] = set(preserve_properties)
-
-    def _append_include_arg(opt: str, arg: str) -> None:
+    for opt, arg in parsed_opts:
+        canonical_opt: str = aliases.get(opt, opt)
+        has_arg: bool = (canonical_opt + "=") in long_opts or (opt[1:] + ":") in short_opts
+        if has_arg and not arg:
+            die(f"Invalid ZFS options {opts!r}: empty argument for {opt}")
+        if canonical_opt in excluded_opts:
+            if exclude_action == "reject":
+                die(f"Invalid ZFS options {opts!r}: option {opt} is not allowed")
+            continue
         if opt == "-o" and "=" in arg and arg.split("=", 1)[0] in preserve_properties:
             die(f"--preserve-properties: Disallowed ZFS property found in --zfs-recv-program-opt(s): -o {arg}")
         if opt == "-x":
             x_names.discard(arg)
-        results.append(opt)
-        results.append(arg)
-
-    def _is_compact_exclude_arg(opt: str) -> bool:
-        # Compact option forms such as -isnap and --resume=<resume-token> carry the managed argument inline.
-        for exclude_arg_opt in exclude_arg_opts:
-            if len(exclude_arg_opt) == 2 and opt.startswith(exclude_arg_opt) and len(opt) > len(exclude_arg_opt):
-                return True
-            if exclude_arg_opt.startswith("--") and opt.startswith(exclude_arg_opt + "="):
-                return True
-        return False
-
-    i = 0
-    n = len(opts)
-    while i < n:
-        opt: str = opts[i]
-        i += 1
-        if opt in exclude_arg_opts:  # example: {"-X", "--exclude"}
-            i += 1
-            continue
-        elif _is_compact_exclude_arg(opt):
-            continue
-        elif opt in include_arg_opts:  # example: {"-o", "-x"}
-            if i < n:
-                _append_include_arg(opt, opts[i])
-                i += 1
-            else:
-                results.append(opt)
-        elif opt not in exclude_long_opts:  # example: {"--dryrun", "--verbose"}
-            for include_arg_opt in include_arg_opts:
-                if len(include_arg_opt) == 2 and opt.startswith(include_arg_opt) and len(opt) > len(include_arg_opt):
-                    _append_include_arg(include_arg_opt, opt[len(include_arg_opt) :])
-                    break
-            else:
-                if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
-                    if "=" in opt:
-                        die(f"Invalid short opt {opt!r} within {opts}")
-                    for char in exclude_short_opts:  # example: "den"
-                        opt = opt.replace(char, "")
-                    if opt == "-":
-                        continue
-                results.append(opt)
+        if has_arg and canonical_opt.startswith("--"):
+            # Attach values to long options where available so downstream flag checks cannot mistake values for options
+            results.append(f"{canonical_opt}={arg}")
+        else:
+            results.append(opt)
+            if has_arg:
+                results.append(arg)
     return results, sorted(x_names)
 
 

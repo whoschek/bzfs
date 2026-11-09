@@ -18,6 +18,7 @@ from __future__ import (
     annotations,
 )
 import errno
+import functools
 import logging
 import os
 import shutil
@@ -27,6 +28,9 @@ import sys
 import tempfile
 import time
 import unittest
+from collections.abc import (
+    Callable,
+)
 from pathlib import (
     Path,
 )
@@ -213,54 +217,103 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual(["foo", "bar\nbaz"], params.split_args("foo", "bar\nbaz"))
         self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
 
-    def test_fix_send_recv_opts(self) -> None:
-        params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
-        self.assertEqual([], params._fix_recv_opts(["-n"], frozenset())[0])
-        self.assertEqual([], params._fix_recv_opts(["--dryrun", "-n"], frozenset())[0])
-        self.assertEqual([""], params._fix_recv_opts([""], frozenset())[0])
-        self.assertEqual([], params._fix_recv_opts([], frozenset())[0])
-        self.assertEqual(["-"], params._fix_recv_opts(["-"], frozenset())[0])
-        self.assertEqual(["-h"], params._fix_recv_opts(["-hn"], frozenset())[0])
-        self.assertEqual(["-h"], params._fix_recv_opts(["-nh"], frozenset())[0])
-        self.assertEqual(["--Fvhn"], params._fix_recv_opts(["--Fvhn"], frozenset())[0])
-        self.assertEqual(["foo"], params._fix_recv_opts(["foo"], frozenset())[0])
-        self.assertEqual(["v", "n", "F"], params._fix_recv_opts(["v", "n", "F"], frozenset())[0])
-        self.assertEqual(["-o", "-n"], params._fix_recv_opts(["-o", "-n"], frozenset())[0])
-        self.assertEqual(["-o", "-n"], params._fix_recv_opts(["-o", "-n", "-n"], frozenset())[0])
-        self.assertEqual(["-x", "--dryrun"], params._fix_recv_opts(["-x", "--dryrun"], frozenset())[0])
-        self.assertEqual(["-x", "--dryrun"], params._fix_recv_opts(["-x", "--dryrun", "-n"], frozenset())[0])
-        self.assertEqual(["-x"], params._fix_recv_opts(["-x"], frozenset())[0])
-        with self.assertRaises(SystemExit):
-            params._fix_recv_opts(["-n=foo"], frozenset())
-        with self.assertRaises(SystemExit):
-            params._fix_recv_opts(["-Fn=foo"], frozenset())
+    def test_send_option_catalog_and_aliases(self) -> None:
+        """Checks the complete allowed flag catalog and resume policy with expectations independent of parser constants."""
+        params = self.make_params(self.argparser_parse_args(["src", "dst"]))
+        for short, long, resumable in [
+            ("-D -L -P -V -c -v -w", "--dedup --large-block --parsable --proctitle --compressed --verbose --raw", True),
+            ("-R -U -b -h -p -s", "--replicate --no-preserve-encryption --backup --holds --props --skip-missing", False),
+        ]:
+            for spelling in (short, long):
+                with self.subTest(spelling=spelling):
+                    options = spelling.split()
+                    self.assertEqual(options, params._fix_send_opts(options))
+                    self.assertEqual(options if resumable else [], params._fix_send_resume_opts(options))
+        self.assertEqual(["-v", "--verbose", "-v"], params._fix_send_opts(["-v", "--verb", "-v"]))
 
-        self.assertEqual([], params._fix_send_opts(["-n"]))
-        self.assertEqual([], params._fix_send_opts(["--dryrun", "-n", "-ed"]))
-        self.assertEqual([], params._fix_send_opts(["-I", "s1"]))
-        self.assertEqual(["--raw"], params._fix_send_opts(["-i", "s1", "--raw"]))
-        self.assertEqual([], params._fix_send_opts(["-is1"]))
-        self.assertEqual([], params._fix_send_opts(["-Is1"]))
-        self.assertEqual([], params._fix_send_opts(["-t1-deadbeef"]))
-        self.assertEqual([], params._fix_send_opts(["--resume=1-deadbeef"]))
-        self.assertEqual(["-X", "d1,d2"], params._fix_send_opts(["-X", "d1,d2"]))
-        self.assertEqual(
-            ["--exclude", "d1,d2", "--redact", "b1"], params._fix_send_opts(["--exclude", "d1,d2", "--redact", "b1"])
-        )
-        with self.assertRaises(SystemExit):
-            params._fix_send_opts(["-n=foo"])
-        with self.assertRaises(SystemExit):
-            params._fix_send_opts(["-ed=foo"])
+    def test_send_option_arguments(self) -> None:
+        """Preserves grouped, attached and abbreviated arguments through public parsing, omitting them on resume."""
+        for options, argument in [
+            ("-vXpool/hidden-denIt", "--exclude=pool/hidden-denIt"),
+            ("-vX pool/hidden-denIt", "--exclude=pool/hidden-denIt"),
+            ("-vd-n", "--redact=-n"),
+            ("-vd -w", "--redact=-w"),
+            ("-v --redact=-P", "--redact=-P"),
+            ("-v --red --", "--redact=--"),
+            ("-v --ex=pool/hidden", "--exclude=pool/hidden"),
+        ]:
+            with self.subTest(options=options):
+                args = self.argparser_parse_args(["src", "dst", f"--zfs-send-program-opts={options} -cw"])
+                params = self.make_params(args)
+                self.assertEqual(["-v", argument, "-c", "-w"], params.zfs_send_program_opts)
+                self.assertEqual(["-v", "-c", "-w"], params.zfs_send_resume_opts)
 
-        self.assertEqual(
-            ["--raw", "--compressed", "--large-block"],
-            params._fix_send_resume_opts(["--raw", "--compressed", "--large-block"]),
+    def test_ambiguous_send_options_match_native_catalog(self) -> None:
+        """Resolves prefixes against the full native catalog before applying bzfs policy exclusions."""
+        params = self.make_params(self.argparser_parse_args(["src", "dst"]))
+        for option in ["--d", "--e=pool/hidden", "--re", "--p"]:
+            for fixer in [params._fix_send_opts, params._fix_send_resume_opts]:
+                with self.subTest(option=option, fixer=fixer), self.assertRaisesRegex(SystemExit, "not a unique prefix"):
+                    fixer([option])
+
+    def test_zfs_option_syntax_errors(self) -> None:
+        """Rejects malformed syntax in all helpers, including missing/empty values on options omitted during resume."""
+        params = self.make_params(self.argparser_parse_args(["src", "dst"]))
+        cases: list[tuple[Callable[[list[str]], object], object]] = [
+            (params._fix_send_opts, []),
+            (params._fix_send_resume_opts, []),
+            (functools.partial(params._fix_recv_opts, preserve_properties=frozenset()), ([], [])),
+        ]
+        for fixer, empty in cases:
+            self.assertEqual(empty, fixer([]))
+            self.assertEqual(empty, fixer(["--"]))
+            for options in [["--unknown"], ["-q"], ["--help"], ["-?"], ["-v=bad"], ["-v", "operand"], ["--", "-v"]]:
+                with self.subTest(fixer=fixer, options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS"):
+                    fixer(options)
+        for fixer in [params._fix_send_opts, params._fix_send_resume_opts]:
+            for options in [["-vd"], ["--redact="], ["-X", ""], ["--raw=bad"]]:
+                with self.subTest(fixer=fixer, options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS"):
+                    fixer(options)
+        for options in [["-o", ""], ["-x"], ["--raw"]]:
+            with self.subTest(options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS"):
+                params._fix_recv_opts(options, frozenset())
+
+    def test_managed_zfs_flags_fail_during_params_initialization(self) -> None:
+        """Rejects incompatible modes individually so one rejection cannot mask another wrongly accepted mode."""
+        for name, values in [
+            (
+                "--zfs-send-program-opts",
+                "-S -e -n --saved --embed --dryrun --res=token -vIbase -vibase -vt1-token -vnXpool/hidden".split(),
+            ),
+            ("--zfs-recv-program-opts", ["-v" + flag for flag in "AFcdens"]),
+            ("--zfs-recv-program-opt", ["-F"]),
+        ]:
+            for value in values:
+                with self.subTest(name=name, value=value), self.assertRaisesRegex(SystemExit, "Invalid ZFS.*not allowed"):
+                    self.make_params(self.argparser_parse_args(["src", "dst", f"{name}={value}"]))
+
+    def test_recv_options_preserve_properties(self) -> None:
+        """Preserves receive flags, grouped properties, order and empty/space-containing values through both CLI forms."""
+        args = self.argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--zfs-recv-program-opts=-hMuvoorg:empty= -xorg:first -o org:key=denIsFA=a=b -x org:first",
+                "--zfs-recv-program-opt=-o",
+                "--zfs-recv-program-opt=org:space=a b",
+            ]
         )
-        self.assertEqual(["-cw"], params._fix_send_resume_opts(["-bchpRsUw"]))
-        self.assertEqual([], params._fix_send_resume_opts(["--skip-missing"]))
-        self.assertEqual([], params._fix_send_resume_opts(["--props", "-p", "--backup", "-b", "--holds", "-h", "-s", "-U"]))
+        params = self.make_params(args)
+        expected = "-h -M -u -v -o org:empty= -x org:first -o org:key=denIsFA=a=b -x org:first".split()
+        expected += ["-o", "org:space=a b"]
+        self.assertEqual(expected, params.zfs_recv_program_opts)
+        self.assertEqual(
+            (expected, ["org:remaining"]), params._fix_recv_opts(expected, frozenset(["org:first", "org:remaining"]))
+        )
+        self.assertEqual({"org:empty", "org:first", "org:key", "org:space"}, bzfs.Job.recv_option_property_names(expected))
 
     def test_fix_recv_opts_with_preserve_properties(self) -> None:
+        """Keeps property protection consistent across attached/separate values and rejects extra operands."""
         mp = "mountpoint"
         cr = "createtxg"
         params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
@@ -269,14 +322,37 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual((["-x", mp], []), params._fix_recv_opts(["-x", mp], frozenset([mp])))
         self.assertEqual((["-x", mp], []), params._fix_recv_opts([f"-x{mp}"], frozenset([mp])))
         with self.assertRaises(SystemExit):
-            params._fix_recv_opts(["-n", "-o", f"{mp}=foo"], frozenset([mp]))
+            params._fix_recv_opts(["-o", f"{mp}=foo"], frozenset([mp]))
         with self.assertRaises(SystemExit):
-            params._fix_recv_opts(["-n", f"-o{mp}=foo"], frozenset([mp]))
-        self.assertEqual(([], [mp]), params._fix_recv_opts(["-n"], frozenset([mp])))
-        self.assertEqual((["-u", mp], [mp]), params._fix_recv_opts(["-n", "-u", mp], frozenset([mp])))
-        self.assertEqual((["-x", mp], []), params._fix_recv_opts(["-n", "-x", mp], frozenset([mp])))
-        self.assertEqual((["-x", mp, "-x", cr], []), params._fix_recv_opts(["-n", "-x", mp, "-x", cr], frozenset([mp])))
+            params._fix_recv_opts([f"-o{mp}=foo"], frozenset([mp]))
+        self.assertEqual(([], [mp]), params._fix_recv_opts([], frozenset([mp])))
+        with self.assertRaises(SystemExit):
+            params._fix_recv_opts(["-u", mp], frozenset([mp]))
+        self.assertEqual((["-x", mp], []), params._fix_recv_opts(["-x", mp], frozenset([mp])))
+        self.assertEqual((["-x", mp, "-x", cr], []), params._fix_recv_opts(["-x", mp, "-x", cr], frozenset([mp])))
         self.assertEqual(([], [cr, mp]), params._fix_recv_opts([], frozenset([mp, cr])))
+
+    def test_fix_send_recv_opts_declarative_specs_and_exclusions(self) -> None:
+        """Covers long-only options, aliases and short-only arguments, with rejection by default and explicit omission."""
+        fixer = functools.partial(
+            configuration._fix_send_recv_opts,
+            short_opts="q:",
+            long_opts={"--flag": "-f", "--value=": "-a", "--only": None, "--drop=": None},
+            exclude_short_opts="f",
+            exclude_long_opts=frozenset(["--drop"]),
+        )
+        self.assertEqual((["--only", "--value=-f", "-q", "--drop"], []), fixer(["--only", "-a-f", "-q", "--drop"]))
+        self.assertEqual((["--drop=-f"], []), fixer(["--dro", "-f"], exclude_long_opts=frozenset()))
+        for options in [["-f"], ["--flag"], ["--dro=value"]]:
+            with self.subTest(options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS.*not allowed"):
+                fixer(options)
+        self.assertEqual(
+            (["--value=-f", "--only"], []),
+            fixer(["--flag", "--drop", "--only", "--value=-f", "--only"], exclude_action="omit"),
+        )
+        for options in [["--drop"], ["--drop="]]:
+            with self.subTest(options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS"):
+                fixer(options, exclude_action="omit")
 
     def test_delete_stale_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
