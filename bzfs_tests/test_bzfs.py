@@ -212,6 +212,51 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertFalse(is_busy("zfs send " + ds + "@snap", ds, busy_if_send=False))
         self.assertTrue(is_busy("zfs send " + ds + "@snap", ds))
 
+    def test_is_zfs_dataset_busy_send_proctitle(self) -> None:
+        """Recognizes native send titles while preserving concurrent incremental receive/send behavior.
+
+        Complete targets and truncated progress counters exercise Linux and FreeBSD title formats.
+        """
+        for dataset in ["tank/foo/bar", "tank/foo bar", "tank/foo.bar"]:
+            for target in [dataset, dataset + "@snap", dataset + "@snap with spaces"]:
+                for progress in [" (50%: 1G/2G)", " (50%: 1G/2G) (zfs)", " (50%: 1", " ("]:
+                    proc = f"zfs: sending {target}{progress}"
+                    with self.subTest(proc=proc, dataset=dataset):
+                        self.assertTrue(_is_zfs_dataset_busy(["unrelated", proc], dataset, busy_if_send=True))
+                        self.assertFalse(_is_zfs_dataset_busy(["unrelated", proc], dataset, busy_if_send=False))
+                        self.assertTrue(_is_zfs_dataset_busy([proc, f"zfs receive {dataset}"], dataset, busy_if_send=False))
+
+    def test_is_zfs_dataset_busy_send_proctitle_truncated(self) -> None:
+        """Recognizes sends when Linux's 255-byte title limit cuts off the snapshot name.
+
+        Valid maximum-length targets retain the dataset and '@', which suffice to identify the busy dataset.
+        """
+        for dataset in ["tank/foo.bar", "tank/foo bar", "tank/" + "d" * 236]:
+            snapshot = "s" * (255 - len(dataset) - 1)
+            proc = f"zfs: sending {dataset}@{snapshot} (50%: 1G/2G)"[:255]
+            with self.subTest(dataset=dataset, proc=proc):
+                self.assertTrue(_is_zfs_dataset_busy([proc], dataset, busy_if_send=True))
+                self.assertFalse(_is_zfs_dataset_busy([proc], dataset, busy_if_send=False))
+
+    def test_is_zfs_dataset_busy_send_proctitle_mismatches(self) -> None:
+        """Rejects other datasets, unrelated processes and incomplete dataset names to avoid false collision reports."""
+        dataset = "tank/foo.bar"
+        for target in ["tank", "tank/foo.bar/child", "tank/foo.bar-copy", "tank/foo.bars", "tank/fooXbar", "other/foo.bar"]:
+            for snapshot in ["", "@snap"]:
+                for progress in ["", " (50%: 1G/2G)"]:
+                    proc = f"zfs: sending {target}{snapshot}{progress}"
+                    with self.subTest(proc=proc):
+                        self.assertFalse(_is_zfs_dataset_busy([proc], dataset, busy_if_send=True))
+        for proc in [
+            "zfs: sending tank/foo",
+            f"zfs: sending {dataset}",
+            f"other: sending {dataset}@snap (50%: 1G/2G)",
+            f"zfs: receiving {dataset}@snap (50%: 1G/2G)",
+            f"sh -c zfs: sending {dataset}@snap (50%: 1G/2G)",
+        ]:
+            with self.subTest(proc=proc):
+                self.assertFalse(_is_zfs_dataset_busy([proc], dataset, busy_if_send=True))
+
     def test_pv_cmd(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst", "--quiet"])
         job = bzfs.Job()

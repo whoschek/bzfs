@@ -1559,6 +1559,7 @@ def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send
 _ZFS_DATASET_BUSY_PREFIX: Final[str] = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
 _ZFS_DATASET_BUSY_IF_MODS: Final[re.Pattern[str]] = re.compile((_ZFS_DATASET_BUSY_PREFIX + ") .*").replace("(", "(?:"))
 _ZFS_DATASET_BUSY_IF_SEND: Final[re.Pattern[str]] = re.compile((_ZFS_DATASET_BUSY_PREFIX + "|send) .*").replace("(", "(?:"))
+_ZFS_SEND_WITH_PROCTITLE: Final[re.Pattern[str]] = re.compile(r"zfs: sending ([^@()\r\n]+)(?:@| \()")
 
 
 def _is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> bool:
@@ -1566,7 +1567,12 @@ def _is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> 
     regex: re.Pattern[str] = _ZFS_DATASET_BUSY_IF_SEND if busy_if_send else _ZFS_DATASET_BUSY_IF_MODS
     suffix: str = " " + dataset
     infix: str = " " + dataset + "@"
-    return any((proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc) for proc in procs)
+    for proc in procs:
+        if (proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc):
+            return True
+        if busy_if_send and (match := _ZFS_SEND_WITH_PROCTITLE.match(proc)) and match.group(1) == dataset:
+            return True
+    return False
 
 
 #############################################################################
