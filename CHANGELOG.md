@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.27.0] - Not yet released
+
+- [bzfs] fix: Enhance validation of `--include-snapshot-plan`.
+- [bzfs] fix: `--include-dataset` and `--exclude-dataset`: Escape leading '!' in literal dataset filter.
+- [bzfs] fix: `--delete-empty-dst-datasets`: Cowardly refuse to delete on listing errors.
+- [bzfs_jobrunner] fix: Enhance validation of `--root-dataset-pairs`.
+- [bzfs] fix: Honor --preserve-properties in `--zfs-set-o-include-regex`.
+- [bzfs] fix: `--zfs-recv-o-include-regex`: Handle option-like ZFS user properties.
+- [bzfs] fix: Enhance validation of dataset names.
+
 ## [1.26.1] - November 4, 2026
 
 - [bzfs] fix: `--zfs-recv-o-include-regex`: Handle native ZFS properties that contain a newline.
