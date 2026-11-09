@@ -2,6 +2,9 @@
 
 ## [1.27.0] - Not yet released
 
+- [bzfs] fix: Make zfs_busy check work when `--proctitle` is specified in `--zfs-send-program-opt(s)`.
+- [bzfs] fix: Enhance validation of `--zfs-send-program-opts` and `--zfs-recv-program-opt(s)`.
+- [bzfs] fix: Enhance validation of `--pv-program-opts` and `--compression-program-opts`.
 - [bzfs] fix: Enhance validation of `--include-snapshot-plan`.
 - [bzfs] fix: `--include-dataset` and `--exclude-dataset`: Escape leading '!' in literal dataset filter.
 - [bzfs] fix: `--delete-empty-dst-datasets`: Cowardly refuse to delete on listing errors.
