@@ -700,7 +700,7 @@ class Job:
         self.src_properties = {}
         self.dst_properties = {}
         if not is_dummy(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
-            basis_src_datasets = self.list_src_datasets_task()
+            basis_src_datasets, self.src_properties = self.list_src_datasets_task()
 
         if not p.create_src_snapshots_config.skip_create_src_snapshots:
             log.info(p.dry("--create-src-snapshots: %s"), f"{src.basis_root_dataset} {p.recursive_flag}{recursive_sep}...")
@@ -727,7 +727,7 @@ class Job:
         log.info("Listing dst datasets: %s", task_description)
         if is_dummy(dst):
             die("Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
-        basis_dst_datasets: list[str] = self.list_dst_datasets_task()
+        basis_dst_datasets, self.dst_properties = self.list_dst_datasets_task()
         dst_datasets: list[str] = filter_datasets(self, dst, basis_dst_datasets)  # apply include/exclude policy
 
         if p.delete_dst_datasets and not failed:
@@ -760,11 +760,12 @@ class Job:
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             self.monitor_snapshots_task(src_datasets, dst_datasets, task_description)
 
-    def list_src_datasets_task(self) -> list[str]:
+    def list_src_datasets_task(self) -> tuple[list[str], dict[str, DatasetProperties]]:
         """Lists datasets on the source host."""
         p = self.params
         src = p.src
         basis_src_datasets: list[str] = []
+        src_properties: dict[str, DatasetProperties] = {}
         is_caching: bool = is_caching_snapshots(p, src)
         props: str = "volblocksize,recordsize,written,name"
         props = "snapshots_changed," + props if is_caching else props
@@ -775,11 +776,12 @@ class Job:
             cols: list[str] = line.split("\t")
             snapshots_changed, volblocksize, recordsize, written, src_dataset = cols if is_caching else ["-"] + cols
             validate_dataset_name(src_dataset, src.root_dataset)
-            assert src_dataset == src.root_dataset or (p.recursive and src_dataset.startswith(src.root_dataset + "/")), (
-                src_dataset,
-                src.root_dataset,
-            )
-            self.src_properties[src_dataset] = DatasetProperties(
+            assert src_dataset == src.root_dataset or (
+                p.recursive
+                and src_dataset.startswith(src.root_dataset + "/")
+                and os.path.dirname(src_dataset) in src_properties
+            ), (src_dataset, src.root_dataset, p.recursive)
+            src_properties[src_dataset] = DatasetProperties(
                 recordsize=int(recordsize) if recordsize != "-" else -int(volblocksize),
                 snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                 written=int(written) if written != "-" else 0,
@@ -787,12 +789,13 @@ class Job:
             basis_src_datasets.append(src_dataset)
         assert basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
         assert not has_duplicates(basis_src_datasets)
-        return basis_src_datasets
+        return basis_src_datasets, src_properties
 
-    def list_dst_datasets_task(self) -> list[str]:
+    def list_dst_datasets_task(self) -> tuple[list[str], dict[str, DatasetProperties]]:
         """Lists datasets on the destination host."""
         p, log = self.params, self.params.log
         dst = p.dst
+        dst_properties: dict[str, DatasetProperties] = {}
         is_caching: bool = is_caching_snapshots(p, dst) and p.monitor_snapshots_config.enable_monitor_snapshots
         props: str = "name"
         props = "snapshots_changed," + props if is_caching else props
@@ -808,11 +811,12 @@ class Job:
                 cols: list[str] = line.split("\t")
                 snapshots_changed, dst_dataset = cols if is_caching else ["-"] + cols
                 validate_dataset_name(dst_dataset, dst.root_dataset)
-                assert dst_dataset == dst.root_dataset or (p.recursive and dst_dataset.startswith(dst.root_dataset + "/")), (
-                    dst_dataset,
-                    dst.root_dataset,
-                )
-                self.dst_properties[dst_dataset] = DatasetProperties(
+                assert dst_dataset == dst.root_dataset or (
+                    p.recursive
+                    and dst_dataset.startswith(dst.root_dataset + "/")
+                    and os.path.dirname(dst_dataset) in dst_properties
+                ), (dst_dataset, dst.root_dataset, p.recursive)
+                dst_properties[dst_dataset] = DatasetProperties(
                     recordsize=0,
                     snapshots_changed=int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                     written=0,
@@ -820,7 +824,7 @@ class Job:
                 basis_dst_datasets.append(dst_dataset)
         assert basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
         assert not has_duplicates(basis_dst_datasets)
-        return basis_dst_datasets
+        return basis_dst_datasets, dst_properties
 
     def create_src_snapshots_task(self, basis_src_datasets: list[str], src_datasets: list[str]) -> None:
         """Atomically creates a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy; implements
@@ -915,7 +919,8 @@ class Job:
                 validate_snapshot_prefix(
                     name, dst_dataset, allow_snapshot=not p.delete_dst_bookmarks, allow_bookmark=p.delete_dst_bookmarks
                 )
-                if userrefs not in ("", "-", "0"):  # ZFS snapshot property userrefs > 0 indicates a zfs hold
+                assert userrefs
+                if userrefs not in ("-", "0"):  # ZFS snapshot property userrefs > 0 indicates a zfs hold
                     tag: str = name[name.index("@") + 1 :]
                     held_dst_snapshots.add(tag)  # don't attempt to delete snapshots that carry a `zfs hold`
             if p.delete_dst_bookmarks:
@@ -1675,14 +1680,15 @@ class Job:
             fields: list[str] = line.split("\t")
             if len(fields) == 3:
                 name, createtxg, creation_unixtime_secs = fields
-                userrefs = ""
+                userrefs = "-"
             else:
                 name, createtxg, creation_unixtime_secs, userrefs = fields
+                assert userrefs
             return (
                 int(createtxg),
                 int(creation_unixtime_secs),
                 name.split("@", 1)[1],
-                userrefs in ("", "-", "0"),  # ZFS snapshot property userrefs > 0 indicates a zfs hold
+                userrefs in ("-", "0"),  # ZFS snapshot property userrefs > 0 indicates a zfs hold
             )
 
         p = self.params
