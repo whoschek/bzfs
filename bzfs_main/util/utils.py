@@ -957,7 +957,7 @@ def format_obj(obj: object) -> str:
     return f'"{obj}"'
 
 
-def validate_dataset_name(dataset: str, input_text: str) -> None:
+def validate_dataset_name(dataset: str, input_text: str, is_assert: bool = False) -> None:
     """'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc."""
     # Also see zfs_namecheck.c and https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
     # and https://github.com/openzfs/zfs/issues/8798
@@ -972,7 +972,11 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
         or "/../" in dataset
         or not ZFS_DATASET_NAME_REGEX.fullmatch(dataset)
     ):
-        die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")
+        msg: str = f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'"
+        if is_assert:
+            raise AssertionError(msg)
+        else:
+            die(msg)
 
 
 def validate_property_name(propname: str, input_text: str) -> str:
@@ -986,13 +990,14 @@ def validate_snapshot_prefix(
     snapshot: str, dataset: str, *, allow_snapshot: bool = True, allow_bookmark: bool = False
 ) -> None:
     """Checks that the given snapshot belongs to the given dataset."""
-    if snapshot.startswith(dataset):
+    if snapshot.startswith(dataset) and len(snapshot) > len(dataset) + 1:
         sep = snapshot[len(dataset)]
         if allow_snapshot and sep == "@":
             return
         if allow_bookmark and sep == "#":
             return
-    die(f"Manipulated ZFS snapshot name: {snapshot} for dataset: {dataset}")
+        assert allow_snapshot or allow_bookmark
+    raise AssertionError(f"Invalid ZFS snapshot name: {snapshot} for dataset: {dataset}")
 
 
 def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentParser | None = None) -> None:
