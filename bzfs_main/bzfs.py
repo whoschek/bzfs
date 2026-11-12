@@ -775,7 +775,7 @@ class Job:
         for line in (self.try_ssh_command_with_retries(src, LOG_DEBUG, cmd=cmd) or "").splitlines():
             cols: list[str] = line.split("\t")
             snapshots_changed, volblocksize, recordsize, written, src_dataset = cols if is_caching else ["-"] + cols
-            validate_dataset_name(src_dataset, src.root_dataset)
+            validate_dataset_name(src_dataset, src.root_dataset, is_assert=True)
             assert src_dataset == src.root_dataset or (
                 p.recursive
                 and src_dataset.startswith(src.root_dataset + "/")
@@ -810,7 +810,7 @@ class Job:
             for line in basis_dst_datasets_str.splitlines():
                 cols: list[str] = line.split("\t")
                 snapshots_changed, dst_dataset = cols if is_caching else ["-"] + cols
-                validate_dataset_name(dst_dataset, dst.root_dataset)
+                validate_dataset_name(dst_dataset, dst.root_dataset, is_assert=True)
                 assert dst_dataset == dst.root_dataset or (
                     p.recursive
                     and dst_dataset.startswith(dst.root_dataset + "/")
