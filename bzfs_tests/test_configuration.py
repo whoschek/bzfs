@@ -227,9 +227,9 @@ class TestHelperFunctions(AbstractTestCase):
             for spelling in (short, long):
                 with self.subTest(spelling=spelling):
                     options = spelling.split()
-                    self.assertEqual(options, params._fix_send_opts(options))
-                    self.assertEqual(options if resumable else [], params._fix_send_resume_opts(options))
-        self.assertEqual(["-v", "--verbose", "-v"], params._fix_send_opts(["-v", "--verb", "-v"]))
+                    self.assertEqual(options, params._fix_send_opts(options)[0])
+                    self.assertEqual(options if resumable else [], params._fix_send_resume_opts(options)[0])
+        self.assertEqual(["-v", "--verbose", "-v"], params._fix_send_opts(["-v", "--verb", "-v"])[0])
 
     def test_send_option_arguments(self) -> None:
         """Preserves grouped, attached and abbreviated arguments through public parsing, omitting them on resume."""
@@ -260,9 +260,9 @@ class TestHelperFunctions(AbstractTestCase):
         """Rejects malformed syntax in all helpers, including missing/empty values on options omitted during resume."""
         params = self.make_params(self.argparser_parse_args(["src", "dst"]))
         cases: list[tuple[Callable[[list[str]], object], object]] = [
-            (params._fix_send_opts, []),
-            (params._fix_send_resume_opts, []),
-            (functools.partial(params._fix_recv_opts, preserve_properties=frozenset()), ([], [])),
+            (params._fix_send_opts, ([], [])),
+            (params._fix_send_resume_opts, ([], [])),
+            (functools.partial(params._fix_recv_opts, preserve_properties=frozenset()), ([], [], [])),
         ]
         for fixer, empty in cases:
             self.assertEqual(empty, fixer([]))
@@ -308,7 +308,7 @@ class TestHelperFunctions(AbstractTestCase):
         expected += ["-o", "org:space=a b"]
         self.assertEqual(expected, params.zfs_recv_program_opts)
         self.assertEqual(
-            (expected, ["org:remaining"]), params._fix_recv_opts(expected, frozenset(["org:first", "org:remaining"]))
+            (expected, ["org:remaining"]), params._fix_recv_opts(expected, frozenset(["org:first", "org:remaining"]))[:2]
         )
         self.assertEqual({"org:empty", "org:first", "org:key", "org:space"}, bzfs.Job.recv_option_property_names(expected))
 
@@ -317,20 +317,20 @@ class TestHelperFunctions(AbstractTestCase):
         mp = "mountpoint"
         cr = "createtxg"
         params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
-        self.assertEqual((["-o", "compression=lz4"], []), params._fix_recv_opts(["-o", "compression=lz4"], frozenset()))
-        self.assertEqual((["-o", "compression=lz4"], []), params._fix_recv_opts(["-ocompression=lz4"], frozenset()))
-        self.assertEqual((["-x", mp], []), params._fix_recv_opts(["-x", mp], frozenset([mp])))
-        self.assertEqual((["-x", mp], []), params._fix_recv_opts([f"-x{mp}"], frozenset([mp])))
+        self.assertEqual((["-o", "compression=lz4"], []), params._fix_recv_opts(["-o", "compression=lz4"], frozenset())[:2])
+        self.assertEqual((["-o", "compression=lz4"], []), params._fix_recv_opts(["-ocompression=lz4"], frozenset())[:2])
+        self.assertEqual((["-x", mp], []), params._fix_recv_opts(["-x", mp], frozenset([mp]))[:2])
+        self.assertEqual((["-x", mp], []), params._fix_recv_opts([f"-x{mp}"], frozenset([mp]))[:2])
         with self.assertRaises(SystemExit):
             params._fix_recv_opts(["-o", f"{mp}=foo"], frozenset([mp]))
         with self.assertRaises(SystemExit):
             params._fix_recv_opts([f"-o{mp}=foo"], frozenset([mp]))
-        self.assertEqual(([], [mp]), params._fix_recv_opts([], frozenset([mp])))
+        self.assertEqual(([], [mp]), params._fix_recv_opts([], frozenset([mp]))[:2])
         with self.assertRaises(SystemExit):
             params._fix_recv_opts(["-u", mp], frozenset([mp]))
-        self.assertEqual((["-x", mp], []), params._fix_recv_opts(["-x", mp], frozenset([mp])))
-        self.assertEqual((["-x", mp, "-x", cr], []), params._fix_recv_opts(["-x", mp, "-x", cr], frozenset([mp])))
-        self.assertEqual(([], [cr, mp]), params._fix_recv_opts([], frozenset([mp, cr])))
+        self.assertEqual((["-x", mp], []), params._fix_recv_opts(["-x", mp], frozenset([mp]))[:2])
+        self.assertEqual((["-x", mp, "-x", cr], []), params._fix_recv_opts(["-x", mp, "-x", cr], frozenset([mp]))[:2])
+        self.assertEqual(([], [cr, mp]), params._fix_recv_opts([], frozenset([mp, cr]))[:2])
 
     def test_fix_send_recv_opts_declarative_specs_and_exclusions(self) -> None:
         """Covers long-only options, aliases and short-only arguments, with rejection by default and explicit omission."""
@@ -341,14 +341,14 @@ class TestHelperFunctions(AbstractTestCase):
             exclude_short_opts="f",
             exclude_long_opts=frozenset(["--drop"]),
         )
-        self.assertEqual((["--only", "--value=-f", "-q", "--drop"], []), fixer(["--only", "-a-f", "-q", "--drop"]))
-        self.assertEqual((["--drop=-f"], []), fixer(["--dro", "-f"], exclude_long_opts=frozenset()))
+        self.assertEqual((["--only", "--value=-f", "-q", "--drop"], []), fixer(["--only", "-a-f", "-q", "--drop"])[:2])
+        self.assertEqual((["--drop=-f"], []), fixer(["--dro", "-f"], exclude_long_opts=frozenset())[:2])
         for options in [["-f"], ["--flag"], ["--dro=value"]]:
             with self.subTest(options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS.*not allowed"):
                 fixer(options)
         self.assertEqual(
             (["--value=-f", "--only"], []),
-            fixer(["--flag", "--drop", "--only", "--value=-f", "--only"], exclude_action="omit"),
+            fixer(["--flag", "--drop", "--only", "--value=-f", "--only"], exclude_action="omit")[:2],
         )
         for options in [["--drop"], ["--drop="]]:
             with self.subTest(options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS"):
