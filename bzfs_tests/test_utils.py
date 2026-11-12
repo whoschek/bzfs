@@ -484,17 +484,28 @@ class TestHelperFunctions(unittest.TestCase):
                 self.assertEqual(utils.DIE_STATUS, cm.exception.code)
                 self.assertEqual(f"Invalid ZFS dataset name: '{name}' for: '{input_text}'", str(cm.exception))
 
+    def test_validate_dataset_name_is_assert(self) -> None:
+        input_text = "backup-host:pool/fs"
+        name = "/pool"
+        with self.assertRaises(AssertionError) as cm:
+            validate_dataset_name(name, input_text, is_assert=True)
+        self.assertEqual(f"Invalid ZFS dataset name: '{name}' for: '{input_text}'", str(cm.exception))
+
     def test_validate_property_name_valid(self) -> None:
-        """Return accepted native and user property names unchanged, including their punctuation."""
-        for name in ("x", "readonly", "backup:enabled", "org.example:keep_1-2"):
+        """Return native and user property names unchanged, allowing leading hyphens on user properties."""
+        for name in ("x", "readonly", "backup:enabled", "org.example:keep_1-2", "-x:foo", "--foo:bar", "-:"):
             with self.subTest(name=name):
                 self.assertEqual(name, validate_property_name(name, "test"))
 
     def test_validate_property_name_invalid(self) -> None:
-        """Reject option-like names and unsupported characters."""
+        """Reject hyphen-prefixed names without a colon and unsupported characters."""
         input_text = "--preserve-properties"
         for name in (
             "",
+            "-x",
+            "-o",
+            "-",
+            "--foo",
             "ReadOnly",
             "backup:Enabled",
             "backup:caf\u00e9",
@@ -526,17 +537,14 @@ class TestHelperFunctions(unittest.TestCase):
         for name, options in (
             ("pool/fs#snap", {}),
             ("pool/fs@snap", {"allow_snapshot": False, "allow_bookmark": True}),
-            ("pool/fs@snap", {"allow_snapshot": False}),
-            ("pool/fs#snap", {"allow_snapshot": False}),
             ("pool/fs2@snap", {}),
             ("pool/fs/child#snap", {"allow_bookmark": True}),
             ("pool/other@snap", {}),
         ):
             with self.subTest(name=name, options=options):
-                with self.assertRaises(SystemExit) as cm:
+                with self.assertRaises(AssertionError) as cm:
                     validate_snapshot_prefix(name, dataset, **options)
-                self.assertEqual(utils.DIE_STATUS, cm.exception.code)
-                self.assertEqual(f"Manipulated ZFS snapshot name: {name} for dataset: {dataset}", str(cm.exception))
+                self.assertEqual(f"Invalid ZFS snapshot name: {name} for dataset: {dataset}", str(cm.exception))
 
 
 #############################################################################
