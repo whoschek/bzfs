@@ -942,19 +942,23 @@ class TestReplication(AbstractTestCase):
                 self.assertEqual(expected, run.call_args_list)
 
     def test_is_zfs_dataset_busy(self) -> None:
+        """Recognizes ordinary ZFS commands with either proctitle setting, since the flag only gates native titles."""
         procs = [
             "sudo -n zfs send pool/ds@s1",
             "sudo -n zfs receive pool/ds",
         ]
-        self.assertTrue(_is_zfs_dataset_busy(procs, "pool/ds", True))
-        self.assertTrue(_is_zfs_dataset_busy(procs, "pool/ds", False))
-        self.assertFalse(_is_zfs_dataset_busy(["other"], "pool/ds", True))
+        for check_proctitle in [False, True]:
+            with self.subTest(check_proctitle=check_proctitle):
+                self.assertTrue(_is_zfs_dataset_busy(procs, "pool/ds", True, check_proctitle=check_proctitle))
+                self.assertTrue(_is_zfs_dataset_busy(procs, "pool/ds", False, check_proctitle=check_proctitle))
+                self.assertFalse(_is_zfs_dataset_busy(["other"], "pool/ds", True, check_proctitle=check_proctitle))
 
     def test_check_zfs_dataset_busy(self) -> None:
         log = MagicMock()
         p = _make_params(
             is_program_available=MagicMock(return_value=True),
             ps_program="ps",
+            zfs_send_has_proctitle=False,
             log=log,
         )
         job = MagicMock(
@@ -1188,7 +1192,7 @@ class TestReplication(AbstractTestCase):
                         recv_opts = ["-u"]
                         cache: dict[tuple[str, ...], dict[str, str | None]] = {}
                         expected_recv = recv_opts.copy()
-                        expected_set = []
+                        expected_set: list[str] = []
                         for name in sorted(props):
                             if name == "org.test:excluded":
                                 continue
