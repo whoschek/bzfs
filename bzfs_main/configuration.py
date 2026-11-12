@@ -94,7 +94,6 @@ from bzfs_main.util.utils import (
     SnapshotPeriods,
     SynchronizedBool,
     SynchronizedDict,
-    append_if_absent,
     compile_regexes,
     current_datetime,
     die,
@@ -109,6 +108,7 @@ from bzfs_main.util.utils import (
     open_nofollow,
     parse_duration_to_milliseconds,
     pid_exists,
+    prepend_if_absent,
     sha256_hex,
     urlsafe_base64,
     validate_dataset_name,
@@ -250,6 +250,8 @@ class Params:
         zfs_send_program_opts, zfs_send_program_opt_names = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
         self.zfs_send_program_opts: Final[list[str]] = zfs_send_program_opts
         self.zfs_send_program_opt_names: Final[list[str]] = zfs_send_program_opt_names
+        if self.verbose_zfs:
+            prepend_if_absent(self.zfs_send_program_opt_names, self.zfs_send_program_opts, "-v")
         self.zfs_send_has_proctitle: Final[bool] = any(opt in ("--proctitle", "-V") for opt in zfs_send_program_opt_names)
         zfs_send_resume_opts, zfs_send_resume_opt_names = self._fix_send_resume_opts(self.zfs_send_program_opts)
         self.zfs_send_resume_opts: Final[list[str]] = zfs_send_resume_opts
@@ -267,8 +269,7 @@ class Params:
         self.zfs_recv_x_names: Final[list[str]] = zfs_recv_x_names
         self.zfs_recv_program_opt_names: Final[list[str]] = zfs_recv_program_opt_names
         if self.verbose_zfs:
-            append_if_absent(self.zfs_send_program_opts, "-v")
-            append_if_absent(self.zfs_recv_program_opts, "-v")
+            prepend_if_absent(self.zfs_recv_program_opt_names, self.zfs_recv_program_opts, "-v")
         # zfs_full_recv_opts: dataset-specific dynamic -o/-x property options are computed later per dataset in
         # replication._add_recv_property_options():
         self.zfs_full_recv_opts: Final[list[str]] = self.zfs_recv_program_opts.copy()

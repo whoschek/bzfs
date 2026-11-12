@@ -182,7 +182,6 @@ from bzfs_main.util.utils import (
     SynchronizedBool,
     SynchronizedDict,
     TaskTiming,
-    append_if_absent,
     compile_regexes,
     cut,
     die,
@@ -625,8 +624,8 @@ class Job:
         p.r2r_mode = resolve_r2r_mode(p)
 
         if is_zpool_feature_enabled_or_active(p, dst, "feature@large_blocks"):
-            append_if_absent(p.curr_zfs_send_program_opts, "--large-block")
-            append_if_absent(p.curr_zfs_send_resume_opts, "--large-block")
+            p.curr_zfs_send_program_opts.append("--large-block")
+            p.curr_zfs_send_resume_opts.append("--large-block")
 
         self.max_workers = {}
         self.max_datasets_per_minibatch_on_list_snaps = {}

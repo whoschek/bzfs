@@ -539,12 +539,14 @@ def replace_in_lines(lines: list[str], old: str, new: str, count: int = -1) -> N
 _TAPPEND = TypeVar("_TAPPEND")
 
 
-def append_if_absent(lst: list[_TAPPEND], *items: _TAPPEND) -> list[_TAPPEND]:
+def prepend_if_absent(checklist: list[_TAPPEND], appendlist: list[_TAPPEND], *items: _TAPPEND) -> list[_TAPPEND]:
     """Appends items to list if they are not already present."""
+    assert checklist is not appendlist
     for item in items:
-        if item not in lst:
-            lst.append(item)
-    return lst
+        if item not in checklist:
+            appendlist.insert(0, item)
+            checklist.insert(0, item)
+    return appendlist
 
 
 def xappend(lst: list[_TAPPEND], *items: _TAPPEND | Iterable[_TAPPEND]) -> list[_TAPPEND]:

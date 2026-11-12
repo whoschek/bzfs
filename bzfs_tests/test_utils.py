@@ -100,7 +100,6 @@ from bzfs_main.util.utils import (
     TaskTiming,
     UpdatablePriorityQueue,
     _get_descendant_processes,
-    append_if_absent,
     binary_search,
     close_quietly,
     compile_regexes,
@@ -125,6 +124,7 @@ from bzfs_main.util.utils import (
     parse_duration_to_milliseconds,
     percent,
     pid_exists,
+    prepend_if_absent,
     pretty_print_formatter,
     replace_capturing_groups_with_non_capturing_groups,
     sha256_hex,
@@ -294,10 +294,10 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(list(dataset_paths("a/b/c")), ["a", "a/b", "a/b/c"])
         self.assertEqual(list(dataset_paths("")), [""])
 
-    def test_append_if_absent(self) -> None:
-        self.assertListEqual([], append_if_absent([]))
-        self.assertListEqual(["a"], append_if_absent([], "a"))
-        self.assertListEqual(["a"], append_if_absent([], "a", "a"))
+    def test_prepend_if_absent(self) -> None:
+        self.assertListEqual([], prepend_if_absent([], []))
+        self.assertListEqual(["a"], prepend_if_absent([], [], "a"))
+        self.assertListEqual(["a"], prepend_if_absent([], [], "a", "a"))
 
     def test_compile_regexes(self) -> None:
         def _assert_full_match(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:
