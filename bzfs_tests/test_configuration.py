@@ -221,7 +221,7 @@ class TestHelperFunctions(AbstractTestCase):
         """Checks the complete allowed flag catalog and resume policy with expectations independent of parser constants."""
         params = self.make_params(self.argparser_parse_args(["src", "dst"]))
         for short, long, resumable in [
-            ("-D -L -P -V -c -v -w", "--dedup --large-block --parsable --proctitle --compressed --verbose --raw", True),
+            ("-D -L -V -c -w", "--dedup --large-block --proctitle --compressed --raw", True),
             ("-R -U -b -h -p -s", "--replicate --no-preserve-encryption --backup --holds --props --skip-missing", False),
         ]:
             for spelling in (short, long):
@@ -229,24 +229,24 @@ class TestHelperFunctions(AbstractTestCase):
                     options = spelling.split()
                     self.assertEqual(options, params._fix_send_opts(options)[0])
                     self.assertEqual(options if resumable else [], params._fix_send_resume_opts(options)[0])
-        self.assertEqual(["-v", "--verbose", "-v"], params._fix_send_opts(["-v", "--verb", "-v"])[0])
+        self.assertEqual(["-p", "--props", "-p"], params._fix_send_opts(["-p", "--prop", "-p"])[0])
 
     def test_send_option_arguments(self) -> None:
         """Preserves grouped, attached and abbreviated arguments through public parsing, omitting them on resume."""
         for options, argument in [
-            ("-vXpool/hidden-denIt", "--exclude=pool/hidden-denIt"),
-            ("-vX pool/hidden-denIt", "--exclude=pool/hidden-denIt"),
-            ("-vd-n", "--redact=-n"),
-            ("-vd -w", "--redact=-w"),
-            ("-v --redact=-P", "--redact=-P"),
-            ("-v --red --", "--redact=--"),
-            ("-v --ex=pool/hidden", "--exclude=pool/hidden"),
+            ("-hXpool/hidden-denIt", "--exclude=pool/hidden-denIt"),
+            ("-hX pool/hidden-denIt", "--exclude=pool/hidden-denIt"),
+            ("-hd-n", "--redact=-n"),
+            ("-hd -w", "--redact=-w"),
+            ("-h --redact=-P", "--redact=-P"),
+            ("-h --red --", "--redact=--"),
+            ("-h --ex=pool/hidden", "--exclude=pool/hidden"),
         ]:
             with self.subTest(options=options):
                 args = self.argparser_parse_args(["src", "dst", f"--zfs-send-program-opts={options} -cw"])
                 params = self.make_params(args)
-                self.assertEqual(["-v", argument, "-c", "-w"], params.zfs_send_program_opts)
-                self.assertEqual(["-v", "-c", "-w"], params.zfs_send_resume_opts)
+                self.assertEqual(["-h", argument, "-c", "-w"], params.zfs_send_program_opts)
+                self.assertEqual(["-c", "-w"], params.zfs_send_resume_opts)
 
     def test_ambiguous_send_options_match_native_catalog(self) -> None:
         """Resolves prefixes against the full native catalog before applying bzfs policy exclusions."""
@@ -283,9 +283,9 @@ class TestHelperFunctions(AbstractTestCase):
         for name, values in [
             (
                 "--zfs-send-program-opts",
-                "-S -e -n --saved --embed --dryrun --res=token -vIbase -vibase -vt1-token -vnXpool/hidden".split(),
+                "-S -e -n --saved --embed --dryrun --res=token -hIbase -hibase -ht1-token -hnXpool/hidden".split(),
             ),
-            ("--zfs-recv-program-opts", ["-v" + flag for flag in "AFcdens"]),
+            ("--zfs-recv-program-opts", ["-h" + flag for flag in "AFcdens"]),
             ("--zfs-recv-program-opt", ["-F"]),
         ]:
             for value in values:
@@ -298,13 +298,13 @@ class TestHelperFunctions(AbstractTestCase):
             [
                 "src",
                 "dst",
-                "--zfs-recv-program-opts=-hMuvoorg:empty= -xorg:first -o org:key=denIsFA=a=b -x org:first",
+                "--zfs-recv-program-opts=-hMuoorg:empty= -xorg:first -o org:key=denIsFA=a=b -x org:first",
                 "--zfs-recv-program-opt=-o",
                 "--zfs-recv-program-opt=org:space=a b",
             ]
         )
         params = self.make_params(args)
-        expected = "-h -M -u -v -o org:empty= -x org:first -o org:key=denIsFA=a=b -x org:first".split()
+        expected = "-h -M -u -o org:empty= -x org:first -o org:key=denIsFA=a=b -x org:first".split()
         expected += ["-o", "org:space=a b"]
         self.assertEqual(expected, params.zfs_recv_program_opts)
         self.assertEqual(

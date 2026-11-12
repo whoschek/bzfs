@@ -94,7 +94,6 @@ from bzfs_main.util.utils import (
     SnapshotPeriods,
     SynchronizedBool,
     SynchronizedDict,
-    append_if_absent,
     compile_regexes,
     current_datetime,
     die,
@@ -250,6 +249,9 @@ class Params:
         zfs_send_program_opts, zfs_send_program_opt_names = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
         self.zfs_send_program_opts: Final[list[str]] = zfs_send_program_opts
         self.zfs_send_program_opt_names: Final[list[str]] = zfs_send_program_opt_names
+        if self.verbose_zfs:
+            self.zfs_send_program_opt_names.append("-v")
+            self.zfs_send_program_opts.append("-v")
         self.zfs_send_has_proctitle: Final[bool] = any(opt in ("--proctitle", "-V") for opt in zfs_send_program_opt_names)
         zfs_send_resume_opts, zfs_send_resume_opt_names = self._fix_send_resume_opts(self.zfs_send_program_opts)
         self.zfs_send_resume_opts: Final[list[str]] = zfs_send_resume_opts
@@ -267,8 +269,8 @@ class Params:
         self.zfs_recv_x_names: Final[list[str]] = zfs_recv_x_names
         self.zfs_recv_program_opt_names: Final[list[str]] = zfs_recv_program_opt_names
         if self.verbose_zfs:
-            append_if_absent(self.zfs_send_program_opts, "-v")
-            append_if_absent(self.zfs_recv_program_opts, "-v")
+            self.zfs_recv_program_opt_names.append("-v")
+            self.zfs_recv_program_opts.append("-v")
         # zfs_full_recv_opts: dataset-specific dynamic -o/-x property options are computed later per dataset in
         # replication._add_recv_property_options():
         self.zfs_full_recv_opts: Final[list[str]] = self.zfs_recv_program_opts.copy()
@@ -465,7 +467,7 @@ class Params:
             opts,
             short_opts="AFMcdehno:suvx:",
             long_opts={},
-            exclude_short_opts="AFcdens",
+            exclude_short_opts="AFcdensv",
             preserve_properties=preserve_properties,
         )
 
@@ -500,7 +502,7 @@ class Params:
             opts,
             short_opts=Params._ZFS_SEND_SHORT_ONLY_OPTS,
             long_opts=Params._ZFS_SEND_LONG_OPTS,
-            exclude_short_opts="ISeint",
+            exclude_short_opts="IPSeintv",
         )
         return result[0], result[2]
 

@@ -100,7 +100,6 @@ from bzfs_main.util.utils import (
     LOG_TRACE,
     POSIX_END_OF_OPTIONS_MARKER,
     Subprocesses,
-    append_if_absent,
     cut,
     die,
     getenv_bool,
@@ -1255,8 +1254,10 @@ def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_
     if p.no_estimate_send_size:
         return 0
     zfs_send_program_opts: list[str] = p.curr_zfs_send_resume_opts if recv_resume_token else p.curr_zfs_send_program_opts
-    zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in zfs_send_program_opts]
-    zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
+    zfs_send_program_opts = zfs_send_program_opts.copy()
+    if not any(opt in ("-v", "--verbose") for opt in p.zfs_send_program_opt_names):
+        zfs_send_program_opts += ["-v"]
+    zfs_send_program_opts += ["-n", "--parsable"]
     if recv_resume_token:
         zfs_send_program_opts += ["-t", recv_resume_token]
         items = ()
