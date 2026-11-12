@@ -1546,7 +1546,7 @@ def _check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send
     procs: list[str] = (job.try_ssh_command(remote, LOG_TRACE, cmd=cmd) or "").splitlines()
     if job.inject_params.get("is_zfs_dataset_busy", False):
         procs += ["sudo -n zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
-    if not _is_zfs_dataset_busy(procs, dataset, busy_if_send=busy_if_send):
+    if not _is_zfs_dataset_busy(procs, dataset, busy_if_send=busy_if_send, check_proctitle=p.zfs_send_has_proctitle):
         return True
     op: str = "zfs {receive" + ("|send" if busy_if_send else "") + "} operation"
     try:
@@ -1562,15 +1562,16 @@ _ZFS_DATASET_BUSY_IF_SEND: Final[re.Pattern[str]] = re.compile((_ZFS_DATASET_BUS
 _ZFS_SEND_WITH_PROCTITLE: Final[re.Pattern[str]] = re.compile(r"zfs: sending ([^@()\r\n]+)(?:@| \()")
 
 
-def _is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> bool:
+def _is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool, check_proctitle: bool) -> bool:
     """Checks if any process list entry indicates ZFS activity on dataset."""
+    check_proctitle = check_proctitle and busy_if_send
     regex: re.Pattern[str] = _ZFS_DATASET_BUSY_IF_SEND if busy_if_send else _ZFS_DATASET_BUSY_IF_MODS
     suffix: str = " " + dataset
     infix: str = " " + dataset + "@"
     for proc in procs:
         if (proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc):
             return True
-        if busy_if_send and (match := _ZFS_SEND_WITH_PROCTITLE.match(proc)) and match.group(1) == dataset:
+        if check_proctitle and (match := _ZFS_SEND_WITH_PROCTITLE.match(proc)) and match.group(1) == dataset:
             return True
     return False
 
