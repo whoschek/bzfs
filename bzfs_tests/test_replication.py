@@ -197,11 +197,11 @@ def _prepare_r2r_job(
         min_pipe_transfer_size=min_pipe_transfer_size,
         no_estimate_send_size=False,
         compression_program="zstd",
-        compression_program_opts=["-3"],
+        compression_program_opts=("-3",),
         mbuffer_program="mbuffer",
-        mbuffer_program_opts=["-q"],
+        mbuffer_program_opts=("-q",),
         pv_program="pv",
-        pv_program_opts=[],
+        pv_program_opts=(),
         log_params=MagicMock(pv_log_file="/tmp/test.pv", quiet=True),
         is_program_available=MagicMock(side_effect=is_program_available),
     )
@@ -249,22 +249,22 @@ class TestQuoting(AbstractTestCase):
         job = _prepare_job(src_host="src", dst_host="dst", is_program_available=lambda program, _loc: program != "zstd")
         # make sure options end with a backslash
         job.params.pv_program = "pv"
-        job.params.pv_program_opts = ["Y\\"]
+        job.params.pv_program_opts = ("Y\\",)
         job.params.mbuffer_program = "mbuffer"
-        job.params.mbuffer_program_opts = ["X\\"]
+        job.params.mbuffer_program_opts = ("X\\",)
         job.params.compression_program = "zstd"
-        job.params.compression_program_opts = ["Z\\"]
+        job.params.compression_program_opts = ("Z\\",)
         job.params.log_params = MagicMock(pv_log_file="/tmp/pv.log\\")  # pv log path ending in backslash
 
         seen: list[str] = []
         with (
             patch(  # force mbuffer to be present on all legs and include our trailing-backslash opt
                 "bzfs_main.replication._mbuffer_cmd",
-                side_effect=lambda p, loc, _rec: shlex.join([p.mbuffer_program, "-s", "1"] + p.mbuffer_program_opts),
+                side_effect=lambda p, loc, _rec: shlex.join((p.mbuffer_program, "-s", "1") + p.mbuffer_program_opts),
             ),
             patch(  # force pv to be present and include our backslashy opts + backslashy log path
                 "bzfs_main.replication._pv_cmd",
-                side_effect=lambda j, _sz, _human, disable_progress_bar=False: f"LC_ALL=C {shlex.join([j.params.pv_program] + j.params.pv_program_opts)} 2>> {shlex.quote(j.params.log_params.pv_log_file)}",
+                side_effect=lambda j, _sz, _human, disable_progress_bar=False: f"LC_ALL=C {shlex.join((j.params.pv_program,) + j.params.pv_program_opts)} 2>> {shlex.quote(j.params.log_params.pv_log_file)}",
             ),
             patch(  # keep squote a no-op so we see the raw strings
                 "bzfs_main.replication.squote", side_effect=lambda _r, s: s
@@ -790,7 +790,7 @@ class TestReplication(AbstractTestCase):
             dst=MagicMock(is_nonlocal=False),
             is_program_available=MagicMock(return_value=False),
             mbuffer_program="mbuffer",
-            mbuffer_program_opts=["-O", "localhost:0"],
+            mbuffer_program_opts=("-O", "localhost:0"),
             no_estimate_send_size=False,
         )
         watchdog = " -W 300" if platform.system() == "FreeBSD" else ""
@@ -812,7 +812,7 @@ class TestReplication(AbstractTestCase):
                     dst=MagicMock(is_nonlocal=dst_is_nonlocal),
                     is_program_available=MagicMock(return_value=True),
                     mbuffer_program="mbuffer",
-                    mbuffer_program_opts=["-m", "8M"],
+                    mbuffer_program_opts=("-m", "8M"),
                     bwlimit="20m",
                     no_estimate_send_size=False,
                 )
@@ -826,7 +826,7 @@ class TestReplication(AbstractTestCase):
             dst=MagicMock(is_nonlocal=False),
             is_program_available=MagicMock(return_value=False),
             compression_program="zstd",
-            compression_program_opts=["-3"],
+            compression_program_opts=("-3",),
             no_estimate_send_size=False,
         )
         self.assertEqual("zstd -c -3", _compress_cmd(p))
@@ -838,7 +838,7 @@ class TestReplication(AbstractTestCase):
             dst=MagicMock(is_nonlocal=False),
             is_program_available=MagicMock(return_value=True),
             compression_program="zstd",
-            compression_program_opts=["-3"],
+            compression_program_opts=("-3",),
             no_estimate_send_size=False,
         )
         self.assertEqual("zstd -c -3", _compress_cmd(p))
@@ -871,7 +871,7 @@ class TestReplication(AbstractTestCase):
         p = _make_params(
             is_program_available=MagicMock(return_value=True),
             pv_program="pv",
-            pv_program_opts=["-L1"],
+            pv_program_opts=("-L1",),
             log_params=log_params,
             quiet=True,
             no_estimate_send_size=False,
@@ -891,7 +891,7 @@ class TestReplication(AbstractTestCase):
         p = _make_params(
             is_program_available=MagicMock(return_value=False),
             pv_program="pv",
-            pv_program_opts=[],
+            pv_program_opts=(),
             log_params=MagicMock(pv_log_file="/tmp/pv.log", quiet=True),
             no_estimate_send_size=False,
         )

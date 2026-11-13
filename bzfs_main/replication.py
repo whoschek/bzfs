@@ -1027,7 +1027,7 @@ def _mbuffer_cmd(p: Params, loc: str, recordsize: int) -> str:
     """Use mbuffer in the network pipe between 'zfs send' and 'zfs receive' to smooth out the rate of data flow and prevent
     bottlenecks caused by network latency or speed fluctuation."""
     recordsize = max(recordsize, 2 * 1024 * 1024)
-    mbuffer_program_opts: list[str] = [p.mbuffer_program, "-s", str(recordsize)] + p.mbuffer_program_opts
+    mbuffer_program_opts: list[str] = [p.mbuffer_program, "-s", str(recordsize), *p.mbuffer_program_opts]
     if (
         platform.system() == "FreeBSD" or p.available_programs.get(loc, {}).get("os") == "FreeBSD"
     ) and "-W" not in mbuffer_program_opts:
@@ -1040,12 +1040,12 @@ def _mbuffer_cmd(p: Params, loc: str, recordsize: int) -> str:
 
 def _compress_cmd(p: Params) -> str:
     """Use compression (e.g. zstd) in the network pipe between 'zfs send' and 'zfs receive' to reduce network bottlenecks."""
-    return shlex.join([p.compression_program, "-c"] + p.compression_program_opts)
+    return shlex.join((p.compression_program, "-c") + p.compression_program_opts)
 
 
 def _decompress_cmd(p: Params) -> str:
     """Formats the decompression half of an enabled compression pair."""
-    return shlex.join([p.compression_program, "-dc"])
+    return shlex.join((p.compression_program, "-dc"))
 
 
 _WORKER_THREAD_NUMBER_REGEX: Final[re.Pattern[str]] = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
@@ -1072,7 +1072,7 @@ def _pv_cmd(job: Job, size_estimate_bytes: int, size_estimate_human: str, disabl
         with open_nofollow(pv_log_file, mode="a", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
             fd.write("\n")  # mark start of new stream so ProgressReporter can reliably reset bytes_in_flight
         job.progress_reporter.enqueue_pv_log_file(pv_log_file)
-    pv_program_opts: list[str] = [p.pv_program] + p.pv_program_opts
+    pv_program_opts: list[str] = [p.pv_program, *p.pv_program_opts]
     if job.progress_update_intervals is not None:  # for testing
         pv_program_opts += [f"--interval={job.progress_update_intervals[0]}"]
     pv_program_opts += ["--force", f"--name={size_estimate_human}"]
