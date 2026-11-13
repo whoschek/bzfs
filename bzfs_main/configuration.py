@@ -324,7 +324,7 @@ class Params:
         self.is_caching_snapshots: Final[bool] = args.cache_snapshots
 
         self.compression_program: Final[str] = self._program_name(args.compression_program)
-        self.compression_program_opts: Final[list[str]] = self.split_args(args.compression_program_opts)
+        self.compression_program_opts: Final[tuple[str, ...]] = tuple(self.split_args(args.compression_program_opts))
         for opt in self.compression_program_opts:
             if opt in ("-", "--") or not opt.startswith("-"):
                 die(
@@ -354,7 +354,7 @@ class Params:
 
         self.getconf_program: Final[str] = self._program_name("getconf")  # print number of CPUs on POSIX
         self.mbuffer_program: Final[str] = self._program_name(args.mbuffer_program)
-        self.mbuffer_program_opts: Final[list[str]] = self.split_args(args.mbuffer_program_opts)
+        self.mbuffer_program_opts: Final[tuple[str, ...]] = tuple(self.split_args(args.mbuffer_program_opts))
         for opt in _validate_posix_opts(
             {"-a", "-A", "-i", "-I", "-l", "-L", "-o", "-O", "-t", "-T"},
             self.mbuffer_program_opts,
@@ -364,8 +364,8 @@ class Params:
         self.bwlimit: Final[str] = self.validate_arg_str(args.bwlimit) if args.bwlimit else ""
         self.ps_program: Final[str] = self._program_name(args.ps_program)
         self.pv_program: Final[str] = self._program_name(args.pv_program)
-        self.pv_program_opts: Final[list[str]] = self.split_args(args.pv_program_opts)
-        for opt in self.pv_program_opts:
+        pv_program_opts: list[str] = self.split_args(args.pv_program_opts)
+        for opt in pv_program_opts:
             if opt in ("-", "--") or not opt.startswith("-"):
                 die(
                     "--pv-program-opts: Each whitespace-separated token must start with '-' "
@@ -376,11 +376,12 @@ class Params:
                        "-U", "--store-and-forward", "-d", "--watchfd", "-R", "--remote", "-P", "--pidfile",
                        "-M", "--monitor", "-N", "--name", "-c", "--cursor", "-Q", "--query", "-!", "--debug"}  # fmt: skip
         for opt in _validate_posix_opts(
-            bad_pv_opts, self.pv_program_opts, short_opts_with_args="ADsiwHuFxLBZJQm", allow_abbreviations=True
+            bad_pv_opts, pv_program_opts, short_opts_with_args="ADsiwHuFxLBZJQm", allow_abbreviations=True
         ):
             die(f"--pv-program-opts: {opt} is disallowed for security reasons.")
         if self.bwlimit:
-            self.pv_program_opts.append(f"--rate-limit={self.bwlimit}")
+            pv_program_opts.append(f"--rate-limit={self.bwlimit}")
+        self.pv_program_opts: Final[tuple[str, ...]] = tuple(pv_program_opts)
 
         self.shell_program_local: Final[str] = "sh"
         self.shell_program: Final[str] = self._program_name(args.shell_program)

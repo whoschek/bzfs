@@ -32,6 +32,9 @@ import time
 from collections import (
     deque,
 )
+from collections.abc import (
+    Sequence,
+)
 from dataclasses import (
     dataclass,
     field,
@@ -99,7 +102,7 @@ class ProgressReporter:
     def __init__(
         self,
         log: Logger,
-        pv_program_opts: list[str],
+        pv_program_opts: Sequence[str],
         use_select: bool,
         progress_update_intervals: tuple[float, float] | None,
         fail: bool = False,
@@ -107,7 +110,7 @@ class ProgressReporter:
         """Creates a reporter configured for ``pv`` log parsing."""
         # immutable variables:
         self._log: Final[Logger] = log
-        self._pv_program_opts: Final[list[str]] = pv_program_opts
+        self._pv_program_opts: Final[Sequence[str]] = pv_program_opts
         self._use_select: Final[bool] = use_select
         self._progress_update_intervals: Final[tuple[float, float] | None] = progress_update_intervals
         self._inject_error: bool = fail  # for testing only

@@ -1194,7 +1194,7 @@ class TestAdditionalHelpers(AbstractTestCase):
                     argv.append(f"--pv-program-opts=--bytes --eta --fineta --average-rate {extra_opts}")
                 args = self.argparser_parse_args(argv)
                 params = self.make_params(args=args)
-                self.assertEqual(args.pv_program_opts.split(), params.pv_program_opts)
+                self.assertEqual(tuple(args.pv_program_opts.split()), params.pv_program_opts)
 
     def test_compression_program_opts_rejects_file_options(self) -> None:
         """Rejects file-list input, trace output, source removal and output flags after zstd's dictionary flag.
@@ -1272,7 +1272,7 @@ class TestAdditionalHelpers(AbstractTestCase):
                         argv.append(f"--compression-program-opts={opts}")
                     args = self.argparser_parse_args(argv)
                     params = self.make_params(args=args)
-                    self.assertEqual(["-1"] if opts is None else [], params.compression_program_opts)
+                    self.assertEqual(("-1",) if opts is None else (), params.compression_program_opts)
 
     def test_compression_program_opts_preserves_program_specific_options(self) -> None:
         """Preserves attached zstd dictionary values and FreeBSD gzip's recursive abbreviation through CLI parsing only,
@@ -1283,7 +1283,7 @@ class TestAdditionalHelpers(AbstractTestCase):
                     ["src", "dst", f"--compression-program={program}", f"--compression-program-opts={opts}"]
                 )
                 params = self.make_params(args=args)
-                self.assertEqual(opts.split(), params.compression_program_opts)
+                self.assertEqual(tuple(opts.split()), params.compression_program_opts)
 
     def test_program_opts_disallows_forbidden_options_with_option_arguments(self) -> None:
         """Rejects forbidden options with separate or attached option-arguments through the shared POSIX option validator."""
@@ -1324,13 +1324,13 @@ class TestAdditionalHelpers(AbstractTestCase):
     def test_program_opts_preserves_option_arguments_and_non_option_arguments(self) -> None:
         """Preserves safe options, option-arguments and non-option arguments to prevent false positives in POSIX validation."""
         for program, opts in [
-            ("pv", ["--foo=--output=x", "-Foutput=o", "--format=output=o", "-L20M"]),
-            ("compression", ["-19", "-T2", "--format=zstd"]),
-            ("mbuffer", []),
-            ("mbuffer", ["-q", "-m", "128M"]),
-            ("mbuffer", ["-q", "-m128M", "-M50MiB"]),
-            ("mbuffer", ["-M", "50MiB"]),
-            ("mbuffer", ["-q", "-m128M", "-s2M", "-W300", "-r20M", "-R20M", "--tcpbuffer", "1M"]),
+            ("pv", ("--foo=--output=x", "-Foutput=o", "--format=output=o", "-L20M")),
+            ("compression", ("-19", "-T2", "--format=zstd")),
+            ("mbuffer", ()),
+            ("mbuffer", ("-q", "-m", "128M")),
+            ("mbuffer", ("-q", "-m128M", "-M50MiB")),
+            ("mbuffer", ("-M", "50MiB")),
+            ("mbuffer", ("-q", "-m128M", "-s2M", "-W300", "-r20M", "-R20M", "--tcpbuffer", "1M")),
         ]:
             with self.subTest(program=program, opts=opts):
                 args = self.argparser_parse_args(["src", "dst", f"--{program}-program-opts={' '.join(opts)}"])
@@ -1362,9 +1362,9 @@ class TestAdditionalHelpers(AbstractTestCase):
     def test_program_opts_preserves_combined_short_posix_options_and_option_arguments(self) -> None:
         """Preserves combined short POSIX options and attached option-arguments containing forbidden option characters."""
         for program, opts in [
-            ("pv", ["-ptebar", "-pFoutput=o", "-qL20M", "-B2M", "-s1T"]),
-            ("compression", ["-q19T2", "--format=zstd"]),
-            ("mbuffer", ["-q", "-v0", "-s2M", "-m128M", "-D1T"]),
+            ("pv", ("-ptebar", "-pFoutput=o", "-qL20M", "-B2M", "-s1T")),
+            ("compression", ("-q19T2", "--format=zstd")),
+            ("mbuffer", ("-q", "-v0", "-s2M", "-m128M", "-D1T")),
         ]:
             with self.subTest(program=program, opts=opts):
                 args = self.argparser_parse_args(["src", "dst", f"--{program}-program-opts={' '.join(opts)}"])
@@ -1389,7 +1389,7 @@ class TestAdditionalHelpers(AbstractTestCase):
                     ["src", "dst", f"--compression-program={program}", f"--compression-program-opts={opts}"]
                 )
                 params = self.make_params(args=args)
-                self.assertEqual([opts], params.compression_program_opts)
+                self.assertEqual((opts,), params.compression_program_opts)
 
     def test_validate_posix_opts_reports_forbidden_options(self) -> None:
         """Reports normalized options once per command-line argument, checking subsequent arguments after an attached
@@ -1431,7 +1431,7 @@ class TestAdditionalHelpers(AbstractTestCase):
                     ["src", "dst", f"--compression-program={program}", "--compression-program-opts=--out"]
                 )
                 params = self.make_params(args=args)
-                self.assertEqual(["--out"], params.compression_program_opts)
+                self.assertEqual(("--out",), params.compression_program_opts)
 
     def test_validate_posix_opts_abbreviated_long_options(self) -> None:
         """Checks opt-in conservative prefix matching, preserving unrelated arguments and excluding bare -- from matching."""
