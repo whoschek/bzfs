@@ -724,7 +724,8 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
              "The value is split on runs of one or more whitespace characters. "
              "Options must be recognized by bzfs; unknown or incompatible options, missing or empty option arguments, and "
              "positional operands are rejected as an error. "
-             f"{PROG_NAME} rejects '-n/--dryrun', '-e/--embed', '-i', '-I', '-S/--saved', and '-t/--resume' here. "
+             f"{PROG_NAME} rejects '-n/--dryrun', '-e/--embed', '-i', '-I', '-P/--parsable', '-S/--saved', '-t/--resume', "
+             "and '-v/--verbose' here. "
              f"Use {PROG_NAME}'s native '--dryrun' option for dry runs.\n\n"
              "Default is '%(default)s'. To run `zfs send` without options, specify the empty "
              "string: `--zfs-send-program-opts=''`. "
@@ -740,7 +741,7 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
              "The value is split on runs of one or more whitespace characters. "
              "Options must be recognized by bzfs; unknown or incompatible options, missing or empty option arguments, and "
              "positional operands are rejected as an error. Empty ZFS property values such as '-o org:key=' are allowed. "
-             f"{PROG_NAME} rejects '-A', '-F', '-c', '-d', '-e', '-n/--dryrun', and '-s' here.\n\n"
+             f"{PROG_NAME} rejects '-A', '-F', '-c', '-d', '-e', '-n', '-s', and '-v' here.\n\n"
              "Default is '%(default)s'. To run `zfs receive` without options, specify the empty "
              "string: `--zfs-recv-program-opts=''`. "
              "Example: '-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption'. "
@@ -754,17 +755,15 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
              "--zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n")
     parser.add_argument(
         "--preserve-properties", nargs="+", default=[], metavar="STRING",
-        help="On replication, preserve the current value of ZFS properties with the given names on the destination "
-             "datasets. The destination ignores the property value it zfs receive's from the source if the property name "
-             "matches one of the given blacklist values. This prevents a compromised or untrusted source from overwriting "
-             "security-critical properties on the destination. The default is to preserve none, i.e. an empty blacklist.\n\n"
+        help="On replication, ignore incoming values for ZFS properties with the given names on destination datasets, using "
+             "'zfs receive -x'. Existing local settings and explicit inheritance are retained. Existing received values may "
+             "be replaced by inherited or default values. The default is to exclude none, i.e. an empty blacklist.\n\n"
+             "When replication is enabled, this option cannot be combined with 'zfs send -R/--replicate'. Combining it "
+             "with 'zfs send -p/--props' or '-b/--backup' requires destination OpenZFS >= 2.2.0.\n\n"
              "Example blacklist that protects against dangerous overwrites: "
              "mountpoint overlay sharenfs sharesmb exec setuid devices encryption keyformat keylocation\n\n"
              "See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html and "
-             "https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x\n\n"
-             "Note: --preserve-properties uses the 'zfs recv -x' option and thus requires either OpenZFS ≥ 2.2.0 "
-             "(see https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff), or that "
-             "'zfs send --props' is not used.\n\n")
+             "https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x\n\n")
     parser.add_argument(
         "--force-rollback-to-latest-snapshot", action="store_true",
         help="Before replication, rollback the destination dataset to its most recent destination snapshot (if there "

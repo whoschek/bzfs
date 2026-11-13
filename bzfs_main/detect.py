@@ -201,16 +201,20 @@ def detect_available_programs(job: Job) -> None:
         if r.sudo and not p.is_program_available("sudo", r.location):
             die(f"{p.sudo_program} CLI is not available on {r.location} host: {r.ssh_user_host or 'localhost'}")
 
-    if (
-        len(p.args.preserve_properties) > 0
-        and any(prop in p.zfs_send_program_opts for prop in ["--props", "-p"])
-        and not p.skip_replication
-        and not p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, p.dst.location)
-    ):
-        die(
-            "Cowardly refusing to proceed as --preserve-properties is unreliable on destination ZFS < 2.2.0 when using "
-            "'zfs send --props'. Either upgrade destination ZFS, or remove '--props' from --zfs-send-program-opt(s)."
-        )
+    if p.preserve_properties and not p.skip_replication:
+        if any(prop in p.zfs_send_program_opt_names for prop in ("--replicate", "-R")):
+            die(
+                "Cowardly refusing to proceed as --preserve-properties cannot be combined with 'zfs send' option "
+                "-R/--replicate when replication is enabled. Remove it from --zfs-send-program-opts."
+            )
+        if any(
+            prop in p.zfs_send_program_opt_names for prop in ("--props", "-p", "--backup", "-b")
+        ) and not p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, p.dst.location):
+            die(
+                "Cowardly refusing to proceed as --preserve-properties is unreliable on destination ZFS < 2.2.0 when using "
+                "'zfs send -p/--props' or 'zfs send -b/--backup'. Either upgrade destination ZFS, or remove these options "
+                "from --zfs-send-program-opts."
+            )
 
 
 def _disable_program(p: Params, program: str, locations: list[str]) -> None:

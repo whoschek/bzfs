@@ -221,7 +221,7 @@ class TestHelperFunctions(AbstractTestCase):
         """Checks the complete allowed flag catalog and resume policy with expectations independent of parser constants."""
         params = self.make_params(self.argparser_parse_args(["src", "dst"]))
         for short, long, resumable in [
-            ("-D -L -P -V -c -v -w", "--dedup --large-block --parsable --proctitle --compressed --verbose --raw", True),
+            ("-D -L -V -c -w", "--dedup --large-block --proctitle --compressed --raw", True),
             ("-R -U -b -h -p -s", "--replicate --no-preserve-encryption --backup --holds --props --skip-missing", False),
         ]:
             for spelling in (short, long):
@@ -229,24 +229,24 @@ class TestHelperFunctions(AbstractTestCase):
                     options = spelling.split()
                     self.assertEqual(options, params._fix_send_opts(options)[0])
                     self.assertEqual(options if resumable else [], params._fix_send_resume_opts(options)[0])
-        self.assertEqual(["-v", "--verbose", "-v"], params._fix_send_opts(["-v", "--verb", "-v"])[0])
+        self.assertEqual(["-p", "--props", "-p"], params._fix_send_opts(["-p", "--prop", "-p"])[0])
 
     def test_send_option_arguments(self) -> None:
         """Preserves grouped, attached and abbreviated arguments through public parsing, omitting them on resume."""
         for options, argument in [
-            ("-vXpool/hidden-denIt", "--exclude=pool/hidden-denIt"),
-            ("-vX pool/hidden-denIt", "--exclude=pool/hidden-denIt"),
-            ("-vd-n", "--redact=-n"),
-            ("-vd -w", "--redact=-w"),
-            ("-v --redact=-P", "--redact=-P"),
-            ("-v --red --", "--redact=--"),
-            ("-v --ex=pool/hidden", "--exclude=pool/hidden"),
+            ("-hXpool/hidden-denIt", "--exclude=pool/hidden-denIt"),
+            ("-hX pool/hidden-denIt", "--exclude=pool/hidden-denIt"),
+            ("-hd-n", "--redact=-n"),
+            ("-hd -w", "--redact=-w"),
+            ("-h --redact=-P", "--redact=-P"),
+            ("-h --red --", "--redact=--"),
+            ("-h --ex=pool/hidden", "--exclude=pool/hidden"),
         ]:
             with self.subTest(options=options):
                 args = self.argparser_parse_args(["src", "dst", f"--zfs-send-program-opts={options} -cw"])
                 params = self.make_params(args)
-                self.assertEqual(["-v", argument, "-c", "-w"], params.zfs_send_program_opts)
-                self.assertEqual(["-v", "-c", "-w"], params.zfs_send_resume_opts)
+                self.assertEqual(("-h", argument, "-c", "-w"), params.zfs_send_program_opts)
+                self.assertEqual(("-c", "-w"), params.zfs_send_resume_opts)
 
     def test_ambiguous_send_options_match_native_catalog(self) -> None:
         """Resolves prefixes against the full native catalog before applying bzfs policy exclusions."""
@@ -262,7 +262,7 @@ class TestHelperFunctions(AbstractTestCase):
         cases: list[tuple[Callable[[list[str]], object], object]] = [
             (params._fix_send_opts, ([], [])),
             (params._fix_send_resume_opts, ([], [])),
-            (functools.partial(params._fix_recv_opts, preserve_properties=frozenset()), ([], [], [])),
+            (functools.partial(params._fix_recv_opts, preserve_properties=frozenset()), ([], [], [], [])),
         ]
         for fixer, empty in cases:
             self.assertEqual(empty, fixer([]))
@@ -274,7 +274,18 @@ class TestHelperFunctions(AbstractTestCase):
             for options in [["-vd"], ["--redact="], ["-X", ""], ["--raw=bad"]]:
                 with self.subTest(fixer=fixer, options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS"):
                     fixer(options)
-        for options in [["-o", ""], ["-x"], ["--raw"]]:
+        for options in [
+            ["-o"],
+            ["-x"],
+            ["-o", ""],
+            ["-x", ""],
+            ["-o", "name1=value1", "-o"],
+            ["-o", "name1=value1", "-x"],
+            ["-o", "-o", "name1=value1"],
+            ["-x", "-x", "name1=value1"],
+            [" -o ", " -o ", "name1=value1"],
+            ["--raw"],
+        ]:
             with self.subTest(options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS"):
                 params._fix_recv_opts(options, frozenset())
 
@@ -283,9 +294,9 @@ class TestHelperFunctions(AbstractTestCase):
         for name, values in [
             (
                 "--zfs-send-program-opts",
-                "-S -e -n --saved --embed --dryrun --res=token -vIbase -vibase -vt1-token -vnXpool/hidden".split(),
+                "-S -e -n --saved --embed --dryrun --res=token -hIbase -hibase -ht1-token -hnXpool/hidden".split(),
             ),
-            ("--zfs-recv-program-opts", ["-v" + flag for flag in "AFcdens"]),
+            ("--zfs-recv-program-opts", ["-h" + flag for flag in "AFcdens"]),
             ("--zfs-recv-program-opt", ["-F"]),
         ]:
             for value in values:
@@ -298,19 +309,34 @@ class TestHelperFunctions(AbstractTestCase):
             [
                 "src",
                 "dst",
-                "--zfs-recv-program-opts=-hMuvoorg:empty= -xorg:first -o org:key=denIsFA=a=b -x org:first",
+                "--zfs-recv-program-opts=-hMuoorg:empty= -xorg:first -o org:key=denIsFA=a=b -x org:first",
                 "--zfs-recv-program-opt=-o",
                 "--zfs-recv-program-opt=org:space=a b",
             ]
         )
         params = self.make_params(args)
-        expected = "-h -M -u -v -o org:empty= -x org:first -o org:key=denIsFA=a=b -x org:first".split()
+        expected = "-h -M -u -o org:empty= -x org:first -o org:key=denIsFA=a=b -x org:first".split()
         expected += ["-o", "org:space=a b"]
-        self.assertEqual(expected, params.zfs_recv_program_opts)
+        self.assertEqual(tuple(expected), params.zfs_recv_program_opts)
+        parsed = [
+            ("-h", ""),
+            ("-M", ""),
+            ("-u", ""),
+            ("-o", "org:empty="),
+            ("-x", "org:first"),
+            ("-o", "org:key=denIsFA=a=b"),
+            ("-x", "org:first"),
+            ("-o", "org:space=a b"),
+        ]
+        self.assertEqual(tuple(parsed), params.zfs_recv_program_getopts)
         self.assertEqual(
-            (expected, ["org:remaining"]), params._fix_recv_opts(expected, frozenset(["org:first", "org:remaining"]))[:2]
+            (expected, ["org:remaining"], ["-h", "-M", "-u", "-o", "-x", "-o", "-x", "-o"], parsed),
+            params._fix_recv_opts(expected, frozenset(["org:first", "org:remaining"])),
         )
-        self.assertEqual({"org:empty", "org:first", "org:key", "org:space"}, bzfs.Job.recv_option_property_names(expected))
+        self.assertEqual(
+            {"org:empty", "org:first", "org:key", "org:space"},
+            bzfs.Job.recv_option_property_names(params.zfs_recv_program_getopts),
+        )
 
     def test_fix_recv_opts_with_preserve_properties(self) -> None:
         """Keeps property protection consistent across attached/separate values and rejects extra operands."""
@@ -333,7 +359,7 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual(([], [cr, mp]), params._fix_recv_opts([], frozenset([mp, cr]))[:2])
 
     def test_fix_send_recv_opts_declarative_specs_and_exclusions(self) -> None:
-        """Covers long-only options, aliases and short-only arguments, with rejection by default and explicit omission."""
+        """Checks aliases and exclusions while retaining parsed option/value boundaries, including omitted options."""
         fixer = functools.partial(
             configuration._fix_send_recv_opts,
             short_opts="q:",
@@ -341,14 +367,30 @@ class TestHelperFunctions(AbstractTestCase):
             exclude_short_opts="f",
             exclude_long_opts=frozenset(["--drop"]),
         )
-        self.assertEqual((["--only", "--value=-f", "-q", "--drop"], []), fixer(["--only", "-a-f", "-q", "--drop"])[:2])
-        self.assertEqual((["--drop=-f"], []), fixer(["--dro", "-f"], exclude_long_opts=frozenset())[:2])
+        self.assertEqual(
+            (
+                ["--only", "--value=-f", "-q", "--drop"],
+                [],
+                ["--only", "-a", "-q"],
+                [("--only", ""), ("-a", "-f"), ("-q", "--drop")],
+            ),
+            fixer(["--only", "-a-f", "-q", "--drop"]),
+        )
+        self.assertEqual(
+            (["--drop=-f"], [], ["--drop"], [("--drop", "-f")]),
+            fixer(["--dro", "-f"], exclude_long_opts=frozenset()),
+        )
         for options in [["-f"], ["--flag"], ["--dro=value"]]:
             with self.subTest(options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS.*not allowed"):
                 fixer(options)
         self.assertEqual(
-            (["--value=-f", "--only"], []),
-            fixer(["--flag", "--drop", "--only", "--value=-f", "--only"], exclude_action="omit")[:2],
+            (
+                ["--value=-f", "--only"],
+                [],
+                ["--flag", "--drop", "--value", "--only"],
+                [("--flag", ""), ("--drop", "--only"), ("--value", "-f"), ("--only", "")],
+            ),
+            fixer(["--flag", "--drop", "--only", "--value=-f", "--only"], exclude_action="omit"),
         )
         for options in [["--drop"], ["--drop="]]:
             with self.subTest(options=options), self.assertRaisesRegex(SystemExit, "Invalid ZFS"):

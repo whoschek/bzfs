@@ -41,6 +41,7 @@ from bzfs_main.configuration import (
     Remote,
 )
 from bzfs_main.detect import (
+    ZFS_VERSION_IS_AT_LEAST_2_2_0,
     RemoteConfCacheItem,
     _validate_default_shell,
     detect_available_programs,
@@ -457,8 +458,8 @@ class TestDisableAndHelpers(AbstractTestCase):
 #############################################################################
 class TestDetectAvailablePrograms(AbstractTestCase):
 
-    def _setup_job(self) -> bzfs.Job:
-        args = self.argparser_parse_args(["src", "dst"])
+    def _setup_job(self, extra_args: list[str] | None = None) -> bzfs.Job:
+        args = self.argparser_parse_args(["src", "dst"] + (extra_args or []))
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
@@ -467,6 +468,26 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         job.params.available_programs = {"local": {"sh": ""}, "src": {}, "dst": {}}
         job.params.zpool_features = {"src": {}, "dst": {}}
         return job
+
+    def test_preserve_properties_send_modes(self) -> None:
+        """With mocked discovery, preservation rejects -R on all receivers and permits -b only on ZFS >= 2.2."""
+        for new_zfs in (False, True):
+            for send_opt in ("-R", "-b", "-p"):
+                with (
+                    stop_on_failure_subtest(send_opt=send_opt, new_zfs=new_zfs),
+                    patch.object(
+                        bzfs_main.detect,
+                        "_detect_available_programs_remote",
+                        return_value={ZFS_VERSION_IS_AT_LEAST_2_2_0: ""} if new_zfs else {},
+                    ),
+                    patch.object(bzfs_main.detect, "_detect_zpool_features", return_value={}),
+                ):
+                    job = self._setup_job(["--preserve-properties", "exec", f"--zfs-send-program-opts={send_opt}"])
+                    if send_opt == "-R" or not new_zfs:
+                        with self.assertRaisesRegex(SystemExit, "--preserve-properties"):
+                            detect_available_programs(job)
+                    else:
+                        detect_available_programs(job)
 
     def test_disable_flags_remove_programs(self) -> None:
         job = self._setup_job()
@@ -523,10 +544,9 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         self.assertNotIn("sh", p.available_programs["local"])
 
     def test_preserve_and_sudo_and_delegation(self) -> None:
-        job = self._setup_job()
+        """Checks preservation, sudo and delegation validation with parsed arguments and mocked discovery."""
+        job = self._setup_job(["--preserve-properties", "exec", "--zfs-send-program-opts=--props"])
         p = job.params
-        p.args.preserve_properties = ["x"]
-        p.zfs_send_program_opts = ["--props"]  # type: ignore[misc]  # cannot assign to final attribute
         p.available_programs[p.dst.location] = {}
         with (
             patch.object(bzfs_main.detect, "_detect_available_programs_remote", return_value={}),

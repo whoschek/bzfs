@@ -1031,7 +1031,7 @@ usage: bzfs [-h]
 - Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. The value is split on runs of
   one or more whitespace characters. Options must be recognized by bzfs; unknown or incompatible options, missing or empty
   option arguments, and positional operands are rejected as an error. bzfs rejects '-n/--dryrun', '-e/--embed', '-i', '-I',
-  '-S/--saved', and '-t/--resume' here. Use bzfs's native '--dryrun' option for dry runs.
+  '-P/--parsable', '-S/--saved', '-t/--resume', and '-v/--verbose' here. Use bzfs's native '--dryrun' option for dry runs.
 
   Default is '--raw --compressed'. To run `zfs send` without options, specify the empty string: `--zfs-send-program-opts=''`.
   See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html and https://github.com/openzfs/zfs/issues/13024
@@ -1047,7 +1047,7 @@ usage: bzfs [-h]
 - Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. The value is split on
   runs of one or more whitespace characters. Options must be recognized by bzfs; unknown or incompatible options, missing or
   empty option arguments, and positional operands are rejected as an error. Empty ZFS property values such as '-o org:key='
-  are allowed. bzfs rejects '-A', '-F', '-c', '-d', '-e', '-n/--dryrun', and '-s' here.
+  are allowed. bzfs rejects '-A', '-F', '-c', '-d', '-e', '-n', '-s', and '-v' here.
 
   Default is '-u'. To run `zfs receive` without options, specify the empty string: `--zfs-recv-program-opts=''`. Example: '-u
   -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption'. See
@@ -1066,19 +1066,18 @@ usage: bzfs [-h]
 
 <span id="--preserve-properties" class="man-option-title">**--preserve-properties** *STRING [STRING ...]*</span> <a href="#--preserve-properties" title="Permalink to --preserve-properties" aria-label="Permalink to --preserve-properties" class="man-option-permalink">&#x1F517;</a>
 
-- On replication, preserve the current value of ZFS properties with the given names on the destination datasets. The
-  destination ignores the property value it zfs receive's from the source if the property name matches one of the given
-  blacklist values. This prevents a compromised or untrusted source from overwriting security-critical properties on the
-  destination. The default is to preserve none, i.e. an empty blacklist.
+- On replication, ignore incoming values for ZFS properties with the given names on destination datasets, using 'zfs receive
+  -x'. Existing local settings and explicit inheritance are retained. Existing received values may be replaced by inherited
+  or default values. The default is to exclude none, i.e. an empty blacklist.
+
+  When replication is enabled, this option cannot be combined with 'zfs send -R/--replicate'. Combining it with 'zfs send
+  -p/--props' or '-b/--backup' requires destination OpenZFS >= 2.2.0.
 
   Example blacklist that protects against dangerous overwrites: mountpoint overlay sharenfs sharesmb exec setuid devices
   encryption keyformat keylocation
 
   See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html and
   https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x
-
-  Note: --preserve-properties uses the 'zfs recv -x' option and thus requires either OpenZFS ≥ 2.2.0 (see
-  https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff), or that 'zfs send --props' is not used.
 
 <!-- -->
 

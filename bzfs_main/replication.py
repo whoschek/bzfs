@@ -35,6 +35,7 @@ from collections.abc import (
     Iterable,
     Iterator,
     Mapping,
+    Sequence,
 )
 from concurrent.futures import (
     Executor,
@@ -100,7 +101,6 @@ from bzfs_main.util.utils import (
     LOG_TRACE,
     POSIX_END_OF_OPTIONS_MARKER,
     Subprocesses,
-    append_if_absent,
     cut,
     die,
     getenv_bool,
@@ -485,7 +485,7 @@ def _replicate_dataset_fully(
         else:
             send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
-        recv_opts: list[str] = p.zfs_full_recv_opts.copy() + recv_resume_opts
+        recv_opts: list[str] = list(p.zfs_full_recv_opts) + recv_resume_opts
         recv_opts, set_opts = _add_recv_property_options(job, True, recv_opts, src_dataset, props_cache)
         recv_cmd: list[str] = p.split_args(
             f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
@@ -608,7 +608,7 @@ def _replicate_dataset_incrementally(
         else:
             send_opts = p.curr_zfs_send_program_opts + [incr_flag, from_snap, to_snap]
         send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
-        recv_opts: list[str] = p.zfs_recv_program_opts.copy() + recv_resume_opts
+        recv_opts: list[str] = list(p.zfs_recv_program_opts) + recv_resume_opts
         recv_opts, set_opts = _add_recv_property_options(job, False, recv_opts, src_dataset, props_cache)
         recv_cmd: list[str] = p.split_args(
             f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
@@ -964,7 +964,6 @@ def _recv_resume_token(job: Job, dst_dataset: str) -> tuple[str | None, list[str
             recv_resume_token = None
         else:
             send_resume_opts += ["-n"] if p.dry_run_no_send else []
-            send_resume_opts += ["-v"] if p.verbose_zfs else []
             send_resume_opts += ["-t", recv_resume_token]
     recv_resume_opts = ["-s"]
     return recv_resume_token, send_resume_opts, recv_resume_opts
@@ -1255,8 +1254,10 @@ def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_
     if p.no_estimate_send_size:
         return 0
     zfs_send_program_opts: list[str] = p.curr_zfs_send_resume_opts if recv_resume_token else p.curr_zfs_send_program_opts
-    zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in zfs_send_program_opts]
-    zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
+    zfs_send_program_opts = zfs_send_program_opts.copy()
+    if not any(opt in p.zfs_send_program_opt_names for opt in ("-v", "--verbose")):
+        zfs_send_program_opts += ["-v"]
+    zfs_send_program_opts += ["-n", "--parsable"]
     if recv_resume_token:
         zfs_send_program_opts += ["-t", recv_resume_token]
         items = ()
@@ -1389,7 +1390,7 @@ def _incremental_send_steps_wrapper(
 
 
 def _add_recv_property_options(
-    job: Job, full_send: bool, recv_opts: list[str], dataset: str, cache: dict[tuple[str, ...], dict[str, str | None]]
+    job: Job, full_send: bool, recv_opts: Sequence[str], dataset: str, cache: dict[tuple[str, ...], dict[str, str | None]]
 ) -> tuple[list[str], list[str]]:
     """Reads the ZFS properties of the given src dataset; Appends zfs recv -o and -x values to a recv_opts copy according to
     CLI params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""
@@ -1405,9 +1406,9 @@ def _add_recv_property_options(
     }
     is_volume: bool = job.src_properties[dataset].recordsize < 0
     p = job.params
-    recv_opts = recv_opts.copy()
+    recv_opts = list(recv_opts)
     set_opts: list[str] = []
-    x_names: list[str] = p.zfs_recv_x_names
+    x_names: tuple[str, ...] = p.zfs_recv_x_names
     x_names_set: set[str] = set(x_names)
     ox_names: set[str] = p.zfs_recv_ox_names.copy()
     if p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, p.dst.location):

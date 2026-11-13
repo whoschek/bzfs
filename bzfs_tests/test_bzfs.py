@@ -151,42 +151,34 @@ class TestHelperFunctions(AbstractTestCase):
                 job.run_main(args)
 
     def test_recv_option_property_names(self) -> None:
-        def names(lst: list[str]) -> set[str]:
-            return bzfs.Job().recv_option_property_names(lst)
+        """Extracts unique property names from parsed options, ignoring flags and preserving arbitrary property values."""
+        cases: list[tuple[set[str], list[tuple[str, str]]]] = [
+            (set(), []),
+            (set(), [("-h", ""), ("-u", "")]),
+            ({"name1"}, [("-o", "name1=value1")]),
+            ({"name1"}, [("-x", "name1")]),
+            ({"name1"}, [("-o", "name1=value1"), ("-o", "name1=value2"), ("-x", "name1")]),
+            ({"name1", "name2"}, [("-o", "name1=value1"), ("-o", "name2=value2")]),
+            ({"name1", "name2"}, [("-o", "name1=value1"), ("-x", "name2")]),
+            ({"name1", "name2"}, [("-h", ""), ("-o", "name1=value1"), ("-u", ""), ("-x", "name2"), ("-M", "")]),
+            ({"org:empty", "org:text"}, [("-o", "org:empty="), ("-o", "org:text=a b=c -x -o")]),
+        ]
+        for expected, options in cases:
+            with self.subTest(options=options):
+                self.assertSetEqual(expected, bzfs.Job.recv_option_property_names(options))
 
-        self.assertSetEqual(set(), names([]))
-        self.assertSetEqual(set(), names(["name1=value1"]))
-        self.assertSetEqual(set(), names(["name1"]))
-        self.assertSetEqual({"name1"}, names(["-o", "name1=value1"]))
-        self.assertSetEqual({"name1"}, names(["-x", "name1"]))
-        self.assertSetEqual({"name1"}, names(["-o", "name1=value1", "-o", "name1=value2", "-x", "name1"]))
-        self.assertSetEqual({"name1", "name2"}, names(["-o", "name1=value1", "-o", "name2=value2"]))
-        self.assertSetEqual({"name1", "name2"}, names(["-o", "name1=value1", "-x", "name2"]))
-        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2"]))
-        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2", "-F"]))
-        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-n", "-o", "name2=value2", "-F"]))
-        with self.assertRaises(SystemExit):
-            names(["-o", "name1"])
-        with self.assertRaises(SystemExit):
-            names(["-o", "=value1"])
-        with self.assertRaises(SystemExit):
-            names(["-o", ""])
-        with self.assertRaises(SystemExit):
-            names(["-x", "=value1"])
-        with self.assertRaises(SystemExit):
-            names(["-x", ""])
-        with self.assertRaises(SystemExit):
-            names(["-o"])
-        with self.assertRaises(SystemExit):
-            names(["-o", "name1=value1", "-o"])
-        with self.assertRaises(SystemExit):
-            names(["-o", "name1=value1", "-x"])
-        with self.assertRaises(SystemExit):
-            names(["-o", "-o", "name1=value1"])
-        with self.assertRaises(SystemExit):
-            names(["-x", "-x", "name1=value1"])
-        with self.assertRaises(SystemExit):
-            names([" -o ", " -o ", "name1=value1"])
+    def test_recv_option_property_names_rejects_invalid_properties(self) -> None:
+        """Rejects malformed property assignments and names after getopt has validated option syntax."""
+        for options, message in [
+            ([("-o", "name1")], "Missing value for -o name=value pair"),
+            ([("-o", "=value1")], "Invalid ZFS property name"),
+            ([("-o", "bad name=value1")], "Invalid ZFS property name"),
+            ([("-x", "=value1")], "Invalid ZFS property name"),
+            ([("-x", "bad name")], "Invalid ZFS property name"),
+            ([("-o", "-o")], "Missing value for -o name=value pair"),
+        ]:
+            with self.subTest(options=options), self.assertRaisesRegex(SystemExit, message):
+                bzfs.Job.recv_option_property_names(options)
 
     def test_is_zfs_dataset_busy_match(self) -> None:
         def is_busy(proc: str, dataset: str, busy_if_send: bool = True) -> bool:
@@ -1036,7 +1028,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
         self.p = self.make_params(args=args)
         self.p.src = Remote("src", args, self.p)  # type: ignore[misc]  # cannot assign to final attribute
         self.p.dst = Remote("dst", args, self.p)  # type: ignore[misc]  # cannot assign to final attribute
-        self.p.zfs_recv_x_names = ["xprop1", "xprop2"]  # type: ignore[misc]  # cannot assign to final attribute
+        self.p.zfs_recv_x_names = ("xprop1", "xprop2")  # type: ignore[misc]  # cannot assign to final attribute
         self.p.zfs_recv_ox_names = {"existing"}
         self.job = bzfs.Job()
         self.job.params = self.p
@@ -1072,7 +1064,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
         self.assertNotIn("mountpoint", pattern.pattern)
 
     def test_keeps_only_recv_opts_supported_for_filesystem(self) -> None:
-        self.p.zfs_recv_x_names = []  # type: ignore[misc]  # cannot assign to final attribute
+        self.p.zfs_recv_x_names = ()  # type: ignore[misc]  # cannot assign to final attribute
         self.p.zfs_recv_ox_names = set()
         self.job.src_properties = {"ds": bzfs.DatasetProperties(1024, 0, written=0)}  # >= 0 int indicates fs
         recv_opts = ["-u", "-o", "canmount=noauto", "-x", "mountpoint", "-o", "volmode=none", "-x", "volsize"]
@@ -1085,7 +1077,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
         self.assertEqual([], set_opts)
 
     def test_keeps_only_recv_opts_supported_for_volume(self) -> None:
-        self.p.zfs_recv_x_names = []  # type: ignore[misc]  # cannot assign to final attribute
+        self.p.zfs_recv_x_names = ()  # type: ignore[misc]  # cannot assign to final attribute
         self.p.zfs_recv_ox_names = set()
         self.job.src_properties = {"ds": bzfs.DatasetProperties(-4096, 0, written=0)}  # < 0 indicates zvol
         recv_opts = [
@@ -1115,7 +1107,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def test_appends_o_options_for_whitelisted_props(self) -> None:
         """Add '-o' options for properties allowed by default regex."""
-        self.p.zfs_recv_x_names = []  # type: ignore[misc]  # cannot assign to final attribute
+        self.p.zfs_recv_x_names = ()  # type: ignore[misc]  # cannot assign to final attribute
         self.p.zfs_recv_ox_names = set()
         recv_opts: list[str] = []
 
@@ -1138,7 +1130,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def test_skips_o_options_for_non_whitelisted_props(self) -> None:
         """Ignore properties that are absent from default whitelist."""
-        self.p.zfs_recv_x_names = []  # type: ignore[misc]  # cannot assign to final attribute
+        self.p.zfs_recv_x_names = ()  # type: ignore[misc]  # cannot assign to final attribute
         self.p.zfs_recv_ox_names = set()
         recv_opts: list[str] = []
 
@@ -1225,7 +1217,8 @@ class TestPreservePropertiesValidation(AbstractTestCase):
         self, mock_detect_zpool_features: MagicMock, mock_detect_available_programs_remote: MagicMock
     ) -> None:
         """Verify --preserve-properties is allowed on old ZFS if --props is not used."""
-        self.p.zfs_send_program_opts.remove("--props")  # Modify the params for this test case
+        self.p.zfs_send_program_opts = tuple(opt for opt in self.p.zfs_send_program_opts if opt != "--props")  # type: ignore[misc]
+        self.p.zfs_send_program_opt_names = self.p.zfs_send_program_opts  # type: ignore[misc]
         with patch.object(self.p, "is_program_available") as mock_is_available:
 
             def side_effect(program: str, location: str) -> bool:

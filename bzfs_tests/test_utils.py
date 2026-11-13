@@ -100,7 +100,6 @@ from bzfs_main.util.utils import (
     TaskTiming,
     UpdatablePriorityQueue,
     _get_descendant_processes,
-    append_if_absent,
     binary_search,
     close_quietly,
     compile_regexes,
@@ -293,11 +292,6 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(list(dataset_paths("a")), ["a"])
         self.assertEqual(list(dataset_paths("a/b/c")), ["a", "a/b", "a/b/c"])
         self.assertEqual(list(dataset_paths("")), [""])
-
-    def test_append_if_absent(self) -> None:
-        self.assertListEqual([], append_if_absent([]))
-        self.assertListEqual(["a"], append_if_absent([], "a"))
-        self.assertListEqual(["a"], append_if_absent([], "a", "a"))
 
     def test_compile_regexes(self) -> None:
         def _assert_full_match(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:
