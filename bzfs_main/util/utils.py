@@ -539,14 +539,6 @@ def replace_in_lines(lines: list[str], old: str, new: str, count: int = -1) -> N
 _TAPPEND = TypeVar("_TAPPEND")
 
 
-def append_if_absent(lst: list[_TAPPEND], *items: _TAPPEND) -> list[_TAPPEND]:
-    """Appends items to list if they are not already present."""
-    for item in items:
-        if item not in lst:
-            lst.append(item)
-    return lst
-
-
 def xappend(lst: list[_TAPPEND], *items: _TAPPEND | Iterable[_TAPPEND]) -> list[_TAPPEND]:
     """Appends each of the items to the given list if the item is "truthy", for example not None and not an empty string; If
     an item is an iterable does so recursively, flattening the output."""

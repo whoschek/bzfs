@@ -182,7 +182,6 @@ from bzfs_main.util.utils import (
     SynchronizedBool,
     SynchronizedDict,
     TaskTiming,
-    append_if_absent,
     compile_regexes,
     cut,
     die,
@@ -426,8 +425,8 @@ class Job:
                         break
                     src.root_dataset = src.basis_root_dataset = src_root_dataset
                     dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
-                    p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
-                    p.curr_zfs_send_resume_opts = p.zfs_send_resume_opts.copy()
+                    p.curr_zfs_send_program_opts = list(p.zfs_send_program_opts)
+                    p.curr_zfs_send_resume_opts = list(p.zfs_send_resume_opts)
                     if p.daemon_lifetime_nanos > 0:
                         self.timeout_nanos = (
                             None if p.timeout_duration_nanos is None else time.monotonic_ns() + p.timeout_duration_nanos
@@ -522,7 +521,7 @@ class Job:
     def validate_once(self) -> None:
         """Validates CLI parameters and compiles regex lists one time only, which will later be reused many times."""
         p = self.params
-        p.zfs_recv_ox_names = self.recv_option_property_names(p.zfs_recv_program_opts)
+        p.zfs_recv_ox_names = self.recv_option_property_names(p.zfs_recv_program_getopts)
         for snapshot_filter in p.snapshot_filters:
             for _filter in snapshot_filter:
                 if _filter.name == SNAPSHOT_REGEX_FILTER_NAME:
@@ -625,8 +624,8 @@ class Job:
         p.r2r_mode = resolve_r2r_mode(p)
 
         if is_zpool_feature_enabled_or_active(p, dst, "feature@large_blocks"):
-            append_if_absent(p.curr_zfs_send_program_opts, "--large-block")
-            append_if_absent(p.curr_zfs_send_resume_opts, "--large-block")
+            p.curr_zfs_send_program_opts.append("--large-block")
+            p.curr_zfs_send_resume_opts.append("--large-block")
 
         self.max_workers = {}
         self.max_datasets_per_minibatch_on_list_snaps = {}
@@ -1440,24 +1439,17 @@ class Job:
             self.inject_params = {}
 
     @staticmethod
-    def recv_option_property_names(recv_opts: list[str]) -> set[str]:
+    def recv_option_property_names(zfs_recv_program_getopts: Sequence[tuple[str, str]]) -> set[str]:
         """Extracts -o and -x property names that are already specified on the command line; This can be used to check for
         dupes because 'zfs receive' does not accept multiple -o or -x options with the same property name."""
         propnames: set[str] = set()
-        i = 0
-        n = len(recv_opts)
-        while i < n:
-            stripped: str = recv_opts[i].strip()
-            if stripped in ("-o", "-x"):
-                i += 1
-                if i == n or recv_opts[i].strip() in ("-o", "-x"):
-                    die(f"Missing value for {stripped} option in --zfs-recv-program-opt(s): {' '.join(recv_opts)}")
-                if stripped == "-o" and "=" not in recv_opts[i]:
-                    die(f"Missing value for {stripped} name=value pair in --zfs-recv-program-opt(s): {' '.join(recv_opts)}")
-                propname: str = recv_opts[i] if stripped == "-x" else recv_opts[i].split("=", 1)[0]
+        for opt, arg in zfs_recv_program_getopts:
+            if opt in ("-o", "-x"):
+                if opt == "-o" and "=" not in arg:
+                    die(f"Missing value for {opt} name=value pair in --zfs-recv-program-opt(s): {zfs_recv_program_getopts}")
+                propname: str = arg if opt == "-x" else arg.split("=", 1)[0]
                 validate_property_name(propname, "--zfs-recv-program-opt(s)")
                 propnames.add(propname)
-            i += 1
         return propnames
 
     def root_datasets_if_recursive_zfs_snapshot_is_possible(

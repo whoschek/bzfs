@@ -526,7 +526,8 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         job = self._setup_job()
         p = job.params
         p.args.preserve_properties = ["x"]
-        p.zfs_send_program_opts = ["--props"]  # type: ignore[misc]  # cannot assign to final attribute
+        p.zfs_send_program_opts = ("--props",)  # type: ignore[misc]  # cannot assign to final attribute
+        p.zfs_send_program_opt_names = p.zfs_send_program_opts  # type: ignore[misc]  # cannot assign to final attribute
         p.available_programs[p.dst.location] = {}
         with (
             patch.object(bzfs_main.detect, "_detect_available_programs_remote", return_value={}),

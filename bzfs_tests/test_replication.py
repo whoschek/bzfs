@@ -1073,7 +1073,7 @@ class TestReplication(AbstractTestCase):
             no_estimate_send_size=False,
             zfs_program="zfs",
             dry_run=False,
-            curr_zfs_send_program_opts=["-P"],
+            curr_zfs_send_program_opts=[],
         )
         remote = MagicMock(sudo="sudo")
         with patch.object(job, "try_ssh_command", return_value="size\t123\n") as mock_try_ssh_command:
@@ -1231,7 +1231,7 @@ class TestReplication(AbstractTestCase):
                 ]
             )
         )
-        params.zfs_recv_ox_names = Job.recv_option_property_names(params.zfs_recv_program_opts)
+        params.zfs_recv_ox_names = Job.recv_option_property_names(params.zfs_recv_program_getopts)
         job = MagicMock(params=params)
         job.src_properties = {"pool/src": MagicMock(recordsize=131072)}
         for full_send in (False, True):

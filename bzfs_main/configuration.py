@@ -95,7 +95,6 @@ from bzfs_main.util.utils import (
     SnapshotPeriods,
     SynchronizedBool,
     SynchronizedDict,
-    append_if_absent,
     compile_regexes,
     current_datetime,
     die,
@@ -249,33 +248,39 @@ class Params:
         self.verbose_destroy: Final[str] = "" if args.quiet else "-v"
 
         zfs_send_program_opts, zfs_send_program_opt_names = self._fix_send_opts(self.split_args(args.zfs_send_program_opts))
-        self.zfs_send_program_opts: Final[list[str]] = zfs_send_program_opts
-        self.zfs_send_program_opt_names: Final[list[str]] = zfs_send_program_opt_names
+        if self.verbose_zfs:
+            zfs_send_program_opts.append("-v")
+            zfs_send_program_opt_names.append("-v")
+        self.zfs_send_program_opts: Final[tuple[str, ...]] = tuple(zfs_send_program_opts)
+        self.zfs_send_program_opt_names: Final[tuple[str, ...]] = tuple(zfs_send_program_opt_names)
         self.zfs_send_has_proctitle: Final[bool] = any(opt in ("--proctitle", "-V") for opt in zfs_send_program_opt_names)
+
         zfs_send_resume_opts, zfs_send_resume_opt_names = self._fix_send_resume_opts(self.zfs_send_program_opts)
-        self.zfs_send_resume_opts: Final[list[str]] = zfs_send_resume_opts
-        self.zfs_send_resume_opt_names: Final[list[str]] = zfs_send_resume_opt_names
+        self.zfs_send_resume_opts: Final[tuple[str, ...]] = tuple(zfs_send_resume_opts)
+        self.zfs_send_resume_opt_names: Final[tuple[str, ...]] = tuple(zfs_send_resume_opt_names)
+
         zfs_recv_program_opts: list[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             zfs_recv_program_opts.append(self.validate_arg_str(extra_opt, allow_all=True))
         self.preserve_properties: Final[frozenset[str]] = frozenset(
             validate_property_name(name, "--preserve-properties") for name in args.preserve_properties
         )
-        zfs_recv_program_opts, zfs_recv_x_names, zfs_recv_program_opt_names = self._fix_recv_opts(
+        zfs_recv_program_opts, zfs_recv_x_names, zfs_recv_program_opt_names, zfs_recv_program_getopts = self._fix_recv_opts(
             zfs_recv_program_opts, self.preserve_properties
         )
-        self.zfs_recv_program_opts: Final[list[str]] = zfs_recv_program_opts
-        self.zfs_recv_x_names: Final[list[str]] = zfs_recv_x_names
-        self.zfs_recv_program_opt_names: Final[list[str]] = zfs_recv_program_opt_names
         if self.verbose_zfs:
-            append_if_absent(self.zfs_send_program_opts, "-v")
-            append_if_absent(self.zfs_recv_program_opts, "-v")
+            zfs_recv_program_opts.append("-v")
+            zfs_recv_program_opt_names.append("-v")
+        self.zfs_recv_program_opts: Final[tuple[str, ...]] = tuple(zfs_recv_program_opts)
+        self.zfs_recv_x_names: Final[tuple[str, ...]] = tuple(zfs_recv_x_names)
+        self.zfs_recv_program_opt_names: Final[tuple[str, ...]] = tuple(zfs_recv_program_opt_names)
+        self.zfs_recv_program_getopts: Final[tuple[tuple[str, str], ...]] = tuple(zfs_recv_program_getopts)
         # zfs_full_recv_opts: dataset-specific dynamic -o/-x property options are computed later per dataset in
         # replication._add_recv_property_options():
-        self.zfs_full_recv_opts: Final[list[str]] = self.zfs_recv_program_opts.copy()
+        self.zfs_full_recv_opts: Final[tuple[str, ...]] = self.zfs_recv_program_opts
+
         cpconfigs = [CopyPropertiesConfig(group, flag, args, self) for group, flag in ZFS_RECV_GROUPS.items()]
         self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
-
         self.force_rollback_to_latest_snapshot: Final[bool] = args.force_rollback_to_latest_snapshot
         self.force_rollback_to_latest_common_snapshot: Final[SynchronizedBool] = SynchronizedBool(
             args.force_rollback_to_latest_common_snapshot
@@ -460,13 +465,15 @@ class Params:
                 die(f"Option must not contain a single quote or double quote or dollar or backtick character: {opt}")
 
     @staticmethod
-    def _fix_recv_opts(opts: Sequence[str], preserve_properties: frozenset[str]) -> tuple[list[str], list[str], list[str]]:
+    def _fix_recv_opts(
+        opts: Sequence[str], preserve_properties: frozenset[str]
+    ) -> tuple[list[str], list[str], list[str], list[tuple[str, str]]]:
         """Returns sanitized ``zfs recv`` options and captured ``-o/-x`` args."""
         return _fix_send_recv_opts(
             opts,
             short_opts="AFMcdehno:suvx:",
             long_opts={},
-            exclude_short_opts="AFcdens",
+            exclude_short_opts="AFcdensv",
             preserve_properties=preserve_properties,
         )
 
@@ -497,25 +504,25 @@ class Params:
     @staticmethod
     def _fix_send_opts(opts: Sequence[str]) -> tuple[list[str], list[str]]:
         """Returns sanitized ``zfs send`` options."""
-        result = _fix_send_recv_opts(
+        zfs_send_program_opts, _, zfs_send_program_opt_names, _ = _fix_send_recv_opts(
             opts,
             short_opts=Params._ZFS_SEND_SHORT_ONLY_OPTS,
             long_opts=Params._ZFS_SEND_LONG_OPTS,
-            exclude_short_opts="ISeint",
+            exclude_short_opts="IPSeintv",
         )
-        return result[0], result[2]
+        return zfs_send_program_opts, zfs_send_program_opt_names
 
     @staticmethod
     def _fix_send_resume_opts(opts: Sequence[str]) -> tuple[list[str], list[str]]:
         """Returns sanitized CLI options for `zfs send -t` resume sends."""
-        result = _fix_send_recv_opts(
+        zfs_send_resume_opts, _, zfs_send_resume_opt_names, _ = _fix_send_recv_opts(
             opts,
             short_opts=Params._ZFS_SEND_SHORT_ONLY_OPTS,
             long_opts=Params._ZFS_SEND_LONG_OPTS,
             exclude_short_opts="RUXbdhps",
             exclude_action="omit",
         )
-        return result[0], result[2]
+        return zfs_send_resume_opts, zfs_send_resume_opt_names
 
     def _program_name(self, program: str) -> str:
         """For testing: helps simulate errors caused by external programs."""
@@ -1044,7 +1051,7 @@ def _fix_send_recv_opts(
     exclude_long_opts: frozenset[str] = frozenset(),
     exclude_action: Literal["omit", "reject"] = "reject",
     preserve_properties: frozenset[str] = frozenset(),
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], list[tuple[str, str]]]:
     """Parses and sanitizes native `zfs send|recv` CLI options.
 
     A long_opts key ending in '=' requires an argument. A non-None long_opts value must be a short alias with a '-' prefix.
@@ -1094,7 +1101,7 @@ def _fix_send_recv_opts(
             results.append(opt)
             if has_arg:
                 results.append(arg)
-    return results, sorted(x_names), [opt for opt, _ in parsed_opts]
+    return results, sorted(x_names), [opt for opt, _ in parsed_opts], parsed_opts
 
 
 _SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: Final[re.Pattern[str]] = re.compile(r"^[0-9]+")  # see local_ssh_command()
