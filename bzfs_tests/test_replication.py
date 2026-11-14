@@ -793,7 +793,7 @@ class TestReplication(AbstractTestCase):
             mbuffer_program_opts=("-O", "localhost:0"),
             no_estimate_send_size=False,
         )
-        watchdog = " -W 300" if platform.system() == "FreeBSD" else ""
+        watchdog = " -W300" if platform.system() == "FreeBSD" else ""
         self.assertEqual(f"mbuffer -s 2097152 -O localhost:0{watchdog}", _mbuffer_cmd(p, "src", 1024))
 
     def test_mbuffer_cmd_uses_bwlimit_for_send_and_receive(self) -> None:
@@ -803,7 +803,7 @@ class TestReplication(AbstractTestCase):
             ("dst", False, True, "-r"),
             ("local", True, True, "-r"),
         ]
-        watchdog = " -W 300" if platform.system() == "FreeBSD" else ""
+        watchdog = " -W300" if platform.system() == "FreeBSD" else ""
         for loc, src_is_nonlocal, dst_is_nonlocal, rate_flag in cases:
             with self.subTest(loc=loc):
                 p = _make_params(
