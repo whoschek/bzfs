@@ -1002,11 +1002,8 @@ def _decode_resume_token(
         msg = "because zfs receive resume token does not match a selected source snapshot GUID and name"
         raise RetryableError(display_msg=msg, retry_immediately_once=True) from RuntimeError(msg)
 
-    def _is_raw_zfs_send(send_opts: Iterable[str]) -> bool:
-        return any(opt == "--raw" or ("w" in opt and opt.startswith("-") and not opt.startswith("--")) for opt in send_opts)
-
     is_raw_token: bool = bool(rawok_match)
-    is_raw_send: bool = _is_raw_zfs_send(p.curr_zfs_send_program_opts)
+    is_raw_send: bool = any(opt in p.zfs_send_program_opt_names for opt in ("--raw", "-w"))
     is_raw_mode_conflict: bool = is_raw_token != is_raw_send
     if is_raw_mode_conflict and not is_raw_token:
         # `--raw` does not produce a raw stream for an unencrypted source, so a token without `rawok` remains compatible.
