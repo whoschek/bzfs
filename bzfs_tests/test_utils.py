@@ -105,6 +105,7 @@ from bzfs_main.util.utils import (
     compile_regexes,
     current_datetime,
     cut,
+    dataset_ancestor_paths,
     dataset_paths,
     die,
     drain,
@@ -292,6 +293,13 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(list(dataset_paths("a")), ["a"])
         self.assertEqual(list(dataset_paths("a/b/c")), ["a", "a/b", "a/b/c"])
         self.assertEqual(list(dataset_paths("")), [""])
+
+    def test_dataset_ancestor_paths(self) -> None:
+        self.assertEqual(list(dataset_ancestor_paths("a")), [])
+        self.assertEqual(list(dataset_ancestor_paths("a/b")), ["a"])
+        self.assertEqual(list(dataset_ancestor_paths("a/b/c")), ["a/b", "a"])
+        self.assertEqual(list(dataset_ancestor_paths("foo/bar/baz")), ["foo/bar", "foo"])
+        self.assertEqual(list(dataset_ancestor_paths("")), [])
 
     def test_compile_regexes(self) -> None:
         def _assert_full_match(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:

@@ -64,6 +64,7 @@ from bzfs_main.filter import (
     filter_snapshots,
 )
 from bzfs_main.util.utils import (
+    DESCENDANTS_RE_SUFFIX,
     LOG_DEBUG,
     UNIX_TIME_INFINITY_SECS,
     compile_regexes,
@@ -846,8 +847,8 @@ class TestFilterDatasets(CommonTest):
         job.is_test_mode = True
         job.params = self.make_params(args=args, log=log)
         p = job.params
-        p.include_dataset_regexes = compile_regexes(include or [".*"])
-        p.exclude_dataset_regexes = compile_regexes(exclude or [])
+        p.include_dataset_regexes = compile_regexes(include or [".*"], suffix=DESCENDANTS_RE_SUFFIX)
+        p.exclude_dataset_regexes = compile_regexes(exclude or [], suffix=DESCENDANTS_RE_SUFFIX)
         p.skip_parent = skip_parent  # type: ignore[misc]  # cannot assign to final attribute
         p.exclude_dataset_property = exclude_property
         remote = MagicMock(spec=Remote, root_dataset="src", location="src")
@@ -867,6 +868,28 @@ class TestFilterDatasets(CommonTest):
         job, remote = self.make_job(include=["bar$"])
         datasets = ["src/bar", "src/foo"]
         self.assertListEqual(["src/bar"], filter_datasets(job, remote, datasets))
+
+    def test_include_subtree_without_included_ancestor(self) -> None:
+        job, remote = self.make_job(include=["private/keep"])
+        datasets = ["src", "src/private", "src/private/keep", "src/private/keep/child", "src/private/other"]
+        self.assertListEqual(["src/private/keep", "src/private/keep/child"], filter_datasets(job, remote, datasets))
+
+    def test_include_negation_does_not_reinclude_descendants(self) -> None:
+        """An included root keeps holes excluded, including explicitly matched descendants, without affecting siblings."""
+        job, remote = self.make_job(include=["!private", "private/keep"])
+        datasets = [
+            "src",
+            "src/private",
+            "src/private-archive",
+            "src/private-archive/keep",
+            "src/private/keep",
+            "src/private/keep/child",
+            "src/private/other",
+            "src/public",
+            "src/public/child",
+        ]
+        expected = ["src", "src/private-archive", "src/private-archive/keep", "src/public", "src/public/child"]
+        self.assertListEqual(expected, filter_datasets(job, remote, datasets))
 
     def test_skip_parent(self) -> None:
         job, remote = self.make_job(skip_parent=True)

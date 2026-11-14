@@ -519,6 +519,16 @@ def dataset_paths(dataset: str) -> Iterator[str]:
             i += 1
 
 
+def dataset_ancestor_paths(dataset: str) -> Iterator[str]:
+    """Enumerates all ancestors of a valid ZFS dataset name; Example: "a/b/c" --> yields "a/b", "a"."""
+    i: int = len(dataset)
+    while i > 0:
+        i = dataset.rfind("/", 0, i)
+        if i >= 0:
+            yield dataset[:i]
+            i -= 1
+
+
 def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
     """In a ZFS dataset s, replaces a leading old_prefix with new_prefix; assumes the leading old_prefix is present as a
     ZFS dataset."""

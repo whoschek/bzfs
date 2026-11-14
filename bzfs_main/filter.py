@@ -40,6 +40,7 @@ from bzfs_main.util.utils import (
     LOG_TRACE,
     UNIX_TIME_INFINITY_SECS,
     RegexList,
+    dataset_ancestor_paths,
     is_descendant,
     is_included,
     relativize_dataset,
@@ -75,13 +76,23 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
     assert (not job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
     p, log = job.params, job.params.log
     results: list[str] = []
+    resultset: set[str] = set()
     for i, dataset in enumerate(sorted_datasets):
         if i == 0 and p.skip_parent:
             continue
         rel_dataset: str = relativize_dataset(dataset, remote.root_dataset)
         if rel_dataset.startswith("/"):
             rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
+        include: bool = False
         if is_included(rel_dataset, p.include_dataset_regexes, p.exclude_dataset_regexes):
+            # Enforce that if a dataset is excluded its descendants are automatically excluded too, and this decision is
+            # never reconsidered even for the descendants because exclude takes precedence over include.
+            if os.path.dirname(dataset) in resultset:
+                include = True
+            else:
+                include = not any(ancestor in resultset for ancestor in dataset_ancestor_paths(dataset))
+        if include:
+            resultset.add(dataset)
             results.append(dataset)
             log.debug("Including b/c dataset regex: %s", dataset)
         else:
@@ -94,12 +105,14 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
             log.debug(f"Finally included {remote.location} dataset: %s", dataset)
     if job.is_test_mode:
         assert results == sorted(results), "List is not sorted"
-        # Asserts the following: If a dataset is excluded its descendants are automatically excluded too, and this
-        # decision is never reconsidered even for the descendants because exclude takes precedence over include.
-        resultset: set[str] = set(results)
+        # Assert that if a dataset is excluded its descendants are automatically excluded too, and this decision is
+        # never reconsidered even for the descendants because exclude takes precedence over include. In other words,
+        # assert there is no hole in the hierarchy: Each included dataset has an included parent, unless it's a root dataset.
+        resultset = set(results)
         root_datasets: list[str] = [dataset for dataset in results if os.path.dirname(dataset) not in resultset]  # no parent
         for root in root_datasets:  # each root is not a descendant of another dataset
             assert not any(is_descendant(root, of_root_dataset=dataset) for dataset in results if dataset != root)
+            assert not any(ancestor in resultset for ancestor in dataset_ancestor_paths(root))
         for dataset in results:  # each dataset belongs to a subtree rooted at one of the roots
             assert any(is_descendant(dataset, of_root_dataset=root) for root in root_datasets)
     return results
