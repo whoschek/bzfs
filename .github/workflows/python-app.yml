@@ -165,7 +165,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.14", "3.15"]
+        python-version: ["3.14", "3.15", "3.16-dev"]
       fail-fast: false
     timeout-minutes: 200
     steps:
@@ -179,7 +179,7 @@ jobs:
       - name: Display ZFS version and Python version
         uses: $/.github/actions/print-versions
       - name: Run pre-commit
-        if: ${{ matrix.python-version != '3.15' }} # PyYAML-6.0.3 lacks a 3.15 wheel but preinstall_dev.sh requires wheels
+        if: ${{ matrix.python-version != '3.15' && matrix.python-version != '3.16-dev' }} # preinstall_dev.sh requires wheels
         uses: $/.github/actions/pre-commit
         with:
           python-version: ${{ matrix.python-version }}
