@@ -891,10 +891,28 @@ class TestFilterDatasets(CommonTest):
         expected = ["src", "src/private-archive", "src/private-archive/keep", "src/public", "src/public/child"]
         self.assertListEqual(expected, filter_datasets(job, remote, datasets))
 
+    def test_included_child_preserves_excluded_sibling_subtree(self) -> None:
+        """An included child must preserve its selected root so a later excluded sibling's descendants stay excluded."""
+        job, remote = self.make_job(include=["!b", "b/keep"])
+        datasets = ["src", "src/a", "src/b", "src/b/keep"]
+        self.assertListEqual(["src", "src/a"], filter_datasets(job, remote, datasets))
+
+    def test_rejected_match_does_not_reinclude_later_sibling(self) -> None:
+        """Below an excluded parent, rejecting one matching child must also keep its matching sibling excluded."""
+        job, remote = self.make_job(include=["!b", "b/keep.*"])
+        datasets = ["src", "src/b", "src/b/keep1", "src/b/keep2"]
+        self.assertListEqual(["src"], filter_datasets(job, remote, datasets))
+
     def test_skip_parent(self) -> None:
         job, remote = self.make_job(skip_parent=True)
         datasets = ["src/a", "src/b"]
         self.assertListEqual(["src/b"], filter_datasets(job, remote, datasets))
+
+    def test_skip_parent_with_interleaved_roots(self) -> None:
+        """Keep exclusions below selected roots even when lexical order interleaves several root subtrees."""
+        job, remote = self.make_job(include=["!a/private", "a/private/keep"], skip_parent=True)
+        datasets = ["src", "src/a", "src/a-copy", "src/a/private", "src/a/private/keep"]
+        self.assertListEqual(["src/a", "src/a-copy"], filter_datasets(job, remote, datasets))
 
     def test_property_filter_called(self) -> None:
         job, remote = self.make_job(exclude_property="skip")
