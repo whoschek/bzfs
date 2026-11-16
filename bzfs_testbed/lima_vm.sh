@@ -139,6 +139,15 @@ sudo mkdir -p /etc/cloud/cloud.cfg.d
 sudo sh -c 'printf "ssh_deletekeys: false\n" > /etc/cloud/cloud.cfg.d/99-lima-preserve-ssh-hostkeys.cfg'
 EOF
 
+# Workaround to pin AlmaLinux 9 / ZFS 2.2 to AlmaLinux 9.8 until https://github.com/openzfs/zfs/issues/19369 is fixed
+if [[ "$LIMA_VM_TEMPLATE" == "template:almalinux-9" && "$LIMA_ZFS_VERSION" == "zfs-2.2" ]]; then
+    limactl shell --tty=false --workdir="$LIMA_WORKDIR" "$LIMA_VM_NAME" -- bash -s << 'EOF'
+set -eo pipefail
+sudo sed -i 's|\$releasever|9.8|g' /etc/yum.repos.d/almalinux-{baseos,appstream,crb,extras}.repo
+sudo dnf clean all
+EOF
+fi
+
 # Optionally, update all installed packages (including the Linux kernel) to their latest stable versions within the
 # current Linux distro release. It does not upgrade from one Linux distro release (such as ubuntu-24.04 or almalinux-9) to
 # another Linux distro release (such as ubuntu-26.04 or almalinux-10).
