@@ -1849,8 +1849,6 @@ class LocalTestCase(IntegrationTestCase):
             "--skip-replication",
             "--delete-dst-snapshots",
             "--threads=1",
-            # don't reuse connection to workaround https://github.com/rapier1/hpn-ssh/issues/158
-            reuse_ssh_connection=False if SSH_PROGRAM == "hpnssh" else None,
         )
 
         self.assertListEqual([], snapshots(root))
@@ -1878,8 +1876,6 @@ class LocalTestCase(IntegrationTestCase):
             "--zfs-set-include-regex=bzfs_test:batch.*",
             "--threads=1",
             # "--verbose",
-            # don't reuse connection to workaround https://github.com/rapier1/hpn-ssh/issues/158
-            reuse_ssh_connection=False if SSH_PROGRAM == "hpnssh" else None,
         )
 
         self.assert_snapshot_names(dst, ["s1"])
