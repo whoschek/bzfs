@@ -418,6 +418,8 @@ class Params:
         snapshot_filters = args.snapshot_filters_var if hasattr(args, SNAPSHOT_FILTERS_VAR) else [[]]
         self.snapshot_filters: list[list[SnapshotFilter]] = [optimize_snapshot_filters(f) for f in snapshot_filters]
         self.exclude_dataset_property: str | None = args.exclude_dataset_property
+        if self.exclude_dataset_property is not None:
+            validate_property_name(self.exclude_dataset_property or "", "--exclude-dataset-property")
         self.exclude_dataset_regexes: RegexList = []  # deferred to validate_task() phase
         self.include_dataset_regexes: RegexList = []  # deferred to validate_task() phase
         self.tmp_exclude_dataset_regexes: RegexList = []  # deferred to validate_task() phase

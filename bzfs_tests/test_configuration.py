@@ -165,6 +165,17 @@ class TestHelperFunctions(AbstractTestCase):
         params.validate_arg("foo\rbar", allow_all=True)
         params.validate_arg(" foo  bar ", allow_all=True)
 
+    def test_exclude_dataset_property_accepts_user_property(self) -> None:
+        """Accept a namespaced ZFS user property for dataset filtering."""
+        args = self.argparser_parse_args(["src", "dst", "--exclude-dataset-property=backup:skip"])
+        self.assertEqual("backup:skip", self.make_params(args).exclude_dataset_property)
+
+    def test_exclude_dataset_property_rejects_assignment(self) -> None:
+        """The option takes a property name, so a name=value assignment must fail during configuration."""
+        args = self.argparser_parse_args(["src", "dst", "--exclude-dataset-property=backup:skip=true"])
+        with self.assertRaisesRegex(SystemExit, "Invalid ZFS property name.*--exclude-dataset-property"):
+            self.make_params(args)
+
     def test_validate_program_name_must_not_be_empty(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
         args.zpool_program = ""
