@@ -23,4 +23,4 @@ run_with_retries() {
 
 run_with_retries sudo add-apt-repository -y --no-update ${1+"$@"}
 script_dir="$(dirname "$(realpath "$0")")"
-"${script_dir}/apt-get-update-with-retries.sh"
+"${script_dir}/apt-get-update-with-retries.sh" --error-on=any -o Acquire::Retries=12

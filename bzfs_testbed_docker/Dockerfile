@@ -42,8 +42,8 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     && if [ "$BZFS_DOCKER_INSTALL_HPNSSH" = "true" ]; then \
            apt-get -y install software-properties-common \
            && run_with_retries add-apt-repository -y --no-update ppa:rapier1/hpnssh \
-           && apt-get -y update --error-on=any -qq \
-           && apt-get -y install hpnssh-client hpnssh-server; \
+           && run_with_retries apt-get -y update --error-on=any -qq \
+           && run_with_retries apt-get -y install hpnssh-client hpnssh-server; \
        fi \
     && rm -rf /var/lib/apt/lists/*
 
