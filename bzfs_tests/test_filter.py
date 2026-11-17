@@ -173,6 +173,29 @@ class TestHelperFunctions(CommonTest):
         result = dataset_regexes(mock_src, mock_dst, datasets)
         self.assertListEqual([".*", ".*", _NEVER_MATCHES_REGEX, "foo", "bar", "a", "/c", ".*"], result)
 
+    def test_dataset_regexes_identical_roots(self) -> None:
+        """The same root name on different hosts gives an absolute selector one relative interpretation."""
+        src = MagicMock(spec=Remote, root_dataset="tank", ssh_host="src")
+        dst = MagicMock(spec=Remote, root_dataset="tank", ssh_host="dst")
+        self.assertEqual(["keep", ".*"], dataset_regexes(src, dst, ["/tank/keep", "/tank/"]))
+
+    def test_dataset_regexes_ambiguous_absolute_path(self) -> None:
+        """Nested roots give two interpretations, including the entire tree when the selector names the deeper root."""
+        cases = [
+            ("tank", "tank/backup", "/tank/backup/keep", "backup/keep", "keep"),
+            ("tank/backup", "tank", "/tank/backup/", "", "backup"),
+        ]
+        for src_root, dst_root, selector, src_relative, dst_relative in cases:
+            with self.subTest(src=src_root, dst=dst_root, selector=selector):
+                src = MagicMock(spec=Remote, root_dataset=src_root)
+                dst = MagicMock(spec=Remote, root_dataset=dst_root)
+                with self.assertRaisesRegex(SystemExit, "Ambiguous") as ctx:
+                    dataset_regexes(src, dst, [selector])
+                message = str(ctx.exception)
+                self.assertIn(repr(selector), message)
+                self.assertIn(f"source root {src_root!r} gives {src_relative!r}", message)
+                self.assertIn(f"destination root {dst_root!r} gives {dst_relative!r}", message)
+
     def test_dataset_regexes_keep_exclamation_marks_literal(self) -> None:
         """Compile relative and absolute selectors to ensure root stripping and escaping preserve literal matching."""
         mock_src = MagicMock(spec=Remote, root_dataset="tank/src")

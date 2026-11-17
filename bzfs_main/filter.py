@@ -41,6 +41,7 @@ from bzfs_main.util.utils import (
     UNIX_TIME_INFINITY_SECS,
     RegexList,
     dataset_ancestor_paths,
+    die,
     is_descendant,
     is_included,
     relativize_dataset,
@@ -377,10 +378,21 @@ def dataset_regexes(src: Remote, dst: Remote, datasets: list[str]) -> list[str]:
     for dataset in datasets:
         if dataset.startswith("/"):
             # it's an absolute dataset - convert it to a relative dataset
+            original: str = dataset
             dataset = dataset[1:]
-            if is_descendant(dataset, of_root_dataset=src.root_dataset):
+            is_src_descendant: bool = is_descendant(dataset, of_root_dataset=src.root_dataset)
+            is_dst_descendant: bool = is_descendant(dataset, of_root_dataset=dst.root_dataset)
+            if is_src_descendant and is_dst_descendant and src.root_dataset != dst.root_dataset:
+                src_relative = relativize_dataset(dataset, src.root_dataset).removeprefix("/").removesuffix("/")
+                dst_relative = relativize_dataset(dataset, dst.root_dataset).removeprefix("/").removesuffix("/")
+                die(
+                    f"Ambiguous absolute dataset filter {original!r}. The source root {src.root_dataset!r} gives "
+                    f"{src_relative!r} and the destination root {dst.root_dataset!r} gives {dst_relative!r}. "
+                    "Instead consider using a relative dataset filter path."
+                )
+            if is_src_descendant:
                 dataset = relativize_dataset(dataset, src.root_dataset)
-            elif is_descendant(dataset, of_root_dataset=dst.root_dataset):
+            elif is_dst_descendant:
                 dataset = relativize_dataset(dataset, dst.root_dataset)
             else:
                 results.append(_NEVER_MATCHES_REGEX)

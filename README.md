@@ -677,7 +677,8 @@ usage: bzfs [-h]
   this decision is never reconsidered even for the descendants because exclude takes precedence over include.
 
   A dataset name is absolute if the specified dataset is prefixed by `/`, e.g. `/tank/baz/tmp`. Otherwise the dataset name is
-  relative wrt. source and destination, e.g. `baz/tmp` if the source is `tank`.
+  relative wrt. source and destination, e.g. `baz/tmp` if the source is `tank`. If an absolute name gives different relative
+  paths under the source and destination roots, the dataset pair is rejected. Use the intended relative path in that case.
 
   This option is automatically translated to an --include-dataset-regex (see below) and can be specified multiple times.
 
