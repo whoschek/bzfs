@@ -377,7 +377,7 @@ class IntegrationTestCase(ParametrizedTestCase):
             if dataset_exists(DST_POOL_NAME):
                 run_cmd(cmd)
 
-        if SSH_PROGRAM != "ssh" and "--ssh-program" not in args and "--ssh-program=" not in args:
+        if SSH_PROGRAM != "ssh" and not any(arg == "--ssh-program" or arg.startswith("--ssh-program=") for arg in args):
             args += ["--ssh-program=" + SSH_PROGRAM]
 
         if params and params.get("verbose", None):
