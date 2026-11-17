@@ -253,7 +253,7 @@ class Params:
             zfs_send_program_opt_names.append("-v")
         self.zfs_send_program_opts: Final[tuple[str, ...]] = tuple(zfs_send_program_opts)
         self.zfs_send_program_opt_names: Final[tuple[str, ...]] = tuple(zfs_send_program_opt_names)
-        self.zfs_send_has_proctitle: Final[bool] = any(opt in ("--proctitle", "-V") for opt in zfs_send_program_opt_names)
+        self.zfs_send_has_proctitle: Final[bool] = any(opt in zfs_send_program_opt_names for opt in ("--proctitle", "-V"))
 
         zfs_send_resume_opts, zfs_send_resume_opt_names = self._fix_send_resume_opts(self.zfs_send_program_opts)
         self.zfs_send_resume_opts: Final[tuple[str, ...]] = tuple(zfs_send_resume_opts)

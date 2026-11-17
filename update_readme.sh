@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Regenerate both README files from argparse help text and refresh shell completion.
+# Regenerate README files from argparse help text and refresh shell completion.
 # Prerequisites: See AGENTS.md section "How to Set up the Environment"
 
 set -e
