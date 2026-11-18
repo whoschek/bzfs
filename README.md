@@ -2170,7 +2170,7 @@ applied before the 'zfs-recv-x' group.
   containing one or more of the following choices: 'local', 'default', 'inherited', 'temporary', 'received', 'none', with the
   default being 'local'. Uses 'zfs get -p -s $zfs-recv-o-sources all $SRC_DATASET' to fetch the properties to copy -
   https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html. P.S: Note that the existing 'zfs send --props' option
-  does not filter and that --props only reads properties from the 'local' ZFS property source
+  does not filter and that --props only reads properties from the 'local,received' ZFS property sources
   (https://github.com/openzfs/zfs/issues/13024).
 
 <!-- -->
@@ -2228,9 +2228,8 @@ applied before the 'zfs-recv-x' group.
   containing one or more of the following choices: 'local', 'default', 'inherited', 'temporary', 'received', 'none', with the
   default being 'local'. Uses 'zfs get -p -s $zfs-recv-x-sources all $SRC_DATASET' to fetch the properties to copy -
   https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html. P.S: Note that the existing 'zfs send --props' option
-  does not filter and that --props only reads properties from the 'local' ZFS property source
-  (https://github.com/openzfs/zfs/issues/13024). Thus, -x opts do not benefit from source != 'local' (which is the default
-  already).
+  does not filter and that --props only reads properties from the 'local,received' ZFS property sources
+  (https://github.com/openzfs/zfs/issues/13024).
 
 <!-- -->
 

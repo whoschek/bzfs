@@ -1211,9 +1211,31 @@ class TestReplication(AbstractTestCase):
                         self.assertEqual(expected_reads, reads)
                         for entry in job.run_ssh_command.call_args_list:
                             self.assertEqual(POSIX_END_OF_OPTIONS_MARKER, entry.kwargs["cmd"][-3])
+                            self.assertEqual("local", entry.kwargs["cmd"][-4])
                         job.run_ssh_command.reset_mock()
                         self.assertEqual(expected, _add_recv_property_options(job, full_send, recv_opts, "pool/src", cache))
                         job.run_ssh_command.assert_not_called()
+
+    def test_recv_excludes_received_properties_when_requested(self) -> None:
+        """Model a relay with local and received properties to check the default and explicit receive exclusions."""
+
+        def zfs_get_names(_remote: Remote, _loglevel: int, *, cmd: list[str]) -> str:
+            sources = cmd[cmd.index("-s") + 1].split(",")
+            properties = {"local": "org.test:relay", "received": "org.test:upstream"}
+            return "".join(f"{name}\n" for source, name in properties.items() if source in sources)
+
+        for options, expected in (
+            ([], ["-x", "org.test:relay"]),
+            (["--zfs-recv-x-sources=local,received"], ["-x", "org.test:relay", "-x", "org.test:upstream"]),
+        ):
+            with self.subTest(options=options):
+                args = self.argparser_parse_args(
+                    ["pool/src", "pool/dst", "--zfs-recv-o-include-regex", "--zfs-recv-x-include-regex=.*", *options]
+                )
+                job = MagicMock(params=self.make_params(args))
+                job.src_properties = {"pool/src": MagicMock(recordsize=131072)}
+                job.run_ssh_command.side_effect = zfs_get_names
+                self.assertEqual((expected, []), _add_recv_property_options(job, True, [], "pool/src", {}))
 
     def test_add_recv_property_options_respects_preserve_properties(self) -> None:
         """Use parsed CLI settings to verify protected native and user properties stay excluded from post-receive copying,

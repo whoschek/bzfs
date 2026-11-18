@@ -1502,8 +1502,6 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
                    f"{', '.join([f'{qq}{x}{qq}' for x in target_choices])}. "
                    "Default is '%(default)s'. "
                    "A 'full' send is sometimes also known as an 'initial' send.\n\n"))
-        msg = "Thus, -x opts do not benefit from source != 'local' (which is the default already)." \
-            if flag == "'-x'" else ""
         argument_group.add_argument(
             f"--{grup}-sources", action=NonEmptyStringAction, default="local", metavar="STRING",
             help=h("The ZFS sources to provide to the 'zfs get -s' CLI in order to fetch the ZFS dataset properties "
@@ -1513,7 +1511,7 @@ $ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --force --delete-
                    f"Uses 'zfs get -p -s ${grup}-sources all $SRC_DATASET' to fetch the "
                    "properties to copy - https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html. P.S: Note "
                    "that the existing 'zfs send --props' option does not filter and that --props only reads properties "
-                   f"from the 'local' ZFS property source (https://github.com/openzfs/zfs/issues/13024). {msg}\n\n"))
+                   f"from the 'local,received' ZFS property sources (https://github.com/openzfs/zfs/issues/13024).\n\n"))
         if option_name == ZFS_RECV_O:
             group_include_regex_default_help: str = f"The default regex is '{ZFS_RECV_O_INCLUDE_REGEX_DEFAULT}'."
         else:

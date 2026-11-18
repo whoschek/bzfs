@@ -959,7 +959,7 @@ def format_obj(obj: object) -> str:
     return f'"{obj}"'
 
 
-def validate_dataset_name(dataset: str, input_text: str, is_assert: bool = False) -> None:
+def validate_dataset_name(dataset: str, input_text: str, *, is_assert: bool = False) -> None:
     """'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc."""
     # Also see zfs_namecheck.c and https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
     # and https://github.com/openzfs/zfs/issues/8798
