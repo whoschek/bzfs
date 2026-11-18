@@ -1428,11 +1428,15 @@ def _add_recv_property_options(
             try:
                 props_any: dict = _zfs_get(job, p.src, dataset, config.sources, "property", "all", True, cache)
                 props_filtered: dict = filter_properties(p, props_any, config.include_regexes, config.exclude_regexes)
-                user_propnames: list[str] = [name for name in props_filtered if ":" in name or name in multiline_props]
-                sys_propnames = ",".join(name for name in props_filtered if not (":" in name or name in multiline_props))
-                props = dict(_zfs_get(job, p.src, dataset, config.sources, "property,value", sys_propnames, True, cache))
-                for propnames in user_propnames:
-                    props.update(_zfs_get(job, p.src, dataset, config.sources, "property,value", propnames, False, cache))
+                if config is p.zfs_recv_x_config:
+                    props = props_filtered
+                else:
+                    user_propnames: list[str] = [name for name in props_filtered if ":" in name or name in multiline_props]
+                    sys_propnames = ",".join(name for name in props_filtered if not (":" in name or name in multiline_props))
+                    output_columns = "property,value"
+                    props = dict(_zfs_get(job, p.src, dataset, config.sources, output_columns, sys_propnames, True, cache))
+                    for propnames in user_propnames:
+                        props.update(_zfs_get(job, p.src, dataset, config.sources, output_columns, propnames, False, cache))
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
                 raise RetryableError(display_msg="zfs get") from e
             for propname in sorted(props.keys()):

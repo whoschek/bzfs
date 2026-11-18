@@ -1143,9 +1143,8 @@ class TestReplication(AbstractTestCase):
         mock_run_ssh_command.assert_called_once()
 
     def test_add_recv_property_options_preserves_multiline_values(self) -> None:
-        """Exercise all property-copy modes with ZFS-style output, preserving values and caching while batching safe
-        native properties. Include option-like user property names and property-like value text to detect option
-        confusion, silent record injection and parse failures."""
+        """Use ZFS-style output to check name-only exclusions, batched value reads and cache reuse. Include option-like
+        property names and multiline values to catch option confusion and record parsing errors."""
         for group in ("zfs-recv-o", "zfs-recv-x", "zfs-set"):
             for full_send in (False, True):
                 for value in ("first\nsecond\t \n\n", "first\ncompression\toff"):
@@ -1206,7 +1205,10 @@ class TestReplication(AbstractTestCase):
                         self.assertEqual(expected, _add_recv_property_options(job, full_send, recv_opts, "pool/src", cache))
                         self.assertEqual(["-u"], recv_opts)
                         reads = [entry.kwargs["cmd"][-2] for entry in job.run_ssh_command.call_args_list]
-                        self.assertEqual(["all", "compression,recordsize"] + list(props)[2:-1], reads)
+                        expected_reads = ["all"]
+                        if group != "zfs-recv-x":
+                            expected_reads += ["compression,recordsize"] + list(props)[2:-1]
+                        self.assertEqual(expected_reads, reads)
                         for entry in job.run_ssh_command.call_args_list:
                             self.assertEqual(POSIX_END_OF_OPTIONS_MARKER, entry.kwargs["cmd"][-3])
                         job.run_ssh_command.reset_mock()
