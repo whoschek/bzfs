@@ -203,7 +203,7 @@ class TestHelperFunctions(CommonTest):
         cases = [("!foo", "!foo"), ("!!foo", "!!foo"), ("/tank/src/!foo", "!foo"), ("/tank/dst/!foo", "!foo")]
         for dataset, literal in cases:
             with self.subTest(dataset=dataset):
-                regex, is_negation = compile_regexes(dataset_regexes(mock_src, mock_dst, [dataset]))[0]
+                regex, is_negation, _ = compile_regexes(dataset_regexes(mock_src, mock_dst, [dataset]))[0]
                 self.assertFalse(is_negation)
                 self.assertIsNotNone(regex.fullmatch(literal))
                 self.assertIsNone(regex.fullmatch("other"))

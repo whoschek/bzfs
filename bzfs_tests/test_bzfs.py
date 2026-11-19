@@ -1059,7 +1059,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def test_default_o_regex_contains_safe_props(self) -> None:
         """Ensure default zfs_recv_o regex whitelists safe properties."""
-        pattern, _ = self.p.zfs_recv_o_config.include_regexes[0]
+        pattern, _, _ = self.p.zfs_recv_o_config.include_regexes[0]
         self.assertIn("compression", pattern.pattern)
         self.assertNotIn("mountpoint", pattern.pattern)
 
@@ -1319,7 +1319,7 @@ class TestJobMethods(AbstractTestCase):
         )
         job.validate_once()
         self.assertSetEqual({"foo", "bar"}, job.params.zfs_recv_ox_names)
-        patterns = [r.pattern for r, _ in job.params.tmp_exclude_dataset_regexes]
+        patterns = [r.pattern for r, _, _ in job.params.tmp_exclude_dataset_regexes]
         self.assertIn(include_exclude_dataset_regex("foo.*"), patterns)
 
     def test_validate_once_requires_bytes_option(self) -> None:
@@ -1376,7 +1376,7 @@ class TestJobMethods(AbstractTestCase):
         )
         job.validate_once()
         self.assertEqual(("/pool/src/abs",), job.params.abs_exclude_datasets)
-        patterns = [r.pattern for r, _ in job.params.tmp_exclude_dataset_regexes]
+        patterns = [r.pattern for r, _, _ in job.params.tmp_exclude_dataset_regexes]
         self.assertIn(include_exclude_dataset_regex("rel"), patterns)
 
     def test_validate_once_separates_abs_and_rel_include_datasets(self) -> None:
@@ -1391,7 +1391,7 @@ class TestJobMethods(AbstractTestCase):
         )
         job.validate_once()
         self.assertEqual(("/pool/dst/abs",), job.params.abs_include_datasets)
-        patterns = [r.pattern for r, _ in job.params.tmp_include_dataset_regexes]
+        patterns = [r.pattern for r, _, _ in job.params.tmp_include_dataset_regexes]
         self.assertIn(include_exclude_dataset_regex("rel"), patterns)
 
     def test_validate_once_skips_pv_checks_when_disabled(self) -> None:

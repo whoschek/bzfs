@@ -352,6 +352,16 @@ class TestHelperFunctions(unittest.TestCase):
                 assert_full_match(text, r"(?iu)foo|bar", re_suffix)
                 assert_full_match(text, r"(?i)(?a)(?x)foo|bar", re_suffix)
 
+    def test_compile_regexes_records_full_pattern(self) -> None:
+        """The full pattern text keeps cache keys distinct even when compiled pattern's repr is truncated beyond 200 chars by
+        cpython repr(re.Pattern)."""
+        alternatives = "daily" * 70
+        compiled: re.Pattern[str] = re.compile(f"(?i)(?:{alternatives})")
+        entry = compile_regexes([f"!(?i)({alternatives})"])[0]
+        self.assertEqual((compiled, True, compiled.pattern), entry)
+        self.assertIn(compiled.pattern, str(entry))
+        self.assertNotIn(compiled.pattern, str(compiled))  # cpython repr(re.Pattern) truncates long patterns
+
     def test_compile_regexes_rejects_remaining_dollar_anchors_with_suffix(self) -> None:
         """Reject dollar signs that prevent a dataset pattern from protecting its descendants."""
         for regex in ["^archive$|^scratch$", "^(archive|scratch)$$", "archive$$", "$$", r"archive$|scratch\$", r"arch\$ive"]:

@@ -618,7 +618,7 @@ class Job:
             p.tmp_include_dataset_regexes + compile_regexes(dataset_regexes(src, dst, p.abs_include_datasets), suffix=suffx),
         )
         if len(p.include_dataset_regexes) == 0:
-            p.include_dataset_regexes = ((re.compile(r".*"), False),)
+            p.include_dataset_regexes = compile_regexes([".*"])
 
         detect_available_programs(self)
         p.r2r_mode = resolve_r2r_mode(p)

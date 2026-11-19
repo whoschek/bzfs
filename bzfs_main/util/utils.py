@@ -121,7 +121,7 @@ UMASK: Final[int] = (~DIR_PERMISSIONS) & 0o777  # so intermediate dirs created b
 UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH: Final[int] = 107 if platform.system() == "Linux" else 103  # see Google for 'sun_path'
 POSIX_END_OF_OPTIONS_MARKER: Final[str] = "--"  # args following -- are treated as operands, even if they begin with a hyphen
 
-RegexList = tuple[tuple[re.Pattern[str], bool], ...]  # Type alias
+RegexList = tuple[tuple[re.Pattern[str], bool, str], ...]  # Type alias including full untruncated pattern
 
 
 def getenv_any(key: str, default: str | None = None, env_var_prefix: str = ENV_VAR_PREFIX) -> str | None:
@@ -566,14 +566,14 @@ def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexLis
 
     A regex that starts with a `!` is a negation - the regex matches if the regex without the `!` prefix does not match.
     """
-    for regex, is_negation in exclude_regexes:
+    for regex, is_negation, _ in exclude_regexes:
         is_match = regex.fullmatch(name) is not None
         if is_negation:
             is_match = not is_match
         if is_match:
             return False
 
-    for regex, is_negation in include_regexes:
+    for regex, is_negation, _ in include_regexes:
         is_match = regex.fullmatch(name) is not None
         if is_negation:
             is_match = not is_match
@@ -608,7 +608,8 @@ def compile_regexes(regexes: list[str], *, suffix: str = "") -> RegexList:
                 prefix: re.Match[str] | None = re.match(r"(\(\?[aimsux]+\))+", regex)  # e.g. (?i)
                 end: int = prefix.end() if prefix else 0
                 regex = f"{regex[:end]}(?:{regex[end:]}){suffix}"
-        compiled_regexes.append((re.compile(regex), is_negation))
+        compiled: re.Pattern[str] = re.compile(regex)
+        compiled_regexes.append((compiled, is_negation, compiled.pattern))
     return tuple(compiled_regexes)
 
 
