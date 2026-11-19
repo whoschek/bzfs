@@ -1,9 +1,9 @@
 [build-system]
-requires = ["uv_build==0.13.7"]
+requires = ["uv_build==0.13.8"]
 build-backend = "uv_build"
 
 [tool.bzfs]
-uv-install-script-sha256 = "d263ee68314cf5bea36b08e6bd9e2c4563240d7adb73756cf33af5c199b92db4"  # for uv_build above
+uv-install-script-sha256 = "4d8fa56e00f16b66feecacbd943773c61d61ab768b13856de350d86fd8740e2f"  # for uv_build above
 
 [project]
 name = "bzfs"
@@ -61,7 +61,7 @@ dev = [  # for development only
   "pre-commit==4.7.0 ; python_version >= '3.11'",  # see https://github.com/pre-commit/pre-commit
   "pre-commit-hooks==6.0.0 ; python_version >= '3.10'",  # see https://github.com/pre-commit/pre-commit-hooks
   "black==26.10.1 ; python_version >= '3.10'",     # see https://github.com/psf/black
-  "ruff==0.17.4",                                  # see https://github.com/astral-sh/ruff
+  "ruff==0.17.5",                                  # see https://github.com/astral-sh/ruff
   "coverage==7.10.7 ; python_version < '3.10'",    # see https://github.com/nedbat/coveragepy
   "coverage==7.16.2 ; python_version >= '3.10'",   # see https://github.com/nedbat/coveragepy
   "mypy==v1.20.2 ; python_version >= '3.10'",      # see https://github.com/python/mypy
