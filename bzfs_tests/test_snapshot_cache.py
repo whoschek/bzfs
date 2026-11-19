@@ -63,6 +63,7 @@ import unittest
 from collections.abc import (
     Callable,
     Generator,
+    Sequence,
 )
 from contextlib import (
     contextmanager,
@@ -169,7 +170,7 @@ class TestSnapshotCache(AbstractTestCase):
         dst_dataset_hash: str = sha256_85_urlsafe_base64(dst_dataset)
         return os.path.join(REPLICATION_CACHE_FILE_PREFIX, userhost_dir, dst_dataset_hash, filter_hash_code)
 
-    def monitor_cache_label(self, cfg_kind: str, label: SnapshotLabel, alerts: list[MonitorSnapshotAlert]) -> str:
+    def monitor_cache_label(self, cfg_kind: str, label: SnapshotLabel, alerts: Sequence[MonitorSnapshotAlert]) -> str:
         assert cfg_kind
         assert label is not None
         assert len(alerts) > 0

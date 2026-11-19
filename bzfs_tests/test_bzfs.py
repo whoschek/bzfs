@@ -1375,7 +1375,7 @@ class TestJobMethods(AbstractTestCase):
             ]
         )
         job.validate_once()
-        self.assertListEqual(["/pool/src/abs"], job.params.abs_exclude_datasets)
+        self.assertEqual(("/pool/src/abs",), job.params.abs_exclude_datasets)
         patterns = [r.pattern for r, _ in job.params.tmp_exclude_dataset_regexes]
         self.assertIn(include_exclude_dataset_regex("rel"), patterns)
 
@@ -1390,7 +1390,7 @@ class TestJobMethods(AbstractTestCase):
             ]
         )
         job.validate_once()
-        self.assertListEqual(["/pool/dst/abs"], job.params.abs_include_datasets)
+        self.assertEqual(("/pool/dst/abs",), job.params.abs_include_datasets)
         patterns = [r.pattern for r, _ in job.params.tmp_include_dataset_regexes]
         self.assertIn(include_exclude_dataset_regex("rel"), patterns)
 

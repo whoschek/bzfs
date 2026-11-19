@@ -22,6 +22,9 @@ import argparse
 import ast
 import os
 import re
+from collections.abc import (
+    Iterable,
+)
 from dataclasses import (
     dataclass,
     field,
@@ -92,7 +95,7 @@ def _add_time_and_rank_snapshot_filter(
         _add_snapshot_filter(args, SnapshotFilter(dst, timerange, rankranges))
 
 
-def has_timerange_filter(snapshot_filters: list[list[SnapshotFilter]]) -> bool:
+def has_timerange_filter(snapshot_filters: Iterable[Iterable[SnapshotFilter]]) -> bool:
     """Interacts with add_time_and_rank_snapshot_filter() and optimize_snapshot_filters()."""
     return any(f.timerange is not None for snapshot_filter in snapshot_filters for f in snapshot_filter)
 

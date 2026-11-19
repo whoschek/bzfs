@@ -969,22 +969,22 @@ class TestHelperFunctions(AbstractTestCase):
             ]
         )
         config = configuration.MonitorSnapshotsConfig(args, params)
-        self.assertListEqual([], config.alerts)
+        self.assertTupleEqual((), config.alerts)
         self.assertFalse(config.enable_monitor_snapshots)
 
         args = bzfs.argument_parser().parse_args(["src", "dst", "--monitor-snapshots=" + plan({"latest": {}})])
         config = configuration.MonitorSnapshotsConfig(args, params)
-        self.assertListEqual([], config.alerts)
+        self.assertTupleEqual((), config.alerts)
         self.assertFalse(config.enable_monitor_snapshots)
 
         args = bzfs.argument_parser().parse_args(["src", "dst", "--monitor-snapshots=" + plan({})])
         config = configuration.MonitorSnapshotsConfig(args, params)
-        self.assertListEqual([], config.alerts)
+        self.assertTupleEqual((), config.alerts)
         self.assertFalse(config.enable_monitor_snapshots)
 
         args = bzfs.argument_parser().parse_args(["src", "dst", "--monitor-snapshots={}"])
         config = configuration.MonitorSnapshotsConfig(args, params)
-        self.assertListEqual([], config.alerts)
+        self.assertTupleEqual((), config.alerts)
         self.assertFalse(config.enable_monitor_snapshots)
 
         args = bzfs.argument_parser().parse_args(

@@ -372,7 +372,7 @@ def filter_lines_except(input_list: list[str], input_set: set[str]) -> list[str]
     return [line for line in input_list if line[: line.index("\t")] not in input_set]
 
 
-def dataset_regexes(src: Remote, dst: Remote, datasets: list[str]) -> list[str]:
+def dataset_regexes(src: Remote, dst: Remote, datasets: Iterable[str]) -> list[str]:
     """Converts dataset paths to regex strings relative to src or dst roots."""
     results: list[str] = []
     for dataset in datasets:

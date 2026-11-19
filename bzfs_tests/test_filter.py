@@ -414,15 +414,15 @@ class TestTimeRangeAction(CommonTest):
 
         args = self.argparser_parse_args(args=["src", "dst"])
         p = self.make_params(args=args)
-        self.assertListEqual([[]], p.snapshot_filters)
+        self.assertListEqual([()], list(p.snapshot_filters))
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "*..*"])
         p = self.make_params(args=args)
-        self.assertListEqual([[]], p.snapshot_filters)
+        self.assertListEqual([()], list(p.snapshot_filters))
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "anytime..anytime"])
         p = self.make_params(args=args)
-        self.assertListEqual([[]], p.snapshot_filters)
+        self.assertListEqual([()], list(p.snapshot_filters))
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "notime"])
         p = self.make_params(args=args)

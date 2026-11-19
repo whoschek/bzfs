@@ -538,12 +538,12 @@ class Job:
         include_regexes: list[str] = p.args.include_dataset_regex
 
         # relative datasets need not be compiled more than once as they don't change between tasks
-        def separate_abs_vs_rel_datasets(datasets: list[str]) -> tuple[list[str], list[str]]:
+        def separate_abs_vs_rel_datasets(datasets: list[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
             abs_datasets: list[str] = []
             rel_datasets: list[str] = []
             for dataset in datasets:
                 (abs_datasets if dataset.startswith("/") else rel_datasets).append(dataset)
-            return abs_datasets, rel_datasets
+            return tuple(abs_datasets), tuple(rel_datasets)
 
         p.abs_exclude_datasets, rel_exclude_datasets = separate_abs_vs_rel_datasets(p.args.exclude_dataset)
         p.abs_include_datasets, rel_include_datasets = separate_abs_vs_rel_datasets(p.args.include_dataset)
@@ -618,7 +618,7 @@ class Job:
             p.tmp_include_dataset_regexes + compile_regexes(dataset_regexes(src, dst, p.abs_include_datasets), suffix=suffx),
         )
         if len(p.include_dataset_regexes) == 0:
-            p.include_dataset_regexes = [(re.compile(r".*"), False)]
+            p.include_dataset_regexes = ((re.compile(r".*"), False),)
 
         detect_available_programs(self)
         p.r2r_mode = resolve_r2r_mode(p)
@@ -1133,7 +1133,7 @@ class Job:
         per dataset. Space complexity is O(max(N, M)).
         """
         p, log = self.params, self.params.log
-        alerts: list[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
+        alerts: Sequence[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
         labels: list[SnapshotLabel] = [alert.label for alert in alerts]
         oldest_skip_holds: list[bool] = [alert.oldest_skip_holds for alert in alerts]
         current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000

@@ -121,7 +121,7 @@ UMASK: Final[int] = (~DIR_PERMISSIONS) & 0o777  # so intermediate dirs created b
 UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH: Final[int] = 107 if platform.system() == "Linux" else 103  # see Google for 'sun_path'
 POSIX_END_OF_OPTIONS_MARKER: Final[str] = "--"  # args following -- are treated as operands, even if they begin with a hyphen
 
-RegexList = list[tuple[re.Pattern[str], bool]]  # Type alias
+RegexList = tuple[tuple[re.Pattern[str], bool], ...]  # Type alias
 
 
 def getenv_any(key: str, default: str | None = None, env_var_prefix: str = ENV_VAR_PREFIX) -> str | None:
@@ -586,7 +586,7 @@ def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexLis
 def compile_regexes(regexes: list[str], *, suffix: str = "") -> RegexList:
     """Compiles regex strings and keeps track of negations."""
     assert isinstance(regexes, list)
-    compiled_regexes: RegexList = []
+    compiled_regexes = []
     for regex in regexes:
         if suffix:  # disallow non-trailing end-of-str symbol in dataset regexes to ensure descendants will also match
             original = regex
@@ -609,7 +609,7 @@ def compile_regexes(regexes: list[str], *, suffix: str = "") -> RegexList:
                 end: int = prefix.end() if prefix else 0
                 regex = f"{regex[:end]}(?:{regex[end:]}){suffix}"
         compiled_regexes.append((re.compile(regex), is_negation))
-    return compiled_regexes
+    return tuple(compiled_regexes)
 
 
 def list_formatter(iterable: Iterable[object], separator: str = " ", lstrip: bool = False) -> object:
@@ -1105,7 +1105,7 @@ class SnapshotPeriods:  # thread-safe
 
     def __init__(self) -> None:
         """Initialize lookup tables of suffixes and corresponding millis."""
-        self.suffix_milliseconds: Final[dict[str, int]] = {
+        self.suffix_milliseconds: Final[Mapping[str, int]] = {
             "yearly": 365 * 86400 * 1000,
             "monthly": round(30.5 * 86400 * 1000),
             "weekly": 7 * 86400 * 1000,
@@ -1115,7 +1115,7 @@ class SnapshotPeriods:  # thread-safe
             "secondly": 1000,
             "millisecondly": 1,
         }
-        self.period_labels: Final[dict[str, str]] = {
+        self.period_labels: Final[Mapping[str, str]] = {
             "yearly": "years",
             "monthly": "months",
             "weekly": "weeks",

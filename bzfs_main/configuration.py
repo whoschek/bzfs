@@ -226,7 +226,7 @@ class Params:
         assert log_params is not None
         assert log is not None
         self.args: Final[argparse.Namespace] = args
-        self.sys_argv: Final[list[str]] = sys_argv
+        self.sys_argv: Final[tuple[str, ...]] = tuple(sys_argv)
         self.log_params: Final[LogParams] = log_params
         self.log: Logger = log
         self.inject_params: Final[dict[str, bool | int]] = inject_params if inject_params is not None else {}  # testing-only
@@ -236,7 +236,7 @@ class Params:
         self.xperiods: Final[SnapshotPeriods] = SnapshotPeriods()
 
         assert len(args.root_dataset_pairs) > 0
-        self.root_dataset_pairs: Final[list[tuple[str, str]]] = args.root_dataset_pairs
+        self.root_dataset_pairs: Final[tuple[tuple[str, str], ...]] = tuple(args.root_dataset_pairs)
         self.recursive: Final[bool] = args.recursive
         self.recursive_flag: Final[str] = "-r" if args.recursive else ""
 
@@ -416,16 +416,18 @@ class Params:
 
         # mutable variables:
         snapshot_filters = args.snapshot_filters_var if hasattr(args, SNAPSHOT_FILTERS_VAR) else [[]]
-        self.snapshot_filters: list[list[SnapshotFilter]] = [optimize_snapshot_filters(f) for f in snapshot_filters]
+        self.snapshot_filters: Sequence[Sequence[SnapshotFilter]] = tuple(
+            tuple(optimize_snapshot_filters(f)) for f in snapshot_filters
+        )
         self.exclude_dataset_property: str | None = args.exclude_dataset_property
         if self.exclude_dataset_property is not None:
             validate_property_name(self.exclude_dataset_property or "", "--exclude-dataset-property")
-        self.exclude_dataset_regexes: RegexList = []  # deferred to validate_task() phase
-        self.include_dataset_regexes: RegexList = []  # deferred to validate_task() phase
-        self.tmp_exclude_dataset_regexes: RegexList = []  # deferred to validate_task() phase
-        self.tmp_include_dataset_regexes: RegexList = []  # deferred to validate_task() phase
-        self.abs_exclude_datasets: list[str] = []  # deferred to validate_task() phase
-        self.abs_include_datasets: list[str] = []  # deferred to validate_task() phase
+        self.exclude_dataset_regexes: RegexList = ()  # deferred to validate_task() phase
+        self.include_dataset_regexes: RegexList = ()  # deferred to validate_task() phase
+        self.tmp_exclude_dataset_regexes: RegexList = ()  # deferred to validate_task() phase
+        self.tmp_include_dataset_regexes: RegexList = ()  # deferred to validate_task() phase
+        self.abs_exclude_datasets: tuple[str, ...] = ()  # deferred to validate_task() phase
+        self.abs_include_datasets: tuple[str, ...] = ()  # deferred to validate_task() phase
         self.r2r_mode: str = "off"  # deferred to validate_task() phase
 
         self.curr_zfs_send_program_opts: list[str] = []
@@ -944,7 +946,7 @@ class MonitorSnapshotsConfig:
     def __init__(self, args: argparse.Namespace, p: Params) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
-        self.monitor_snapshots: Final[dict] = ast.literal_eval(args.monitor_snapshots)
+        self.monitor_snapshots: Final[Mapping] = ast.literal_eval(args.monitor_snapshots)
         self.dont_warn: Final[bool] = args.monitor_snapshots_dont_warn
         self.dont_crit: Final[bool] = args.monitor_snapshots_dont_crit
         self.no_latest_check: Final[bool] = args.monitor_snapshots_no_latest_check
@@ -1004,7 +1006,7 @@ class MonitorSnapshotsConfig:
             return duration_milliseconds, alert.label
 
         alerts.sort(key=alert_sort_key, reverse=True)  # check snapshots for dailies before hourlies, and so on
-        self.alerts: Final[list[MonitorSnapshotAlert]] = alerts
+        self.alerts: Final[tuple[MonitorSnapshotAlert, ...]] = tuple(alerts)
         self.enable_monitor_snapshots: Final[bool] = len(alerts) > 0
 
     def __repr__(self) -> str:
