@@ -290,16 +290,16 @@ class TestHelperFunctions(unittest.TestCase):
                     self.assertLess(sort_datasets_key(child), sort_datasets_key(parent + char + "copy"))
 
     def test_dataset_paths(self) -> None:
-        self.assertEqual(list(dataset_paths("a")), ["a"])
-        self.assertEqual(list(dataset_paths("a/b/c")), ["a", "a/b", "a/b/c"])
-        self.assertEqual(list(dataset_paths("")), [""])
+        self.assertEqual(["a"], list(dataset_paths("a")))
+        self.assertEqual(["a", "a/b", "a/b/c"], list(dataset_paths("a/b/c")))
+        self.assertEqual([""], list(dataset_paths("")))
 
     def test_dataset_ancestor_paths(self) -> None:
-        self.assertEqual(list(dataset_ancestor_paths("a")), [])
-        self.assertEqual(list(dataset_ancestor_paths("a/b")), ["a"])
-        self.assertEqual(list(dataset_ancestor_paths("a/b/c")), ["a/b", "a"])
-        self.assertEqual(list(dataset_ancestor_paths("foo/bar/baz")), ["foo/bar", "foo"])
-        self.assertEqual(list(dataset_ancestor_paths("")), [])
+        self.assertEqual([], list(dataset_ancestor_paths("a")))
+        self.assertEqual(["a"], list(dataset_ancestor_paths("a/b")))
+        self.assertEqual(["a/b", "a"], list(dataset_ancestor_paths("a/b/c")))
+        self.assertEqual(["foo/bar", "foo"], list(dataset_ancestor_paths("foo/bar/baz")))
+        self.assertEqual([], list(dataset_ancestor_paths("")))
 
     def test_compile_regexes(self) -> None:
         def _assert_full_match(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:
