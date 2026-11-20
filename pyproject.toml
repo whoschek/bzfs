@@ -277,11 +277,7 @@ force_grid_wrap = 1  # ruff does not have this option, which is why we still use
 py-version = "3.9"
 
 [tool.pylint."MESSAGES CONTROL"]  # see https://pylint.readthedocs.io/en/latest/user_guide/messages/messages_overview.html
-# Preferably only include checks that are not yet supported by ruff or mypy; see https://github.com/astral-sh/ruff/issues/970
-enable  = [
-    "E",     # errors
-    "W",     # warnings
-]
+# Preferably only include checks not yet supported by ruff/pyrefly/mypy; see https://github.com/astral-sh/ruff/issues/970
 disable = [
 #    "all",  # turn all checks off ...
     "C",     # convention
@@ -295,6 +291,10 @@ disable = [
     "W0613", # unused-argument
     "W0718", # broad-exception-caught
     "W1510", # subprocess-run-check
+]
+enable = [  # Pylint starts with its default ruleset, then applies these exceptions after the 'disable' directives above
+    "R0022", # useless-option-value
+    "R0401", # cyclic-import
 ]
 
 [tool.mypy]
