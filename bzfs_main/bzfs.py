@@ -908,6 +908,8 @@ class Job:
                 lambda: set(self.run_ssh_command(src, LOG_TRACE, cmd=src_cmd).splitlines() if src_cmd else []),
                 lambda: self.try_ssh_command(dst, LOG_TRACE, cmd=dst_cmd),
             )
+            for guid in src_snaps_with_guids:
+                assert guid.isdigit()
             if dst_snaps_with_guids_str is None:
                 log.warning("Third party deleted destination: %s", dst_dataset)
                 return False
@@ -915,12 +917,18 @@ class Job:
             dst_snaps_with_guids: list[str] = []
             for line in dst_snaps_with_guids_str.splitlines():
                 dst_snaps_with_guids.append(line[: line.rindex("\t")])  # strip off trailing userrefs column
-                _, name, userrefs = line.rsplit("\t", 2)
+                if filter_needs_creation_time:
+                    creation, guid, name, userrefs = line.split("\t")
+                    assert creation.isdigit()
+                else:
+                    guid, name, userrefs = line.split("\t")
+                assert guid.isdigit()
                 validate_snapshot_prefix(
                     name, dst_dataset, allow_snapshot=not p.delete_dst_bookmarks, allow_bookmark=p.delete_dst_bookmarks
                 )
                 assert userrefs
                 if userrefs not in ("-", "0"):  # ZFS snapshot property userrefs > 0 indicates a zfs hold
+                    assert userrefs.isdigit()
                     tag: str = name[name.index("@") + 1 :]
                     held_dst_snapshots.add(tag)  # don't attempt to delete snapshots that carry a `zfs hold`
             if p.delete_dst_bookmarks:
@@ -1668,10 +1676,11 @@ class Job:
         if fn_oldest is not None:
             assert len(labels) == len(fn_oldest_skip_holds)
         assert (not self.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
+        no_userrefs: bool = fn_oldest is None or not any(fn_oldest_skip_holds)
 
         def extract_fields(line: str) -> tuple[int, int, str, bool]:
             fields: list[str] = line.split("\t")
-            if len(fields) == 3:
+            if no_userrefs:
                 name, createtxg, creation_unixtime_secs = fields
                 userrefs = "-"
             else:
@@ -1686,7 +1695,8 @@ class Job:
 
         p = self.params
         props: str = "name,createtxg,creation"
-        props = props if fn_oldest is None or not any(fn_oldest_skip_holds) else props + ",userrefs"
+        if not no_userrefs:
+            props += ",userrefs"
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")  # sorts by dataset,creation
         datasets_with_snapshots: set[str] = set()
         interner: SortedInterner[str] = SortedInterner(sorted_datasets)  # reduces memory footprint

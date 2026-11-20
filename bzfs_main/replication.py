@@ -273,12 +273,17 @@ def _list_and_filter_src_and_dst_snapshots(
     job.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids_str is not None
     dst_snapshots_with_guids: list[str] = (dst_snapshots_with_guids_str or "").splitlines()
     for line in dst_snapshots_with_guids:
-        validate_snapshot_prefix(line.split("\t", 1)[1], dst_dataset)
+        guid, name = line.split("\t")
+        assert guid.isdigit()
+        validate_snapshot_prefix(name, dst_dataset)
     if src_snapshots_and_bookmarks is None:
         log.warning("Third party deleted source: %s", src_dataset)
         return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
     raw_src_snapshots_with_guids: list[str] = src_snapshots_and_bookmarks.splitlines()
     src_snapshots_with_guids: list[str] = raw_src_snapshots_with_guids.copy()
+    _validate_src_snapshots(
+        src_snapshots_with_guids, src_dataset, filter_needs_creation_time, allow_bookmark="bookmark" in types
+    )
     if not p.use_bookmark:
         src_snapshots_with_guids = [snapshot for snapshot in src_snapshots_with_guids if "@" in snapshot]
     src_snapshots_and_bookmarks = None
@@ -302,10 +307,9 @@ def _list_and_filter_src_and_dst_snapshots(
     latest_src_snapshot: str = ""
     included_src_guids: dict[str, str] = {}
     for line in src_snapshots_with_guids:
-        guid, snapshot = line.split("\t", 1)
+        guid, snapshot = line.split("\t")
         assert guid
         assert snapshot
-        validate_snapshot_prefix(snapshot, src_dataset, allow_bookmark=True)
         if "@" in snapshot:
             included_src_guids[guid] = snapshot
             latest_src_snapshot = snapshot
@@ -351,6 +355,25 @@ def _list_and_filter_src_and_dst_snapshots(
     )
 
 
+def _validate_src_snapshots(
+    src_snapshots_with_guids: list[str], src_dataset: str, filter_needs_creation_time: bool, *, allow_bookmark: bool
+) -> None:
+    for line in src_snapshots_with_guids:
+        fields: list[str] = line.split("\t")
+        if filter_needs_creation_time:
+            creation, guid, name = fields
+            assert creation.isdigit()
+        else:
+            guid, name = fields
+        assert guid.isdigit()
+        validate_snapshot_prefix(name, src_dataset, allow_bookmark=allow_bookmark)
+        c: int = line.count("@")
+        d: int = line.count("#")
+        if not allow_bookmark:
+            assert d == 0
+        assert c + d == 1  # it's either a snapshot or a bookmark
+
+
 def _rollback_dst_dataset_if_necessary(
     job: Job,
     dst_dataset: str,
@@ -366,7 +389,7 @@ def _rollback_dst_dataset_if_necessary(
     latest_dst_snapshot: str = ""
     latest_dst_guid: str = ""
     if len(dst_snapshots_with_guids) > 0:
-        latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
+        latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t")
         if p.force_rollback_to_latest_snapshot:
             log.info(p.dry(f"{tid} Rolling back destination to most recent snapshot: %s"), latest_dst_snapshot)
             # rollback just in case the dst dataset was modified since its most recent snapshot
@@ -381,7 +404,7 @@ def _rollback_dst_dataset_if_necessary(
         """Returns a true snapshot instead of its bookmark with the same GUID, per the sort order previously used for 'zfs
         list -s ...'."""
         for _line in reversed(snapshots_with_guids):
-            guid_, snapshot_ = _line.split("\t", 1)
+            guid_, snapshot_ = _line.split("\t")
             if guid_ in intersect_guids:
                 return guid_, snapshot_  # can be a snapshot or bookmark
         return None, ""
@@ -542,7 +565,7 @@ def _replicate_dataset_incrementally(
         last_appended_guid: str = ""
         snapshot_itr: Iterator[str] = reversed(basis_src_snapshots_with_guids)
         while True:
-            guid, snapshot = next(snapshot_itr).split("\t", 1)
+            guid, snapshot = next(snapshot_itr).split("\t")
             if "@" in snapshot:
                 result_snapshots.append(snapshot)
                 result_guids.append(guid)
@@ -1629,6 +1652,8 @@ class _Continuity:
         raw_src_snapshots_with_guids: list[str],
         dst_snapshots_with_guids: list[str],
     ) -> None:
+        assert src_dataset
+        assert dst_dataset
         self._src_dataset: Final[str] = src_dataset
         dst_pool_guid: str = p.zpool_features[p.dst.location][p.dst.pool].get(POOL_GUID, "")
         if not dst_pool_guid:
@@ -1642,11 +1667,11 @@ class _Continuity:
         )
         tmp_suffix: str = f".{self._dst_dataset_id}"
         self._dst_snapshot_guids: Final[set[str]] = {
-            guid for guid, name in (line.split("\t", 1) for line in dst_snapshots_with_guids) if "@" in name
+            guid for guid, name in (line.split("\t") for line in dst_snapshots_with_guids) if "@" in name
         }
         raw_src_snapshots_components: list[tuple[str, str, bool, bool, bool]] = [
             (name, guid, "@" in name, "#" in name, is_tmp_bookmark(name))
-            for guid, name in (line.split("\t", 1) for line in raw_src_snapshots_with_guids)
+            for guid, name in (line.split("\t") for line in raw_src_snapshots_with_guids)
         ]
         self._src_snapshots: Final[Mapping[str, str]] = {
             name: guid
@@ -1666,9 +1691,9 @@ class _Continuity:
 
     def _tmp_bookmark_name_and_guid(self, snapshot: str) -> tuple[str, str]:
         """Returns the name and GUID of the tmp bookmark for the given src snapshot."""
-        assert "@" in snapshot
-        dataset, snapshot_name = snapshot.split("@", 1)
+        dataset, snapshot_name = snapshot.split("@")
         assert dataset == self._src_dataset
+        assert snapshot_name
         snapshot_guid: str = self._src_snapshots[snapshot]
         tbm = f"{dataset}#{_TMP_BOOKMARK_PREFIX}{snapshot_name}.{self._compact_guid(snapshot_guid)}.{self._dst_dataset_id}"
         return tbm, snapshot_guid
@@ -1676,8 +1701,9 @@ class _Continuity:
     def _finalized_bookmark_name(self, tmp_bookmark: str) -> str:
         """Returns the name of the final bookmark corresponding to the given tmp bookmark."""
         assert is_tmp_bookmark(tmp_bookmark), tmp_bookmark
-        dataset, tag = tmp_bookmark.split("#", 1)
+        dataset, tag = tmp_bookmark.split("#")
         assert dataset == self._src_dataset
+        assert tag
         prefix_and_snapshot_name, compact_snapshot_guid, _, _ = tag.rsplit(".", 3)
         assert prefix_and_snapshot_name.startswith(_TMP_BOOKMARK_PREFIX), (prefix_and_snapshot_name, tmp_bookmark)
         snapshot_name = prefix_and_snapshot_name.removeprefix(_TMP_BOOKMARK_PREFIX)  # bzfs_us-west_2024-11-06_08:30:05_daily

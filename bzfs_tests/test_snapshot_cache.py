@@ -457,20 +457,21 @@ class TestSnapshotCache(AbstractTestCase):
     def test_monitor_all_held_preserves_latest_and_missing_alerts(self) -> None:
         """Exercise real selection and alert evaluation with held, unheld and absent matches using fixed creation times."""
         fresh = f"{DST_DATASET}@org_onsite_fresh_secondly\t2\t999\t1"
-        stale = f"{DST_DATASET}@org_onsite_stale_secondly\t1\t900\t1"
-        unheld = f"{DST_DATASET}@org_onsite_stale_secondly\t1\t900\t0"
+        stale = f"{DST_DATASET}@org_onsite_stale_secondly\t1\t900"
+        held = stale + "\t1"
+        unheld = stale + "\t0"
         unrelated = f"{DST_DATASET}@unrelated\t1\t900\t0"
         no_latest = ["--monitor-snapshots-no-latest-check"]
         cases = [
             ("fresh held", [fresh], True, [], (0, "")),
-            ("stale held", [stale], True, [], (-CRITICAL_STATUS, "Latest")),
-            ("oldest only held", [stale], True, no_latest, (0, "")),
+            ("stale held", [held], True, [], (-CRITICAL_STATUS, "Latest")),
+            ("oldest only held", [held], True, no_latest, (0, "")),
             ("snapshotless", [], True, [], (-CRITICAL_STATUS, "Latest")),
             ("oldest only snapshotless", [], True, no_latest, (-CRITICAL_STATUS, "Oldest")),
             ("oldest only absent label", [unrelated], True, no_latest, (-CRITICAL_STATUS, "Oldest")),
             ("mixed holds", [unheld, fresh], True, [], (-CRITICAL_STATUS, "Oldest")),
             ("hold filtering disabled", [stale], False, no_latest, (-CRITICAL_STATUS, "Oldest")),
-            ("oldest disabled", [stale], True, ["--monitor-snapshots-no-oldest-check"], (-CRITICAL_STATUS, "Latest")),
+            ("oldest disabled", [held], True, ["--monitor-snapshots-no-oldest-check"], (-CRITICAL_STATUS, "Latest")),
         ]
         for name, rows, skip_holds, opts, expected in cases:
             with self.subTest(name=name):

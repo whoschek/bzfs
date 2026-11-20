@@ -1214,6 +1214,7 @@ class LocalTestCase(IntegrationTestCase):
             *filter2,
             *filter3,
             creation_prefix=CREATION_PREFIX,
+            no_create_bookmark=True,
         )
 
     def test_snapshot_filter_order_matters(self) -> None:

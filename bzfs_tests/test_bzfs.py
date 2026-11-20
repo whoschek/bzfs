@@ -1492,8 +1492,8 @@ class TestJobMethods(AbstractTestCase):
         # Craft synthetic zfs list outputs (guid\tname) for src and dst
         src_dataset = "pool/src"
         dst_dataset = "pool/dst"
-        src_lines_all = ["guid1\tpool/src@d1", "guid2\tpool/src@h1", "guid3\tpool/src@d2"]
-        dst_lines = ["guid2\tpool/dst@h1"]
+        src_lines_all = ["1\tpool/src@d1", "2\tpool/src@h1", "3\tpool/src@d2"]
+        dst_lines = ["2\tpool/dst@h1"]
 
         # Patch out remote calls and heavy operations to isolate the logic
         with (
