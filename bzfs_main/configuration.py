@@ -637,16 +637,18 @@ class Remote:
         self.socket_prefix: Final[str] = "s"
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         self.ssh_socket_dir: str = ""
+        ssh_exit_on_shutdown_socket_dir: str = ""
         if self.reuse_ssh_connection:
             ssh_home_dir: str = os.path.join(get_home_directory(), ".ssh")
             os.makedirs(ssh_home_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             self.ssh_socket_dir = os.path.join(ssh_home_dir, "bzfs")
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             validate_file_permissions(self.ssh_socket_dir, mode=DIR_PERMISSIONS)
-            self.ssh_exit_on_shutdown_socket_dir: Final[str] = os.path.join(self.ssh_socket_dir, "x")
-            os.makedirs(self.ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
-            validate_file_permissions(self.ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS)
-            _delete_stale_files(self.ssh_exit_on_shutdown_socket_dir, prefix=self.socket_prefix, ssh=True)
+            ssh_exit_on_shutdown_socket_dir = os.path.join(self.ssh_socket_dir, "x")
+            os.makedirs(ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+            validate_file_permissions(ssh_exit_on_shutdown_socket_dir, mode=DIR_PERMISSIONS)
+            _delete_stale_files(ssh_exit_on_shutdown_socket_dir, prefix=self.socket_prefix, ssh=True)
+        self.ssh_exit_on_shutdown_socket_dir: Final[str] = ssh_exit_on_shutdown_socket_dir
         self.sanitize1_regex: Final[re.Pattern[str]] = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with ~ char
         self.sanitize2_regex: Final[re.Pattern[str]] = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # remove bad chars
 
@@ -700,6 +702,7 @@ class Remote:
                 unique: str = f"{os.getpid()}@{curr_time}@{rand_str}"
                 optional: str = f"@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
                 socket_name: str = f"{self.socket_prefix}{unique}{optional}"
+                assert self.ssh_exit_on_shutdown_socket_dir
                 socket_path = os.path.join(self.ssh_exit_on_shutdown_socket_dir, socket_name)
                 socket_path = socket_path[: max(UNIX_DOMAIN_SOCKET_PATH_MAX_LENGTH, len(socket_path) - len(optional))]
                 # `ssh` will error out later if the max OS Unix domain socket path limit cannot be met reasonably as the
