@@ -1294,8 +1294,8 @@ class TestTimeout(AbstractTestCase):
         self.job.timeout_duration_nanos = 1_000_000_000
         self.job.timeout_nanos = time.monotonic_ns() + self.job.timeout_duration_nanos
         result = connection.timeout(self.job)
-        self.assertIsNotNone(result)
-        self.assertGreaterEqual(cast(float, result), 0.0)
+        assert result is not None
+        self.assertGreaterEqual(result, 0.0)
 
 
 #############################################################################

@@ -505,7 +505,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
             if isinstance(time_spec, timedelta):
                 return time_spec
             if isinstance(time_spec, int):
-                return int(time_spec)
+                return time_spec
             return default
 
         lo, hi = times

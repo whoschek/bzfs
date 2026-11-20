@@ -59,6 +59,7 @@ from bzfs_main.configuration import (
     LogParams,
 )
 from bzfs_main.detect import (
+    DISABLE_PRG,
     DUMMY_DATASET,
 )
 from bzfs_main.parallel_batch_cmd import (
@@ -810,7 +811,7 @@ class LocalTestCase(IntegrationTestCase):
                     self.assertTrue(job.params.is_program_available("ps", loc))
 
     def test_basic_replication_flat_simple_with_progress_reporter(self) -> None:
-        for pv_program in ["pv", bzfs_main.detect.DISABLE_PRG]:
+        for pv_program in ["pv", DISABLE_PRG]:
             for i in range(3):
                 with stop_on_failure_subtest(i=i):
                     self.tearDownAndSetup()
@@ -1906,10 +1907,10 @@ class LocalTestCase(IntegrationTestCase):
                 self.setup_basic()
                 props = self.properties_with_special_characters()
                 zfs_set([ibase.SRC_ROOT_DATASET + "/foo"], props)
-                disable_pv = [] if i <= 0 else ["--pv-program=" + bzfs_main.detect.DISABLE_PRG]
-                disable_mbuffer = [] if i <= 1 else ["--mbuffer-program=" + bzfs_main.detect.DISABLE_PRG]
-                disable_zstd = [] if i <= 2 else ["--compression-program=" + bzfs_main.detect.DISABLE_PRG]
-                disable_sh = [] if i <= 3 else ["--shell-program=" + bzfs_main.detect.DISABLE_PRG]
+                disable_pv = [] if i <= 0 else ["--pv-program=" + DISABLE_PRG]
+                disable_mbuffer = [] if i <= 1 else ["--mbuffer-program=" + DISABLE_PRG]
+                disable_zstd = [] if i <= 2 else ["--compression-program=" + DISABLE_PRG]
+                disable_sh = [] if i <= 3 else ["--shell-program=" + DISABLE_PRG]
                 self.run_bzfs(
                     ibase.SRC_ROOT_DATASET + "/foo",
                     ibase.DST_ROOT_DATASET + "/foo",
@@ -1972,7 +1973,7 @@ class LocalTestCase(IntegrationTestCase):
         cmd: list[str] = [SSH_PROGRAM, "-F", SSH_CONFIG_FILE]
         port = getenv_any("test_ssh_port")
         if port is not None:
-            cmd += ["-p", str(port)]
+            cmd += ["-p", port]
         cmd += ["127.0.0.1", "sh", "-c", script]
         completed = subprocess.run(cmd, capture_output=True, text=True, check=True)
         self.assertEqual(prop_arg, completed.stdout.rstrip("\n"))
@@ -5909,7 +5910,7 @@ class LocalTestCase(IntegrationTestCase):
         self.run_bzfs(
             ibase.SRC_ROOT_DATASET,
             ibase.DST_ROOT_DATASET,
-            "--ssh-program=" + bzfs_main.detect.DISABLE_PRG,
+            "--ssh-program=" + DISABLE_PRG,
             expected_status=DIE_STATUS,
         )
 

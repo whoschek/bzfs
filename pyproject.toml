@@ -338,6 +338,7 @@ python-version = "3.9"
 #project-includes = ["bzfs_*/**"]
 project-excludes = ["lab/**", "_tmp/**"]
 preset = "strict"
+#min-severity = "warn"  # exit with non-zero exit code even on warnings
 
 [tool.pyrefly.errors]
 deprecated = "error"

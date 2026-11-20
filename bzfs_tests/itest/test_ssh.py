@@ -28,14 +28,13 @@ from subprocess import (
 )
 from typing import (
     Final,
-    cast,
     final,
 )
 from unittest.mock import (
     patch,
 )
 
-import bzfs_main.replication
+import bzfs_main.loggers
 from bzfs_main import (
     bzfs,
 )
@@ -262,8 +261,7 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
             # Replace the Unix domain socket file with a regular empty file, which will make _is_ssh_control_socket_usable()
             # return False and trigger the stale socket unlinking logic.
             socket_path = conn._ssh_socket_path
-            self.assertIsNotNone(socket_path)
-            socket_path = cast(str, socket_path)
+            assert socket_path is not None
             os.unlink(socket_path)
             with open(socket_path, "w", encoding="utf-8"):
                 pass
