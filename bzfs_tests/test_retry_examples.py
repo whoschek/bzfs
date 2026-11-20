@@ -649,7 +649,7 @@ class RetryIntegrationExamples(unittest.TestCase):
                 if retry.count < 2:
                     raise socket.timeout("upstream timed out")
                 return "ok"
-            except (socket.timeout, TimeoutError, http.client.HTTPException, OSError) as exc:
+            except (http.client.HTTPException, OSError) as exc:
                 # Keep the display_msg low-cardinality; use it for logs, not as a metric label.
                 raise RetryableError(display_msg=type(exc).__name__) from exc
 

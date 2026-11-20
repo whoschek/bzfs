@@ -71,6 +71,7 @@ from typing import (
 )
 
 import bzfs_main.argparse_actions
+import bzfs_main.argparse_cli
 from bzfs_main import (
     bzfs,
 )

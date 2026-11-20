@@ -586,7 +586,7 @@ def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexLis
 def compile_regexes(regexes: list[str], *, suffix: str = "") -> RegexList:
     """Compiles regex strings and keeps track of negations."""
     assert isinstance(regexes, list)
-    compiled_regexes = []
+    compiled_regexes: list[tuple[re.Pattern[str], bool, str]] = []
     for regex in regexes:
         if suffix:  # disallow non-trailing end-of-str symbol in dataset regexes to ensure descendants will also match
             original = regex

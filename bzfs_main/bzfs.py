@@ -82,6 +82,7 @@ from typing import (
     final,
 )
 
+import bzfs_main.argparse_cli
 import bzfs_main.loggers
 from bzfs_main.argparse_actions import (
     has_timerange_filter,

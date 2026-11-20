@@ -298,8 +298,8 @@ class IntegrationTestCase(ParametrizedTestCase):
         args = list(arguments)
         src_host = [] if use_jobrunner else ["--ssh-src-host", src_host_str]
         dst_host = [] if use_jobrunner else ["--ssh-dst-host", dst_host_str]
-        src_port = ["--ssh-src-port", SSH_DEFAULT_PORT if port is None else str(port)]
-        dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
+        src_port = ["--ssh-src-port", SSH_DEFAULT_PORT if port is None else port]
+        dst_port = [] if port is None else ["--ssh-dst-port", port]
         src_user = ["--ssh-src-user", os_username()]
         params = self.param
 

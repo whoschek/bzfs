@@ -846,22 +846,20 @@ def make_fake_params() -> Params:
 
 #############################################################################
 class _FakeRemote(SimpleNamespace):
-    ssh_extra_opts: tuple[str, ...]
+    """Provide SSH defaults that individual connection tests can override by keyword."""
 
-    def __init__(self, **kwargs: Any) -> None:
+    ssh_extra_opts: tuple[str, ...] = ()
+    ssh_control_persist_margin_secs: int = 2
+    pool: str = SHARED
+
+    def __init__(self, *, params: Params | None = None, ssh_socket_dir: str | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        if not hasattr(self, "params"):
-            self.params = make_fake_params()
-        if not hasattr(self, "ssh_extra_opts"):
-            self.ssh_extra_opts = ()
-        if not hasattr(self, "ssh_socket_dir"):
-            self.ssh_socket_dir = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX)
-        if not hasattr(self, "ssh_control_persist_margin_secs"):
-            self.ssh_control_persist_margin_secs = 2
-        if not hasattr(self, "cache_namespace"):
-            self.cache_namespace = lambda: "user@host#22#cfg"
-        if not hasattr(self, "pool"):
-            self.pool = SHARED
+        self.params = make_fake_params() if params is None else params
+        self.ssh_socket_dir = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX) if ssh_socket_dir is None else ssh_socket_dir
+
+    def cache_namespace(self) -> str:
+        """Return a fixed namespace so test connections to this remote share leases."""
+        return "user@host#22#cfg"
 
     def local_ssh_command(self, socket_path: str | None = None) -> tuple[tuple[str, ...], str | None]:
         return ("ssh", self.ssh_user_host or "localhost"), socket_path
@@ -1296,8 +1294,8 @@ class TestTimeout(AbstractTestCase):
         self.job.timeout_duration_nanos = 1_000_000_000
         self.job.timeout_nanos = time.monotonic_ns() + self.job.timeout_duration_nanos
         result = connection.timeout(self.job)
-        self.assertIsNotNone(result)
-        self.assertGreaterEqual(cast(float, result), 0.0)
+        assert result is not None
+        self.assertGreaterEqual(result, 0.0)
 
 
 #############################################################################

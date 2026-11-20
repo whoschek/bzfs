@@ -56,7 +56,7 @@ Example Usage:
 from __future__ import (
     annotations,
 )
-import concurrent
+import concurrent.futures
 import heapq
 import logging
 import os

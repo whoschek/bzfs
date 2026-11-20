@@ -117,7 +117,7 @@ class TestRemotePathValidation(unittest.TestCase):
 
             marker_file.unlink(missing_ok=True)
             result = subprocess.run(
-                ["bash", str(self.script)],
+                ["bash", self.script],
                 check=False,
                 cwd=self.repo_root,
                 env=env,

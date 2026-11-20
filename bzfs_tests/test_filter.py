@@ -753,11 +753,11 @@ class TestFilterSnapshotsWithBookmarks(CommonTest):
         self.job.params.log.setLevel(logging.INFO)  # Set to INFO to avoid verbose output during tests
 
         self.basis_snapshots = [
-            f"{int(unixtime_fromisoformat('2024-01-01'))}\tguid1\tds@daily_2024-01-01",
-            f"{int(unixtime_fromisoformat('2024-01-02'))}\tguid2\tds#daily_2024-01-02",  # Bookmark
-            f"{int(unixtime_fromisoformat('2024-01-03'))}\tguid3\tds@hourly_2024-01-03",
-            f"{int(unixtime_fromisoformat('2024-01-04'))}\tguid4\tds#hourly_2024-01-04",  # Bookmark
-            f"{int(unixtime_fromisoformat('2024-01-05'))}\tguid5\tds@keep_this_one",
+            f"{unixtime_fromisoformat('2024-01-01')}\tguid1\tds@daily_2024-01-01",
+            f"{unixtime_fromisoformat('2024-01-02')}\tguid2\tds#daily_2024-01-02",  # Bookmark
+            f"{unixtime_fromisoformat('2024-01-03')}\tguid3\tds@hourly_2024-01-03",
+            f"{unixtime_fromisoformat('2024-01-04')}\tguid4\tds#hourly_2024-01-04",  # Bookmark
+            f"{unixtime_fromisoformat('2024-01-05')}\tguid5\tds@keep_this_one",
         ]
         self.daily_snap = self.basis_snapshots[0]
         self.daily_bookmark = self.basis_snapshots[1]
@@ -802,7 +802,7 @@ class TestFilterSnapshotsWithBookmarks(CommonTest):
     def test_filter_bookmarks_true_with_time_range(self) -> None:
         """Verify filter_bookmarks=True: time filters apply to both bookmarks and snapshots."""
         # Filter for everything on or after 2024-01-03.
-        timerange = (int(unixtime_fromisoformat("2024-01-03")), UNIX_TIME_INFINITY_SECS)
+        timerange = (unixtime_fromisoformat("2024-01-03"), UNIX_TIME_INFINITY_SECS)
         self.job.params.snapshot_filters = [[SnapshotFilter("include_snapshot_times", timerange, None)]]
 
         result = filter_snapshots(self.job, self.basis_snapshots, filter_bookmarks=True)

@@ -265,8 +265,7 @@ class SanitizeRecvOptsForDatasetTypeTestCase(IntegrationTestCase):
             assert isinstance(value, str)
             if value != "-":
                 return value
-        self.fail(f"Failed to determine a valid value for property: {propname}")
-        raise AssertionError("unreachable")
+        raise AssertionError(f"Failed to determine a valid value for property: {propname}")
 
     def _full_send_argv(self, dataset: str, snapshot_tag: str) -> list[str]:
         return SUDO_CMD + ["zfs", "send", "--props", "--raw", f"{dataset}@{snapshot_tag}"]

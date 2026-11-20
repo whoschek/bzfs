@@ -28,14 +28,13 @@ from subprocess import (
 )
 from typing import (
     Final,
-    cast,
     final,
 )
 from unittest.mock import (
     patch,
 )
 
-import bzfs_main.replication
+import bzfs_main.loggers
 from bzfs_main import (
     bzfs,
 )
@@ -91,6 +90,7 @@ class TestSSHLatency(IntegrationTestCase):
         p = self.make_params(args=args, log_params=log_params, log=log)
 
         ssh_opts_list = list(p.src.ssh_extra_opts) + ["-oStrictHostKeyChecking=no"]
+        assert p.src.ssh_exit_on_shutdown_socket_dir
         ssh_opts_list += ["-S", os.path.join(p.src.ssh_exit_on_shutdown_socket_dir, "bzfs_test_ssh_socket")]
         ssh_opts_list += ["-p", _PORT]
 
@@ -262,8 +262,7 @@ class TestSSHMasterIntermittentFailure(IntegrationTestCase):
             # Replace the Unix domain socket file with a regular empty file, which will make _is_ssh_control_socket_usable()
             # return False and trigger the stale socket unlinking logic.
             socket_path = conn._ssh_socket_path
-            self.assertIsNotNone(socket_path)
-            socket_path = cast(str, socket_path)
+            assert socket_path is not None
             os.unlink(socket_path)
             with open(socket_path, "w", encoding="utf-8"):
                 pass

@@ -26,7 +26,10 @@ import subprocess
 import sys
 import threading
 import time
-import unittest
+import unittest.mock
+from collections.abc import (
+    Callable,
+)
 from logging import (
     Logger,
 )
@@ -34,6 +37,9 @@ from subprocess import (
     DEVNULL,
     PIPE,
     CalledProcessError,
+)
+from types import (
+    SimpleNamespace,
 )
 from typing import (
     Any,
@@ -269,22 +275,16 @@ class TestParseSrcHosts(AbstractTestCase):
         self.assertIn("expected a Python list literal", str(cm.exception))
 
     # ---- raw_src_hosts missing -> read from stdin ----
-    class _FakeStdin:
-        def __init__(self, data: str, isatty: object | None = None) -> None:
-            self._data = data
-            # isatty can be: True/False function, raising function, None (no attribute)
-            if isatty is True:
-                self.isatty = lambda: True  # set dynamically for test
-            elif isatty is False:
-                self.isatty = lambda: False  # set dynamically for test
-            elif callable(isatty):
-                self.isatty = isatty  # set dynamically for test
-
-        def read(self) -> str:
-            return self._data
+    @staticmethod
+    def _fake_stdin(data: str, isatty: bool | Callable[[], bool] | None = None) -> SimpleNamespace:
+        """Build a readable stream with an optional isatty method for stdin tests."""
+        stream = SimpleNamespace(read=lambda: data)
+        if isatty is not None:
+            stream.isatty = isatty if callable(isatty) else lambda: isatty
+        return stream
 
     def test_stdin_tty_raises(self) -> None:
-        fake = self._FakeStdin(data="", isatty=True)
+        fake = self._fake_stdin(data="", isatty=True)
         with patch.object(sys, "stdin", fake):
             with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
@@ -292,7 +292,7 @@ class TestParseSrcHosts(AbstractTestCase):
             self.assertIn("stdin is a TTY", str(cm.exception))
 
     def test_stdin_empty_raises(self) -> None:
-        fake = self._FakeStdin(data="   \n\t  ", isatty=False)
+        fake = self._fake_stdin(data="   \n\t  ", isatty=False)
         with patch.object(sys, "stdin", fake):
             with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
@@ -300,7 +300,7 @@ class TestParseSrcHosts(AbstractTestCase):
             self.assertIn("stdin is empty", str(cm.exception))
 
     def test_stdin_invalid_literal_raises(self) -> None:
-        fake = self._FakeStdin(data="nonsense", isatty=False)
+        fake = self._fake_stdin(data="nonsense", isatty=False)
         with patch.object(sys, "stdin", fake):
             with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
@@ -308,7 +308,7 @@ class TestParseSrcHosts(AbstractTestCase):
             self.assertIn("Invalid --src-hosts format:", str(cm.exception))
 
     def test_stdin_not_a_list_raises(self) -> None:
-        fake = self._FakeStdin(data="'abc'", isatty=False)
+        fake = self._fake_stdin(data="'abc'", isatty=False)
         with patch.object(sys, "stdin", fake):
             with self.assertRaises(SystemExit) as cm, suppress_output(), suppress_logger(self.job.log):
                 self.job.parse_src_hosts_from_cli_or_stdin(None)
@@ -316,7 +316,7 @@ class TestParseSrcHosts(AbstractTestCase):
             self.assertIn("expected a Python list literal", str(cm.exception))
 
     def test_stdin_valid_list(self) -> None:
-        fake = self._FakeStdin(data=str(["x", "y"]), isatty=False)
+        fake = self._fake_stdin(data=str(["x", "y"]), isatty=False)
         with patch.object(sys, "stdin", fake):
             result = self.job.parse_src_hosts_from_cli_or_stdin(None)
         self.assertEqual(["x", "y"], result)
@@ -325,7 +325,7 @@ class TestParseSrcHosts(AbstractTestCase):
         def raising_isatty() -> bool:
             raise RuntimeError("isatty failure")
 
-        fake = self._FakeStdin(data=str(["z1"]), isatty=raising_isatty)
+        fake = self._fake_stdin(data=str(["z1"]), isatty=raising_isatty)
         with patch.object(sys, "stdin", fake):
             result = self.job.parse_src_hosts_from_cli_or_stdin(None)
         self.assertEqual(["z1"], result)
