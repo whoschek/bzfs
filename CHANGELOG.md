@@ -2,6 +2,10 @@
 
 ## [1.27.0] - Not yet released
 
+This release hardens command-line validation and makes dataset selection and cleanup safer. Recursive operations skip
+the entire subtree of an excluded dataset, and `bzfs` stops before deleting empty destination datasets if `zfs list`
+fails.
+
 - [bzfs] fix: Enhance validation: reject ambiguous absolute paths in `--include-dataset` and `--exclude-dataset`.
 - [bzfs] fix: Enhance validation of `--exclude-dataset-property`.
 - [bzfs] fix: Enhance validation of `--zfs-send-program-opts` and `--zfs-recv-program-opt(s)`.
@@ -9,8 +13,9 @@
 - [bzfs] fix: Enhance validation of `--include-snapshot-plan`.
 - [bzfs] fix: Enhance validation of dataset names.
 - [bzfs_jobrunner] fix: Enhance validation of `--root-dataset-pairs`.
+- [bzfs_jobrunner] chore: `--spawn-process-per-job`: harden process env.
 - [bzfs] fix: Enforce dataset exclusion filter semantics. When a dataset filter skips a parent within a selected
-  subtree, it now skips its descendants too. For example, recursive replication with
+  subtree, it now skips its descendants too. For example, `--recursive` replication with
   `--include-dataset-regex '!private' 'private/keep'` now skips `private/keep` and its descendants.
 - [bzfs] fix: Make zfs_busy check work when `--proctitle` is specified in `--zfs-send-program-opts`.
 - [bzfs] fix: `--include-dataset` and `--exclude-dataset`: Escape leading '!' in literal dataset filter.
