@@ -106,6 +106,7 @@ from bzfs_main.util.utils import (
     getenv_bool,
     human_readable_bytes,
     is_descendant,
+    is_zfs_guid,
     list_formatter,
     open_nofollow,
     replace_prefix,
@@ -1771,6 +1772,7 @@ class _Continuity:
     @staticmethod
     def _compact_guid(decimal_guid: str) -> str:
         """Converts a 64-bit ZFS GUID from canonical decimal format (20 bytes) to base64 (11 bytes); to shorten it."""
+        assert is_zfs_guid(decimal_guid)
         guid_bytes: bytes = base64.urlsafe_b64encode(int(decimal_guid).to_bytes(8, "big"))
         return _Continuity._b64escape(guid_bytes.decode().rstrip("="))
 
@@ -1779,7 +1781,9 @@ class _Continuity:
         """Converts an 11-character base64 ZFS GUID back to its canonical decimal representation such that
         _decimal_guid(_compact_guid(x)) == x"""
         guid_bytes: bytes = base64.urlsafe_b64decode(_Continuity._b64unescape(compact_guid) + "=")
-        return str(int.from_bytes(guid_bytes, "big"))
+        decimal_guid: str = str(int.from_bytes(guid_bytes, "big"))
+        assert is_zfs_guid(decimal_guid)
+        return decimal_guid
 
     @staticmethod
     def _b64escape(name: str) -> str:

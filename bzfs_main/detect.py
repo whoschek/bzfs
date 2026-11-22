@@ -47,6 +47,7 @@ from bzfs_main.util.utils import (
     SynchronousExecutor,
     die,
     drain,
+    is_zfs_guid,
     list_formatter,
     stderr_to_str,
     xfinally,
@@ -340,7 +341,7 @@ def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict) -
         else:
             features = dict(line.split("\t", 1) for line in lines)
             assert set(propnames).issuperset(features.keys())
-            assert features[POOL_GUID].isdigit()
+            assert is_zfs_guid(features[POOL_GUID])
     if len(lines) == 0:
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
         if job.try_ssh_command_with_retries(remote, LOG_TRACE, cmd=cmd) is None:
