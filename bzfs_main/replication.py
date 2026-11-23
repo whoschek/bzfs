@@ -106,7 +106,6 @@ from bzfs_main.util.utils import (
     getenv_bool,
     human_readable_bytes,
     is_descendant,
-    is_zfs_guid,
     list_formatter,
     open_nofollow,
     replace_prefix,
@@ -115,6 +114,7 @@ from bzfs_main.util.utils import (
     stderr_to_str,
     validate_property_name,
     validate_snapshot_prefix,
+    validate_zfs_guid,
     xprint,
 )
 
@@ -275,7 +275,7 @@ def _list_and_filter_src_and_dst_snapshots(
     dst_snapshots_with_guids: list[str] = (dst_snapshots_with_guids_str or "").splitlines()
     for line in dst_snapshots_with_guids:
         guid, name = line.split("\t")
-        assert guid.isdigit()
+        validate_zfs_guid(guid)
         validate_snapshot_prefix(name, dst_dataset)
     if src_snapshots_and_bookmarks is None:
         log.warning("Third party deleted source: %s", src_dataset)
@@ -363,10 +363,10 @@ def _validate_src_snapshots(
         fields: list[str] = line.split("\t")
         if filter_needs_creation_time:
             creation, guid, name = fields
-            assert creation.isdigit()
+            assert creation.isdecimal()
         else:
             guid, name = fields
-        assert guid.isdigit()
+        validate_zfs_guid(guid)
         validate_snapshot_prefix(name, src_dataset, allow_bookmark=allow_bookmark)
         c: int = line.count("@")
         d: int = line.count("#")
@@ -1239,7 +1239,7 @@ def _create_zfs_bookmarks(
         bookmark_dict[snapshot] = (bookmarks[i], expected_guids[i])
     assert len(snapshots) == len(bookmark_dict)
 
-    def create_zfs_bookmark(cmd: list[str]) -> None:
+    def _create_zfs_bookmark(cmd: list[str]) -> None:
         snapshot = cmd[-1]
         bookmark, expected_guid = bookmark_dict[snapshot]
         try:
@@ -1265,7 +1265,7 @@ def _create_zfs_bookmarks(
 
     cmd: list[str] = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark")
     run_ssh_cmd_parallel(
-        job, remote, [(cmd, snapshots)], lambda _cmd, batch: create_zfs_bookmark(_cmd + batch), max_batch_items=1
+        job, remote, [(cmd, snapshots)], lambda _cmd, batch: _create_zfs_bookmark(_cmd + batch), max_batch_items=1
     )
 
 
@@ -1772,7 +1772,7 @@ class _Continuity:
     @staticmethod
     def _compact_guid(decimal_guid: str) -> str:
         """Converts a 64-bit ZFS GUID from canonical decimal format (20 bytes) to base64 (11 bytes); to shorten it."""
-        assert is_zfs_guid(decimal_guid)
+        validate_zfs_guid(decimal_guid)
         guid_bytes: bytes = base64.urlsafe_b64encode(int(decimal_guid).to_bytes(8, "big"))
         return _Continuity._b64escape(guid_bytes.decode().rstrip("="))
 
@@ -1782,7 +1782,7 @@ class _Continuity:
         _decimal_guid(_compact_guid(x)) == x"""
         guid_bytes: bytes = base64.urlsafe_b64decode(_Continuity._b64unescape(compact_guid) + "=")
         decimal_guid: str = str(int.from_bytes(guid_bytes, "big"))
-        assert is_zfs_guid(decimal_guid)
+        validate_zfs_guid(decimal_guid)
         return decimal_guid
 
     @staticmethod

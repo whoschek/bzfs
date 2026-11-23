@@ -960,11 +960,6 @@ def format_obj(obj: object) -> str:
     return f'"{obj}"'
 
 
-def is_zfs_guid(guid: str) -> bool:
-    """Returns whether of not the given string is a valid decimal ZFS GUID."""
-    return guid.isascii() and guid.isdigit()
-
-
 def validate_dataset_name(dataset: str, input_text: str, *, is_assert: bool = False) -> None:
     """'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc."""
     # Also see zfs_namecheck.c and https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
@@ -1009,6 +1004,11 @@ def validate_snapshot_prefix(
             return
         assert allow_snapshot or allow_bookmark
     raise AssertionError(f"Invalid ZFS snapshot name: {snapshot} for dataset: {dataset}")
+
+
+def validate_zfs_guid(guid: str) -> None:
+    """Checks that the given string is a valid decimal ZFS GUID."""
+    assert len(guid) <= 20 and guid.isascii() and guid.isdecimal(), guid
 
 
 def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentParser | None = None) -> None:

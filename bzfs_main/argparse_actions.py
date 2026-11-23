@@ -474,7 +474,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
             time_spec = time_spec.strip()
             if time_spec == "*" or time_spec == "anytime":
                 return None
-            if time_spec.isdigit():
+            if time_spec.isdecimal():
                 return int(time_spec)
             try:
                 return timedelta(milliseconds=parse_duration_to_milliseconds(time_spec, regex_suffix=r"\s*ago"))

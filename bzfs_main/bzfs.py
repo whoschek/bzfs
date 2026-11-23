@@ -205,6 +205,7 @@ from bzfs_main.util.utils import (
     validate_dataset_name,
     validate_property_name,
     validate_snapshot_prefix,
+    validate_zfs_guid,
     xappend,
     xfinally,
     xprint,
@@ -909,7 +910,7 @@ class Job:
                 lambda: self.try_ssh_command(dst, LOG_TRACE, cmd=dst_cmd),
             )
             for guid in src_snaps_with_guids:
-                assert guid.isdigit()
+                validate_zfs_guid(guid)
             if dst_snaps_with_guids_str is None:
                 log.warning("Third party deleted destination: %s", dst_dataset)
                 return False
@@ -919,16 +920,16 @@ class Job:
                 dst_snaps_with_guids.append(line[: line.rindex("\t")])  # strip off trailing userrefs column
                 if filter_needs_creation_time:
                     creation, guid, name, userrefs = line.split("\t")
-                    assert creation.isdigit()
+                    assert creation.isdecimal()
                 else:
                     guid, name, userrefs = line.split("\t")
-                assert guid.isdigit()
+                validate_zfs_guid(guid)
                 validate_snapshot_prefix(
                     name, dst_dataset, allow_snapshot=not p.delete_dst_bookmarks, allow_bookmark=p.delete_dst_bookmarks
                 )
                 assert userrefs
                 if userrefs not in ("-", "0"):  # ZFS snapshot property userrefs > 0 indicates a zfs hold
-                    assert userrefs.isdigit()
+                    assert userrefs.isdecimal()
                     tag: str = name[name.index("@") + 1 :]
                     held_dst_snapshots.add(tag)  # don't attempt to delete snapshots that carry a `zfs hold`
             if p.delete_dst_bookmarks:
@@ -1947,11 +1948,9 @@ def validate_host_name(host: str, input_text: str) -> None:
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 
-def validate_port(port: str | int | None, message: str) -> None:
-    """Checks that port specification is a valid integer."""
-    if isinstance(port, int):
-        port = str(port)
-    if port and not port.isdigit():
+def validate_port(port: int | None, message: str) -> None:
+    """Checks that port specification is a valid integer, or None."""
+    if port is not None and port <= 0:
         die(message + f"must be empty or a positive integer: '{port}'")
 
 

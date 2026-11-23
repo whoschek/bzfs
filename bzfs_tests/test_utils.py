@@ -2794,7 +2794,7 @@ class TestCurrentDateTime(unittest.TestCase):
         self.assertTrue(actual.strftime(fmt).startswith(expected_prefix))
         suffix = actual.strftime(fmt)[len(expected_prefix) :]
         self.assertIn(suffix[0], ["+", "-"])
-        self.assertTrue(suffix[1:].isdigit())
+        self.assertTrue(suffix[1:].isdecimal())
 
     def test_utc_timezone(self) -> None:
         expected = self.fixed_datetime.astimezone(tz=timezone.utc)
@@ -2843,7 +2843,7 @@ class TestCurrentDateTime(unittest.TestCase):
         expected_prefix = "2024-01-01T20:00:00"
         suffix = actual.strftime(fmt)[len(expected_prefix) :]
         self.assertIn(suffix[0], ["+", "-"])
-        self.assertTrue(suffix[1:].isdigit())
+        self.assertTrue(suffix[1:].isdecimal())
 
     def test_invalid_timezone(self) -> None:
         with self.assertRaises(ValueError) as context:

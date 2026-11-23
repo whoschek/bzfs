@@ -134,12 +134,12 @@ def include_exclude_dataset_regex(regex: str) -> str:
 class TestHelperFunctions(AbstractTestCase):
 
     def test_validate_port(self) -> None:
+        bzfs.validate_port(None, "msg")
         bzfs.validate_port(47, "msg")
-        bzfs.validate_port("47", "msg")
-        bzfs.validate_port(0, "msg")
-        bzfs.validate_port("", "msg")
         with self.assertRaises(SystemExit):
-            bzfs.validate_port("xxx47", "msg")
+            bzfs.validate_port(0, "msg")
+        with self.assertRaises(SystemExit):
+            bzfs.validate_port(-1, "msg")
 
     def test_run_main_with_unexpected_exception(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
