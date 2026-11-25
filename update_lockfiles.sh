@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
-# When bumping an existing dependency version in `pyproject.toml`, regenerate the requirements lock files by running this
+# When bumping an existing dependency version in `pyproject.toml`, update the requirements lock files by running this
 # script. This also pins transitive dependencies. It also respects the cooldown period defined in preinstall_dev.sh.
+#
+# If you want to re-resolve all versions without preserving existing pins, run this first: `rm requirements*.txt`
 
 # shellcheck source=/dev/null
 set -e

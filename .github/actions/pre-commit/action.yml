@@ -30,7 +30,7 @@ runs:
         python3 -m venv .venv
         . .venv/bin/activate
         . ./preinstall_dev.sh
-        python3 -m pip install --require-hashes -r requirements-dev.txt
+        PIP_UPLOADED_PRIOR_TO="" python3 -m pip install --require-hashes --no-deps -r requirements-dev.txt
         python3 -m pip install -e '.[dev]' --no-deps
 
         # In CI, disable pre-commit fail_fast so all hooks run and report.

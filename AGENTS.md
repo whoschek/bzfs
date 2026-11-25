@@ -78,7 +78,7 @@ To understand the system's architecture and features, as necessary:
   python3 -m venv .venv                                            # Create a Python virtual environment
   . .venv/bin/activate                                             # Activate the virtual environment
   . ./preinstall_dev.sh                                            # Prepare install
-  python3 -m pip install --require-hashes -r requirements-dev.txt  # Install all development dependencies
+  PIP_UPLOADED_PRIOR_TO="" python3 -m pip install --require-hashes --no-deps -r requirements-dev.txt  # Install devel dependencies
   python3 -m pip install -e '.[dev]' --no-deps                     # Make source edits take effect without reinstalling
   pre-commit install --install-hooks                               # Set up linters/formatters to run on every commit
   ```

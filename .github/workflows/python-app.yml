@@ -156,7 +156,7 @@ jobs:
           . .venv/bin/activate
           . ./preinstall_dev.sh
           python3 -m pip install pip-audit==2.10.1
-          pip-audit --requirement requirements*.txt
+          pip-audit --strict --disable-pip --requirement requirements*.txt
 
   test_ubuntu_26_04: # currently uses zfs-2.4.1
     needs: create_iteration_test_matrix
