@@ -65,7 +65,7 @@ dev = [  # for development only
   "coverage==7.10.7 ; python_version < '3.10'",    # see https://github.com/nedbat/coveragepy
   "coverage==7.16.2 ; python_version >= '3.10'",   # see https://github.com/nedbat/coveragepy
   "mypy==v1.20.2 ; python_version >= '3.10'",      # see https://github.com/python/mypy
-  "pyrefly==1.4.1",                                # see https://github.com/facebook/pyrefly
+  "pyrefly==1.5.0",                                # see https://github.com/facebook/pyrefly
   "pylint==4.1.4 ; python_version >= '3.10'",      # see https://github.com/pylint-dev/pylint
   "isort==9.0.2 ; python_version >= '3.10'",       # see https://github.com/PyCQA/isort
   "conventional-pre-commit==4.4.0 ; python_version >= '3.9'",  # see https://github.com/compilerla/conventional-pre-commit
@@ -287,6 +287,7 @@ disable = [
     "R",     # refactor
     "W0106", # expression-not-assigned
     "W0108", # unnecessary-lambda
+    "W0212", # protected-access (deferred to pyrefly)
     "W0511", # fixme
     "W0613", # unused-argument
     "W0718", # broad-exception-caught
@@ -337,17 +338,53 @@ disable_error_code = [  # toggles to exclude overly strict `mypy` checks in deve
 python-version = "3.9"
 #project-includes = ["bzfs_*/**"]
 project-excludes = ["lab/**", "_tmp/**"]
-preset = "strict"
-#min-severity = "warn"  # exit with non-zero exit code even on warnings
+preset = "strict"                      # see https://pyrefly.org/en/docs/configuration/#preset-strict
+min-severity = "warn"                  # exit with non-zero exit code even on warnings
 
-[tool.pyrefly.errors]
-deprecated = "error"
+[tool.pyrefly.errors]                  # see https://pyrefly.org/en/docs/error-kinds
 missing-override-decorator = "ignore"  # retain compatibility with Python 3.9
-implicit-any-type-argument = "ignore"
+deprecated = "error"
+empty-body = "error"
+implicit-abstract-class = "error"
+implicit-reexport = "error"
+#import-cycle = "error"  # TODO: enable this on upgrade to pyrefly-1.6
+incompatible-comparison = "error"
+invalid-abstract-method = "error"
+invalid-cast = "error"
+invalid-format-spec = "error"
+missing-super-call = "error"
+no-any-return = "error"
+not-required-key-access = "error"
+string-as-iterable = "error"
+unannotated-return = "error"
+uninitialized-instance-variable = "error"
+unknown-attribute-type = "error"
+unknown-base-class = "error"
+unknown-return-type = "error"
+unreachable = "error"
+untyped-class-decorator = "error"
+untyped-function-decorator = "error"
+untyped-namedtuple = "error"
 
-[[tool.pyrefly.sub-config]]
+[[tool.pyrefly.sub-config]]       # tighten error checking for prod
+matches = "bzfs_main/**"
+treat-all-caps-as-final = true
+type-ignore-unknown-tag-behavior = "no-effect"
+
+[tool.pyrefly.sub-config.errors]  # tighten error checking for prod
+implicitly-defined-attribute = "error"
+protected-access = "error"
+unknown-argument-type = "error"
+unknown-attribute-access = "error"
+unknown-from-error = "error"
+unknown-variable-type = "error"
+
+[[tool.pyrefly.sub-config]]       # relax error checking for tests
 matches = "bzfs_tests/**"
 
 [tool.pyrefly.sub-config.errors]  # relax error checking for tests
 implicit-any-empty-container = "ignore"
 implicit-any-lambda = "ignore"
+implicit-any-type-argument = "ignore"
+unknown-return-type = "hint"
+unreachable = "hint"

@@ -4256,7 +4256,7 @@ class LocalTestCase(IntegrationTestCase):
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
 
-        scenarios = [
+        scenarios: list[tuple[str, int, str, list[str], list[str], list[str]]] = [
             ("resume_target_selected1", 3, ".*s.*", [], ["s1", "s2", "s3"], ["s2", "s3"]),
             ("resume_target_selected2", 3, ".*s2.*", [], ["s1", "s2"], ["s2"]),
             ("resume_target_skipped", 3, ".*s3.*", [], ["s1", "s3"], ["s3"]),
@@ -6094,7 +6094,9 @@ class LocalTestCase(IntegrationTestCase):
                 retain_dst_targets = dst_hosts_pull.copy()
                 retain_dst_targets.update(dst_hosts_push)
                 src_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}}}
-                dst_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}, "offsite": {}}}
+                dst_snapshot_plan: bzfs_jobrunner._SnapshotPlan = {
+                    "z": {"onsite": {"millisecondly": 1, "daily": 0}, "offsite": {}}
+                }
                 src_bookmark_plan = dst_snapshot_plan
                 monitor_dst_snapshot_plan = {
                     "z": {
@@ -6350,7 +6352,7 @@ class LocalTestCase(IntegrationTestCase):
                 self.assertEqual(1, len(snapshots(ibase.DST_ROOT_DATASET)))
 
                 # push replication does nothing if period isn't greater than zero:
-                dst_snapshot_plan_empty = {"z": {"onsite": {"daily": 0}}}
+                dst_snapshot_plan_empty: bzfs_jobrunner._SnapshotPlan = {"z": {"onsite": {"daily": 0}}}
                 push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
                 push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
                 run_jobrunner("--replicate", *push_args_empty)
@@ -6560,7 +6562,7 @@ class LocalTestCase(IntegrationTestCase):
             nonheld_snapshot = take_snapshot(ibase.SRC_ROOT_DATASET, "z_onsite_20000101_000001_millisecondly")
             self.assertEqual("0", snapshot_property(nonheld_snapshot, "userrefs"))
 
-            def monitor_plan(oldest_skip_holds: bool) -> dict[str, dict[str, dict[str, dict[str, Any]]]]:
+            def monitor_plan(oldest_skip_holds: bool) -> bzfs_jobrunner._MonitorPlan:
                 return {
                     "z": {
                         "onsite": {

@@ -438,7 +438,7 @@ def _rollback_dst_dataset_if_necessary(
         try:
             job.run_ssh_command(dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
         except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-            stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+            stderr: str = stderr_to_str(e.stderr) if isinstance(e, subprocess.CalledProcessError) else ""
             retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
             raise RetryableError(display_msg="zfs rollback", retry_immediately_once=retry_immediately_once) from e
@@ -1002,7 +1002,7 @@ def _decode_resume_token(
     try:
         decoded_resume_token: str = job.run_ssh_command(p.src, LOG_DEBUG, cmd=decode_cmd)
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-        stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+        stderr: str = stderr_to_str(e.stderr) if isinstance(e, subprocess.CalledProcessError) else ""
         retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
         # op isn't idempotent so retries regather current state from the start of replicate_dataset()
         raise RetryableError(display_msg="zfs send -t", retry_immediately_once=retry_immediately_once) from e
@@ -1138,7 +1138,7 @@ def _delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str
         job.maybe_inject_error(cmd=cmd, error_trigger="zfs_delete_snapshot")
         job.run_ssh_command(r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-        stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+        stderr: str = stderr_to_str(e.stderr) if isinstance(e, subprocess.CalledProcessError) else ""
         retry_immediately_once: bool = _clear_resumable_recv_state_if_necessary(job, dataset, stderr)
         # op isn't idempotent so retries regather current state from the start of delete_destination_snapshots() or similar
         raise RetryableError(display_msg="zfs destroy snapshot", retry_immediately_once=retry_immediately_once) from e
@@ -1211,8 +1211,8 @@ def _create_zfs_filesystem(job: Job, filesystem: str) -> None:
                 job.run_ssh_command(p.dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
                 # ignore harmless error caused by 'zfs create' without the -u flag, or by dataset already existing
-                stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
-                is_harmless: bool = isinstance(e, subprocess.CalledProcessError) and (
+                stderr: str = stderr_to_str(e.stderr) if isinstance(e, subprocess.CalledProcessError) else ""
+                is_harmless: bool = (
                     "filesystem successfully created, but it may only be mounted by root" in stderr
                     or "filesystem successfully created, but not mounted" in stderr  # SolarisZFS
                     or "dataset already exists" in stderr
@@ -1245,7 +1245,7 @@ def _create_zfs_bookmarks(
         try:
             job.run_ssh_command(remote, LOG_DEBUG, is_dry=p.dry_run, print_stderr=False, cmd=cmd + [bookmark])
         except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-            stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+            stderr: str = stderr_to_str(e.stderr) if isinstance(e, subprocess.CalledProcessError) else ""
             if ": bookmark exists" in stderr:
                 # verify value of actual bookmark GUID is as expected
                 query_cmd: list[str] = p.split_args(f"{p.zfs_program} list -t bookmark -Hp -o guid", bookmark)
@@ -1289,7 +1289,7 @@ def _estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_
         assert retryable_error.__cause__ is not None
         if recv_resume_token:
             e = retryable_error.__cause__
-            stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+            stderr: str = stderr_to_str(getattr(e, "stderr", ""))
             retryable_error.retry_immediately_once = _clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
         # op isn't idempotent so retries regather current state from the start of replicate_dataset()
         raise
@@ -1450,8 +1450,8 @@ def _add_recv_property_options(
             # call for each ZFS user property and each known multiline native property.
             # TODO: perf: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
             try:
-                props_any: dict = _zfs_get(job, p.src, dataset, config.sources, "property", "all", True, cache)
-                props_filtered: dict = filter_properties(p, props_any, config.include_regexes, config.exclude_regexes)
+                props_any = _zfs_get(job, p.src, dataset, config.sources, "property", "all", True, cache)
+                props_filtered = filter_properties(p, props_any, config.include_regexes, config.exclude_regexes)
                 if config is p.zfs_recv_x_config:
                     props = props_filtered
                 else:

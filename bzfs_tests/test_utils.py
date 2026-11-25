@@ -546,13 +546,14 @@ class TestHelperFunctions(unittest.TestCase):
         validate_snapshot_prefix("pool/fs@snap", dataset, allow_bookmark=True)
         validate_snapshot_prefix("pool/fs#snap", dataset, allow_bookmark=True)
         validate_snapshot_prefix("pool/fs#snap", dataset, allow_snapshot=False, allow_bookmark=True)
-        for name, options in (
+        cases: tuple[tuple[str, dict[str, bool]], ...] = (
             ("pool/fs#snap", {}),
             ("pool/fs@snap", {"allow_snapshot": False, "allow_bookmark": True}),
             ("pool/fs2@snap", {}),
             ("pool/fs/child#snap", {"allow_bookmark": True}),
             ("pool/other@snap", {}),
-        ):
+        )
+        for name, options in cases:
             with self.subTest(name=name, options=options):
                 with self.assertRaises(AssertionError) as cm:
                     validate_snapshot_prefix(name, dataset, **options)

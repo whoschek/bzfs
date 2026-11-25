@@ -35,6 +35,8 @@ from dataclasses import (
 )
 from typing import (
     TYPE_CHECKING,
+    TypeVar,
+    Union,
     final,
 )
 
@@ -86,6 +88,10 @@ class _ComparableSnapshot:
     cols: list[str] = field(compare=False)  # excluded from comparison/equality checks
 
 
+_SnapshotEntry = Union[tuple[str, _ComparableSnapshot], tuple[str, _ComparableSnapshot, _ComparableSnapshot]]  # Type alias
+_T = TypeVar("_T")
+
+
 def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: list[str]) -> None:
     """Compares source and destination dataset trees recursively with respect to snapshots, for example to check if all
     recently taken snapshots have been successfully replicated by a periodic job; implements --compare-snapshot-lists.
@@ -115,7 +121,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         """Extracts the dataset name from a ZFS output line whose final column is a snapshot or bookmark name."""
         return line.rsplit("\t", 1)[1].replace("#", "@", 1).split("@", 1)[0]
 
-    def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Iterator[str]:
+    def _zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Iterator[str]:
         """Lists snapshots sorted by dataset name; All snapshots of a given dataset will be adjacent."""
         assert (not job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
         # Also see https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
@@ -132,7 +138,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
                 lines.sort(key=_dataset_name)  # stable sort by dataset name
             yield from lines
 
-    def snapshot_iterator(
+    def _snapshot_iterator(
         r: Remote, sorted_datasets: list[str], root_dataset: str, sorted_itr: Iterator[str]
     ) -> Iterator[_ComparableSnapshot]:
         """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that any two snapshots
@@ -165,15 +171,17 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
                 key = (rel_dataset, guid)  # ensures src snapshots and dst snapshots with the same GUID will be adjacent
                 yield _ComparableSnapshot(key, cols)
 
-    def print_dataset(rel_dataset: str, entries: Iterable[tuple[str, _ComparableSnapshot]]) -> None:
-        entries = sorted(  # fetch all snapshots of current dataset and sort em by creation, createtxg, snapshot_tag
-            entries,
-            key=lambda entry: (
-                int((cols := entry[1].cols)[0]),  # creation
+    def _print_dataset(rel_dataset: str, entries: Iterable[_SnapshotEntry]) -> None:
+        def _snapshot_sort_key(entry: _SnapshotEntry) -> tuple[int, int, str]:
+            """Order comparison rows by creation time, createtxg, then tag for both snapshots and bookmarks."""
+            cols = entry[1].cols
+            return (
+                int(cols[0]),  # creation
                 int(cols[2]),  # createtxg
                 cols[-1].replace("#", "@", 1).split("@", 1)[1],  # snapshot_tag
-            ),
-        )
+            )
+
+        entries = sorted(entries, key=_snapshot_sort_key)
 
         @dataclass
         @final
@@ -271,11 +279,11 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         log.info("%s", "\n".join(msgs))
 
     # setup streaming pipeline
-    src_snapshot_itr: Iterator = snapshot_iterator(
-        src, src_datasets, src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets)
+    src_snapshot_itr = _snapshot_iterator(
+        src, src_datasets, src.root_dataset, _zfs_list_snapshot_iterator(src, src_datasets)
     )
-    dst_snapshot_itr: Iterator = snapshot_iterator(
-        dst, dst_datasets, dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets)
+    dst_snapshot_itr = _snapshot_iterator(
+        dst, dst_datasets, dst.root_dataset, _zfs_list_snapshot_iterator(dst, dst_datasets)
     )
     merge_itr = _merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snapshot_itr, dst_snapshot_itr)
 
@@ -290,7 +298,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     with open_nofollow(tmp_tsv_file, "w", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
         # streaming group by rel_dataset (consumes constant memory only); entry is a Tuple[str, ComparableSnapshot]
         groups = itertools.groupby(merge_itr, key=lambda entry: entry[1].key[0])
-        _print_datasets(groups, lambda rel_ds, entries: print_dataset(rel_ds, entries), rel_src_or_dst)
+        _print_datasets(groups, _print_dataset, rel_src_or_dst)
     os.rename(tmp_tsv_file, tsv_file)
     log.info("%s", f"Final TSV output file comparing {task} is: {tsv_file}")
 
@@ -311,7 +319,9 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
     os.rename(tmp_tsv_file, tsv_file)
 
 
-def _print_datasets(groups: itertools.groupby, fn: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
+def _print_datasets(
+    groups: itertools.groupby[str, _T], fn: Callable[[str, Iterable[_T]], None], rel_datasets: Iterable[str]
+) -> None:
     """Iterate over grouped datasets and apply fn, adding gaps for missing ones."""
     rel_datasets = sorted(rel_datasets)
     n = len(rel_datasets)
@@ -333,7 +343,7 @@ def _merge_sorted_iterators(
     choice: str,  # Example: "src+dst+all"
     src_itr: Iterator[_ComparableSnapshot],
     dst_itr: Iterator[_ComparableSnapshot],
-) -> Iterator[tuple[str, _ComparableSnapshot] | tuple[str, _ComparableSnapshot, _ComparableSnapshot]]:
+) -> Iterator[_SnapshotEntry]:
     """The typical pipelined merge algorithm of a merge sort, slightly adapted to our specific use case."""
     assert len(choices) == 3
     assert choice

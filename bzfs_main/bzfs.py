@@ -279,10 +279,10 @@ class Job:
         self.max_exceptions_to_summarize: int = 10000
         self.first_exception: BaseException | None = None
         self.worst_exception: BaseException | None = None
-        self.remote_conf_cache: dict[tuple, RemoteConfCacheItem] = {}
+        self.remote_conf_cache: dict[tuple[str, str, int | None, str | None], RemoteConfCacheItem] = {}
         self.max_datasets_per_minibatch_on_list_snaps: dict[str, int] = {}
         self.max_workers: dict[str, int] = {}
-        self.progress_reporter: ProgressReporter = cast(ProgressReporter, None)
+        self.progress_reporter: ProgressReporter  # initialized in run_tasks() after options and logging are available
         self.is_first_replication_task: Final[SynchronizedBool] = SynchronizedBool(True)
         self.replication_start_time_nanos: int = time.monotonic_ns()
         self.timeout_nanos: int | None = None  # timestamp aka instant in time
@@ -316,7 +316,7 @@ class Job:
         with xfinally(self.subprocesses.terminate_process_subtrees):
             self.shutdown()
 
-    def _retry_template(self) -> RetryTemplate:
+    def _retry_template(self) -> RetryTemplate[bool]:
         p = self.params
         return RetryTemplate(policy=p.retry_policy.copy(timing=self.retry_timing), log=p.log)
 
@@ -1309,7 +1309,7 @@ class Job:
             maybe_stale_dst_datasets: list[str] = []
             userhost_dir: str = sha256_85_urlsafe_base64(p.dst.cache_namespace())
             # filter_key: cache is only valid if same --include/excl-snapshot*, --skip-missing-snapshots, --no-use-bookmark
-            filter_key: tuple = (p.snapshot_filters, p.skip_missing_snapshots, p.use_bookmark)
+            filter_key = (p.snapshot_filters, p.skip_missing_snapshots, p.use_bookmark)
             filter_hash_code: str = sha256_85_urlsafe_base64(str(filter_key))
             for src_dataset in src_datasets:
                 dst_dataset: str = src2dst(src_dataset)  # cache is only valid for identical destination dataset

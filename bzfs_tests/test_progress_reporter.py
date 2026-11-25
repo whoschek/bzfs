@@ -442,7 +442,7 @@ class TestHelperFunctions(unittest.TestCase):
         reporter = ProgressReporter(log, [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
         fds: list[IO[Any]] = []
         selector = MagicMock()
-        selector.select.return_value = []
+        selector.select.return_value = list[tuple[selectors.SelectorKey, int]]()
         with patch("sys.stdout.write"), patch("sys.stdout.flush"):
             with self.assertRaises(ValueError):
                 reporter._inject_error = True
@@ -456,7 +456,7 @@ class TestHelperFunctions(unittest.TestCase):
         with reporter._lock:
             reporter._file_name_queue.add(pv_file)
         selector = MagicMock()
-        selector.select.return_value = []
+        selector.select.return_value = list[tuple[selectors.SelectorKey, int]]()
         with (
             patch.object(progress_reporter, "open_nofollow", side_effect=FileNotFoundError()),
             patch.object(Path, "touch", lambda self, *args, **kwargs: None),
@@ -527,7 +527,7 @@ class TestHelperFunctions(unittest.TestCase):
 
         reporter._sleeper.sleep = fake_sleep  # type: ignore[assignment]
         selector = MagicMock()
-        selector.select.return_value = []
+        selector.select.return_value = list[tuple[selectors.SelectorKey, int]]()
         reporter._run_internal(fds, selector)
         self.assertEqual(1, sleep_count)
 
@@ -569,7 +569,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual([State.IS_RESETTING], reporter._states)
         fds: list[IO[Any]] = []
         selector = MagicMock()
-        selector.select.return_value = []
+        selector.select.return_value = list[tuple[selectors.SelectorKey, int]]()
         with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
             with self.assertRaises(ValueError):
                 reporter._inject_error = True
@@ -607,7 +607,7 @@ class TestHelperFunctions(unittest.TestCase):
 
         reporter._sleeper.sleep = fake_sleep  # type: ignore[assignment]
         selector = MagicMock()
-        selector.select.return_value = []
+        selector.select.return_value = list[tuple[selectors.SelectorKey, int]]()
         reporter._run_internal(fds, selector)
         self.assertEqual(1, sleep_count)
         self.assertListEqual([], reporter._states)

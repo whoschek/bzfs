@@ -462,7 +462,7 @@ class TestSnapshotCache(AbstractTestCase):
         unheld = stale + "\t0"
         unrelated = f"{DST_DATASET}@unrelated\t1\t900\t0"
         no_latest = ["--monitor-snapshots-no-latest-check"]
-        cases = [
+        cases: list[tuple[str, list[str], bool, list[str], tuple[int, str]]] = [
             ("fresh held", [fresh], True, [], (0, "")),
             ("stale held", [held], True, [], (-CRITICAL_STATUS, "Latest")),
             ("oldest only held", [held], True, no_latest, (0, "")),
@@ -542,7 +542,7 @@ class TestSnapshotCache(AbstractTestCase):
 
     def test_monitor_hold_filter_preserves_unaffected_cache_hits(self) -> None:
         """Keep cached alerts usable when hold filtering is off or the oldest check is disabled."""
-        cases = [
+        cases: list[tuple[bool, list[str], tuple[int, str]]] = [
             (False, [], (-CRITICAL_STATUS, "Oldest")),
             (True, ["--monitor-snapshots-no-oldest-check"], (0, "")),
         ]

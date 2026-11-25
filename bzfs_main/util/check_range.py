@@ -62,16 +62,16 @@ class CheckRange(argparse.Action):
     def interval(self) -> str:
         """Returns a human-readable description of the allowed range."""
         if hasattr(self, "min"):
-            lo = f"[{self.min}"
+            lo = f"[{self.min}"  # pyrefly: ignore[unknown-attribute-access]
         elif hasattr(self, "inf"):
-            lo = f"({self.inf}"
+            lo = f"({self.inf}"  # pyrefly: ignore[unknown-attribute-access]
         else:
             lo = "(-infinity"
 
         if hasattr(self, "max"):
-            up = f"{self.max}]"
+            up = f"{self.max}]"  # pyrefly: ignore[unknown-attribute-access]
         elif hasattr(self, "sup"):
-            up = f"{self.sup})"
+            up = f"{self.sup})"  # pyrefly: ignore[unknown-attribute-access]
         else:
             up = "+infinity)"
 

@@ -34,9 +34,6 @@ from collections.abc import (
 from pathlib import (
     Path,
 )
-from typing import (
-    Any,
-)
 from unittest.mock import (
     MagicMock,
     patch,
@@ -871,7 +868,7 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual(DIE_STATUS, context.exception.code)
 
     def test_MonitorSnapshotsConfig(self) -> None:  # noqa: N802
-        def plan(alerts: dict[str, Any]) -> str:
+        def plan(alerts: dict[str, configuration.MonitorAlertSettings]) -> str:
             return str({"z": {"onsite": {"100millisecondly": alerts}}})
 
         params = self.make_params(args=bzfs.argument_parser().parse_args(["src", "dst"]))
@@ -898,6 +895,7 @@ class TestHelperFunctions(AbstractTestCase):
             ]
         )
         config = configuration.MonitorSnapshotsConfig(args, params)
+        self.assertEqual(3, config.monitor_snapshots["z"]["onsite"]["100millisecondly"]["oldest"]["cycles"])
         self.assertTrue(str(config))
         self.assertListEqual([None], [alert.latest for alert in config.alerts])
         self.assertListEqual(

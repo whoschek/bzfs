@@ -104,7 +104,7 @@ def detect_available_programs(job: Job) -> None:
     todo: list[Remote] = []
     for r in [p.dst, p.src]:
         loc: str = r.location
-        remote_conf_cache_key: tuple = r.cache_key()
+        remote_conf_cache_key = r.cache_key()
         cache_item: RemoteConfCacheItem | None = job.remote_conf_cache.get(remote_conf_cache_key)
         if cache_item is not None:
             # startup perf: cache avoids ssh connect setup and feature detection roundtrips on revisits to same site
@@ -126,7 +126,7 @@ def detect_available_programs(job: Job) -> None:
 
     def run_detect(r: Remote) -> None:  # thread-safe
         loc: str = r.location
-        remote_conf_cache_key: tuple = r.cache_key()
+        remote_conf_cache_key = r.cache_key()
         connection_pools: ConnectionPools = p.connection_pools[loc]
 
         def _cleanup_uncached_pools() -> None:
@@ -312,7 +312,7 @@ def is_dummy(r: Remote) -> bool:
     return r.root_dataset == DUMMY_DATASET
 
 
-def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict) -> dict[str, str]:
+def _detect_zpool_features(job: Job, remote: Remote, available_programs: dict[str, str]) -> dict[str, str]:
     """Fills ``job.params.zpool_features`` with detected zpool capabilities."""
     p = params = job.params
     r, loc, log = remote, remote.location, p.log

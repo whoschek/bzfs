@@ -74,9 +74,6 @@ from bzfs_main.replication import (
     _pv_cmd,
     replicate_dataset,
 )
-from bzfs_main.snapshot_cache import (
-    SnapshotCache,
-)
 from bzfs_main.util.connection import (
     ConnectionPools,
 )
@@ -336,7 +333,7 @@ class TestHelperFunctions(AbstractTestCase):
     def test_root_datasets_if_recursive_zfs_snapshot_is_possible(self) -> None:
         """Also exhaustively compares optimized root dataset detection against a baseline impl that is slow but correct."""
 
-        def run_filter(src_datasets: list[str], basis_src_datasets: list[str]) -> list[str]:
+        def run_filter(src_datasets: list[str], basis_src_datasets: list[str]) -> list[str] | None:
             assert set(src_datasets).issubset(set(basis_src_datasets))
             src_datasets = sorted(src_datasets)
             basis_src_datasets = sorted(basis_src_datasets)
@@ -346,84 +343,80 @@ class TestHelperFunctions(AbstractTestCase):
             job = bzfs.Job()
             job.is_test_mode = True
             actual = job.root_datasets_if_recursive_zfs_snapshot_is_possible(src_datasets, basis_src_datasets)
-            if expected is not None:
-                self.assertListEqual(expected, cast(list[str], actual))
             self.assertEqual(expected, actual)
             expected = self.root_datasets_if_recursive_zfs_snapshot_is_possible_faster_but_not_ideal(
                 src_datasets, basis_src_datasets
             )
-            if expected is not None:
-                self.assertListEqual(expected, cast(list[str], actual))
             self.assertEqual(expected, actual)
-            return cast(list[str], actual)
+            return actual
 
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/d"]
-        self.assertListEqual([], run_filter([], basis_src_datasets))
-        self.assertListEqual(["a"], run_filter(basis_src_datasets, basis_src_datasets))
-        self.assertIsNone(cast(None, run_filter(["a", "a/b", "a/b/c"], basis_src_datasets)))
-        self.assertIsNone(cast(None, run_filter(["a/b", "a/d"], basis_src_datasets)))
-        self.assertListEqual(["a/b"], run_filter(["a/b", "a/b/c"], basis_src_datasets))
-        self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
-        self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
-        self.assertListEqual(["a/d"], run_filter(["a/d"], basis_src_datasets))
+        self.assertEqual([], run_filter([], basis_src_datasets))
+        self.assertEqual(["a"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertIsNone(run_filter(["a", "a/b", "a/b/c"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a/b", "a/d"], basis_src_datasets))
+        self.assertEqual(["a/b"], run_filter(["a/b", "a/b/c"], basis_src_datasets))
+        self.assertEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
+        self.assertEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
+        self.assertEqual(["a/d"], run_filter(["a/d"], basis_src_datasets))
 
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/d", "e", "e/f"]
-        self.assertListEqual(["a", "e"], run_filter(basis_src_datasets, basis_src_datasets))
-        self.assertIsNone(cast(None, run_filter(["e"], basis_src_datasets)))
-        self.assertListEqual(["e/f"], run_filter(["e/f"], basis_src_datasets))
-        self.assertListEqual(["a", "e/f"], run_filter(["a", "a/b", "a/b/c", "a/d", "e/f"], basis_src_datasets))
-        self.assertListEqual(["a/b"], run_filter(["a/b", "a/b/c"], basis_src_datasets))
-        self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
-        self.assertListEqual(["a/d"], run_filter(["a/d"], basis_src_datasets))
-        self.assertIsNone(cast(None, run_filter(["a/b", "a/d"], basis_src_datasets)))
-        self.assertIsNone(cast(None, run_filter(["a", "a/b", "a/d"], basis_src_datasets)))
+        self.assertEqual(["a", "e"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertIsNone(run_filter(["e"], basis_src_datasets))
+        self.assertEqual(["e/f"], run_filter(["e/f"], basis_src_datasets))
+        self.assertEqual(["a", "e/f"], run_filter(["a", "a/b", "a/b/c", "a/d", "e/f"], basis_src_datasets))
+        self.assertEqual(["a/b"], run_filter(["a/b", "a/b/c"], basis_src_datasets))
+        self.assertEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
+        self.assertEqual(["a/d"], run_filter(["a/d"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a/b", "a/d"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a", "a/b", "a/d"], basis_src_datasets))
 
         basis_src_datasets = ["a", "e", "h"]
-        self.assertListEqual([], run_filter([], basis_src_datasets))
-        self.assertListEqual(["a", "e", "h"], run_filter(basis_src_datasets, basis_src_datasets))
-        self.assertListEqual(["a", "e"], run_filter(["a", "e"], basis_src_datasets))
-        self.assertListEqual(["e", "h"], run_filter(["e", "h"], basis_src_datasets))
-        self.assertListEqual(["a", "h"], run_filter(["a", "h"], basis_src_datasets))
-        self.assertListEqual(["a"], run_filter(["a"], basis_src_datasets))
-        self.assertListEqual(["e"], run_filter(["e"], basis_src_datasets))
-        self.assertListEqual(["h"], run_filter(["h"], basis_src_datasets))
+        self.assertEqual([], run_filter([], basis_src_datasets))
+        self.assertEqual(["a", "e", "h"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertEqual(["a", "e"], run_filter(["a", "e"], basis_src_datasets))
+        self.assertEqual(["e", "h"], run_filter(["e", "h"], basis_src_datasets))
+        self.assertEqual(["a", "h"], run_filter(["a", "h"], basis_src_datasets))
+        self.assertEqual(["a"], run_filter(["a"], basis_src_datasets))
+        self.assertEqual(["e"], run_filter(["e"], basis_src_datasets))
+        self.assertEqual(["h"], run_filter(["h"], basis_src_datasets))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g"]
-        self.assertListEqual([], run_filter([], basis_src_datasets))
-        self.assertListEqual(["a", "e", "h"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertEqual([], run_filter([], basis_src_datasets))
+        self.assertEqual(["a", "e", "h"], run_filter(basis_src_datasets, basis_src_datasets))
 
-        self.assertIsNone(cast(None, run_filter(["a", "h"], basis_src_datasets)))
-        self.assertListEqual(["a", "h/g"], run_filter(["a", "h/g"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a", "h"], basis_src_datasets))
+        self.assertEqual(["a", "h/g"], run_filter(["a", "h/g"], basis_src_datasets))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "k", "k/l"]
-        self.assertListEqual([], run_filter([], basis_src_datasets))
-        self.assertListEqual(["a", "e", "h", "k"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertEqual([], run_filter([], basis_src_datasets))
+        self.assertEqual(["a", "e", "h", "k"], run_filter(basis_src_datasets, basis_src_datasets))
 
-        self.assertIsNone(cast(None, run_filter(["a", "h"], basis_src_datasets)))
-        self.assertListEqual(["a", "h/g"], run_filter(["a", "h/g"], basis_src_datasets))
-        self.assertIsNone(cast(None, run_filter(["a", "k"], basis_src_datasets)))
-        self.assertListEqual(["a", "k/l"], run_filter(["a", "k/l"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a", "h"], basis_src_datasets))
+        self.assertEqual(["a", "h/g"], run_filter(["a", "h/g"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a", "k"], basis_src_datasets))
+        self.assertEqual(["a", "k/l"], run_filter(["a", "k/l"], basis_src_datasets))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "hh", "hh/g", "k", "kk", "k/l", "kk/l"]
-        self.assertIsNone(cast(None, run_filter(["a", "hh"], basis_src_datasets)))
-        self.assertListEqual(["a", "hh/g"], run_filter(["a", "hh/g"], basis_src_datasets))
-        self.assertIsNone(cast(None, run_filter(["kk"], basis_src_datasets)))
-        self.assertListEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
-        self.assertIsNone(cast(None, run_filter(["k"], basis_src_datasets)))
-        self.assertListEqual(["k/l"], run_filter(["k/l"], basis_src_datasets))
-        self.assertIsNone(cast(None, run_filter(["h"], basis_src_datasets)))
-        self.assertListEqual(["h/g"], run_filter(["h/g"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a", "hh"], basis_src_datasets))
+        self.assertEqual(["a", "hh/g"], run_filter(["a", "hh/g"], basis_src_datasets))
+        self.assertIsNone(run_filter(["kk"], basis_src_datasets))
+        self.assertEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
+        self.assertIsNone(run_filter(["k"], basis_src_datasets))
+        self.assertEqual(["k/l"], run_filter(["k/l"], basis_src_datasets))
+        self.assertIsNone(run_filter(["h"], basis_src_datasets))
+        self.assertEqual(["h/g"], run_filter(["h/g"], basis_src_datasets))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "hh", "hh/g", "kk", "kk/l"]
-        self.assertIsNone(cast(None, run_filter(["kk"], basis_src_datasets)))
-        self.assertListEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
-        self.assertIsNone(cast(None, run_filter(["hh"], basis_src_datasets)))
+        self.assertIsNone(run_filter(["kk"], basis_src_datasets))
+        self.assertEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
+        self.assertIsNone(run_filter(["hh"], basis_src_datasets))
 
         # sorted()
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/B", "a/B/c", "a/D", "a/X", "a/X/c"]
-        self.assertListEqual(["a/D", "a/b"], run_filter(["a/b", "a/b/c", "a/D"], basis_src_datasets))
-        self.assertListEqual(["a/B", "a/D", "a/b"], run_filter(["a/B", "a/B/c", "a/b", "a/b/c", "a/D"], basis_src_datasets))
-        self.assertListEqual(["a/B", "a/D", "a/X"], run_filter(["a/B", "a/B/c", "a/X", "a/X/c", "a/D"], basis_src_datasets))
+        self.assertEqual(["a/D", "a/b"], run_filter(["a/b", "a/b/c", "a/D"], basis_src_datasets))
+        self.assertEqual(["a/B", "a/D", "a/b"], run_filter(["a/B", "a/B/c", "a/b", "a/b/c", "a/D"], basis_src_datasets))
+        self.assertEqual(["a/B", "a/D", "a/X"], run_filter(["a/B", "a/B/c", "a/X", "a/X/c", "a/D"], basis_src_datasets))
 
         exhaustive_basis_sets: list[list[str]] = [
             ["pool", "pool/a", "pool/a-copy", "pool/a-copy/child", "pool/a/child"],
@@ -741,7 +734,7 @@ class TestAdditionalHelpers(AbstractTestCase):
     def test_job_shutdown_calls_pool_shutdown(self) -> None:
         job = bzfs.Job()
         mock_pool = MagicMock()
-        job.remote_conf_cache = {("k",): RemoteConfCacheItem(mock_pool, {}, {})}
+        job.remote_conf_cache = {("src", "host", None, None): RemoteConfCacheItem(mock_pool, {}, {})}
         job.shutdown()
         mock_pool.shutdown.assert_called_once()
 
@@ -2173,7 +2166,6 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
             def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
                 """Do nothing for tests."""
 
-        job.cache = cast(SnapshotCache, FakeCache())
         job.src_properties = {
             "tank/a": bzfs.DatasetProperties(0, creation_time_a, written=0),
             "tank/b": bzfs.DatasetProperties(0, 456, written=0),
@@ -2199,6 +2191,7 @@ class TestFindDatasetsToSnapshot(AbstractTestCase):
 
         with (
             patch("bzfs_main.bzfs.is_caching_snapshots", return_value=True),
+            patch.object(job, "cache", FakeCache()),
             patch.object(bzfs.Job, "handle_minmax_snapshots", new=fake_handle),
             patch("bzfs_main.bzfs.set_last_modification_time_safe"),
         ):
@@ -2367,7 +2360,7 @@ class TestTerminationEventBehavior(AbstractTestCase):
         """sleep_until_next_daemon_iteration returns early with False when termination_event is set during wait."""
         job = self.make_job(["src", "dst"])
 
-        job.progress_reporter = cast(ProgressReporter, self._DummyPR())
+        job.progress_reporter = MagicMock(spec=ProgressReporter)
         # Provide required log file attribute for logging in sleep_until_next_daemon_iteration
         job.params.log_params.log_file = "dummy.log"
 

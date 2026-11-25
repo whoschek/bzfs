@@ -139,7 +139,7 @@ class TestCompareSnapshotLists(AbstractTestCase):
             calls.append((rel_ds, [val for _, val in entries]))
 
         _print_datasets(group, capture, ["c", "a", "b"])
-        expected = [("a", []), ("b", [1, 2]), ("c", [])]
+        expected: list[tuple[str, list[int]]] = [("a", []), ("b", [1, 2]), ("c", [])]
         self.assertEqual(expected, calls)
 
     def test_print_datasets_handles_empty_group(self) -> None:

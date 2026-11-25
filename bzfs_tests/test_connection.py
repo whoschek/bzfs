@@ -37,15 +37,17 @@ from collections import (
 from collections.abc import (
     Generator,
 )
+from dataclasses import (
+    dataclass,
+    field,
+)
 from pathlib import (
     Path,
-)
-from types import (
-    SimpleNamespace,
 )
 from typing import (
     Any,
     cast,
+    final,
 )
 from unittest.mock import (
     MagicMock,
@@ -236,18 +238,12 @@ class TestConnectionPool(AbstractTestCase):
         with get_tmpdir() as ssh_socket_dir:
             args = self.argparser_parse_args(["src", "dst"])  # do not set --ssh-exit-on-shutdown
             p = self.make_params(args=args)
-            remote = cast(
-                Remote,
-                _FakeRemote(
-                    params=p,
-                    location="dst",
-                    ssh_user_host="host",
-                    reuse_ssh_connection=True,
-                    ssh_exit_on_shutdown=False,
-                    ssh_control_persist_secs=90,
-                    ssh_extra_opts=[],
-                    ssh_socket_dir=ssh_socket_dir,
-                ),
+            remote = _FakeRemote(
+                params=p,
+                location="dst",
+                ssh_user_host="host",
+                ssh_exit_on_shutdown=False,
+                ssh_socket_dir=ssh_socket_dir,
             )
             cpool = ConnectionPool(remote, SHARED, 1)
             try:
@@ -550,7 +546,7 @@ class TestSimpleMiniRemote(AbstractTestCase):
 
     def test_none_log_raises_valueerror(self) -> None:
         with self.assertRaises(ValueError):
-            connection.create_simple_miniremote(log=cast(logging.Logger, None), ssh_user_host="user@h")
+            connection.create_simple_miniremote(log=None, ssh_user_host="user@h")  # type: ignore[arg-type]  # Exercise invalid input.
 
     def test_local_ssh_command_branching(self) -> None:
         r = connection.create_simple_miniremote(log=self.log, ssh_user_host="user@h", reuse_ssh_connection=False)
@@ -837,7 +833,7 @@ class TestQuoting(AbstractTestCase):
 
 
 def make_fake_params() -> Params:
-    mock = MagicMock(spec=Params)
+    mock: Params = MagicMock(spec=Params)
     mock.log = logging.getLogger(__name__)
     mock.ssh_program = "ssh"
     mock.connection_pools = {}
@@ -845,24 +841,27 @@ def make_fake_params() -> Params:
 
 
 #############################################################################
-class _FakeRemote(SimpleNamespace):
+@dataclass
+@final
+class _FakeRemote:
     """Provide SSH defaults that individual connection tests can override by keyword."""
 
+    location: str
+    ssh_user_host: str
+    params: Params = field(default_factory=make_fake_params)
     ssh_extra_opts: tuple[str, ...] = ()
+    reuse_ssh_connection: bool = True
+    ssh_control_persist_secs: int = 90
     ssh_control_persist_margin_secs: int = 2
-    pool: str = SHARED
-
-    def __init__(self, *, params: Params | None = None, ssh_socket_dir: str | None = None, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self.params = make_fake_params() if params is None else params
-        self.ssh_socket_dir = tempfile.mkdtemp(prefix=TEST_DIR_PREFIX) if ssh_socket_dir is None else ssh_socket_dir
+    ssh_exit_on_shutdown: bool = False
+    ssh_socket_dir: str = field(default_factory=lambda: tempfile.mkdtemp(prefix=TEST_DIR_PREFIX))
 
     def cache_namespace(self) -> str:
         """Return a fixed namespace so test connections to this remote share leases."""
         return "user@host#22#cfg"
 
-    def local_ssh_command(self, socket_path: str | None = None) -> tuple[tuple[str, ...], str | None]:
-        return ("ssh", self.ssh_user_host or "localhost"), socket_path
+    def local_ssh_command(self, socket_file: str | None = None) -> tuple[tuple[str, ...], str | None]:
+        return ("ssh", self.ssh_user_host or "localhost"), socket_file
 
     def is_ssh_available(self) -> bool:
         return True
@@ -875,15 +874,11 @@ class TestRunSshCommand(AbstractTestCase):
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
         self.job.timeout_nanos = None
-        self.remote = cast(
-            Remote,
-            _FakeRemote(
-                location="dst", ssh_user_host="", reuse_ssh_connection=True, ssh_control_persist_secs=90, ssh_extra_opts=[]
-            ),
-        )
+        self.remote = _FakeRemote(location="dst", ssh_user_host="")
         self.conn_pools = ConnectionPools(remote=self.remote, capacities={SHARED: 1})
         self.conn_pool = self.conn_pools.pool(SHARED)
-        self.pooled_remote = cast(Remote, self.conn_pool._remote)
+        assert isinstance(self.conn_pool._remote, _FakeRemote)
+        self.pooled_remote = self.conn_pool._remote
         self.conn: Connection | None = None
 
         original_connection = self.conn_pool.connection
@@ -991,9 +986,7 @@ class TestTrySshCommand(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
-        self.remote = cast(
-            Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
-        )
+        self.remote = _FakeRemote(location="dst", ssh_user_host="host")
 
     @patch("bzfs_main.bzfs.Job.run_ssh_command", return_value="ok")
     @patch("bzfs_main.bzfs.Job.maybe_inject_error")
@@ -1043,19 +1036,14 @@ class TestRefreshSshConnection(AbstractTestCase):
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
         self.job.timeout_nanos = None
-        self.remote = cast(
-            Remote,
-            _FakeRemote(
-                params=self.job.params,
-                location="dst",
-                ssh_user_host="host",
-                reuse_ssh_connection=True,
-                ssh_control_persist_secs=4,
-                ssh_exit_on_shutdown=True,
-                ssh_extra_opts=[],
-            ),
+        self.remote = _FakeRemote(
+            params=self.job.params,
+            location="dst",
+            ssh_user_host="host",
+            ssh_control_persist_secs=4,
+            ssh_control_persist_margin_secs=1,
+            ssh_exit_on_shutdown=True,
         )
-        self.remote.ssh_control_persist_margin_secs = 1
         self.conn = connection.Connection(self.remote, 1)
 
     @patch("bzfs_main.util.utils.Subprocesses.subprocess_run")
@@ -1119,18 +1107,13 @@ class TestRefreshSshConnection(AbstractTestCase):
         """
         mock_run.return_value = MagicMock(returncode=0)
         with get_tmpdir() as ssh_socket_dir:
-            remote = cast(
-                Remote,
-                _FakeRemote(
-                    params=self.job.params,
-                    location="dst",
-                    ssh_user_host="host",
-                    reuse_ssh_connection=True,
-                    ssh_control_persist_secs=4,
-                    ssh_exit_on_shutdown=False,  # acquire lease
-                    ssh_extra_opts=[],
-                    ssh_socket_dir=ssh_socket_dir,
-                ),
+            remote = _FakeRemote(
+                params=self.job.params,
+                location="dst",
+                ssh_user_host="host",
+                ssh_control_persist_secs=4,
+                ssh_exit_on_shutdown=False,  # acquire lease
+                ssh_socket_dir=ssh_socket_dir,
             )
             cpool = ConnectionPool(remote, SHARED, 1)
             conn = cpool.get_connection()
@@ -1366,16 +1349,11 @@ class TestSshExitOnShutdown(AbstractTestCase):
 
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
-        r = cast(
-            Remote,
-            _FakeRemote(
-                params=p,
-                location="src",
-                ssh_user_host="host",
-                reuse_ssh_connection=True,
-                ssh_exit_on_shutdown=True,
-                ssh_extra_opts=[],
-            ),
+        r = _FakeRemote(
+            params=p,
+            location="src",
+            ssh_user_host="host",
+            ssh_exit_on_shutdown=True,
         )
         conn: Connection = Connection(r, 1)
         conn.shutdown("test")
@@ -1402,18 +1380,12 @@ class TestSshExitOnShutdown(AbstractTestCase):
         with get_tmpdir() as ssh_socket_dir:
             args = self.argparser_parse_args(["src", "dst"])  # default is to NOT exit masters immediately
             p = self.make_params(args=args)
-            r = cast(
-                Remote,
-                _FakeRemote(
-                    params=p,
-                    location="src",
-                    ssh_user_host="host",
-                    reuse_ssh_connection=True,
-                    ssh_exit_on_shutdown=False,
-                    ssh_control_persist_secs=90,
-                    ssh_extra_opts=[],
-                    ssh_socket_dir=ssh_socket_dir,
-                ),
+            r = _FakeRemote(
+                params=p,
+                location="src",
+                ssh_user_host="host",
+                ssh_exit_on_shutdown=False,
+                ssh_socket_dir=ssh_socket_dir,
             )
             cpool = ConnectionPool(r, SHARED, 1)
             conn: Connection = cpool.get_connection()

@@ -78,6 +78,10 @@ from bzfs_main import (
 from bzfs_main.argparse_cli import (
     PROG_AUTHOR,
 )
+from bzfs_main.configuration import (
+    ExpandedMonitorPlan,
+    MonitorAlertSettings,
+)
 from bzfs_main.detect import (
     DUMMY_DATASET,
 )
@@ -123,6 +127,9 @@ PROG_NAME: Final[str] = "bzfs_jobrunner"
 SRC_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^SRC_HOST"  # noqa: S105
 DST_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^DST_HOST"  # noqa: S105
 SEP: Final[str] = ","
+
+_SnapshotPlan = dict[str, dict[str, dict[str, int]]]  # type alias: org -> target -> period -> count
+_MonitorPlan = dict[str, dict[str, dict[str, MonitorAlertSettings]]]  # type alias: org -> target -> period -> settings
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -555,10 +562,10 @@ class Job:
         assert len(args.root_dataset_pairs) > 0
         for src_dataset, _ in args.root_dataset_pairs:
             validate_dataset_name(src_dataset, "--root-dataset-pairs source")
-        src_snapshot_plan: dict = self.validate_snapshot_plan(literal_eval(args.src_snapshot_plan), "--src-snapshot-plan")
-        src_bookmark_plan: dict = self.validate_snapshot_plan(literal_eval(args.src_bookmark_plan), "--src-bookmark-plan")
-        dst_snapshot_plan: dict = self.validate_snapshot_plan(literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
-        monitor_snapshot_plan: dict = self.validate_monitor_snapshot_plan(literal_eval(args.monitor_snapshot_plan))
+        src_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.src_snapshot_plan), "--src-snapshot-plan")
+        src_bookmark_plan = self.validate_snapshot_plan(literal_eval(args.src_bookmark_plan), "--src-bookmark-plan")
+        dst_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
+        monitor_snapshot_plan = self.validate_monitor_snapshot_plan(literal_eval(args.monitor_snapshot_plan))
         localhostname: str = args.localhost if args.localhost else socket.gethostname()
         self.validate_host_name(localhostname, "--localhost")
         log.debug("localhostname: %s", localhostname)
@@ -732,7 +739,11 @@ class Job:
                 subjob_name = update_subjob_name(marker)
 
             def prune_src(
-                opts: list[str], retention_plan: dict, tag: str, src_host: str = src_host, logsuffix: str = src_log_suffix
+                opts: list[str],
+                retention_plan: _SnapshotPlan,
+                tag: str,
+                src_host: str = src_host,
+                logsuffix: str = src_log_suffix,
             ) -> None:
                 """Creates prune subjob options for ``tag`` using ``retention_plan``."""
                 opts += ["--skip-replication", f"--delete-dst-snapshots-except-plan={retention_plan}"]
@@ -781,17 +792,19 @@ class Job:
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
-            def monitor_snapshots_opts(tag: str, monitor_plan: dict, logsuffix: str) -> list[str]:
+            def monitor_snapshots_opts(tag: str, monitor_plan: ExpandedMonitorPlan, logsuffix: str) -> list[str]:
                 """Returns monitor subjob options for ``tag`` and ``monitor_plan``."""
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
                 opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
                 self.add_log_file_opts(opts, tag, job_id, runpad(), logsuffix)
                 return opts
 
-            def build_monitor_plan(monitor_plan: dict, snapshot_plan: dict, cycles_prefix: str) -> dict:
+            def build_monitor_plan(
+                monitor_plan: _MonitorPlan, snapshot_plan: _SnapshotPlan, cycles_prefix: str
+            ) -> ExpandedMonitorPlan:
                 """Expands ``monitor_plan`` with cycle defaults from ``snapshot_plan``."""
 
-                def alert_dicts(alertdict: dict, cycles: int) -> dict:
+                def alert_dicts(alertdict: MonitorAlertSettings, cycles: int) -> dict[str, MonitorAlertSettings]:
                     """Returns alert dictionaries with explicit ``cycles`` value."""
                     latest_dict = alertdict.copy()
                     for prefix in ("src_snapshot_", "dst_snapshot_", ""):
@@ -815,8 +828,8 @@ class Job:
             subjob_name += "/" + BARRIER_CHAR + "/monitor-snapshots"
             if args.monitor_src_snapshots:
                 marker = "monitor-src-snapshots"
-                monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan, "src_snapshot_")
-                opts = monitor_snapshots_opts(marker, monitor_plan, src_log_suffix)
+                src_monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan, "src_snapshot_")
+                opts = monitor_snapshots_opts(marker, src_monitor_plan, src_log_suffix)
                 self.add_ssh_opts(  # i.e. dst=src, src=dummy
                     opts, ssh_dst_user=ssh_src_user, ssh_dst_port=ssh_src_port, ssh_dst_config_file=ssh_src_config_file
                 )
@@ -833,8 +846,8 @@ class Job:
                         org: {target: periods for target, periods in target_periods.items() if target in monitor_targets}
                         for org, target_periods in monitor_snapshot_plan.items()
                     }
-                    monitor_plan = build_monitor_plan(monitor_plan, dst_snapshot_plan, "dst_snapshot_")
-                    opts = monitor_snapshots_opts(marker, monitor_plan, _log_suffix(lhn, src_host, dst_hostname))
+                    dst_monitor_plan = build_monitor_plan(monitor_plan, dst_snapshot_plan, "dst_snapshot_")
+                    opts = monitor_snapshots_opts(marker, dst_monitor_plan, _log_suffix(lhn, src_host, dst_hostname))
                     self.add_ssh_opts(
                         opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
                     )
@@ -867,7 +880,7 @@ class Job:
 
     def replication_opts(
         self,
-        dst_snapshot_plan: dict[str, dict[str, dict[str, int]]],
+        dst_snapshot_plan: _SnapshotPlan,
         targets: set[str],
         localhostname: str,
         src_hostname: str,
@@ -1160,9 +1173,7 @@ class Job:
             self.validate_type(dst_root_dataset, str, f"{context} root dataset")
         return dst_root_datasets
 
-    def validate_snapshot_plan(
-        self, snapshot_plan: dict[str, dict[str, dict[str, int]]], context: str
-    ) -> dict[str, dict[str, dict[str, int]]]:
+    def validate_snapshot_plan(self, snapshot_plan: _SnapshotPlan, context: str) -> _SnapshotPlan:
         """Checks snapshot plan structure and value types."""
         self.validate_type(snapshot_plan, dict, context)
         for org, target_periods in snapshot_plan.items():
@@ -1176,9 +1187,7 @@ class Job:
                     self.validate_non_negative_int(period_amount, f"{context} org/target/period_amount")
         return snapshot_plan
 
-    def validate_monitor_snapshot_plan(
-        self, monitor_snapshot_plan: dict[str, dict[str, dict[str, dict[str, str | int]]]]
-    ) -> dict[str, dict[str, dict[str, dict[str, str | int]]]]:
+    def validate_monitor_snapshot_plan(self, monitor_snapshot_plan: _MonitorPlan) -> _MonitorPlan:
         """Checks snapshot monitoring plan configuration."""
         context = "--monitor-snapshot-plan"
         self.validate_type(monitor_snapshot_plan, dict, context)
@@ -1235,12 +1244,12 @@ class Job:
             for t in union_types:
                 if isinstance(value, t):
                     return
-            type_msg = " or ".join([t.__name__ for t in union_types])
+            type_msg: str = " or ".join([t.__name__ for t in union_types])
             self.die(f"{name} must be of type {type_msg} but got {type(value).__name__}: {value}")
         elif not isinstance(value, expected_type):
             self.die(f"{name} must be of type {expected_type.__name__} but got {type(value).__name__}: {value}")
 
-    def parse_src_hosts_from_cli_or_stdin(self, raw_src_hosts: str | None) -> list:
+    def parse_src_hosts_from_cli_or_stdin(self, raw_src_hosts: str | None) -> list[str]:
         """Resolve --src-hosts from CLI or stdin with robust TTY/empty handling."""
         if raw_src_hosts is None:
             # If stdin is an interactive TTY, don't block waiting for input; fail clearly instead

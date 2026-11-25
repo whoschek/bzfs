@@ -414,7 +414,7 @@ class Connection:
         loglevel: int = logging.INFO,
         is_dry: bool = False,
         **kwargs: Any,  # optional low-level keyword args to be forwarded to subprocess.run()
-    ) -> subprocess.CompletedProcess:
+    ) -> subprocess.CompletedProcess[Any]:
         """Runs the given CLI cmd via ssh on the given remote, and returns CompletedProcess including stdout and stderr.
 
         The full command is the concatenation of both the command to run on the localhost in order to talk to the remote host
@@ -537,7 +537,7 @@ class Connection:
                 log = self._remote.params.log
                 log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_sock_cmd))
                 try:
-                    proc: subprocess.CompletedProcess = subprocess.run(
+                    proc: subprocess.CompletedProcess[str] = subprocess.run(
                         ssh_sock_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=0.1, check=False
                     )
                 except subprocess.TimeoutExpired as e:  # harmless as master auto-exits after ssh_control_persist_secs anyway
@@ -597,13 +597,13 @@ class ConnectionPool:
         """
         with self._lock:
             conn = self._priority_queue.pop() if len(self._priority_queue) > 0 else None
-            if conn is None or conn._is_full():  # noqa: SLF001  # pylint: disable=protected-access
+            if conn is None or conn._is_full():  # noqa: SLF001  # pyrefly: ignore[protected-access]
                 if conn is not None:
                     self._priority_queue.push(conn)
                 conn = self._new_connection()  # add a new connection
                 self._last_modified += 1
-                conn._update_last_modified(self._last_modified)  # noqa: SLF001  # pylint: disable=protected-access
-            conn._increment_free(-1)  # noqa: SLF001  # pylint: disable=protected-access
+                conn._update_last_modified(self._last_modified)  # noqa: SLF001  # pyrefly: ignore[protected-access]
+            conn._increment_free(-1)  # noqa: SLF001  # pyrefly: ignore[protected-access]
             self._priority_queue.push(conn)
             return conn
 
@@ -617,9 +617,9 @@ class ConnectionPool:
         with self._lock:
             # update priority = remove conn from queue, increment priority, finally reinsert updated conn into queue
             if self._priority_queue.remove(conn):  # conn is not contained only if ConnectionPool.shutdown() was called
-                conn._increment_free(1)  # noqa: SLF001  # pylint: disable=protected-access
+                conn._increment_free(1)  # noqa: SLF001  # pyrefly: ignore[protected-access]
                 self._last_modified += 1
-                conn._update_last_modified(self._last_modified)  # noqa: SLF001  # pylint: disable=protected-access
+                conn._update_last_modified(self._last_modified)  # noqa: SLF001  # pyrefly: ignore[protected-access]
                 self._priority_queue.push(conn)
 
     def shutdown(self, msg_prefix: str = "") -> None:

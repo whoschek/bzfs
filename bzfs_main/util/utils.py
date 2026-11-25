@@ -106,11 +106,11 @@ LOG_STDERR: Final[int] = (logging.INFO + logging.WARNING) // 2  # custom log lev
 LOG_STDOUT: Final[int] = (LOG_STDERR + logging.INFO) // 2  # custom log level is halfway in between
 LOG_DEBUG: Final[int] = logging.DEBUG
 LOG_TRACE: Final[int] = logging.DEBUG // 2  # custom log level is halfway in between
-YEAR_WITH_FOUR_DIGITS_REGEX: Final[re.Pattern] = re.compile(r"[1-9][0-9][0-9][0-9]")  # empty shall not match nonempty target
+YEAR_WITH_FOUR_DIGITS_REGEX: Final[re.Pattern[str]] = re.compile(r"[1-9][0-9][0-9][0-9]")  # match empty vs nonempty target
 UNIX_TIME_INFINITY_SECS: Final[int] = 2**64  # billions of years and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET: Final[str] = ""
-ZFS_DATASET_NAME_REGEX: Final[re.Pattern] = re.compile(r"[a-zA-Z][a-zA-Z0-9 _.:/-]*")  # see zfs_namecheck.c
-ZFS_PROPERTY_NAME_REGEX: Final[re.Pattern] = re.compile(r"[a-z0-9_.:-]+")  # see zfs_prop.c
+ZFS_DATASET_NAME_REGEX: Final[re.Pattern[str]] = re.compile(r"[a-zA-Z][a-zA-Z0-9 _.:/-]*")  # see zfs_namecheck.c
+ZFS_PROPERTY_NAME_REGEX: Final[re.Pattern[str]] = re.compile(r"[a-z0-9_.:-]+")  # see zfs_prop.c
 ZFS_MAX_PROPERTY_NAME_LEN: Final[int] = 255  # 256 incl. NUL: https://github.com/openzfs/zfs/blob/master/include/sys/fs/zfs.h
 ZFS_MAX_DATASET_NAME_LEN: Final[int] = 255  # 256 incl. NUL: https://github.com/openzfs/zfs/blob/master/include/sys/fs/zfs.h
 SHELL_CHARS: Final[str] = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"  # intentionally not included: -_.:/
@@ -700,7 +700,7 @@ def die(msg: str, exit_code: int = DIE_STATUS, parser: argparse.ArgumentParser |
         parser.error(msg)
 
 
-def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
+def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[Any]:
     """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired, and
     provides optional child PID tracking, and optional logging of execution status via ``log`` and ``loglevel`` params."""
     input_value = kwargs.pop("input", None)
@@ -726,11 +726,11 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
                 elapsed_time: str = human_readable_float((time.monotonic_ns() - start_time_nanos) / 1_000_000) + "ms"
                 status = "cancel" if is_cancel else "timeout" if is_timeout else "success" if exitcode == 0 else "failure"
                 cmd = kwargs["args"] if "args" in kwargs else (args[0] if args else None)
-                cmd_str: str = " ".join(str(arg) for arg in iter(cmd)) if isinstance(cmd, (list, tuple)) else str(cmd)
+                cmd_str: str = " ".join(map(str, cmd)) if isinstance(cmd, (list, tuple)) else str(cmd)
                 log.log(_loglevel, f"Executed [{status}] [{elapsed_time}]: %s", cmd_str)
 
     with xfinally(log_status):
-        ctx: contextlib.AbstractContextManager[subprocess.Popen]
+        ctx: contextlib.AbstractContextManager[subprocess.Popen[str] | subprocess.Popen[bytes]]
         if subprocesses is None:
             ctx = subprocess.Popen(*args, **kwargs)
         else:
@@ -738,7 +738,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
         with ctx as proc:
             try:
                 sp = subprocesses
-                if sp is not None and sp._is_terminated():  # noqa: SLF001 pylint: disable=protected-access
+                if sp is not None and sp._is_terminated():  # noqa: SLF001  # pyrefly: ignore[protected-access]
                     is_cancel = True
                     timeout = 0.0
                 stdout, stderr = proc.communicate(input_value, timeout=timeout)
@@ -891,7 +891,9 @@ class Subprocesses:
         self._child_pids: Final[dict[int, None]] = {}  # a set that preserves insertion order
 
     @contextlib.contextmanager
-    def popen_and_track(self, *popen_args: Any, **popen_kwargs: Any) -> Generator[subprocess.Popen]:
+    def popen_and_track(
+        self, *popen_args: Any, **popen_kwargs: Any
+    ) -> Generator[subprocess.Popen[str] | subprocess.Popen[bytes]]:
         """Context manager that calls subprocess.Popen() and tracks the child PID for per-job termination.
 
         Holds a lock across Popen+PID registration to prevent a race when terminate_process_subtrees() is invoked (e.g. from
@@ -899,7 +901,7 @@ class Subprocesses:
         unregistered on context exit.
         """
         with self._lock:
-            proc: subprocess.Popen = subprocess.Popen(*popen_args, **popen_kwargs)
+            proc: subprocess.Popen[str] | subprocess.Popen[bytes] = subprocess.Popen(*popen_args, **popen_kwargs)
             self._child_pids[proc.pid] = None
         try:
             yield proc
@@ -907,7 +909,7 @@ class Subprocesses:
             with self._lock:
                 self._child_pids.pop(proc.pid, None)
 
-    def subprocess_run(self, *args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
+    def subprocess_run(self, *args: Any, **kwargs: Any) -> subprocess.CompletedProcess[Any]:
         """Wrapper around utils.subprocess_run() that auto-registers/unregisters child PIDs for per-job termination."""
         return subprocess_run(*args, **kwargs, subprocesses=self)
 
@@ -1131,8 +1133,10 @@ class SnapshotPeriods:  # thread-safe
             "secondly": "seconds",
             "millisecondly": "milliseconds",
         }
-        self._suffix_regex0: Final[re.Pattern] = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
-        self._suffix_regex1: Final[re.Pattern] = re.compile("_" + self._suffix_regex0.pattern)
+        self._suffix_regex0: Final[re.Pattern[str]] = re.compile(
+            rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})"
+        )
+        self._suffix_regex1: Final[re.Pattern[str]] = re.compile("_" + self._suffix_regex0.pattern)
 
     def suffix_to_duration0(self, suffix: str) -> tuple[int, str]:
         """Parse suffix like '10minutely' to (10, 'minutely')."""
@@ -1143,7 +1147,7 @@ class SnapshotPeriods:  # thread-safe
         return self._suffix_to_duration(suffix, self._suffix_regex1)
 
     @staticmethod
-    def _suffix_to_duration(suffix: str, regex: re.Pattern) -> tuple[int, str]:
+    def _suffix_to_duration(suffix: str, regex: re.Pattern[str]) -> tuple[int, str]:
         """Example: Converts '2 hourly' to (2, 'hourly') and 'hourly' to (1, 'hourly')."""
         if match := regex.fullmatch(suffix):
             duration_amount: int = int(match.group(1)) if match.group(1) else 1
@@ -1518,7 +1522,7 @@ class SynchronousExecutor(Executor):
 
 #############################################################################
 @final
-class _XFinally(contextlib.AbstractContextManager):
+class _XFinally(contextlib.AbstractContextManager[object]):
     """Context manager ensuring cleanup code executes after ``with`` blocks."""
 
     def __init__(self, cleanup: Callable[[], None]) -> None:

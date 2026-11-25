@@ -150,10 +150,10 @@ class TestHelperFunctions(AbstractTestCase):
             self.job.validate_is_subset(["3"], ["1", "2"], "x", "y")
         with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
             self.job.validate_is_subset(["3", "4"], [], "x", "y")
-        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
-            self.job.validate_is_subset("foo", ["3"], "x", "y")
-        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaises(SystemExit):
-            self.job.validate_is_subset(["3"], "foo", "x", "y")
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaisesRegex(SystemExit, "x must be an Iterable"):
+            self.job.validate_is_subset("a", ["a"], "x", "y")  # pyrefly: ignore[string-as-iterable]  # Test invalid input.
+        with self.assertLogs(self.job.log, level="ERROR"), self.assertRaisesRegex(SystemExit, "y must be an Iterable"):
+            self.job.validate_is_subset(["a"], "a", "x", "y")  # pyrefly: ignore[string-as-iterable]  # Test invalid input.
 
     def _make_mock_socket(self, bind_side_effect: Exception | None = None) -> MagicMock:
         sock = MagicMock()
@@ -468,8 +468,8 @@ class TestFiltering(AbstractTestCase):
         dst_hosts: dict[str, list[str]],
         retain_dst_targets: dict[str, list[str]],
         dst_root_datasets: dict[str, str],
-        dst_snapshot_plan: dict,
-        monitor_snapshot_plan: dict | None = None,
+        dst_snapshot_plan: bzfs_jobrunner._SnapshotPlan,
+        monitor_snapshot_plan: bzfs_jobrunner._MonitorPlan | None = None,
         localhostname: str = "localtest",
     ) -> dict[str, list[str]]:
         """Builds argv, runs Job.run_main and returns the subjobs dict captured via run_subjobs."""
@@ -1395,7 +1395,7 @@ class TestValidateSnapshotPlan(AbstractTestCase):
         self.job = make_bzfs_jobrunner_job(log=MagicMock())
 
     def test_validate_snapshot_plan_empty(self) -> None:
-        plan: dict = {}
+        plan: bzfs_jobrunner._SnapshotPlan = {}
         self.assertEqual(plan, self.job.validate_snapshot_plan(plan, "ctx"))
 
     def test_validate_snapshot_plan_valid(self) -> None:
@@ -1415,17 +1415,15 @@ class TestValidateMonitorSnapshotPlan(AbstractTestCase):
         self.job = make_bzfs_jobrunner_job(log=MagicMock())
 
     def test_validate_monitor_snapshot_plan_empty(self) -> None:
-        plan: dict = {}
+        plan: bzfs_jobrunner._MonitorPlan = {}
         self.assertEqual(plan, self.job.validate_monitor_snapshot_plan(plan))
 
     def test_validate_monitor_snapshot_plan_valid(self) -> None:
-        plan: dict[str, dict[str, dict[str, dict[str, str | int]]]] = {
-            "org": {"tgt": {"hour": {"warn": "msg", "max_age": 1}}}
-        }
+        plan: bzfs_jobrunner._MonitorPlan = {"org": {"tgt": {"hour": {"warn": "msg", "max_age": 1}}}}
         self.assertEqual(plan, self.job.validate_monitor_snapshot_plan(plan))
 
     def test_validate_monitor_snapshot_plan_invalid_value(self) -> None:
-        plan: dict[str, dict[str, dict[str, dict[str, object]]]] = {"org": {"tgt": {"hour": {"warn": object()}}}}
+        plan = {"org": {"tgt": {"hour": {"warn": object()}}}}
         with self.assertRaises(SystemExit):
             self.job.validate_monitor_snapshot_plan(plan)  # type: ignore[arg-type]
 

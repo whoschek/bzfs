@@ -154,7 +154,8 @@ def _prepare_job(
         is_program_available=MagicMock(side_effect=is_program_available),
     )
     job.src_properties = {"pool/ds": MagicMock(recordsize=1)}
-    job.inject_params = {}
+    inject_params: dict[str, bool | int] = {}
+    job.inject_params = inject_params
     return job
 
 
@@ -206,7 +207,8 @@ def _prepare_r2r_job(
         is_program_available=MagicMock(side_effect=is_program_available),
     )
     job.src_properties = {"pool/ds": MagicMock(recordsize=1)}
-    job.inject_params = {}
+    inject_params: dict[str, bool | int] = {}
+    job.inject_params = inject_params
     return job
 
 
@@ -671,7 +673,7 @@ class TestReplication(AbstractTestCase):
         p = MagicMock()
         p.dst.location = "dst"
         p.dst.pool = "dstpool"
-        p.zpool_features = {"dst": {"dstpool": {}}}
+        p.zpool_features = {"dst": {"dstpool": dict[str, str]()}}
 
         with self.assertRaises(SystemExit) as context:
             _Continuity(p, "srcpool/src", "dstpool/backups/src", [], [])
@@ -1225,8 +1227,8 @@ class TestReplication(AbstractTestCase):
             return "".join(f"{name}\n" for source, name in properties.items() if source in sources)
 
         for options, expected in (
-            ([], ["-x", "org.test:relay"]),
-            (["--zfs-recv-x-sources=local,received"], ["-x", "org.test:relay", "-x", "org.test:upstream"]),
+            ((), ["-x", "org.test:relay"]),
+            (("--zfs-recv-x-sources=local,received",), ["-x", "org.test:relay", "-x", "org.test:upstream"]),
         ):
             with self.subTest(options=options):
                 args = self.argparser_parse_args(

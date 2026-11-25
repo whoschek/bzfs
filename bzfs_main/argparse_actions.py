@@ -24,6 +24,7 @@ import os
 import re
 from collections.abc import (
     Iterable,
+    Sequence,
 )
 from dataclasses import (
     dataclass,
@@ -34,6 +35,7 @@ from datetime import (
 )
 from typing import (
     Any,
+    Union,
     cast,
     final,
 )
@@ -124,7 +126,7 @@ def _merge_adjacent_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> 
         if isinstance(filter_i.options, list):
             j = i - 1
             if j >= 0 and snapshot_filters[j] == filter_i:
-                lst: list = cast(list, snapshot_filters[j].options)
+                lst = cast(list[Union[str, RankRange]], snapshot_filters[j].options)
                 assert isinstance(lst, list)
                 assert isinstance(filter_i.options, list)
                 lst.extend(filter_i.options)
@@ -148,10 +150,10 @@ def _merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> 
             j = i - 1
             while j >= 0 and snapshot_filters[j].name in SNAPSHOT_REGEX_FILTER_NAMES:
                 if snapshot_filters[j].name == filter_i.name:
-                    lst: list = cast(list[str], snapshot_filters[j].options)
+                    lst = cast(list[str], snapshot_filters[j].options)
                     assert isinstance(lst, list)
                     assert isinstance(filter_i.options, list)
-                    lst.extend(filter_i.options)
+                    lst.extend(cast(list[str], filter_i.options))
                     snapshot_filters.pop(i)
                     break
                 j -= 1
@@ -466,7 +468,11 @@ class TimeRangeAndRankRangeAction(argparse.Action):
     """Parses --include-snapshot-times-and-ranks option values."""
 
     def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Sequence[str] | None,
+        option_string: str | None = None,
     ) -> None:
         """Converts user-supplied time and rank ranges into snapshot filters."""
 
@@ -518,7 +524,9 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         return lo, hi
 
     @staticmethod
-    def _parse_rankranges(parser: argparse.ArgumentParser, values: Any, option_string: str | None = None) -> list[RankRange]:
+    def _parse_rankranges(
+        parser: argparse.ArgumentParser, values: Iterable[str], option_string: str | None = None
+    ) -> list[RankRange]:
         """Parses rank range strings like 'latest 3..latest 5' into tuples."""
 
         def parse_rank(spec: str) -> tuple[bool, str, int, bool]:

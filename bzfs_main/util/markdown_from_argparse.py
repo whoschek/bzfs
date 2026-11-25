@@ -366,20 +366,20 @@ class MarkdownFromArgparse:
         list_separator: list[str] = ["<!-- -->", ""]  # prevent adjacent Markdown lists from merging
         all_results: list[str] = []
         sub_results: list[str] = []  # subparser command details
-        formatter: argparse.HelpFormatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
+        formatter: argparse.HelpFormatter = parser._get_formatter()  # noqa: SLF001
         mutually_exclusive_notes: dict[int, str] = self._mutually_exclusive_group_notes(parser, formatter)
-        for group in parser._action_groups:  # noqa: SLF001  # pylint: disable=protected-access  # no public iterator
+        for group in parser._action_groups:  # noqa: SLF001  # no public iterator
             group_results: list[str] = []
             for action in self._visible_group_actions(group):
                 gists: list[str] = []  # subparser command overview list
                 if note := mutually_exclusive_notes.get(id(action)):
                     group_results += self._render_blocks(note) + [""]
-                if not isinstance(action, argparse._SubParsersAction):  # noqa: SLF001  # pylint: disable=protected-access
+                if not isinstance(action, argparse._SubParsersAction):  # noqa: SLF001
                     group_results += [self._render_option_title(parser, action, anchor_prefix=anchor_prefix), ""]
                     is_list = True
                 else:
                     is_list = False
-                    visible_subparser_actions: list[tuple] = self._visible_subparser_actions(action)
+                    visible_subparser_actions = self._visible_subparser_actions(action)
                     if len(visible_subparser_actions) == 0:
                         continue
                     for name, title, subparser, subaction in visible_subparser_actions:  # generate cmd overview + details
@@ -419,7 +419,7 @@ class MarkdownFromArgparse:
     def _mutually_exclusive_group_notes(self, parser: ArgumentParser, fmt: argparse.HelpFormatter) -> dict[int, str]:
         """Returns notes keyed by the first visible action in each mutually exclusive group."""
         notes: dict[int, str] = {}
-        for group in parser._mutually_exclusive_groups:  # noqa: SLF001  # pylint: disable=protected-access
+        for group in parser._mutually_exclusive_groups:  # noqa: SLF001
             actions: list[argparse.Action] = self._visible_group_actions(group)
             if len(actions) >= 2 or (group.required and len(actions) == 1):
                 choice_labels: list[str] = []
@@ -427,9 +427,8 @@ class MarkdownFromArgparse:
                     if action.option_strings:
                         choice_labels.append(" / ".join(_bold(_escape_md(option)) for option in action.option_strings))
                     else:
-                        # pylint: disable-next=protected-access
                         met: str = fmt._get_default_metavar_for_positional(action)  # noqa: SLF001
-                        metavars = fmt._metavar_formatter(action, met)(1)  # noqa: SLF001  # pylint: disable=protected-access
+                        metavars = fmt._metavar_formatter(action, met)(1)  # noqa: SLF001
                         label = " ".join(metavars)
                         choice_labels.append(_bold(_escape_md(label)))
                 if len(actions) == 1:
@@ -439,19 +438,15 @@ class MarkdownFromArgparse:
                     notes[id(actions[0])] = f"Mutually exclusive group: choose {quantifier} of {', '.join(choice_labels)}."
         return notes
 
-    def _visible_group_actions(
-        self, group: argparse._ArgumentGroup  # pylint: disable=protected-access
-    ) -> list[argparse.Action]:
+    def _visible_group_actions(self, group: argparse._ArgumentGroup) -> list[argparse.Action]:
         """Returns documented actions from one argparse action group."""
-        group_actions: list[argparse.Action] = group._group_actions  # noqa: SLF001  # pylint: disable=protected-access
+        group_actions: list[argparse.Action] = group._group_actions  # noqa: SLF001
         return [action for action in group_actions if action.help != argparse.SUPPRESS]
 
     def _visible_subparser_actions(
-        self, action: argparse._SubParsersAction  # pylint: disable=protected-access
+        self, action: argparse._SubParsersAction[ArgumentParser]
     ) -> list[tuple[str, str, ArgumentParser, argparse.Action | None]]:
-        subactions: dict[str, argparse.Action] = {
-            subact.dest: subact for subact in action._get_subactions()  # noqa: SLF001  # pylint: disable=protected-access
-        }
+        subactions: dict[str, argparse.Action] = {subact.dest: subact for subact in action._get_subactions()}  # noqa: SLF001
         results: list[tuple[str, str, ArgumentParser, argparse.Action | None]] = []
         seen: set[int] = set()
         for name, subparser in action.choices.items():
@@ -479,18 +474,18 @@ class MarkdownFromArgparse:
             result: str = f"{_html_option_title(anchor, title)} {_html_permalink(anchor)}"
             return result
 
-        formatter: argparse.HelpFormatter = parser._get_formatter()  # noqa: SLF001  # pylint: disable=protected-access
+        formatter: argparse.HelpFormatter = parser._get_formatter()  # noqa: SLF001
         if not action.option_strings:
-            dflt = formatter._get_default_metavar_for_positional(action)  # noqa: SLF001  # pylint: disable=protected-access
-            positional_args: str = formatter._format_args(action, dflt)  # noqa: SLF001  # pylint: disable=protected-access
+            dflt = formatter._get_default_metavar_for_positional(action)  # noqa: SLF001
+            positional_args: str = formatter._format_args(action, dflt)  # noqa: SLF001
             if action.nargs == argparse.REMAINDER and positional_args == "...":
                 positional_args = str(action.metavar or dflt)
             return _render_anchor_and_title(action.dest, _bold(_escape_md(positional_args)))
         elif action.nargs == 0:
             title_line: str = ", ".join(_bold(_escape_md(opt)) for opt in action.option_strings)
         else:
-            dflt = formatter._get_default_metavar_for_optional(action)  # noqa: SLF001  # pylint: disable=protected-access
-            option_args: str = formatter._format_args(action, dflt)  # noqa: SLF001  # pylint: disable=protected-access
+            dflt = formatter._get_default_metavar_for_optional(action)  # noqa: SLF001
+            option_args: str = formatter._format_args(action, dflt)  # noqa: SLF001
             title_line = ", ".join(f"{_bold(_escape_md(opt))} *{_escape_md(option_args)}*" for opt in action.option_strings)
         if action.required:
             title_line += " _(required)_"
@@ -515,7 +510,7 @@ class MarkdownFromArgparse:
         return lines
 
     def _expand_help(self, action: argparse.Action, formatter: argparse.HelpFormatter) -> str:
-        help_text: str = formatter._expand_help(action)  # noqa: SLF001  # pylint: disable=protected-access
+        help_text: str = formatter._expand_help(action)  # noqa: SLF001
         return help_text
 
     def _format_usage(self, parser: ArgumentParser) -> str:

@@ -131,13 +131,13 @@ class TestBuildTree(unittest.TestCase):
 
     def test_raw_tree_keys_descend(self) -> None:
         datasets = ["pool", "pool/dataset", "pool/dataset/sub", "pool/other", "pool/other/sub/child"]
-        expected_tree = {"pool": {"other": {"sub": {"child": {}}}, "dataset": {"sub": {}}}}
+        expected_tree: _Tree = {"pool": {"other": {"sub": {"child": {}}}, "dataset": {"sub": {}}}}
         tree, _ = _build_dataset_tree(datasets, COMPONENT_SEPARATOR)
         self.assertEqual(expected_tree, tree)
 
     def test_basic_tree(self) -> None:
         datasets = ["pool", "pool/dataset", "pool/dataset/sub", "pool/other", "pool/other/sub/child"]
-        expected_tree = {"pool": {"dataset": {"sub": {}}, "other": {"sub": {"child": {}}}}}
+        expected_tree: _Tree = {"pool": {"dataset": {"sub": {}}, "other": {"sub": {"child": {}}}}}
         tree = self.build_tree(datasets)
         self.assertEqual(expected_tree, tree)
         self.assert_keys_sorted(tree)

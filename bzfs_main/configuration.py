@@ -50,6 +50,7 @@ from typing import (
     Final,
     Literal,
     NamedTuple,
+    Union,
     cast,
     final,
 )
@@ -815,7 +816,7 @@ class SnapshotLabelAttributes:
     written_threshold: int
 
     @classmethod
-    def parse(cls, attributes: dict) -> SnapshotLabelAttributes:
+    def parse(cls, attributes: dict[str, object]) -> SnapshotLabelAttributes:
         """Parses the given configuration dict into a typed object."""
         written_threshold: int = 0
         for name, value in attributes.items():
@@ -942,6 +943,11 @@ class MonitorSnapshotAlert:
 
 
 #############################################################################
+MonitorAlertSettings = dict[str, Union[str, int]]  # type alias
+# Monitoring settings by organization, target, period, and alert type ("latest" or "oldest"):
+ExpandedMonitorPlan = Mapping[str, dict[str, dict[str, dict[str, MonitorAlertSettings]]]]  # type alias
+
+
 @final
 class MonitorSnapshotsConfig:
     """Option values for --monitor-snapshots*, that is, policy describing which snapshots to monitor for staleness."""
@@ -949,7 +955,7 @@ class MonitorSnapshotsConfig:
     def __init__(self, args: argparse.Namespace, p: Params) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
-        self.monitor_snapshots: Final[Mapping] = ast.literal_eval(args.monitor_snapshots)
+        self.monitor_snapshots: Final[ExpandedMonitorPlan] = ast.literal_eval(args.monitor_snapshots)
         self.dont_warn: Final[bool] = args.monitor_snapshots_dont_warn
         self.dont_crit: Final[bool] = args.monitor_snapshots_dont_crit
         self.no_latest_check: Final[bool] = args.monitor_snapshots_no_latest_check

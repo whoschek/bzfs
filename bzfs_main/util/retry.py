@@ -414,7 +414,7 @@ async def call_with_retries_async(
     policy: RetryPolicy,  # specifies how ``RetryableError`` shall be retried
     *,
     backoff: BackoffStrategy = full_jitter_backoff_strategy,  # computes delay time before next retry attempt, after failure
-    giveup: Callable[[AttemptOutcome], object | Awaitable] = no_giveup,  # stop retrying based on custom logic, e.g. time
+    giveup: Callable[[AttemptOutcome], object | Awaitable[object]] = no_giveup,  # custom stop condition, e.g. a time limit
     before_attempt: Callable[[Retry], int | Awaitable[int]] = before_attempt_noop,  # e.g rate limiting/internal backpressure
     after_attempt: Callable[[AttemptOutcome], Awaitable[None] | None] = after_attempt_log_failure,  # e.g. metrics/logging
     on_retryable_error: Callable[[AttemptOutcome], Awaitable[None] | None] = noop,  # e.g. count RetryableError failures
@@ -501,7 +501,8 @@ async def call_with_retries_async(
 async def _await_result(result: _T | Awaitable[_T]) -> _T:
     """Returns a callback result, awaiting it first when it is awaitable."""
     if inspect.isawaitable(result):
-        return await result
+        awaitable_result: Awaitable[_T] = result
+        return await awaitable_result
     else:
         return result
 
@@ -1138,7 +1139,7 @@ class AsyncRetryTemplate(Generic[_T]):
     fn: Callable[[Retry], Awaitable[_T]] = _fn_not_implemented  # set this to make the RetryTemplate object itself callable
     policy: RetryPolicy = RetryPolicy()  # specifies how ``RetryableError`` shall be retried
     backoff: BackoffStrategy = full_jitter_backoff_strategy  # computes delay time before next retry attempt, after failure
-    giveup: Callable[[AttemptOutcome], object | Awaitable] = no_giveup  # stop retrying based on custom logic, e.g. time
+    giveup: Callable[[AttemptOutcome], object | Awaitable[object]] = no_giveup  # custom stop condition, e.g. a time limit
     before_attempt: Callable[[Retry], int | Awaitable[int]] = before_attempt_noop  # e.g. rate limiting/internal backpressure
     after_attempt: Callable[[AttemptOutcome], Awaitable[None] | None] = after_attempt_log_failure  # e.g. metrics/logging
     on_retryable_error: Callable[[AttemptOutcome], Awaitable[None] | None] = noop  # e.g. count RetryableError failures
@@ -1175,7 +1176,7 @@ class AsyncRetryTemplate(Generic[_T]):
         policy: RetryPolicy | None = None,
         *,
         backoff: BackoffStrategy | None = None,
-        giveup: Callable[[AttemptOutcome], object | Awaitable] | None = None,
+        giveup: Callable[[AttemptOutcome], object | Awaitable[object]] | None = None,
         before_attempt: Callable[[Retry], int | Awaitable[int]] | None = None,
         after_attempt: Callable[[AttemptOutcome], Awaitable[None] | None] | None = None,
         on_retryable_error: Callable[[AttemptOutcome], Awaitable[None] | None] | None = None,

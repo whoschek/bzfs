@@ -97,17 +97,17 @@ def _get_default_logger(log_params: LogParams, args: argparse.Namespace, logger_
     log.setLevel(log_params.log_level)
     log.propagate = False  # don't propagate log messages up to the root logger to avoid emitting duplicate messages
 
-    handler: logging.StreamHandler = logging.StreamHandler(stream=sys.stdout)
-    handler.terminator = ""
-    handler.setFormatter(get_default_log_formatter(default_terminator="\n", log_params=log_params))
-    handler.setLevel(log_params.log_level)
-    log.addHandler(handler)
+    stream_handler = logging.StreamHandler(stream=sys.stdout)
+    stream_handler.terminator = ""
+    stream_handler.setFormatter(get_default_log_formatter(default_terminator="\n", log_params=log_params))
+    stream_handler.setLevel(log_params.log_level)
+    log.addHandler(stream_handler)
 
-    handler = logging.FileHandler(log_params.log_file, encoding="utf-8")
-    handler.terminator = ""
-    handler.setFormatter(get_default_log_formatter(default_terminator="\n"))
-    handler.setLevel(log_params.log_level)
-    log.addHandler(handler)
+    file_handler = logging.FileHandler(log_params.log_file, encoding="utf-8")
+    file_handler.terminator = ""
+    file_handler.setFormatter(get_default_log_formatter(default_terminator="\n"))
+    file_handler.setLevel(log_params.log_level)
+    log.addHandler(file_handler)
 
     address = args.log_syslog_address
     if address:  # optionally, also log to local or remote syslog
