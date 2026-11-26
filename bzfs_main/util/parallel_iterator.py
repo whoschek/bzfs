@@ -161,7 +161,7 @@ def parallel_iterator_results(
 
     # Materialize the next N=max_workers futures into a buffer, causing submission + parallel execution of their CLI calls
     fifo_buffer: deque[Future[_T]] = deque(itertools.islice(iterator, max_workers))
-    sentinel: Future[_T] = Future()
+    sentinel_fut: Future[_T] = Future()
     next_future: Future[_T]
 
     if ordered:
@@ -171,8 +171,8 @@ def parallel_iterator_results(
                     future.cancel()
                 return
             curr_future: Future[_T] = fifo_buffer.popleft()
-            next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
-            if next_future is not sentinel:
+            next_future = next(iterator, sentinel_fut)  # keep the buffer full; causes the next CLI call to be submitted
+            if next_future is not sentinel_fut:
                 fifo_buffer.append(next_future)
             yield curr_future.result()  # blocks until CLI returns
     else:
@@ -186,11 +186,11 @@ def parallel_iterator_results(
                     for future in todo_futures:
                         future.cancel()
                     return
-                next_future = next(iterator, sentinel)  # keep the buffer full; causes the next CLI call to be submitted
-                if next_future is not sentinel:
+                next_future = next(iterator, sentinel_fut)  # keep the buffer full; causes the next CLI call to be submitted
+                if next_future is not sentinel_fut:
                     todo_futures.add(next_future)
                 yield done_futures.pop().result()  # does not block as processing has already completed
-    assert next(iterator, sentinel) is sentinel
+    assert next(iterator, sentinel_fut) is sentinel_fut
 
 
 _K = TypeVar("_K")
