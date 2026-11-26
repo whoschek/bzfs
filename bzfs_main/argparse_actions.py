@@ -560,7 +560,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
                     if is_percent:
                         negated_kind: str = "oldest" if kind == "latest" else "latest"
                         lo = parse_rank(f"{negated_kind}0")
-                        hi = parse_rank(f"{negated_kind}{100-num}%")
+                        hi = parse_rank(f"{negated_kind}{100 - num}%")
                     else:
                         lo = parse_rank(f"{kind}{num}")
                         hi = parse_rank(f"{kind}100%")

@@ -43,7 +43,6 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestIncrementalSendSteps(unittest.TestCase):
-
     def test_basic1(self) -> None:
         input_snapshots = ["d1", "h1", "d2", "d3", "d4"]
         expected_results = ["d1", "d2", "d3", "d4"]

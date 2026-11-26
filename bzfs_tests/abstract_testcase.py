@@ -41,7 +41,6 @@ from bzfs_main.util import (
 
 #############################################################################
 class AbstractTestCase(unittest.TestCase):
-
     def __init__(self, methodName: str = "runTest") -> None:  # noqa: N803
         super().__init__(methodName)
         # immutable variables:

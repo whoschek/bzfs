@@ -192,7 +192,6 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestHelperFunctions(unittest.TestCase):
-
     def test_die_with_parser(self) -> None:
         parser = argparse.ArgumentParser()
         with self.assertRaises(SystemExit), suppress_output():
@@ -562,7 +561,6 @@ class TestHelperFunctions(unittest.TestCase):
 
 #############################################################################
 class TestBase64(unittest.TestCase):
-
     def test_sha256_hex_basic(self) -> None:
         """sha256_hex returns 64 lowercase hex chars and is deterministic."""
         inputs = [
@@ -662,7 +660,6 @@ class TestBase64(unittest.TestCase):
 
 ###############################################################################
 class TestSnapshotPeriods(unittest.TestCase):
-
     def test_label_milliseconds(self) -> None:
         xperiods = SnapshotPeriods()
         self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 1, xperiods.label_milliseconds("foo_yearly"))
@@ -684,7 +681,6 @@ class TestSnapshotPeriods(unittest.TestCase):
 
 #############################################################################
 class TestCut(unittest.TestCase):
-
     def test_cut(self) -> None:
         lines = ["34\td1@s1", "56\td2@s2"]
         self.assertListEqual(["34", "56"], cut(1, lines=lines))
@@ -720,7 +716,6 @@ class TestCut(unittest.TestCase):
 
 #############################################################################
 class TestDrain(unittest.TestCase):
-
     def test_drain(self) -> None:
         itr = iter(["foo", "bar"])
         drain(itr)
@@ -730,7 +725,6 @@ class TestDrain(unittest.TestCase):
 
 #############################################################################
 class TestShuffleDict(unittest.TestCase):
-
     def test_shuffle_dict_preserves_items(self) -> None:
         d = {"a": 1, "b": 2, "c": 3}
 
@@ -748,7 +742,6 @@ class TestShuffleDict(unittest.TestCase):
 
 #############################################################################
 class TestSortedDict(unittest.TestCase):
-
     def test_sorted_dict_empty_dictionary_returns_empty(self) -> None:
         result: dict[str, int] = sorted_dict({})
         self.assertEqual([], list(result.items()))
@@ -780,7 +773,6 @@ class TestSortedDict(unittest.TestCase):
 
 #############################################################################
 class TestBinarySearch(unittest.TestCase):
-
     @staticmethod
     def insertion_point(result: int) -> int:
         return result if result >= 0 else -result - 1
@@ -841,7 +833,6 @@ class TestBinarySearch(unittest.TestCase):
 
 #############################################################################
 class TestTail(unittest.TestCase):
-
     def test_tail(self) -> None:
         fd, file = tempfile.mkstemp(prefix="test_bzfs.tail_")
         os.write(fd, "line1\nline2\n".encode("utf-8"))
@@ -856,7 +847,6 @@ class TestTail(unittest.TestCase):
 
 #############################################################################
 class TestGetHomeDirectory(unittest.TestCase):
-
     def test_get_home_directory(self) -> None:
         old_home = os.environ.get("HOME")
         if old_home is not None:
@@ -870,7 +860,6 @@ class TestGetHomeDirectory(unittest.TestCase):
 
 #############################################################################
 class TestHumanReadable(unittest.TestCase):
-
     def assert_human_readable_float(self, actual: float, expected: str) -> None:
         self.assertEqual(expected, human_readable_float(actual))
         self.assertEqual("-" + expected, human_readable_float(-actual))
@@ -989,7 +978,6 @@ class TestHumanReadable(unittest.TestCase):
 
 #############################################################################
 class TestOpenNoFollow(unittest.TestCase):
-
     def setUp(self) -> None:
         self.tmpdir = tempfile.mkdtemp()
         self.real_path = os.path.join(self.tmpdir, "file.txt")
@@ -1152,7 +1140,6 @@ class TestOpenNoFollow(unittest.TestCase):
 
 #############################################################################
 class TestCloseQuietly(unittest.TestCase):
-
     def test_closes_valid_fd(self) -> None:
         """Closes a valid FD so subsequent close raises OSError (EBADF)."""
         r, w = os.pipe()
@@ -1192,7 +1179,6 @@ class TestCloseQuietly(unittest.TestCase):
 
 #############################################################################
 class TestValidateFilePermissions(unittest.TestCase):
-
     def test_ok_when_owner_and_mode_match(self) -> None:
         with tempfile.NamedTemporaryFile(delete=True) as f:
             os.chmod(f.name, FILE_PERMISSIONS)
@@ -1381,7 +1367,6 @@ class TestNonblockingFileLock(unittest.TestCase):
 
 #############################################################################
 class TestFindMatch(unittest.TestCase):
-
     def test_basic(self) -> None:
         def condition(arg: str) -> bool:
             return arg.startswith("-")
@@ -1588,7 +1573,6 @@ class TestFindMatch(unittest.TestCase):
 
 #############################################################################
 class TestReplaceCapturingGroups(unittest.TestCase):
-
     def test_basic_case(self) -> None:
         self.assertEqual("(?:abc)", replace_capturing_groups_with_non_capturing_groups("(abc)"))
 
@@ -1754,7 +1738,6 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 
 #############################################################################
 class TestTaskTiming(unittest.TestCase):
-
     def test_sleep_calls_time_sleep_by_default(self) -> None:
         sleep_nanos = 123_000_000
         expected_secs = sleep_nanos / 1_000_000_000
@@ -1814,7 +1797,6 @@ class TestTaskTiming(unittest.TestCase):
 
 #############################################################################
 class TestSubprocessRun(unittest.TestCase):
-
     def test_successful_command(self) -> None:
         result = subprocess_run(["true"], stdout=PIPE, stderr=subprocess.PIPE)
         self.assertEqual(0, result.returncode)
@@ -1867,7 +1849,6 @@ class TestSubprocessRun(unittest.TestCase):
 
 #############################################################################
 class TestSubprocessRunWithSubprocesses(unittest.TestCase):
-
     def test_unregisters_on_success(self) -> None:
         """Registers a PID and ensures it is unregistered on success."""
         sp = Subprocesses()
@@ -2111,7 +2092,6 @@ class TestSubprocessRunLogging(unittest.TestCase):
 
 #############################################################################
 class TestPIDExists(unittest.TestCase):
-
     def test_pid_exists(self) -> None:
         self.assertTrue(pid_exists(os.getpid()))
         self.assertFalse(pid_exists(-1))
@@ -2136,7 +2116,6 @@ class TestPIDExists(unittest.TestCase):
 
 #############################################################################
 class TestTerminateProcessSubtree(unittest.TestCase):
-
     def setUp(self) -> None:
         self.children: list[subprocess.Popen[Any]] = []
 
@@ -2208,7 +2187,6 @@ class TestTerminateProcessSubtree(unittest.TestCase):
 
 #############################################################################
 class TestTerminationSignalHandler(unittest.TestCase):
-
     def test_sets_event_and_calls_custom_handler_on_sigint(self) -> None:
         old_sigint = signal.getsignal(signal.SIGINT)
         old_sigterm = signal.getsignal(signal.SIGTERM)
@@ -2300,7 +2278,6 @@ class TestTerminationSignalHandler(unittest.TestCase):
 
 #############################################################################
 class TestJobStats(unittest.TestCase):
-
     def test_stats_repr(self) -> None:
         stats = JobStats(jobs_all=10)
         stats.jobs_started = 5
@@ -2314,7 +2291,6 @@ class TestJobStats(unittest.TestCase):
 
 #############################################################################
 class TestUpdatablePriorityQueue(unittest.TestCase):
-
     def setUp(self) -> None:
         self.pq: UpdatablePriorityQueue[int] = UpdatablePriorityQueue()
         self.pq_reverse: UpdatablePriorityQueue[int] = UpdatablePriorityQueue(reverse=True)
@@ -2529,7 +2505,6 @@ class IntHolder:
 
 #############################################################################
 class TestSynchronizedBool(unittest.TestCase):
-
     def test_initialization(self) -> None:
         b = SynchronizedBool(True)
         self.assertTrue(b.value)
@@ -2586,7 +2561,6 @@ class TestSynchronizedBool(unittest.TestCase):
 
 #############################################################################
 class TestSynchronizedDict(unittest.TestCase):
-
     def setUp(self) -> None:
         self.sync_dict: SynchronizedDict = SynchronizedDict({"a": 1, "b": 2, "c": 3})
 
@@ -2641,7 +2615,6 @@ class TestSynchronizedDict(unittest.TestCase):
 
 #############################################################################
 class TestSynchronousExecutor(unittest.TestCase):
-
     def test_submit_runs_inline_on_current_thread(self) -> None:
         main_ident: int = threading.get_ident()
         with SynchronousExecutor() as ex:
@@ -2715,7 +2688,6 @@ class TestSynchronousExecutor(unittest.TestCase):
 
 #############################################################################
 class TestXFinally(unittest.TestCase):
-
     def test_xfinally_executes_cleanup_on_success(self) -> None:
         cleanup = MagicMock()
         with xfinally(cleanup):
@@ -2763,7 +2735,6 @@ class TestXFinally(unittest.TestCase):
 
 ###############################################################################
 class TestCurrentDateTime(unittest.TestCase):
-
     def setUp(self) -> None:
         self.fixed_datetime = datetime(2024, 1, 1, 12, 0, 0)
 

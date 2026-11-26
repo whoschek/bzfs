@@ -80,7 +80,7 @@ Has zero dependencies beyond the Python standard library.
 Example README.md file:
 
 ```markdown
-{_markdown_file_template('Example CLI Tool').replace("-MANPAGE-", ".MANPAGE.").rstrip()}
+{_markdown_file_template("Example CLI Tool").replace("-MANPAGE-", ".MANPAGE.").rstrip()}
 ```
 
 Manually replace all occurrences of '.MANPAGE.' with '-MANPAGE-' in the example file above.

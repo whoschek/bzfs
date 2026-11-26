@@ -640,7 +640,7 @@ def _replicate_dataset_incrementally(
         dense_size: str = p.two_or_more_spaces_regex.sub("", humansize.strip())
         log.info(
             p.dry(f"{tid} Incremental send {incr_flag}: %s"),
-            f"{from_snap} .. {to_snap[to_snap.index('@'):]} --> {dst_dataset} ({dense_size}) ({human_num}) ...",
+            f"{from_snap} .. {to_snap[to_snap.index('@') :]} --> {dst_dataset} ({dense_size}) ({human_num}) ...",
         )
         done_checking = done_checking or _check_zfs_dataset_busy(job, dst, dst_dataset, busy_if_send=False)
         if p.dry_run and not job.dst_dataset_exists[dst_dataset]:

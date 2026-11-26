@@ -23,6 +23,9 @@ import logging
 import sys
 import time
 import unittest
+from collections.abc import (
+    Sequence,
+)
 from datetime import (
     datetime,
     timedelta,
@@ -93,12 +96,11 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class CommonTest(AbstractTestCase):
-
     def __init__(self, methodName: str = "runTest") -> None:  # noqa: N803
         super().__init__(methodName)
 
     def filter_snapshots_by_times_and_rank(
-        self, snapshots: list[str], timerange: str, ranks: list[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
+        self, snapshots: list[str], timerange: str, ranks: Sequence[str] = (), loglevel: int = logging.DEBUG
     ) -> list[str]:
         args = self.argparser_parse_args(args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks])
         job = bzfs.Job()
@@ -113,7 +115,6 @@ class CommonTest(AbstractTestCase):
 
 #############################################################################
 class TestHelperFunctions(CommonTest):
-
     def test_filter_lines(self) -> None:
         input_list = ["apple\tred", "banana\tyellow", "cherry\tred", "date\tbrown"]
 
@@ -279,7 +280,6 @@ class TestHelperFunctions(CommonTest):
 
 #############################################################################
 class TestTimeRangeAction(CommonTest):
-
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--time-n-ranks", action=bzfs_main.argparse_actions.TimeRangeAndRankRangeAction, nargs="+")
@@ -477,14 +477,13 @@ class TestTimeRangeAction(CommonTest):
         )
 
     def filter_snapshots_by_times_and_rank1(
-        self, snapshots: list[str], timerange: str, ranks: list[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
+        self, snapshots: list[str], timerange: str, ranks: Sequence[str] = (), loglevel: int = logging.DEBUG
     ) -> list[str]:
         return self.filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks, loglevel=loglevel)
 
 
 #############################################################################
 class TestRankRangeAction(CommonTest):
-
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--ranks", nargs="+", action=bzfs_main.argparse_actions.TimeRangeAndRankRangeAction)
@@ -744,7 +743,6 @@ class TestRankRangeAction(CommonTest):
 
 #############################################################################
 class TestFilterSnapshotsWithBookmarks(CommonTest):
-
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
         self.job = bzfs.Job()
@@ -854,7 +852,6 @@ class TestFilterSnapshotsWithBookmarks(CommonTest):
 
 #############################################################################
 class TestFilterDatasets(CommonTest):
-
     def make_job(
         self,
         include: list[str] | None = None,
@@ -977,7 +974,6 @@ class TestFilterDatasets(CommonTest):
 
 #############################################################################
 class TestFilterDatasetsByExcludeProperty(CommonTest):
-
     def make_job(self, debug: bool = False) -> tuple[Job, Remote]:
         args = self.argparser_parse_args(["src", "dst", "--exclude-dataset-property", "skip"])
         log = logging.getLogger(f"prop_{id(self)}_{debug}")

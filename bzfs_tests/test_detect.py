@@ -80,7 +80,6 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestVersionComparison(AbstractTestCase):
-
     def test_is_version_at_least(self) -> None:
         self.assertFalse(is_version_at_least("0.9.9", "1.0.0"))
         self.assertTrue(is_version_at_least("1.0.0", "1.0.0"))
@@ -112,7 +111,6 @@ class TestVersionComparison(AbstractTestCase):
 
 #############################################################################
 class TestRemoteConfCache(AbstractTestCase):
-
     def test_remote_conf_cache_hit_skips_detection(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
@@ -404,7 +402,6 @@ class TestDetectionConnectionCleanup(AbstractTestCase):
 
 #############################################################################
 class TestDisableAndHelpers(AbstractTestCase):
-
     def test_disable_program(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
@@ -457,7 +454,6 @@ class TestDisableAndHelpers(AbstractTestCase):
 
 #############################################################################
 class TestDetectAvailablePrograms(AbstractTestCase):
-
     def _setup_job(self, extra_args: list[str] | None = None) -> bzfs.Job:
         args = self.argparser_parse_args(["src", "dst"] + (extra_args or []))
         p = self.make_params(args=args)
@@ -689,7 +685,6 @@ class TestDetectAvailablePrograms(AbstractTestCase):
 
 #############################################################################
 class TestDetectAvailableProgramsRemote(AbstractTestCase):
-
     def _setup(self) -> tuple[bzfs.Job, Remote]:
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)

@@ -61,7 +61,6 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestConnectionLease(AbstractTestCase):
-
     def test__set_socket_mtime_to_now_updates_when_file_exists(self) -> None:
         with tempfile.NamedTemporaryFile(delete=True) as tf:
             socket_path = tf.name
@@ -73,7 +72,7 @@ class TestConnectionLease(AbstractTestCase):
             self.assertGreater(after, before)
 
     def test__set_socket_mtime_to_now_ignores_missing_file(self) -> None:
-        missing_path = os.path.join(tempfile.gettempdir(), f"bzfs_utime_now_missing_{int(time.time()*1e6)}")
+        missing_path = os.path.join(tempfile.gettempdir(), f"bzfs_utime_now_missing_{int(time.time() * 1e6)}")
         if os.path.exists(missing_path):
             os.remove(missing_path)
         lease = ConnectionLease(fd=-1, used_path="", free_path="", socket_path=missing_path)

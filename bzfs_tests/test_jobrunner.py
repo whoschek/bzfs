@@ -101,7 +101,6 @@ def make_bzfs_jobrunner_job(log: Logger | None = None) -> bzfs_jobrunner.Job:
 
 #############################################################################
 class TestHelperFunctions(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = make_bzfs_jobrunner_job()
 
@@ -253,7 +252,6 @@ class TestHelperFunctions(AbstractTestCase):
 
 #############################################################################
 class TestParseSrcHosts(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = make_bzfs_jobrunner_job()
 
@@ -333,7 +331,6 @@ class TestParseSrcHosts(AbstractTestCase):
 
 #############################################################################
 class TestValidation(AbstractTestCase):
-
     def _new_job(self) -> bzfs_jobrunner.Job:
         job = make_bzfs_jobrunner_job()
         return job
@@ -458,7 +455,6 @@ class TestValidation(AbstractTestCase):
 
 #############################################################################
 class TestFiltering(AbstractTestCase):
-
     def _capture_subjobs(
         self,
         *,
@@ -564,7 +560,6 @@ class TestFiltering(AbstractTestCase):
 
 #############################################################################
 class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
-
     def setUp(self) -> None:
         self.log_mock = MagicMock(Logger)
         self.job = make_bzfs_jobrunner_job(log=self.log_mock)
@@ -924,7 +919,6 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
 
 #############################################################################
 class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
-
     def setUp(self) -> None:
         self.assertIsNotNone(shutil.which("sh"))
         self.job = make_bzfs_jobrunner_job()
@@ -1049,7 +1043,6 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
 #############################################################################
 @patch("bzfs_main.bzfs_jobrunner.Job._bzfs_run_main")
 class TestRunSubJobInCurrentThread(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = make_bzfs_jobrunner_job()
 
@@ -1125,7 +1118,6 @@ class TestRunSubJobInCurrentThread(AbstractTestCase):
 
 #############################################################################
 class TestRunSubJob(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = make_bzfs_jobrunner_job()
         self.job.stats.jobs_all = 1
@@ -1218,7 +1210,6 @@ class TestRunSubJob(AbstractTestCase):
 
 #############################################################################
 class TestGetWorstException(AbstractTestCase):
-
     def test_fatal_exit_codes_choose_larger_code(self) -> None:
         """Both inputs fatal => pick max(exit_code)."""
         for existing_code, new_code, expected in ((7, 9, 9), (9, 7, 9), (5, 5, 5)):
@@ -1238,7 +1229,6 @@ class TestGetWorstException(AbstractTestCase):
 
 #############################################################################
 class TestErrorPropagation(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = make_bzfs_jobrunner_job()
 
@@ -1390,7 +1380,6 @@ class TestScopedTerminationInProcess(AbstractTestCase):
 
 #############################################################################
 class TestValidateSnapshotPlan(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = make_bzfs_jobrunner_job(log=MagicMock())
 
@@ -1410,7 +1399,6 @@ class TestValidateSnapshotPlan(AbstractTestCase):
 
 #############################################################################
 class TestValidateMonitorSnapshotPlan(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = make_bzfs_jobrunner_job(log=MagicMock())
 
@@ -1430,7 +1418,6 @@ class TestValidateMonitorSnapshotPlan(AbstractTestCase):
 
 #############################################################################
 class TestParserIsolationAcrossSubjobs(AbstractTestCase):
-
     def test_replicate_subjobs_do_not_leak_snapshot_filters(self) -> None:
         """Multiple replicate subjobs in one process must not leak include-snapshot-regex between parses.
 
@@ -1504,7 +1491,6 @@ class TestParserIsolationAcrossSubjobs(AbstractTestCase):
 
 #############################################################################
 class TestRepeatIfTookMoreThanSeconds(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = make_bzfs_jobrunner_job()
 

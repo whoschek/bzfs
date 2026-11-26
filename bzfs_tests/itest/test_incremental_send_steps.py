@@ -44,7 +44,6 @@ from bzfs_tests.zfs_util import (
 #############################################################################
 @final
 class IncrementalSendStepsTestCase(IntegrationTestCase):
-
     def test_snapshot_series_excluding_hourlies(self) -> None:
         testcase = {None: ["d1", "h1", "d2", "d3", "d4"]}
         expected_results = ["d1", "d2", "d3", "d4"]

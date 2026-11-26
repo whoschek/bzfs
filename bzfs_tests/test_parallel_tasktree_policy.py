@@ -65,7 +65,6 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestProcessDatasetsInParallel(unittest.TestCase):
-
     def setUp(self) -> None:
         self.lock: threading.Lock = threading.Lock()
         self.log = MagicMock(spec=Logger)

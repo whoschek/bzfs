@@ -231,7 +231,7 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
         i = regex.rfind("(", 0, i + 1)
         if i >= 0 and (i == 0 or regex[i - 1] != "\\"):
             if regex[i + 1] != "?":
-                regex = f"{regex[0:i]}(?:{regex[i + 1:]}"  # unnamed capturing group
+                regex = f"{regex[0:i]}(?:{regex[i + 1 :]}"  # unnamed capturing group
             else:  # potentially a valid named capturing group
                 regex = regex[0:i] + _NAMED_CAPTURING_GROUP.sub(repl="(?:", string=regex[i:], count=1)
         i -= 1

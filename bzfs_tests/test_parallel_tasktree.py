@@ -105,7 +105,6 @@ def _run_complete_dataset_with_barriers(
 
 #############################################################################
 class TestBuildTree(unittest.TestCase):
-
     def assert_keys_sorted(self, tree: dict[str, Any]) -> None:
         keys = list(tree.keys())
         self.assertEqual(sorted(keys), keys, f"Keys are not sorted: {keys}")
@@ -272,7 +271,6 @@ class TestBuildTree(unittest.TestCase):
 
 #############################################################################
 class TestProcessDatasetsInParallel(unittest.TestCase):
-
     def test_str_treenode(self) -> None:
         self.assertTrue(bool(str(_make_tree_node("foo", "foo", {}))))
 
@@ -570,7 +568,6 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
 #############################################################################
 class TestCustomPriorityOrder(unittest.TestCase):
-
     def test_custom_priority_orders_available_datasets(self) -> None:
         """Custom priority uses integer "size" (cost) per dataset to decide order among available datasets.
 
@@ -742,7 +739,6 @@ def make_tree_node(dataset: str, children: _Tree, parent: _TreeNode | None = Non
 
 #############################################################################
 class TestBarriersCleared(unittest.TestCase):
-
     def test_failure_clears_ancestor_barriers_and_sets_empty_barrier(self) -> None:
         """Verifies that a first failure clears barriers for the node and all its ancestors and sets empty_barrier.
 
@@ -910,7 +906,6 @@ def pp_process_dataset(dataset: str, submit_count: int) -> CompletionCallback:
 
 #############################################################################
 class TestProcessPoolExecutor(unittest.TestCase):
-
     def test_process_pool_executor_with_picklable_callback_via_partial(self) -> None:
         """ProcessPoolExecutor works when process_dataset returns a pickleable callback (via partial).
 
@@ -951,7 +946,6 @@ class TestProcessPoolExecutor(unittest.TestCase):
 
 #############################################################################
 class TestBarrierName(unittest.TestCase):
-
     def test_rejects_empty_barrier_name(self) -> None:
         """Validates that barrier_name must be non-empty."""
 
@@ -1011,7 +1005,6 @@ class TestBarrierName(unittest.TestCase):
 
 #############################################################################
 class TestParallelTaskTreeBenchmark(unittest.TestCase):
-
     @staticmethod
     def generate_unique_datasets(num_datasets: int, length: int) -> list[str]:
         # Create a realistic hierarchy to test tree-building performance

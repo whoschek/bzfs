@@ -63,7 +63,6 @@ _PORT: Final[str] = getenv_any("test_ssh_port") or SSH_DEFAULT_PORT
 
 #############################################################################
 class MinimalRemoteTestCase(IntegrationTestCase):
-
     def supports_r2r_mode(self) -> bool:
         """Returns true when this parametrized test case uses a remote-to-remote topology suitable for r2r."""
         ssh_mode: str = self.param.get("ssh_mode", "local") if self.param else "local"
@@ -234,7 +233,6 @@ class MinimalRemoteTestCase(IntegrationTestCase):
 #############################################################################
 @final
 class FullRemoteTestCase(MinimalRemoteTestCase):
-
     def test_ssh_program_must_not_be_disabled_in_nonlocal_mode(self) -> None:
         LocalTestCase(param=self.param).test_ssh_program_must_not_be_disabled_in_nonlocal_mode()
 

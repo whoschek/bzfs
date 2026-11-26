@@ -79,7 +79,6 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestHelperFunctions(unittest.TestCase):
-
     def setUp(self) -> None:
         self.default_opts = bzfs.argument_parser().get_default("pv_program_opts")
 
