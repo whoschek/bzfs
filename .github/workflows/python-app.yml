@@ -179,7 +179,7 @@ jobs:
       - name: Display ZFS version and Python version
         uses: $/.github/actions/print-versions
       - name: Run pre-commit
-        if: ${{ matrix.python-version != '3.15' && matrix.python-version != '3.16-dev' }} # preinstall_dev.sh requires wheels
+        if: ${{ matrix.python-version != '3.16-dev' }} # preinstall_dev.sh requires wheels
         uses: $/.github/actions/pre-commit
         with:
           python-version: ${{ matrix.python-version }}

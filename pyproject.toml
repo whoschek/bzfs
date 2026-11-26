@@ -78,7 +78,7 @@ exclude-dependencies = [
 
 [tool.uv.pip]
 # update_lockfiles.sh will use the following security fixes with shorter cooldown period:
-exclude-newer-package = { platformdirs = "4 days" }
+exclude-newer-package = { platformdirs = "4 days", pyyaml = "5 days" }
 
 [project.scripts]
 bzfs = "bzfs_main.bzfs:main"
