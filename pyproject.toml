@@ -71,6 +71,16 @@ dev = [  # for development only
   "conventional-pre-commit==4.4.0 ; python_version >= '3.9'",  # see https://github.com/compilerla/conventional-pre-commit
 ]
 
+[tool.uv]
+exclude-dependencies = [
+  "virtualenv",  # we don't need pre-commit's managed Python hooks. For security, our Python hooks run directly from .venv
+  "nodeenv",     # ditto
+]
+
+[tool.uv.pip]
+# update_lockfiles.sh will use the following security fixes with shorter cooldown period:
+exclude-newer-package = { platformdirs = "4 days" }
+
 [project.scripts]
 bzfs = "bzfs_main.bzfs:main"
 bzfs_jobrunner = "bzfs_main.bzfs_jobrunner:main"

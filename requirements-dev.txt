@@ -282,16 +282,6 @@ dill==0.4.1 ; python_full_version >= '3.11' \
     --hash=sha256:1e1ce33e978ae97fcfcff5638477032b801c46c7c65cf717f95fbc2248f79a9d \
     --hash=sha256:423092df4182177d4d8ba8290c8a5b640c66ab35ec7da59ccfa00f6fa3eea5fa
     # via pylint
-distlib==0.4.4 ; python_full_version >= '3.11' \
-    --hash=sha256:ca4175b4ac7f71223cc30ed7248c45d2b38c2439d8ee6e498ab67ed63cf3508d \
-    --hash=sha256:cf09d55b1e85a89576b036aeb71550bfd68320f3f21761ca329eadadad918638
-    # via virtualenv
-filelock==4.2.12 ; python_full_version >= '3.11' \
-    --hash=sha256:21decfec02f116ed4c954433cdb31f28c3b346b784543177b6d7059da2702ee9 \
-    --hash=sha256:7e7da24d3ac39268b0f156e56870001de44886318f092f9d851e692f7114d6dd
-    # via
-    #   python-discovery
-    #   virtualenv
 identify==2.6.20 ; python_full_version >= '3.11' \
     --hash=sha256:6a16b69b93187244e0548cbfd25b3e4a6f9a7a2ad784625c3bec2b8d27b81aaa \
     --hash=sha256:ad729860a923858d26917c2f4fb0a1d83d27a75b1e090c06440c573f048f3285
@@ -533,29 +523,22 @@ mypy-extensions==1.2.0 ; python_full_version >= '3.10' \
     #   black
     #   isort
     #   mypy
-nodeenv==1.12.0 ; python_full_version >= '3.11' \
-    --hash=sha256:4ea7f88339310afebc3253f2c7a91b94bacf97d73a36a5c108962abdfaca501e \
-    --hash=sha256:80644d65c10cc2be12e3e4b54b3367ff288c7ad24ae75c2dcc65454fc7449d4d
-    # via pre-commit
 packaging==26.3 ; python_full_version >= '3.11' \
     --hash=sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79 \
     --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
-    # via
-    #   black
-    #   virtualenv
+    # via black
 pathspec==1.1.1 ; python_full_version >= '3.10' \
     --hash=sha256:17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a \
     --hash=sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189
     # via
     #   black
     #   mypy
-platformdirs==4.14.7 ; python_full_version >= '3.11' \
-    --hash=sha256:391513b74707c42335fff3ea17eaac657a7ee9ffcadd809634d34ea594d0122c \
-    --hash=sha256:5472257c1cf97a14658af52997011c7e59e4aebf3a24950b973c11b579e1b074
+platformdirs==4.14.8 ; python_full_version >= '3.11' \
+    --hash=sha256:1e34af590de4d978631b751eb2202f2fee4497537a17c1720b12fcf57b331392 \
+    --hash=sha256:96893d686e84e9e6f358a9ea41a8de544df66dbf2ba6cda250e7dc73acf85b9b
     # via
     #   black
     #   pylint
-    #   virtualenv
 pre-commit==4.7.0 ; python_full_version >= '3.11' \
     --hash=sha256:1f3deee12b914c8fa184bd2b5953391c2e4f36763e403d4a23dc9983fa7c6e86 \
     --hash=sha256:2e229038ad3656081b70c27913157e4b636ef306f643f024a8a8e3f0f7b2f877
@@ -583,10 +566,6 @@ pyrefly==1.5.0 \
     --hash=sha256:e9fcc4ef2709eda35c5b8b262f204db2601ef619f983ce084f26627fdf641b01 \
     --hash=sha256:ef8411a2dfcf68d3d727b7cf5a6e5bfc71008e99267f763b331cc8b9070d0b29
     # via bzfs (pyproject.toml)
-python-discovery==1.9.6 ; python_full_version >= '3.11' \
-    --hash=sha256:383aa67858d73a9585a843a37a4383c6be98e4d86a981a031328e393a6eb2632 \
-    --hash=sha256:93b10b90363d4151964cdeee2ec6601f3041b17fc2b253a1c3da7d6e7ddd8337
-    # via virtualenv
 pytokens==0.4.1 ; python_full_version >= '3.11' \
     --hash=sha256:0fc71786e629cef478cbf29d7ea1923299181d0699dbe7c3c0f4a583811d9fc1 \
     --hash=sha256:11edda0942da80ff58c4408407616a310adecae1ddd22eef8c692fe266fa5009 \
@@ -805,7 +784,3 @@ typing-extensions==4.16.0 ; python_full_version >= '3.10' \
     --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8 \
     --hash=sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5
     # via mypy
-virtualenv==21.15.9 ; python_full_version >= '3.11' \
-    --hash=sha256:adc6799981f513ce852aea17ea592e0d342ce48e87f5d17a3d997966df582a67 \
-    --hash=sha256:c0fbae7de061402e31897d96cfbe7dc35ce93cd464fe05f9bdbecf61313447bf
-    # via pre-commit
