@@ -517,6 +517,13 @@ class Job:
         self.subprocesses: Final[Subprocesses] = Subprocesses(termination_event.is_set)
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
+        self.spawn_process_env: Final[dict[str, str]] = dict(  # same as the `bzfs` launcher shell script
+            os.environ,
+            PYTHONPATH=os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
+            PYTHONSAFEPATH="1",
+            PYTHONNOUSERSITE="1",
+            PYTHONOPTIMIZE="",
+        )
         self.loopback_address: Final[str] = _detect_loopback_address()
 
         # mutable variables:
@@ -1095,7 +1102,7 @@ class Job:
         if self.jobrunner_dryrun:
             return 0
 
-        with self.subprocesses.popen_and_track(cmd, stdin=subprocess.DEVNULL, text=True) as proc:
+        with self.subprocesses.popen_and_track(cmd, stdin=subprocess.DEVNULL, text=True, env=self.spawn_process_env) as proc:
             try:
                 if self.termination_event.is_set():
                     timeout_secs = 1.0 if timeout_secs is None else timeout_secs
