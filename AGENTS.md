@@ -201,8 +201,8 @@ Before committing any changes, you MUST follow this exact sequence:
 2. **Re-run Validation:** Execute the full [Change Validation Workflow](#change-validation-workflow). If it does not
    pass 100%, stop and do not commit.
 
-3. **Final Slow Checks:** Run `pre-commit run --all-files --hook-stage manual` to also run manual hooks (e.g. pylint).
-   If it does not pass 100%, do not commit.
+3. **Final Slow Checks:** Run `pre-commit run --all-files --hook-stage manual` to also run manual hooks. If it does not
+   pass 100%, do not commit.
 
 4. **Commit:**
 
@@ -281,9 +281,6 @@ Your goal is to improve quality with zero functional regressions.
 
 - **Preserve docstrings and code comments:** During refactors, copy existing docstrings and comments first, then keep or
   improve them as code changes or moves.
-
-- **Detect Circular Dependencies:** Run `pre-commit run pylint --all-files --hook-stage manual` to catch any import
-  cycles (this check is not run on every commit by default).
 
 - **Avoid Circular Dependencies:** If you detect a circular import, extract the shared logic into a new utility module -
   or an existing module that keeps the dependency graph acyclic - rather than adding deep import chains.

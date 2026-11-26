@@ -38,5 +38,5 @@ runs:
         sed -i 's/^fail_fast:\s*true/fail_fast: false/' .pre-commit-config.yaml
         echo "[CI] pre-commit fail_fast is now set to: $(grep '^fail_fast:' .pre-commit-config.yaml)"
 
-        # Run all normal pre-commit hooks, plus the manual stage for CI-only checks such as cyclic import detection by pylint
+        # Run all normal pre-commit hooks, plus the manual stage for CI-only checks
         pre-commit run --all-files --hook-stage manual

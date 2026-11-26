@@ -12,7 +12,7 @@
 #
 # Optional maintenance commands:
 #   * pre-commit run --all-files        # Run hooks on the whole repo
-#   * pre-commit run --all-files --hook-stage manual  # Also run manual hooks (e.g. pylint)
+#   * pre-commit run --all-files --hook-stage manual  # Also run manual hooks
 #   * pre-commit uninstall              # Remove the .git/hooks/pre-commit hook script
 #   * pre-commit uninstall; pre-commit clean; pre-commit install --install-hooks  # Reinstall from scratch
 #
@@ -149,7 +149,6 @@ repos:
         entry: .venv/bin/python -m isort
         args: [--filter-files]
         types_or: [python, pyi]
-        stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
         require_serial: true
       # config options like `force_grid_wrap` live in pyproject.toml
   - repo: local
@@ -162,17 +161,6 @@ repos:
         types_or: [python, pyi]
         require_serial: true
       # config options like `target-version` live in pyproject.toml
-  - repo: local
-    hooks:
-      - id: pylint                      # Run `pylint` linter to check Python source code via https://github.com/pycqa/pylint
-        name: pylint (cyclic imports, etc)
-        language: unsupported
-        entry: .venv/bin/python -m pylint
-        types: [python]
-        stages: [manual]  # Slow; only runs manually or in CI via 'pre-commit run --all-files --hook-stage manual'
-        files: '^(?!bzfs_tests/).*\.py$'  # Run on all Python files except bzfs_tests/
-        require_serial: true
-        # config options like `enable` live in pyproject.toml
   - repo: local
     hooks:
       - id: pyrefly-infer
