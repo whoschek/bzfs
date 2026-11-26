@@ -63,7 +63,6 @@ def suite() -> unittest.TestSuite:
 
 ###############################################################################
 class TestDatasetPairsAction(AbstractTestCase):
-
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--input", nargs="+", action=argparse_actions.DatasetPairsAction)
@@ -131,7 +130,6 @@ class TestDatasetPairsAction(AbstractTestCase):
 
 ###############################################################################
 class TestFileOrLiteralAction(AbstractTestCase):
-
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--input", nargs="+", action=argparse_actions.FileOrLiteralAction)
@@ -172,7 +170,6 @@ class TestFileOrLiteralAction(AbstractTestCase):
 
 ###############################################################################
 class TestNewSnapshotFilterGroupAction(AbstractTestCase):
-
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument(
@@ -251,7 +248,6 @@ class TestDeleteDstSnapshotsExceptPlanAction(AbstractTestCase):
 
 ###############################################################################
 class TestNonEmptyStringAction(AbstractTestCase):
-
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--name", action=argparse_actions.NonEmptyStringAction)
@@ -263,7 +259,6 @@ class TestNonEmptyStringAction(AbstractTestCase):
 
 ###############################################################################
 class SSHConfigFileNameAction(AbstractTestCase):
-
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("filename", action=argparse_actions.SSHConfigFileNameAction)
@@ -289,7 +284,6 @@ class SSHConfigFileNameAction(AbstractTestCase):
 
 ###############################################################################
 class TestSafeFileNameAction(AbstractTestCase):
-
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("filename", action=argparse_actions.SafeFileNameAction)
@@ -329,7 +323,6 @@ class TestSafeFileNameAction(AbstractTestCase):
 
 ###############################################################################
 class TestSafeDirectoryNameAction(AbstractTestCase):
-
     def test_valid_directory_name_is_accepted(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--dir", action=argparse_actions.SafeDirectoryNameAction)
@@ -357,7 +350,6 @@ class TestSafeDirectoryNameAction(AbstractTestCase):
 
 ###############################################################################
 class TestValidateNoArgumentFile(AbstractTestCase):
-
     def test_validate_no_argument_file_raises(self) -> None:
         parser = argparse.ArgumentParser()
         ns = argparse.Namespace(no_argument_file=True)
@@ -367,7 +359,6 @@ class TestValidateNoArgumentFile(AbstractTestCase):
 
 ###############################################################################
 class TestCheckRange(AbstractTestCase):
-
     def test_valid_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=CheckRange, min=0, max=100)
@@ -493,7 +484,6 @@ class TestCheckRange(AbstractTestCase):
 
 ###############################################################################
 class TestCheckPercentRange(AbstractTestCase):
-
     def test_valid_range_min(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--threads", action=argparse_actions.CheckPercentRange, min=1)

@@ -134,9 +134,9 @@ class ParallelTaskTree:
         priority: Callable[[str], Comparable] = lambda dataset: dataset,  # lexicographical order by default
         max_workers: int = os.cpu_count() or 1,
         executors: Callable[[], Executor] | None = None,  # factory producing Executor; None means 'auto-choose'
-        interval_nanos: Callable[
-            [int, str, int], int
-        ] = lambda last_update_nanos, dataset, submit_count: 0,  # optionally spread tasks out over time; e.g. for jitter
+        interval_nanos: Callable[[int, str, int], int] = lambda last_update_nanos, dataset, submit_count: (
+            0
+        ),  # optionally spread tasks out over time; e.g. for jitter
         timing: TaskTiming = TaskTiming(),  # noqa: B008
         component_separator: str = COMPONENT_SEPARATOR,
         enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'

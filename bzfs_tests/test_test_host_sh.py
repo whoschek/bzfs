@@ -42,7 +42,6 @@ def suite() -> unittest.TestSuite:
 #############################################################################
 @unittest.skipIf(shutil.which("bash") is None, "Requires bash")
 class TestRemotePathValidation(unittest.TestCase):
-
     def setUp(self) -> None:
         self.repo_root: Path = Path(__file__).resolve().parents[1]
         self.script: str = os.path.join(self.repo_root, "test_host.sh")

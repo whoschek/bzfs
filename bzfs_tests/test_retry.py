@@ -89,7 +89,6 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestSleep(unittest.TestCase):
-
     def test_sleep_calls_time_sleep_when_termination_event_is_none(self) -> None:
         sleep_nanos = 123_000_000
         expected_secs = sleep_nanos / 1_000_000_000
@@ -138,7 +137,6 @@ class TestSleep(unittest.TestCase):
 
 #############################################################################
 class TestRetryTiming(unittest.TestCase):
-
     def test_make_from_none_returns_default_timing(self) -> None:
         sleep_nanos = 123_000_000
         expected_secs = sleep_nanos / 1_000_000_000
@@ -259,7 +257,6 @@ class TestRetryTiming(unittest.TestCase):
 
 #############################################################################
 class TestCallWithRetries(unittest.TestCase):
-
     def test_retry_policy_repr(self) -> None:
         retry_policy = RetryPolicy(
             max_retries=1,
@@ -1893,7 +1890,6 @@ class TestCallWithRetries(unittest.TestCase):
 
 #############################################################################
 class TestRetryPolicyCopy(unittest.TestCase):
-
     def test_copy_returns_distinct_but_equal_policy(self) -> None:
         """Ensures copy() returns a new RetryPolicy instance with identical field values when no overrides are given."""
         original = RetryPolicy(
@@ -1938,7 +1934,6 @@ class TestRetryPolicyCopy(unittest.TestCase):
 
 #############################################################################
 class TestRetryConfigCopy(unittest.TestCase):
-
     def test_copy_returns_distinct_but_equal_config(self) -> None:
         """Ensures copy() returns a new RetryConfig instance with identical field values when no overrides are given."""
         original = RetryConfig()
@@ -1990,7 +1985,6 @@ class TestRetryConfigCopy(unittest.TestCase):
 
 #############################################################################
 class TestRetryTemplateCopy(unittest.TestCase):
-
     def test_copy_returns_distinct_but_equal_template(self) -> None:
         """Ensures copy() returns a new RetryTemplate instance with identical field values when no overrides are given."""
         original: RetryTemplate = RetryTemplate()
@@ -2034,7 +2028,6 @@ class TestRetryTemplateCopy(unittest.TestCase):
 
 #############################################################################
 class TestRetryTemplateCall(unittest.TestCase):
-
     def test_default_fn_raises_not_implemented_error(self) -> None:
         template: RetryTemplate = RetryTemplate()
         with self.assertRaises(NotImplementedError) as ctx:
@@ -2092,7 +2085,6 @@ class TestRetryTemplateCall(unittest.TestCase):
 
 #############################################################################
 class TestRetryTemplateWraps(unittest.TestCase):
-
     def test_wraps_sync_function_retries_and_passes_args(self) -> None:
         calls: list[tuple[int, int]] = []
         retry_count = 0
@@ -2153,7 +2145,6 @@ class TestRetryTemplateWraps(unittest.TestCase):
 
 #############################################################################
 class TestAttemptOutcomeCopy(unittest.TestCase):
-
     def test_copy_overrides_selected_fields(self) -> None:
         """Ensures copy() correctly overrides selected fields while preserving others."""
         original_log = MagicMock(spec=Logger)
@@ -2245,7 +2236,6 @@ class TestAttemptOutcomeCopy(unittest.TestCase):
 
 #############################################################################
 class TestCallWithExceptionHandlers(unittest.TestCase):
-
     def test_call_with_exception_handlers_success_returns_value(self) -> None:
         self.assertEqual("ok", call_with_exception_handlers(lambda: "ok", handlers={}))
 

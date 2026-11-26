@@ -67,9 +67,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
     skip_tree_on_error: Callable[[str], bool],  # lambda: dataset # called on error; return True to skip subtree on error
     skip_on_error: str = "fail",
     max_workers: int = os.cpu_count() or 1,
-    interval_nanos: Callable[
-        [int, str, int], int
-    ] = lambda last_update_nanos, dataset, submit_count: 0,  # optionally spread tasks out over time; e.g. for jitter
+    interval_nanos: Callable[[int, str, int], int] = lambda last_update_nanos, dataset, submit_count: (
+        0
+    ),  # optionally spread tasks out over time; e.g. for jitter
     timing: TaskTiming = TaskTiming(),  # noqa: B008
     termination_handler: Callable[[], None] = lambda: None,
     task_name: str = "Task",

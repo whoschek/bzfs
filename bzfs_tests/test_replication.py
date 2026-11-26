@@ -266,7 +266,9 @@ class TestQuoting(AbstractTestCase):
             ),
             patch(  # force pv to be present and include our backslashy opts + backslashy log path
                 "bzfs_main.replication._pv_cmd",
-                side_effect=lambda j, _sz, _human, disable_progress_bar=False: f"LC_ALL=C {shlex.join((j.params.pv_program,) + j.params.pv_program_opts)} 2>> {shlex.quote(j.params.log_params.pv_log_file)}",
+                side_effect=lambda j, _sz, _human, disable_progress_bar=False: (
+                    f"LC_ALL=C {shlex.join((j.params.pv_program,) + j.params.pv_program_opts)} 2>> {shlex.quote(j.params.log_params.pv_log_file)}"
+                ),
             ),
             patch(  # keep squote a no-op so we see the raw strings
                 "bzfs_main.replication.squote", side_effect=lambda _r, s: s

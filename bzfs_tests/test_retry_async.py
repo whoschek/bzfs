@@ -1448,7 +1448,6 @@ class TestAsyncRetryTemplateCall(unittest.IsolatedAsyncioTestCase):
 
 #############################################################################
 class TestAsyncRetryTemplateWraps(unittest.IsolatedAsyncioTestCase):
-
     async def test_wraps_async_function_retries_and_passes_args(self) -> None:
         calls: list[tuple[int, int]] = []
         retry_count = 0

@@ -141,7 +141,6 @@ from bzfs_tests.zfs_util import (
 #############################################################################
 @final
 class LocalTestCase(IntegrationTestCase):
-
     def test_aaa_log_diagnostics_first(self) -> None:
         logging.getLogger(__name__).warning(f"itest: self.param={self.param}")
 

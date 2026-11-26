@@ -71,7 +71,6 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestSnapshotLabel(AbstractTestCase):
-
     def test_notimestamp_str_full_parts(self) -> None:
         """Concatenates prefix + infix + suffix; ignores timestamp.
 
@@ -116,7 +115,6 @@ class TestSnapshotLabel(AbstractTestCase):
 
 #############################################################################
 class TestHelperFunctions(AbstractTestCase):
-
     def test_validate_quoting(self) -> None:
         params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
         params._validate_quoting([""])
@@ -879,7 +877,8 @@ class TestHelperFunctions(AbstractTestCase):
         config = configuration.MonitorSnapshotsConfig(args, params)
         self.assertTrue(str(config))
         self.assertListEqual(
-            [(100 + 1, 100 + 2)], [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts]  # type: ignore
+            [(100 + 1, 100 + 2)],
+            [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual([None], [alert.oldest for alert in config.alerts])
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
@@ -1019,7 +1018,6 @@ class TestHelperFunctions(AbstractTestCase):
 
 #############################################################################
 class TestAdditionalHelpers(AbstractTestCase):
-
     def make_r2r_params(
         self,
         *,

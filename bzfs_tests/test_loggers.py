@@ -77,7 +77,6 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestHelperFunctions(AbstractTestCase):
-
     def test_logdir_basename_prefix(self) -> None:
         """Basename of --log-dir must start with prefix 'bzfs-logs'."""
         with tempfile.TemporaryDirectory(prefix="logdir_symlink_test") as tmp_rootdir:

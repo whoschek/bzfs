@@ -75,7 +75,6 @@ _PORT: Final[str] = getenv_any("test_ssh_port") or "22"
 #############################################################################
 @final
 class TestSSHLatency(IntegrationTestCase):
-
     def run_latency_cmd(self, cmd: list[str], *, close_fds: bool = True) -> tuple[str, str]:
         process = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True, close_fds=close_fds)
         return process.stdout[0:-1], process.stderr[0:-1]  # omit trailing newline char

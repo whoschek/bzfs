@@ -188,8 +188,7 @@ class TestMarkdownFromArgparse(AbstractTestCase):
         self.assertIn('# <span id="sync~" class="man-subparser-heading">sync</span>', details)
         self.assertIn('<span id="--root" class="man-option-title">**--root** *VALUE*</span>', details)
         self.assertIn(
-            '<a href="#--root" title="Permalink to --root" aria-label="Permalink to --root" '
-            'class="man-option-permalink">',
+            '<a href="#--root" title="Permalink to --root" aria-label="Permalink to --root" class="man-option-permalink">',
             details,
         )
 

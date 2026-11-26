@@ -1019,10 +1019,12 @@ class Job:
         if process_datasets_in_parallel_and_fault_tolerant(
             log=log,
             datasets=sorted_subjobs,
-            process_dataset=lambda subjob, tid, retry: self.run_subjob(
-                subjobs[subjob], name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=spawn_process_per_job
-            )
-            == 0,
+            process_dataset=lambda subjob, tid, retry: (
+                self.run_subjob(
+                    subjobs[subjob], name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=spawn_process_per_job
+                )
+                == 0
+            ),
             priority=lambda dataset: dataset.count("/"),  # start runnable jobs sorted by tree depth aka breadth-first order
             skip_tree_on_error=lambda subjob: True,
             skip_on_error="dataset",

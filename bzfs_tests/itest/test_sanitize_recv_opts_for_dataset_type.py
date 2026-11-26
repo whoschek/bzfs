@@ -307,12 +307,7 @@ class SanitizeRecvOptsForDatasetTypeTestCase(IntegrationTestCase):
             self.assertEqual(
                 0,
                 process.returncode,
-                msg=(
-                    f"command: {cmd}\n"
-                    f"exit={process.returncode}\n"
-                    f"stdout:\n{process.stdout}\n\n"
-                    f"stderr:\n{process.stderr}"
-                ),
+                msg=f"command: {cmd}\nexit={process.returncode}\nstdout:\n{process.stdout}\n\nstderr:\n{process.stderr}",
             )
         return process
 

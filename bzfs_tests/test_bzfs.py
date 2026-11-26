@@ -129,7 +129,6 @@ def include_exclude_dataset_regex(regex: str) -> str:
 
 #############################################################################
 class TestHelperFunctions(AbstractTestCase):
-
     def test_validate_port(self) -> None:
         bzfs.validate_port(None, "msg")
         bzfs.validate_port(47, "msg")
@@ -730,7 +729,6 @@ class TestHelperFunctions(AbstractTestCase):
 
 #############################################################################
 class TestAdditionalHelpers(AbstractTestCase):
-
     def test_job_shutdown_calls_pool_shutdown(self) -> None:
         job = bzfs.Job()
         mock_pool = MagicMock()
@@ -765,7 +763,6 @@ class TestAdditionalHelpers(AbstractTestCase):
 
 #############################################################################
 class TestParseDatasetLocator(AbstractTestCase):
-
     def run_test(
         self,
         input_value: str,
@@ -925,7 +922,6 @@ class TestParseDatasetLocator(AbstractTestCase):
 
 #############################################################################
 class TestArgumentParser(AbstractTestCase):
-
     def test_help(self) -> None:
         parser = bzfs.argument_parser()
         with self.assertRaises(SystemExit) as e, suppress_output():
@@ -1015,7 +1011,6 @@ class TestArgumentParser(AbstractTestCase):
 
 ###############################################################################
 class TestAddRecvPropertyOptions(AbstractTestCase):
-
     def setUp(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         self.p = self.make_params(args=args)
@@ -1147,7 +1142,6 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
 #############################################################################
 class TestPreservePropertiesValidation(AbstractTestCase):
-
     def setUp(self) -> None:
         self.args = self.argparser_parse_args(
             [
@@ -1504,7 +1498,6 @@ class TestJobMethods(AbstractTestCase):
                 return_value=[("-i", "pool/src@h1", "pool/src@d2", ["pool/src@d2"])],
             ) as mock_steps,
         ):
-
             # Filtered listing on src will be built by the code; we just return the raw list and let filters apply.
             def side_effect(
                 remote: Remote,
@@ -2418,7 +2411,6 @@ class TestPerJobTermination(AbstractTestCase):
 #############################################################################
 @unittest.skip("benchmark; enable for performance comparison")
 class TestPerformance(AbstractTestCase):
-
     def test_close_fds(self) -> None:
         """See https://bugs.python.org/issue42738
         and https://github.com/python/cpython/pull/113118/commits/654f63053aee162a6e59fa894b2cd8ee82a33a77"""
@@ -2435,5 +2427,5 @@ class TestPerformance(AbstractTestCase):
                     self.assertTrue(stdout)
                 secs = (time.time_ns() - start_time_nanos) / 1000_000_000
                 logging.getLogger(__name__).warning(
-                    f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters/secs:.1f}"
+                    f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters / secs:.1f}"
                 )

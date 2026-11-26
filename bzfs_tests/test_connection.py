@@ -114,7 +114,6 @@ TEST_DIR_PREFIX: str = "t_bzfs"
 
 #############################################################################
 class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better implementation against this baseline
-
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int) -> None:
         super().__init__(remote, SHARED, max_concurrent_ssh_sessions_per_tcp_connection)
         self._priority_queue: list[Connection] = []  # type: ignore
@@ -146,7 +145,6 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
 
 #############################################################################
 class TestConnectionPool(AbstractTestCase):
-
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst", "-v", "--ssh-exit-on-shutdown"])
         p = self.make_params(args=args)
@@ -393,7 +391,7 @@ class TestConnectionPool(AbstractTestCase):
                                 i = len(conns) - 1
                             conn, donn = conns.pop(i)
                             if is_logging:
-                                log.log(loglevel, f"return {i}/{len(conns)+1}: conn: {conn}, donn: {donn} ")
+                                log.log(loglevel, f"return {i}/{len(conns) + 1}: conn: {conn}, donn: {donn} ")
                             self.return_connection(cpool, conn, dpool, donn)
                 except Exception:
                     logging.getLogger(__name__).warning("Ooops!")
@@ -869,7 +867,6 @@ class _FakeRemote:
 
 #############################################################################
 class TestRunSshCommand(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
@@ -982,7 +979,6 @@ class TestRunSshCommand(AbstractTestCase):
 
 #############################################################################
 class TestTrySshCommand(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
@@ -1256,7 +1252,6 @@ class TestRefreshSshConnection(AbstractTestCase):
 
 #############################################################################
 class TestTimeout(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
@@ -1283,7 +1278,6 @@ class TestTimeout(AbstractTestCase):
 
 #############################################################################
 class TestMaybeInjectError(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.injection_lock = threading.Lock()
@@ -1314,7 +1308,6 @@ class TestMaybeInjectError(AbstractTestCase):
 
 #############################################################################
 class TestDecrementInjectionCounter(AbstractTestCase):
-
     def setUp(self) -> None:
         self.job = bzfs.Job()
         self.job.injection_lock = threading.Lock()
@@ -1331,7 +1324,6 @@ class TestDecrementInjectionCounter(AbstractTestCase):
 
 #############################################################################
 class TestSshExitOnShutdown(AbstractTestCase):
-
     @patch("bzfs_main.util.connection.subprocess.run")
     def test_ssh_exit_on_shutdown_true_triggers_exit(self, mock_run: MagicMock) -> None:
         """Purpose: Validate that when ``--ssh-exit-on-shutdown`` is enabled, the connection shutdown triggers an SSH

@@ -130,7 +130,6 @@ DST_DATASET: str = "pool/dst"
 
 #############################################################################
 class TestSnapshotCache(AbstractTestCase):
-
     @contextmanager
     def job_context(self, args: list[str]) -> Generator[tuple[Job, str]]:
         """Context manager yielding (job, tmpdir) with patched homedir.
@@ -307,7 +306,6 @@ class TestSnapshotCache(AbstractTestCase):
     def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
         mock_remote = MagicMock(spec=Remote)  # spec helps catch calls to non-existent attrs
         with self.job_context([SRC_DATASET, DST_DATASET]) as (job, _tmpdir):
-
             mock_itr_parallel.return_value = [  # normal input
                 [
                     "12345\tdataset/valid1",
@@ -628,7 +626,6 @@ class TestSnapshotCache(AbstractTestCase):
                 patch("bzfs_main.bzfs.replicate_dataset", return_value=True),
                 patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed),
             ):
-
                 # First replication with newer snapshots_changed
                 job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_000, written=0)
                 job.replicate_datasets([SRC_DATASET], task_description="t", max_workers=1)
@@ -680,7 +677,6 @@ class TestSnapshotCache(AbstractTestCase):
                 patch("bzfs_main.bzfs.replicate_dataset", return_value=True),
                 patch.object(SnapshotCache, "zfs_get_snapshots_changed", side_effect=fake_zfs_get_snapshots_changed),
             ):
-
                 job.src_properties[SRC_DATASET] = DatasetProperties(recordsize=0, snapshots_changed=2_000_000_000, written=0)
                 job.replicate_datasets([SRC_DATASET], task_description="t", max_workers=1)
 

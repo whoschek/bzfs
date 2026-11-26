@@ -80,7 +80,6 @@ class ScriptRunResult:
 )
 @final
 class TestLimaVmScript(unittest.TestCase):
-
     def setUp(self) -> None:
         """Resolves repo paths and the timestamp prefix used by this test run."""
         self.repo_root: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -191,7 +190,7 @@ class TestLimaVmScript(unittest.TestCase):
                     version_name += f"+upgrade={vm_upgrade}"
                     log_path = os.path.join(
                         log_dir,
-                        f"{self.log_time_prefix}+run{log_sequence:02d}+{template.replace('/','_')}+{version_name}.log",
+                        f"{self.log_time_prefix}+run{log_sequence:02d}+{template.replace('/', '_')}+{version_name}.log",
                     )
                     with self._cleanup_vms(vm_name):
                         self._run_logged_bash_script(

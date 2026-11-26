@@ -117,8 +117,8 @@ To validate your changes, you MUST follow this exact sequence:
    _Note:_ `pre-commit` only processes tracked files, even with `--all-files`.
 
 5. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run all hooks specified in
-   `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting with `ruff`, formatting with
-   `black`, type checking with `mypy`.
+   `.pre-commit-config.yaml` and configured in `pyproject.toml`, for example for linting with `ruff check`, formatting
+   with `ruff format`, and type checking with `mypy`.
    - Apply the [Command Verification Rules](#command-verification-rules).
    - If the exit code is non-zero, iteratively fix all reported issues and re-run until the exit code is `0`.
 

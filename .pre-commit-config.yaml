@@ -253,13 +253,14 @@ repos:
         exclude: '^\.pre-commit-config\.yaml$'
   - repo: local
     hooks:
-      - id: black                               # Run `black` Python code formatter; see https://github.com/psf/black
-        name: black
+      - id: ruff-format                 # Run `ruff` Python code formatter; see https://github.com/astral-sh/ruff
+        name: ruff format
         language: unsupported
-        entry: .venv/bin/python -m black
+        entry: .venv/bin/ruff
+        args: [format, --force-exclude]
         types_or: [python, pyi]
         require_serial: true
-      # style options like `line_length` live in pyproject.toml
+        # config options like `quote-style` live in pyproject.toml
   - repo: local
     hooks:
       - id: conventional-pre-commit             # Check commit msg has the form `type(scope): description`

@@ -45,7 +45,6 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestCallWithRetriesBenchmark(unittest.TestCase):
-
     def test_benchmark_r1k_n0_p0_s0(self) -> None:
         self.benchmark(runs=1000, max_retries=0, max_previous_outcomes=0, success_on=0)
 

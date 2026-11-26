@@ -136,7 +136,6 @@ set_sudo_cmd(SUDO_CMD)
 
 #############################################################################
 class ParametrizedTestCase(AbstractTestCase):
-
     def __init__(self, methodName: str = "runTest", param: dict[str, Any] | None = None) -> None:  # noqa: N803
         super().__init__(methodName)
         self.param = param
@@ -153,7 +152,6 @@ class ParametrizedTestCase(AbstractTestCase):
 
 #############################################################################
 class IntegrationTestCase(ParametrizedTestCase):
-
     def setUp(self, pool_size_bytes: int = POOL_SIZE_BYTES_DEFAULT) -> None:
         global SRC_POOL, DST_POOL
         global SRC_ROOT_DATASET, DST_ROOT_DATASET

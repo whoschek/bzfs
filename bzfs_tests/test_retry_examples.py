@@ -314,7 +314,6 @@ MAX_ELAPSED_NANOS_FACTORY: Final[Callable[[], dict[RetryableErrorCategory | None
 
 
 class TestGiveupExamples(unittest.TestCase):
-
     def test_category_giveup(self) -> None:
 
         def unreliable_operation(retry: Retry) -> str:
@@ -667,7 +666,6 @@ class RetryIntegrationExamples(unittest.TestCase):
 
 #############################################################################
 class TestMiscBackoffStrategies(unittest.TestCase):
-
     def test_linear_backoff_strategy(self) -> None:
         strategy = linear_backoff_strategy(
             start_sleep_nanos=1_000_000_000, increment_sleep_nanos=2_000_000_000, max_sleep_nanos=5_000_000_000
