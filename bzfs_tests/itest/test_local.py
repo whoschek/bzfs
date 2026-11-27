@@ -29,6 +29,7 @@ import socket
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from collections import (
@@ -6591,6 +6592,30 @@ class LocalTestCase(IntegrationTestCase):
             if held_snapshot in snapshots(ibase.SRC_ROOT_DATASET):
                 run_cmd(SUDO_CMD + ["zfs", "release", hold_tag, held_snapshot])
                 self.assertEqual("0", snapshot_property(held_snapshot, "userrefs"))
+
+    def test_jobrunner_log_init_failure_exits_with_fatal_status(self) -> None:
+        """bzfs_jobrunner must return fatal status when the worker cannot create its log directory, both with and without
+        --spawn-process-per-job mode."""
+        with tempfile.NamedTemporaryFile(prefix="bzfs-logs-") as log_file:
+            cmd = [
+                sys.executable,
+                "-m",
+                "bzfs_main.bzfs_jobrunner",
+                "--job-id=log-init-failure",
+                "--src-hosts=['localhost']",
+                "--create-src-snapshots",
+                "--dryrun",
+                f"--log-dir={log_file.name}",
+                "--root-dataset-pairs",
+                ibase.SRC_ROOT_DATASET,
+                DUMMY_DATASET,
+            ]
+            for flags in ([], ["--spawn-process-per-job"]):
+                with self.subTest(flags=flags):
+                    result = subprocess.run(cmd + flags, capture_output=True, text=True, check=False)
+                    self.assertEqual(DIE_STATUS, result.returncode, msg=result.stderr)
+                    self.assertIn("FileExistsError", result.stderr)
+                    self.assertIn(log_file.name, result.stderr)
 
     def test_jobrunner_exit_status_when_monitoring_multiple_root_datasets(self) -> None:
         """Verify CLI exit code severity when monitoring multiple root datasets using real snapshots.

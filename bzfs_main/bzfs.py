@@ -239,6 +239,8 @@ def main() -> None:
             run_main(argument_parser().parse_args(), sys.argv, termination_event=termination_event)
     except subprocess.CalledProcessError as e:
         sys.exit(normalize_called_process_error(e))
+    except Exception as e:
+        raise SystemExit(DIE_STATUS) from e
     finally:
         os.umask(prev_umask)  # restore prior global state
 

@@ -21,6 +21,8 @@ import contextlib
 import logging
 import re
 import subprocess
+import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -753,6 +755,15 @@ class TestAdditionalHelpers(AbstractTestCase):
         with self.assertRaises(SystemExit) as ctx:
             bzfs.main()
         self.assertEqual(DIE_STATUS, ctx.exception.code)
+
+    def test_main_log_init_failure_exits_with_fatal_status(self) -> None:
+        """Use a regular file as the log directory so CLI startup fails even when running as root."""
+        with tempfile.NamedTemporaryFile(prefix="bzfs-logs-") as log_file:
+            cmd = [sys.executable, "-m", "bzfs_main.bzfs", "--log-dir", log_file.name, "--dryrun=send", "src", "dst"]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            self.assertEqual(DIE_STATUS, result.returncode, result.stderr)
+            self.assertRegex(result.stderr, rf"(?m)^FileExistsError: .*: {re.escape(repr(log_file.name))}$")
+            self.assertIn("Traceback (most recent call last)", result.stderr)
 
     @patch("bzfs_main.bzfs.Job.run_main")
     def test_run_main_delegates_to_job(self, mock_run_main: MagicMock) -> None:
