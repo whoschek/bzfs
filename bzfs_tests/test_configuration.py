@@ -842,7 +842,7 @@ class TestHelperFunctions(AbstractTestCase):
                 )
                 with self.assertRaisesRegex(
                     SystemExit,
-                    f"^--create-src-snapshots-plan-attributes: written_threshold must be a non-negative int: {value}$",
+                    f"^--create-src-snapshots-plan-attributes: written_threshold must be a non-negative int: {value!r}$",
                 ) as context:
                     self.make_params(args=args)
                 self.assertEqual(DIE_STATUS, context.exception.code)
@@ -1014,6 +1014,16 @@ class TestHelperFunctions(AbstractTestCase):
         config = configuration.MonitorSnapshotsConfig(args, params)
         self.assertTrue(config.dont_warn)
         self.assertTrue(config.dont_crit)
+
+    def test_monitor_snapshots_rejects_invalid_cycles(self) -> None:
+        """Check the diagnostic and exit status for invalid cycle counts in a CLI monitor plan."""
+        for cycles in (1.75, "two", True, -1):
+            with self.subTest(cycles=cycles):
+                plan = {"prod": {"onsite": {"hourly": {"latest": {"warning": "1 millis", "cycles": cycles}}}}}
+                args = self.argparser_parse_args(["src", "dst", f"--monitor-snapshots={plan}"])
+                with self.assertRaisesRegex(SystemExit, "^--monitor-snapshots: 'cycles' must be a non-negative int") as ctx:
+                    self.make_params(args=args)
+                self.assertEqual(DIE_STATUS, ctx.exception.code)
 
 
 #############################################################################

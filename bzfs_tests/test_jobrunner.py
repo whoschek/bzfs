@@ -1500,7 +1500,13 @@ class TestValidateMonitorSnapshotPlan(AbstractTestCase):
         self.assertEqual(plan, self.job.validate_monitor_snapshot_plan(plan))
 
     def test_validate_monitor_snapshot_plan_valid(self) -> None:
-        plan: bzfs_jobrunner._MonitorPlan = {"org": {"tgt": {"hour": {"warn": "msg", "max_age": 1}}}}
+        plan: bzfs_jobrunner._MonitorPlan = {
+            "org": {
+                "tgt": {
+                    "hour": {"warn": "msg", "oldest_skip_holds": True, "src_snapshot_cycles": 0, "dst_snapshot_cycles": 7}
+                }
+            }
+        }
         self.assertEqual(plan, self.job.validate_monitor_snapshot_plan(plan))
 
     def test_validate_monitor_snapshot_plan_invalid_value(self) -> None:

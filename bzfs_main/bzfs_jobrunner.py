@@ -828,7 +828,7 @@ class Job:
                     for prefix in ("src_snapshot_", "dst_snapshot_", ""):
                         latest_dict.pop(f"{prefix}cycles", None)
                     oldest_dict = latest_dict.copy()
-                    oldest_dict["cycles"] = int(alertdict.get(f"{cycles_prefix}cycles", cycles))
+                    oldest_dict["cycles"] = alertdict.get(f"{cycles_prefix}cycles", cycles)
                     latest_dict.pop("oldest_skip_holds", None)
                     return {"latest": latest_dict, "oldest": oldest_dict}
 
@@ -1223,7 +1223,10 @@ class Job:
                     self.validate_type(alert_dict, dict, f"{context} org/target/alert_dict")
                     for key, value in alert_dict.items():
                         self.validate_non_empty_string(key, f"{context} org/target/alert_dict/key")
-                        self.validate_type(value, Union[str, int], f"{context} org/target/alert_dict/value")
+                        if key in ("src_snapshot_cycles", "dst_snapshot_cycles"):
+                            self.validate_non_negative_int(value, f"{context}: {org}/{target}/{period_unit}/{key}")
+                        else:
+                            self.validate_type(value, Union[str, int, bool], f"{context} org/target/alert_dict/value")
         return monitor_snapshot_plan
 
     def validate_is_subset(self, x: Iterable[str], y: Iterable[str], x_name: str, y_name: str) -> None:
@@ -1247,7 +1250,7 @@ class Job:
         if not value:
             self.die(f"{name} must not be empty!")
 
-    def validate_non_negative_int(self, value: int, name: str) -> None:
+    def validate_non_negative_int(self, value: object, name: str) -> None:
         """Checks ``value`` is an int >= 0."""
         if type(value) is not int or value < 0:
             self.die(f"{name} must be a non-negative integer: {value!r}")

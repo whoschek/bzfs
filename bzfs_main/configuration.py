@@ -18,7 +18,6 @@ from __future__ import (
     annotations,
 )
 import argparse
-import ast
 import getopt
 import os
 import platform
@@ -104,6 +103,7 @@ from bzfs_main.util.utils import (
     getenv_bool,
     getenv_int,
     is_included,
+    literal_eval_dict,
     ninfix,
     nprefix,
     nsuffix,
@@ -116,6 +116,7 @@ from bzfs_main.util.utils import (
     validate_file_permissions,
     validate_is_not_a_symlink,
     validate_property_name,
+    validate_type,
     xappend,
 )
 
@@ -818,14 +819,16 @@ class SnapshotLabelAttributes:
     @classmethod
     def parse(cls, attributes: dict[str, object]) -> SnapshotLabelAttributes:
         """Parses the given configuration dict into a typed object."""
+        context = "--create-src-snapshots-plan-attributes:"
         written_threshold: int = 0
         for name, value in attributes.items():
+            validate_type(name, str, f"{context} key", fn=die)
             if name == WRITTEN_THRESHOLD:
-                if not isinstance(value, int) or value < 0:
-                    die(f"--create-src-snapshots-plan-attributes: {WRITTEN_THRESHOLD} must be a non-negative int: {value}")
+                if type(value) is not int or value < 0:
+                    die(f"{context} {WRITTEN_THRESHOLD} must be a non-negative int: {value!r}")
                 written_threshold = value
             else:
-                die(f"--create-src-snapshots-plan-attributes: Invalid attribute name: '{name}'")
+                die(f"{context} Invalid attribute name: '{name}'")
         return SnapshotLabelAttributes(written_threshold=written_threshold)
 
 
@@ -849,20 +852,39 @@ class CreateSrcSnapshotConfig:
         # daemon mode via sleep_until_next_daemon_iteration()
         labels: list[SnapshotLabel] = []
         snapshot_label_attributes: dict[str, SnapshotLabelAttributes] = {}
-        create_src_snapshots_plan: str = args.create_src_snapshots_plan or str({"bzfs": {"onsite": {"adhoc": 1}}})
-        for org, target_periods in ast.literal_eval(create_src_snapshots_plan).items():
+        context = "--create-src-snapshots-plan:"
+        create_src_snapshots_plan: dict[str, dict[str, dict[str, int]]] = literal_eval_dict(
+            args.create_src_snapshots_plan or str({"bzfs": {"onsite": {"adhoc": 1}}}), context, fn=die
+        )
+        validate_type(create_src_snapshots_plan, dict, f"{context}", fn=die)
+        for org, target_periods in create_src_snapshots_plan.items():
+            validate_type(org, str, f"{context} Organization name", fn=die)
+            validate_type(target_periods, dict, f"{context}", fn=die)
             for target, periods in target_periods.items():
+                validate_type(target, str, f"{context} Target name", fn=die)
+                validate_type(periods, dict, f"{context}", fn=die)
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
-                    if not isinstance(period_amount, int) or period_amount < 0:
-                        die(f"--create-src-snapshots-plan: Period amount must be a non-negative integer: {period_amount}")
+                    validate_type(period_unit, str, f"{context} Period unit", fn=die)
+                    if type(period_amount) is not int or period_amount < 0:
+                        die(f"{context} Period amount must be a non-negative integer: {period_amount!r}")
                     lbl = SnapshotLabel(prefix=nprefix(org), infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
                     if period_amount > 0:
                         labels.append(lbl)
                         snapshot_label_attributes[lbl.notimestamp_str()] = SnapshotLabelAttributes.parse({})
-        create_src_snapshots_plan_attributes: str = args.create_src_snapshots_plan_attributes or str({})
-        for org, target_periods in ast.literal_eval(create_src_snapshots_plan_attributes).items():
-            for target, periods in target_periods.items():
-                for period_unit, period_attributes in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
+        context = "--create-src-snapshots-plan-attributes:"
+        create_src_snapshots_plan_attributes: dict[str, dict[str, dict[str, dict[str, object]]]] = literal_eval_dict(
+            args.create_src_snapshots_plan_attributes or str({}), context, fn=die
+        )
+        validate_type(create_src_snapshots_plan_attributes, dict, f"{context}", fn=die)
+        for org, target_periods2 in create_src_snapshots_plan_attributes.items():
+            validate_type(org, str, f"{context} Organization name", fn=die)
+            validate_type(target_periods2, dict, f"{context}", fn=die)
+            for target, periods2 in target_periods2.items():
+                validate_type(target, str, f"{context} Target name", fn=die)
+                validate_type(periods2, dict, f"{context}", fn=die)
+                for period_unit, period_attributes in periods2.items():  # e.g. "10minutely" or "minutely"
+                    validate_type(period_unit, str, f"{context} Period unit", fn=die)
+                    validate_type(period_attributes, dict, f"{context} Period attributes", fn=die)
                     lbl = SnapshotLabel(prefix=nprefix(org), infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
                     snapshot_label_attributes[lbl.notimestamp_str()] = SnapshotLabelAttributes.parse(period_attributes)
         self.snapshot_label_attributes: Final[Mapping[str, SnapshotLabelAttributes]] = snapshot_label_attributes
@@ -955,17 +977,25 @@ class MonitorSnapshotsConfig:
     def __init__(self, args: argparse.Namespace, p: Params) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
-        self.monitor_snapshots: Final[ExpandedMonitorPlan] = ast.literal_eval(args.monitor_snapshots)
+        mcontext: str = "--monitor-snapshots:"
+        self.monitor_snapshots: Final[ExpandedMonitorPlan] = literal_eval_dict(args.monitor_snapshots, mcontext, fn=die)
         self.dont_warn: Final[bool] = args.monitor_snapshots_dont_warn
         self.dont_crit: Final[bool] = args.monitor_snapshots_dont_crit
         self.no_latest_check: Final[bool] = args.monitor_snapshots_no_latest_check
         self.no_oldest_check: Final[bool] = args.monitor_snapshots_no_oldest_check
         alerts: list[MonitorSnapshotAlert] = []
         xperiods: SnapshotPeriods = p.xperiods
+        validate_type(self.monitor_snapshots, dict, f"{mcontext}", fn=die)
         for org, target_periods in self.monitor_snapshots.items():
+            validate_type(org, str, f"{mcontext} Organization name", fn=die)
+            validate_type(target_periods, dict, f"{mcontext}", fn=die)
             prefix: str = nprefix(org)
             for target, periods in target_periods.items():
+                validate_type(target, str, f"{mcontext} Target name", fn=die)
+                validate_type(periods, dict, f"{mcontext}", fn=die)
                 for period_unit, alert_dicts in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
+                    validate_type(period_unit, str, f"{mcontext} Period unit", fn=die)
+                    validate_type(alert_dicts, dict, f"{mcontext}", fn=die)
                     label = SnapshotLabel(prefix=prefix, infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
                     alert_latest, alert_oldest = None, None
                     oldest_skip_holds: bool = False
@@ -973,6 +1003,7 @@ class MonitorSnapshotsConfig:
                         m = "--monitor-snapshots: "
                         if alert_type not in ["latest", "oldest"]:
                             die(f"{m}'{alert_type}' must be 'latest' or 'oldest' within {args.monitor_snapshots}")
+                        validate_type(alert_dict, dict, f"{mcontext}", fn=die)
                         warning_millis: int = 0
                         critical_millis: int = 0
                         cycles: int = 1
@@ -983,7 +1014,9 @@ class MonitorSnapshotsConfig:
                             elif kind == "critical":
                                 critical_millis = max(0, parse_duration_to_milliseconds(str(value), context=context))
                             elif kind == "cycles":
-                                cycles = max(0, int(value))
+                                if type(value) is not int or value < 0:
+                                    die(f"{m}'{kind}' must be a non-negative int within {context}")
+                                cycles = value
                             elif kind == "oldest_skip_holds" and alert_type == "oldest":
                                 if not isinstance(value, bool):
                                     die(f"{m}'{kind}' must be a bool within {context}")
