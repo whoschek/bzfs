@@ -148,6 +148,7 @@ usage: bzfs_jobrunner
        [--worker-timeout-seconds FLOAT]
        [--repeat-if-took-more-than-seconds FLOAT]
        [--spawn-process-per-job]
+       [--job-process-rlimit NAME=SOFT[:HARD]]
        [--jobrunner-dryrun]
        [--jobrunner-log-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
        [--daemon-replication-frequency STRING]
@@ -451,6 +452,17 @@ usage: bzfs_jobrunner
 - Spawn a Python process per subjob instead of a Python thread per subjob (optional). The former is only recommended for a
   job operating in parallel on a large number of hosts as it helps avoid exceeding per-process limits such as the default max
   number of open file descriptors, at the expense of increased startup latency.
+
+<!-- -->
+
+<span id="--job-process-rlimit" class="man-option-title">**--job-process-rlimit** *NAME=SOFT[:HARD]*</span> <a href="#--job-process-rlimit" title="Permalink to --job-process-rlimit" aria-label="Permalink to --job-process-rlimit" class="man-option-permalink">&#x1F517;</a>
+
+- Limit a local worker process launched with --spawn-process-per-job on Linux (via `prlimit` CLI) or FreeBSD (via `limits`
+  CLI). This option can be specified multiple times and only applies if --spawn-process-per-job. Supported names are 'as'
+  (max virtual address space in bytes) and 'nofile' (max open file descriptors). Use nonnegative decimal integers. HARD
+  defaults to SOFT. Tighter inherited soft and hard limits take precedence. Local child processes inherit limits
+  individually. Use --worker-timeout-seconds to limit elapsed time per worker. Example: --job-process-rlimit as=2147483648
+  --job-process-rlimit nofile=512:1024
 
 <!-- -->
 

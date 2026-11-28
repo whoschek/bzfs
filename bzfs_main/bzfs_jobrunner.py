@@ -41,6 +41,9 @@ import os
 import platform
 import pwd
 import random
+import re
+import resource
+import shutil
 import socket
 import subprocess
 import sys
@@ -127,6 +130,10 @@ PROG_NAME: Final[str] = "bzfs_jobrunner"
 SRC_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^SRC_HOST"  # noqa: S105
 DST_MAGIC_SUBSTITUTION_TOKEN: Final[str] = "^DST_HOST"  # noqa: S105
 SEP: Final[str] = ","
+_JOB_PROCESS_RLIMITS: Final[Mapping[str, tuple[int, str]]] = {  # resource ID and FreeBSD limits(1) flag
+    "as": (resource.RLIMIT_AS, "-v"),
+    "nofile": (resource.RLIMIT_NOFILE, "-n"),
+}
 
 _SnapshotPlan = dict[str, dict[str, dict[str, int]]]  # type alias: org -> target -> period -> count
 _MonitorPlan = dict[str, dict[str, dict[str, MonitorAlertSettings]]]  # type alias: org -> target -> period -> settings
@@ -455,6 +462,15 @@ This is harmless because that extra process exits immediately with a message lik
              "per-process limits such as the default max number of open file descriptors, at the expense of increased "
              "startup latency.\n\n")
     parser.add_argument(
+        "--job-process-rlimit", action=JobProcessRlimitAction, metavar="NAME=SOFT[:HARD]",
+        help="Limit a local worker process launched with --spawn-process-per-job on Linux (via `prlimit` CLI) or FreeBSD "
+             "(via `limits` CLI). This option can be specified multiple times and only applies if --spawn-process-per-job. "
+             "Supported names are 'as' (max virtual address space in bytes) and 'nofile' (max open file descriptors). "
+             "Use nonnegative decimal integers. HARD defaults to SOFT. "
+             "Tighter inherited soft and hard limits take precedence. Local child processes inherit limits individually. "
+             "Use --worker-timeout-seconds to limit elapsed time per worker. "
+             "Example: --job-process-rlimit as=2147483648 --job-process-rlimit nofile=512:1024\n\n")
+    parser.add_argument(
         "--jobrunner-dryrun", action="store_true",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
              "for real (optional). This option treats both the ZFS source and destination as read-only. Can also be used to "
@@ -534,6 +550,7 @@ class Job:
         self.loopback_address: Final[str] = _detect_loopback_address()
 
         # mutable variables:
+        self.job_process_prefix: tuple[str, ...] = ()
         self.first_exception: int | None = None
         self.worst_exception: int | None = None
         self.stats: JobStats = JobStats(jobs_all=0)
@@ -559,6 +576,8 @@ class Job:
         args, unknown_args = argument_parser().parse_known_args(sys_argv[1:], nsp)  # forward all unknown args to `bzfs`
         log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
+        self.spawn_process_per_job = args.spawn_process_per_job
+        self.job_process_prefix = self._rlimit_prefix(args.job_process_rlimit) if self.spawn_process_per_job else ()
         assert len(args.root_dataset_pairs) > 0
         for src_dataset, _ in args.root_dataset_pairs:
             validate_dataset_name(src_dataset, "--root-dataset-pairs source")
@@ -630,7 +649,6 @@ class Job:
         max_workers: int = max(1, round((os.cpu_count() or 1) * workers / 100.0) if workers_is_percent else round(workers))
         worker_timeout_seconds: int = args.worker_timeout_seconds
         repeat_if_took_more_than_nanos: int = int(args.repeat_if_took_more_than_seconds * 1_000_000_000)
-        self.spawn_process_per_job = args.spawn_process_per_job
         username: str = pwd.getpwuid(os.getuid()).pw_name
         assert username
         loopback_ids: set[str] = {"localhost", "127.0.0.1", "::1", socket.gethostname()}  # ::1 is IPv6 loopback address
@@ -1117,6 +1135,7 @@ class Job:
         if self.jobrunner_dryrun:
             return 0
 
+        cmd = list(self.job_process_prefix) + cmd
         with self.subprocesses.popen_and_track(cmd, stdin=subprocess.DEVNULL, text=True, env=self.spawn_process_env) as proc:
             try:
                 if self.termination_event.is_set():
@@ -1293,6 +1312,61 @@ class Job:
         self.log.log(LOG_TRACE, "localhost_ips: %s", sorted(ips))
         return ips
 
+    def _rlimit_prefix(self, limits: dict[str, tuple[int, int]] | None) -> tuple[str, ...]:
+        """Builds the native worker launcher, preserving tighter inherited resource ceilings."""
+        if not limits:
+            return ()
+        command = {"Linux": "prlimit", "FreeBSD": "limits"}.get(platform.system())
+        if command is None or not (command_path := shutil.which(command, path=os.defpath)):
+            self.die("--job-process-rlimit requires Linux with prlimit or FreeBSD with limits in a system directory.")
+        if command == "limits" and "=" in sys.executable:
+            self.die(  # limits(1) treats the command_path as an environment assignment
+                f"--job-process-rlimit on FreeBSD requires a Python executable path without '='. Got {sys.executable!r}"
+            )
+        args: list[str] = []
+        hard_args: list[str] = []
+        for name, (soft, hard) in limits.items():
+            resource_id, flag = _JOB_PROCESS_RLIMITS[name]
+            inherited_soft, inherited_hard = resource.getrlimit(resource_id)
+            soft = min(soft, _as_uint64(inherited_soft))
+            hard = min(hard, _as_uint64(inherited_hard))
+            if command == "prlimit":
+                args.append(f"--{name}={soft}:{hard}")
+            else:
+                assert command == "limits"
+                args += [flag, str(soft)]
+                hard_args += [flag, str(hard)]
+        if command == "prlimit":
+            return (command_path, *args, "--")
+        else:  # FreeBSD limits(1) stores only one value per resource per invocation. Lower soft limits before hard limits
+            return (command_path, "-S", *args, "--", command_path, "-H", *hard_args, "--")
+
+
+#############################################################################
+@final
+class JobProcessRlimitAction(argparse.Action):
+    """Collects one numeric ceiling per supported resource so only validated options reach prlimit."""
+
+    def __call__(
+        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
+    ) -> None:
+        """Validates each setting and stores the last soft and hard limits specified for each resource."""
+        match: re.Match[str] | None = re.fullmatch(r"([a-z]+)=0*([0-9]{1,20})(:0*([0-9]{1,20}))?", values)
+        if match is None or match[1] not in _JOB_PROCESS_RLIMITS:
+            parser.error(
+                f"{option_string}: expected NAME=SOFT[:HARD] with NAME in {', '.join(_JOB_PROCESS_RLIMITS)} "
+                "and nonnegative decimal limits"
+            )
+        name: str = match[1]
+        soft: int = int(match[2])
+        hard: int = int(match[4]) if match[4] is not None else soft
+        infinity: int = 2**63 - 1 if platform.system() == "FreeBSD" else 2**64 - 1
+        if not soft <= hard < infinity:
+            parser.error(f"{option_string}: expected SOFT <= HARD < {infinity}")
+        limits: dict[str, tuple[int, int]] = getattr(namespace, self.dest) or {}
+        limits[name] = (soft, hard)
+        setattr(namespace, self.dest, limits)
+
 
 #############################################################################
 @final
@@ -1307,6 +1381,11 @@ class RejectArgumentAction(argparse.Action):
 
 
 #############################################################################
+def _as_uint64(value: int) -> int:
+    """If the 64-bit input is negative, return it plus 2**64 (so -2 becomes 2**64 - 2). Otherwise return the input as is."""
+    return value % 2**64
+
+
 def _dedupe(root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """Returns a list with duplicate dataset pairs removed while preserving order."""
     return list(dict.fromkeys(root_dataset_pairs))

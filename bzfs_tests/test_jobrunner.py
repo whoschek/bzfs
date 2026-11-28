@@ -19,7 +19,9 @@ from __future__ import (
 )
 import argparse
 import contextlib
+import os
 import platform
+import resource
 import shutil
 import signal
 import subprocess
@@ -76,6 +78,7 @@ def suite() -> unittest.TestSuite:
         TestHelperFunctions,
         TestParseSrcHosts,
         TestValidation,
+        TestJobProcessRlimit,
         TestFiltering,
         TestSkipDatasetsWithNonExistingDstPool,
         TestRunSubJobSpawnProcessPerJob,
@@ -451,6 +454,96 @@ class TestValidation(AbstractTestCase):
                 job.run_main(base_argv)
             self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
+
+
+#############################################################################
+class TestJobProcessRlimit(AbstractTestCase):
+    """Exercise resource limits from the jobrunner CLI through worker dispatch."""
+
+    def setUp(self) -> None:
+        self.job = make_bzfs_jobrunner_job(log=MagicMock())
+        self.argv = [
+            "bzfs_jobrunner",
+            "--job-id=test",
+            "--src-hosts=['src1']",
+            "--root-dataset-pairs",
+            "tank/src",
+            "tank/dst",
+        ]
+
+    def test_only_spawned_jobs_require_a_limit_command(self) -> None:
+        """Thread mode accepts valid rlimits even without --spawn-process-per-job."""
+        argv = self.argv + ["--job-process-rlimit=nofile=80:150"]
+        with patch("shutil.which", return_value=None), patch.object(self.job, "_bzfs_run_main") as worker:
+            self.job.run_main(argv + ["--create-src-snapshots"])
+            worker.assert_called_once()
+            self.assertNotIn("--job-process-rlimit=nofile", worker.call_args.args[0])
+            with self.assertRaisesRegex(SystemExit, "--job-process-rlimit"):
+                self.job.run_main(argv + ["--spawn-process-per-job"])
+
+    def test_rejects_invalid_limits_even_in_threaded_mode(self) -> None:
+        """Reject unsupported resources, malformed limits, and unlimited values during CLI validation."""
+        parser = bzfs_jobrunner.argument_parser()
+        for spec in ("pid=1", "cpu=1", "as=1 --pid=2", "core=2:1", f"as={2**64 - 1}"):
+            with self.subTest(spec=spec), suppress_output(), self.assertRaises(SystemExit):
+                parser.parse_args(self.argv[1:] + ["--job-process-rlimit", spec])
+        with patch("platform.system", return_value="FreeBSD"), suppress_output(), self.assertRaises(SystemExit):
+            parser.parse_args(self.argv[1:] + ["--job-process-rlimit", f"as={2**63 - 1}"])
+
+    def test_freebsd_rejects_equals_in_python_path_only_with_limits(self) -> None:
+        """FreeBSD accepts this path with either flag alone and rejects it when both are used."""
+        spawn = "--spawn-process-per-job"
+        limit = "--job-process-rlimit=nofile=80:150"
+        with (
+            patch("platform.system", return_value="FreeBSD"),
+            patch("sys.executable", "/opt/a=b/bin/python"),
+            patch("shutil.which", return_value="/usr/bin/limits"),
+        ):
+            self.job.run_main(self.argv + [spawn])
+            self.job.run_main(self.argv + [limit])
+            with self.assertRaisesRegex(SystemExit, "/opt/a=b/bin/python"):
+                self.job.run_main(self.argv + [spawn, limit])
+
+    def test_last_limits_respect_inherited_ceilings(self) -> None:
+        """A repeated setting replaces both limits, and a tighter inherited ceiling still wins."""
+        inherited = {resource.RLIMIT_NOFILE: (80, 150), resource.RLIMIT_AS: (resource.RLIM_INFINITY, resource.RLIM_INFINITY)}
+        limits = [
+            "--job-process-rlimit=nofile=5",
+            "--job-process-rlimit=nofile=100:200",
+            "--job-process-rlimit=as=2147483648",
+        ]
+        for system, python, command, expected in (
+            ("Linux", "/opt/a=b/bin/python", "prlimit", "--nofile=80:150 --as=2147483648:2147483648 --"),
+            ("FreeBSD", "/opt/bin/python", "limits", "-S -n 80 -v 2147483648 -- /usr/bin/limits -H -n 150 -v 2147483648 --"),
+        ):
+            path = "/usr/bin/" + command
+            with (
+                self.subTest(system=system),
+                patch("platform.system", return_value=system),
+                patch("sys.executable", python),
+                patch("shutil.which", return_value=path) as which,
+                patch("resource.getrlimit", side_effect=inherited.__getitem__),
+            ):
+                self.job.run_main(self.argv + ["--spawn-process-per-job"] + limits)
+                which.assert_called_once_with(command, path=os.defpath)
+                self.assertEqual((path, *expected.split()), self.job.job_process_prefix)
+
+    @unittest.skipUnless(
+        (platform.system() == "Linux" and shutil.which("prlimit", path=os.defpath))
+        or (platform.system() == "FreeBSD" and shutil.which("limits", path=os.defpath) and "=" not in sys.executable),
+        "requires Linux prlimit or FreeBSD limits in a system directory and a supported Python path",
+    )
+    def test_real_limits_set_only_in_worker(self) -> None:
+        """Verify both ceilings in the spawned worker and check that its parent keeps its limits."""
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        expected = (
+            64 if soft == resource.RLIM_INFINITY else min(64, soft),
+            128 if hard == resource.RLIM_INFINITY else min(128, hard),
+        )
+        self.job.run_main(self.argv + ["--spawn-process-per-job", "--job-process-rlimit=nofile=64:128"])
+        check = f"import resource, sys; sys.exit(resource.getrlimit(resource.RLIMIT_NOFILE) != {expected})"
+        self.assertEqual(0, self.job.run_worker_job_spawn_process_per_job([sys.executable, "-c", check], timeout_secs=None))
+        self.assertEqual((soft, hard), resource.getrlimit(resource.RLIMIT_NOFILE))
 
 
 #############################################################################
