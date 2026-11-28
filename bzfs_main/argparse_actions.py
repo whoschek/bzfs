@@ -19,7 +19,6 @@ from __future__ import (
     annotations,
 )
 import argparse
-import ast
 import os
 import re
 from collections.abc import (
@@ -35,6 +34,7 @@ from datetime import (
 )
 from typing import (
     Any,
+    NoReturn,
     Union,
     cast,
     final,
@@ -51,18 +51,21 @@ from bzfs_main.util.check_range import (
     CheckRange,
 )
 from bzfs_main.util.utils import (
+    DIE_STATUS,
     SHELL_CHARS,
     UNIX_TIME_INFINITY_SECS,
     YEAR_WITH_FOUR_DIGITS_REGEX,
     RegexList,
     SnapshotPeriods,
     die,
+    literal_eval_dict,
     ninfix,
     nprefix,
     nsuffix,
     open_nofollow,
     parse_duration_to_milliseconds,
     unixtime_fromisoformat,
+    validate_type,
 )
 
 
@@ -410,17 +413,28 @@ class IncludeSnapshotPlanAction(argparse.Action):
         values: str,
         option_string: str | None = None,
     ) -> bool:
+
+        def _die(msg: str) -> NoReturn:
+            parser.exit(DIE_STATUS, f"{msg}\n")
+
+        context = f"{option_string}:"
+        plan: dict[str, dict[str, dict[str, int]]] = literal_eval_dict(values, context, fn=_die)
         xperiods: SnapshotPeriods = SnapshotPeriods()
         has_at_least_one_filter_clause: bool = False
-        for org, target_periods in ast.literal_eval(values).items():
+        for org, target_periods in plan.items():
+            validate_type(org, str, f"{context} Organization name", fn=_die)
             if org.startswith("!"):
-                parser.error(f"{option_string}: Organization name must not start with '!': {org!r}")
+                _die(f"{context} Organization name must not start with '!': {org!r}")
             prefix: str = re.escape(nprefix(org))
+            validate_type(target_periods, dict, f"{context}", fn=_die)
             for target, periods in target_periods.items():
+                validate_type(target, str, f"{context} Target name", fn=_die)
                 infix: str = re.escape(ninfix(target)) if target else YEAR_WITH_FOUR_DIGITS_REGEX.pattern
+                validate_type(periods, dict, f"{context}", fn=_die)
                 for period_unit, period_amount in periods.items():
-                    if not isinstance(period_amount, int) or period_amount < 0:
-                        parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
+                    validate_type(period_unit, str, f"{context} Period unit", fn=_die)
+                    if type(period_amount) is not int or period_amount < 0:
+                        _die(f"{context} Period amount must be a non-negative integer: {period_amount!r}")
                     suffix: str = re.escape(nsuffix(period_unit))
                     regex: str = f"{prefix}{infix}.*{suffix}"
                     opts += ["--new-snapshot-filter-group", f"--include-snapshot-regex={regex}"]
@@ -452,12 +466,13 @@ class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
         opts = [] if opts is None else opts
         opts += ["--delete-dst-snapshots-except"]
         if not self._add_opts(opts, parser, values, option_string=option_string):
-            parser.error(
-                f"{option_string}: Cowardly refusing to delete all snapshots on"
-                f"--delete-dst-snapshots-except-plan='{values}' (which means 'retain no snapshots' aka "
+            parser.exit(
+                DIE_STATUS,
+                f"{option_string}: Cowardly refusing to delete all snapshots on "
+                f"{option_string}={values!r} (which means 'retain no snapshots' aka "
                 "'delete all snapshots'). Assuming this is an unintended pilot error rather than intended carnage. "
                 "Aborting. If this is really what is intended, use `--delete-dst-snapshots --include-snapshot-regex=.*` "
-                "instead to force the deletion."
+                "instead to force the deletion.\n",
             )
         setattr(namespace, self.dest, opts)
 

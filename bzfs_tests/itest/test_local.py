@@ -651,7 +651,7 @@ class LocalTestCase(IntegrationTestCase):
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-except-plan",
             str({}),  # error out on empty dict as deleting all snapshots is likely a pilot error rather than intended
-            expected_status=2,
+            expected_status=DIE_STATUS,
         )
         self.assert_snapshot_names(ibase.SRC_ROOT_DATASET, ["s1_onsite_2024-01-04_00:00:00_adhoc"])
 
@@ -662,7 +662,7 @@ class LocalTestCase(IntegrationTestCase):
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": -1, "hourly": 1}}}),  # parser error: negative int isn't accepted
-            expected_status=2,
+            expected_status=DIE_STATUS,
         )
 
     def test_delete_dst_snapshots_except_with_source(self) -> None:

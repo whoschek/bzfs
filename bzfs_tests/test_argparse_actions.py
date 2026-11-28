@@ -34,10 +34,14 @@ from bzfs_main.filter import (
 from bzfs_main.util.check_range import (
     CheckRange,
 )
+from bzfs_main.util.utils import (
+    DIE_STATUS,
+)
 from bzfs_tests.abstract_testcase import (
     AbstractTestCase,
 )
 from bzfs_tests.tools import (
+    capture_stderr,
     suppress_output,
 )
 
@@ -230,7 +234,7 @@ class TestIncludeSnapshotPlanAction(AbstractTestCase):
             with self.subTest(option=option):
                 with self.assertRaises(SystemExit) as error, suppress_output():
                     self.argparser_parse_args(["src", "dst", option, str(plan)])
-                self.assertEqual(2, error.exception.code)
+                self.assertEqual(DIE_STATUS, error.exception.code)
 
 
 ###############################################################################
@@ -242,8 +246,10 @@ class TestDeleteDstSnapshotsExceptPlanAction(AbstractTestCase):
         self.parser.add_argument("--plan", action=argparse_actions.DeleteDstSnapshotsExceptPlanAction)
 
     def test_empty_plan_errors_to_prevent_delete_all(self) -> None:
-        with self.assertRaises(SystemExit), suppress_output():
+        with self.assertRaises(SystemExit) as error, capture_stderr() as stderr:
             self.parser.parse_args(["--plan", "{}"])
+        self.assertEqual(DIE_STATUS, error.exception.code)
+        self.assertIn("--plan: Cowardly refusing to delete all snapshots", stderr.getvalue())
 
 
 ###############################################################################

@@ -765,6 +765,24 @@ class TestAdditionalHelpers(AbstractTestCase):
             self.assertRegex(result.stderr, rf"(?m)^FileExistsError: .*: {re.escape(repr(log_file.name))}$")
             self.assertIn("Traceback (most recent call last)", result.stderr)
 
+    def test_main_reports_invalid_snapshot_plan(self) -> None:
+        """Check fatal status on invalid snapshot plan."""
+        with self.assertRaises(SyntaxError) as syntax_error:
+            compile(source="{", filename="<plan>", mode="eval")  # SyntaxError wording varies across Python versions
+        for option in ("--include-snapshot-plan", "--delete-dst-snapshots-except-plan"):
+            for value, reason in [
+                ("{", syntax_error.exception.msg),
+                ("daily", "malformed node or string"),
+                ("[]", "must be of type dict but got list"),
+                ("{'prod': {'onsite': {'daily': '7'}}}", "Period amount must be a non-negative integer: '7'"),
+            ]:
+                with self.subTest(option=option, value=value):
+                    cmd = [sys.executable, "-m", "bzfs_main.bzfs", "--dryrun=send", f"{option}={value}", "src", "dst"]
+                    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+                    self.assertEqual(DIE_STATUS, result.returncode, result.stderr)
+                    self.assertIn(f"{option}: {reason}", result.stderr)
+                    self.assertTrue(result.stderr.endswith("\n"), repr(result.stderr))
+
     @patch("bzfs_main.bzfs.Job.run_main")
     def test_run_main_delegates_to_job(self, mock_run_main: MagicMock) -> None:
         args = self.argparser_parse_args(["src", "dst"])

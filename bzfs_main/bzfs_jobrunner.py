@@ -1249,9 +1249,8 @@ class Job:
 
     def validate_non_negative_int(self, value: int, name: str) -> None:
         """Checks ``value`` is an int >= 0."""
-        self.validate_type(value, int, name)
-        if value < 0:
-            self.die(f"{name} must be a non-negative integer: {value}")
+        if type(value) is not int or value < 0:
+            self.die(f"{name} must be a non-negative integer: {value!r}")
 
     def validate_true(self, expr: object, msg: str) -> None:
         """Raises error if ``expr`` evaluates to ``False``."""
@@ -1260,15 +1259,7 @@ class Job:
 
     def validate_type(self, value: Any, expected_type: Any, name: str) -> None:
         """Checks ``value`` is instance of ``expected_type`` or union thereof."""
-        if hasattr(expected_type, "__origin__") and expected_type.__origin__ is Union:  # for compat with python < 3.10
-            union_types = expected_type.__args__
-            for t in union_types:
-                if isinstance(value, t):
-                    return
-            type_msg: str = " or ".join([t.__name__ for t in union_types])
-            self.die(f"{name} must be of type {type_msg} but got {type(value).__name__}: {value}")
-        elif not isinstance(value, expected_type):
-            self.die(f"{name} must be of type {expected_type.__name__} but got {type(value).__name__}: {value}")
+        utils.validate_type(value, expected_type, name, fn=lambda msg: self.die(msg))
 
     def parse_src_hosts_from_cli_or_stdin(self, raw_src_hosts: str | None) -> list[str]:
         """Resolve --src-hosts from CLI or stdin with robust TTY/empty handling."""

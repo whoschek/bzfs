@@ -23,6 +23,7 @@ from __future__ import (
     annotations,
 )
 import argparse
+import ast
 import base64
 import bisect
 import contextlib
@@ -93,6 +94,7 @@ from typing import (
     SupportsIndex,
     TextIO,
     TypeVar,
+    Union,
     cast,
     final,
 )
@@ -1031,6 +1033,33 @@ def validate_file_permissions(path: str, mode: int) -> None:
             f"{path!r} has permissions {st_mode:03o} aka {stat.filemode(st_mode)[1:]}, "
             f"not {mode:03o} aka {stat.filemode(mode)[1:]})"
         )
+
+
+def validate_type(value: Any, expected_type: Any, name: str, *, fn: Callable[[str], None]) -> None:
+    """Checks ``value`` is instance of ``expected_type`` or union thereof."""
+    if hasattr(expected_type, "__origin__") and expected_type.__origin__ is Union:  # for compat with python < 3.10
+        union_types = expected_type.__args__
+        for t in union_types:
+            if isinstance(value, t):
+                return
+        type_msg: str = " or ".join([t.__name__ for t in union_types])
+        fn(f"{name} must be of type {type_msg} but got {type(value).__name__}: {value!r}")
+    elif not isinstance(value, expected_type):
+        fn(f"{name} must be of type {expected_type.__name__} but got {type(value).__name__}: {value!r}")
+
+
+def literal_eval_dict(s: str, context: str, *, fn: Callable[[str], None]) -> dict[str, Any]:
+    """Validates and returns ast.literal_eval(s)."""
+    plan: dict[str, Any] = {}
+    try:
+        plan = ast.literal_eval(s)
+    except SyntaxError as e:
+        fn(f"{context} {e.msg}")
+    except (TypeError, ValueError) as e:
+        fn(f"{context} {e}")
+    else:
+        validate_type(plan, dict, f"{context}", fn=fn)
+    return plan
 
 
 def parse_duration_to_milliseconds(duration: str, *, regex_suffix: str = "", context: str = "") -> int:
